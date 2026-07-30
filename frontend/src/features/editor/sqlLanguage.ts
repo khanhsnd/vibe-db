@@ -1,0 +1,124 @@
+import {
+  completeFromList,
+  ifNotIn,
+  snippetCompletion,
+  type Completion,
+  type CompletionSource,
+} from '@codemirror/autocomplete'
+import { MySQL, sql, type SQLNamespace } from '@codemirror/lang-sql'
+import type { EditorState, Extension } from '@codemirror/state'
+
+import type { TableSchema } from '@/bridge/connections'
+
+// `${…}` marks a field the caret jumps between with Tab. The label is what the user
+// types to reach the snippet, so it stays lower-case even though the body is not.
+const SNIPPETS: readonly Completion[] = [
+  snippet('select', 'SELECT ${columns}\nFROM ${table}\nWHERE ${condition}'),
+  snippet('select all', 'SELECT *\nFROM ${table}\nLIMIT ${100}'),
+  snippet('count', 'SELECT COUNT(*)\nFROM ${table}\nWHERE ${condition}'),
+  snippet('insert', 'INSERT INTO ${table} (${columns})\nVALUES (${values})'),
+  snippet('update', 'UPDATE ${table}\nSET ${column} = ${value}\nWHERE ${condition}'),
+  snippet('delete', 'DELETE FROM ${table}\nWHERE ${condition}'),
+  snippet('join', 'JOIN ${table} ON ${left} = ${right}'),
+  snippet('left join', 'LEFT JOIN ${table} ON ${left} = ${right}'),
+  snippet('group by', 'GROUP BY ${columns}\nHAVING ${condition}'),
+  snippet('order by', 'ORDER BY ${column} DESC'),
+  snippet('with', 'WITH ${name} AS (\n\tSELECT ${columns}\n\tFROM ${table}\n)\nSELECT *\nFROM ${name}'),
+  snippet('case', 'CASE WHEN ${condition} THEN ${value} ELSE ${fallback} END'),
+]
+
+function snippet(label: string, template: string): Completion {
+  return snippetCompletion(template, {
+    label,
+    type: 'snippet',
+    detail: firstLine(template),
+  })
+}
+
+function firstLine(template: string): string {
+  const line = template.split('\n')[0] ?? ''
+  return line.replace(/\$\{(\w*)\}/g, '$1')
+}
+
+// lang-sql keys its namespace by table name and resolves `FROM users u` aliases itself,
+// so one flat map of the active database is the whole schema it needs.
+function toNamespace(tables: TableSchema[]): SQLNamespace {
+  return Object.fromEntries(
+    tables.map((table) => [
+      table.name,
+      {
+        self: { label: table.name, type: 'type', detail: `${table.columns.length} columns` },
+        children: table.columns,
+      },
+    ]),
+  )
+}
+
+// lang-sql only offers columns behind a `table.` prefix. Everywhere else in a statement
+// — after SELECT, after WHERE, after ORDER BY — the columns of the tables that statement
+// already names are what is being reached for, so they are offered bare.
+function bareColumnSource(tables: TableSchema[]): CompletionSource {
+  const byName = new Map(tables.map((table) => [table.name.toLowerCase(), table]))
+
+  return (context) => {
+    const word = context.matchBefore(/[\w$]*/)
+    if (!word) return null
+
+    const options = tablesInStatement(context.state, context.pos, byName).flatMap((table) =>
+      table.columns.map((column) => ({
+        label: column,
+        type: 'property',
+        detail: table.name,
+        boost: 1,
+      })),
+    )
+    if (options.length === 0) return null
+
+    return { from: word.from, options, validFor: /^[\w$]*$/ }
+  }
+}
+
+// Any word in the statement that names a table counts, rather than only the one after
+// FROM. That reads aliased and joined tables for free, and it also catches the tables
+// whose name is a reserved word, which the parser hands back as a keyword token.
+function tablesInStatement(
+  state: EditorState,
+  pos: number,
+  byName: Map<string, TableSchema>,
+): TableSchema[] {
+  const doc = state.doc.toString()
+  const start = doc.lastIndexOf(';', pos - 1) + 1
+  const end = doc.indexOf(';', pos)
+  const statement = doc.slice(start, end === -1 ? doc.length : end)
+
+  const found = new Map<string, TableSchema>()
+  for (const [word] of statement.matchAll(/`[^`]+`|[\w$]+/g)) {
+    const table = byName.get(word.replaceAll('`', '').toLowerCase())
+    if (table) found.set(table.name, table)
+  }
+  return [...found.values()]
+}
+
+// Neither source belongs where the schema is already answering — after `alias.`, inside
+// a string, inside a comment.
+const OFF_LIMITS = [
+  'CompositeIdentifier',
+  'QuotedIdentifier',
+  'String',
+  'LineComment',
+  'BlockComment',
+]
+
+export function sqlLanguage(tables: TableSchema[]): Extension {
+  const support = sql({
+    dialect: MySQL,
+    schema: toNamespace(tables),
+    upperCaseKeywords: true,
+  })
+
+  return [
+    support,
+    support.language.data.of({ autocomplete: ifNotIn(OFF_LIMITS, completeFromList(SNIPPETS)) }),
+    support.language.data.of({ autocomplete: ifNotIn(OFF_LIMITS, bareColumnSource(tables)) }),
+  ]
+}

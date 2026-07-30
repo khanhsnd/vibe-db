@@ -172,6 +172,17 @@ func (a *ConnectionAPI) ListTables(sessionID, database string) ([]string, error)
 	return names, nil
 }
 
+func (a *ConnectionAPI) LoadSchema(sessionID, database string) ([]TableSchema, error) {
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	tables, err := a.sessions.Schema(ctx, sessionID, database)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return toTableSchemaDTOs(tables), nil
+}
+
 func (a *ConnectionAPI) LoadTableRows(sessionID string, page TablePageInput) (TableRows, error) {
 	target := page.toDriver()
 

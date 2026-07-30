@@ -26,6 +26,10 @@ export function ListTables(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ListTables'](arg1, arg2);
 }
 
+export function LoadSchema(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['LoadSchema'](arg1, arg2);
+}
+
 export function LoadTableRows(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadTableRows'](arg1, arg2);
 }

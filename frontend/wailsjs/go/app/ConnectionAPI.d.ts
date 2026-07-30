@@ -14,6 +14,8 @@ export function ListProfiles():Promise<Array<app.Profile>>;
 
 export function ListTables(arg1:string,arg2:string):Promise<Array<string>>;
 
+export function LoadSchema(arg1:string,arg2:string):Promise<Array<app.TableSchema>>;
+
 export function LoadTableRows(arg1:string,arg2:app.TablePageInput):Promise<app.TableRows>;
 
 export function SaveProfile(arg1:app.ProfileInput):Promise<app.Profile>;

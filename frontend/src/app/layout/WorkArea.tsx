@@ -48,7 +48,12 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             />
           )
         ) : (
-          <QueryWorkspace tab={activeTab} sessionId={sessionId} databases={databases} />
+          <QueryWorkspace
+            key={activeTab.id}
+            tab={activeTab}
+            sessionId={sessionId}
+            databases={databases}
+          />
         )}
       </div>
     </div>

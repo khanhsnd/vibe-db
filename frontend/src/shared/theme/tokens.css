@@ -5,6 +5,8 @@
   --surface-hover: #232830;
   --surface-active: #2a303a;
   --surface-selected: #1e2b45;
+  --selection: #2d4f7a;
+  --line-highlight: #ffffff0d;
 
   --line: #282e37;
   --line-strong: #3a424e;
@@ -40,6 +42,8 @@
   --surface-hover: #eff1f5;
   --surface-active: #e4e7ec;
   --surface-selected: #dce8fd;
+  --selection: #b3d4fc;
+  --line-highlight: #0000000a;
 
   --line: #dfe3e8;
   --line-strong: #c3cad3;

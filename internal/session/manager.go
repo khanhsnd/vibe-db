@@ -127,6 +127,14 @@ func (m *Manager) Tables(ctx context.Context, id, database string) ([]string, er
 	return s.driverSession.Tables(ctx, database)
 }
 
+func (m *Manager) Schema(ctx context.Context, id, database string) ([]driver.TableSchema, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return s.driverSession.Schema(ctx, database)
+}
+
 func (m *Manager) TableRows(
 	ctx context.Context,
 	id string,

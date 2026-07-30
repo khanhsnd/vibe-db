@@ -7,6 +7,7 @@ export type Profile = app.Profile
 export type ProfileInput = app.ProfileInput
 export type Session = app.Session
 export type TestResult = app.TestResult
+export type TableSchema = app.TableSchema
 
 export type TLSMode = 'disabled' | 'preferred' | 'required' | 'verify-ca'
 
@@ -57,4 +58,6 @@ export const connections = {
   listDatabases: (sessionId: string) => call(() => api.ListDatabases(sessionId)),
   listTables: (sessionId: string, database: string) =>
     call(() => api.ListTables(sessionId, database)),
+  loadSchema: (sessionId: string, database: string) =>
+    call(() => api.LoadSchema(sessionId, database)),
 }

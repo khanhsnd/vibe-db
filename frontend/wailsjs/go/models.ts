@@ -233,6 +233,20 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class TableSchema {
+	    name: string;
+	    columns: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TableSchema(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.columns = source["columns"];
+	    }
+	}
 	export class TestResult {
 	    serverVersion: string;
 	    latencyMs: number;

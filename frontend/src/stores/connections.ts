@@ -1,7 +1,13 @@
 import { create } from 'zustand'
 
 import { type AppError, toAppError } from '@/bridge/errors'
-import { connections, type Profile, type ProfileInput, type Session } from '@/bridge/connections'
+import {
+  connections,
+  type Profile,
+  type ProfileInput,
+  type Session,
+  type TableSchema,
+} from '@/bridge/connections'
 import type { ConnectionStatus, TreeNode } from '@/features/connections/tree'
 
 export const connectionNodeId = (profileId: string) => `conn:${profileId}`
@@ -11,7 +17,7 @@ export const tablesNodeId = (profileId: string, database: string) =>
 export const tableNodeId = (profileId: string, database: string, table: string) =>
   `table:${profileId}:${database}:${table}`
 
-const tablesKey = (profileId: string, database: string) => `${profileId}:${database}`
+export const databaseKey = (profileId: string, database: string) => `${profileId}:${database}`
 
 interface ConnectionsState {
   profiles: Profile[]
@@ -19,6 +25,7 @@ interface ConnectionsState {
   statuses: Record<string, ConnectionStatus>
   databases: Record<string, string[]>
   tables: Record<string, string[]>
+  schemas: Record<string, TableSchema[]>
   activeDatabase: Record<string, string>
   expanded: ReadonlySet<string>
   loading: boolean
@@ -31,6 +38,7 @@ interface ConnectionsState {
   disconnect: (profileId: string) => Promise<void>
   selectDatabase: (profileId: string, database: string) => void
   loadTables: (profileId: string, database: string) => Promise<void>
+  loadSchema: (profileId: string, database: string) => Promise<void>
   toggleNode: (nodeId: string) => void
   clearError: () => void
 }
@@ -41,6 +49,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   statuses: {},
   databases: {},
   tables: {},
+  schemas: {},
   activeDatabase: {},
   expanded: new Set<string>(),
   loading: false,
@@ -108,9 +117,9 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
         delete databases[profileId]
         delete activeDatabase[profileId]
 
-        const tables = Object.fromEntries(
-          Object.entries(s.tables).filter(([key]) => !key.startsWith(`${profileId}:`)),
-        )
+        const own = (key: string) => !key.startsWith(`${profileId}:`)
+        const tables = Object.fromEntries(Object.entries(s.tables).filter(([key]) => own(key)))
+        const schemas = Object.fromEntries(Object.entries(s.schemas).filter(([key]) => own(key)))
 
         const expanded = new Set(s.expanded)
         expanded.delete(connectionNodeId(profileId))
@@ -119,6 +128,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
           sessions,
           databases,
           tables,
+          schemas,
           activeDatabase,
           expanded,
           statuses: { ...s.statuses, [profileId]: 'idle' },
@@ -136,12 +146,28 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   loadTables: async (profileId, database) => {
     const { sessions, tables } = get()
     const session = sessions[profileId]
-    const key = tablesKey(profileId, database)
+    const key = databaseKey(profileId, database)
     if (!session || tables[key]) return
 
     try {
       const names = await connections.listTables(session.id, database)
       set((s) => ({ tables: { ...s.tables, [key]: names } }))
+    } catch (thrown) {
+      set({ error: toAppError(thrown) })
+    }
+  },
+
+  // Cached until disconnect, like tables: a schema read costs one information_schema
+  // scan, and the editor asks for it on every keystroke.
+  loadSchema: async (profileId, database) => {
+    const { sessions, schemas } = get()
+    const session = sessions[profileId]
+    const key = databaseKey(profileId, database)
+    if (!session || schemas[key]) return
+
+    try {
+      const tables = await connections.loadSchema(session.id, database)
+      set((s) => ({ schemas: { ...s.schemas, [key]: tables } }))
     } catch (thrown) {
       set({ error: toAppError(thrown) })
     }
@@ -191,7 +217,7 @@ function databaseNode(
   tables: Record<string, string[]>,
   active: boolean,
 ): TreeNode {
-  const names = tables[tablesKey(profileId, database)]
+  const names = tables[databaseKey(profileId, database)]
 
   return {
     id: databaseNodeId(profileId, database),

@@ -76,6 +76,11 @@ type TableRows struct {
 	Offset  int           `json:"offset"`
 }
 
+type TableSchema struct {
+	Name    string   `json:"name"`
+	Columns []string `json:"columns"`
+}
+
 type QueryInput struct {
 	RunID    string `json:"runId"`
 	Database string `json:"database"`
@@ -184,6 +189,14 @@ func toQueryResultDTO(result driver.QueryResult, elapsed time.Duration) QueryRes
 		Truncated:    result.Truncated,
 		ElapsedMs:    elapsed.Milliseconds(),
 	}
+}
+
+func toTableSchemaDTOs(source []driver.TableSchema) []TableSchema {
+	tables := make([]TableSchema, 0, len(source))
+	for _, table := range source {
+		tables = append(tables, TableSchema{Name: table.Name, Columns: table.Columns})
+	}
+	return tables
 }
 
 func toColumnDTOs(source []driver.Column) []TableColumn {

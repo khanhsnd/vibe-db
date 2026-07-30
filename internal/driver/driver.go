@@ -30,6 +30,13 @@ type TablePage struct {
 	Offset   int
 }
 
+// TableSchema is the completion-sized view of a table: names only, no types, because
+// the editor needs every table of a database at once and nothing more.
+type TableSchema struct {
+	Name    string
+	Columns []string
+}
+
 type TableRows struct {
 	Columns []Column
 	Rows    [][]*string
@@ -68,6 +75,7 @@ type Session interface {
 	ServerInfo(ctx context.Context) (ServerInfo, error)
 	Databases(ctx context.Context) ([]string, error)
 	Tables(ctx context.Context, database string) ([]string, error)
+	Schema(ctx context.Context, database string) ([]TableSchema, error)
 	TableRows(ctx context.Context, page TablePage) (TableRows, error)
 	UpdateCell(ctx context.Context, edit CellEdit) error
 	Query(ctx context.Context, query Query) (QueryResult, error)

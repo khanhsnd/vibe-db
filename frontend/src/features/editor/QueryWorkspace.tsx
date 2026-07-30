@@ -1,12 +1,16 @@
 import { useEffect, useRef } from 'react'
 
+import type { TableSchema } from '@/bridge/connections'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
+import { databaseKey, useConnectionsStore } from '@/stores/connections'
 import { IDLE_RUN, useQueriesStore } from '@/stores/queries'
 import { useTabsStore, type QueryTab } from '@/stores/tabs'
 
 import { EditorPane } from './EditorPane'
 import { QueryOutput } from './QueryOutput'
 import { QueryToolbar } from './QueryToolbar'
+
+const NO_SCHEMA: TableSchema[] = []
 
 interface QueryWorkspaceProps {
   tab: QueryTab
@@ -20,13 +24,26 @@ export function QueryWorkspace({ tab, sessionId, databases }: QueryWorkspaceProp
   const cancel = useQueriesStore((s) => s.cancel)
   const editQuery = useTabsStore((s) => s.editQuery)
 
+  const schema = useConnectionsStore(
+    (s) => s.schemas[databaseKey(tab.profileId, tab.database)] ?? NO_SCHEMA,
+  )
+  const loadSchema = useConnectionsStore((s) => s.loadSchema)
+
+  useEffect(() => {
+    if (tab.database !== '') void loadSchema(tab.profileId, tab.database)
+  }, [loadSchema, tab.profileId, tab.database])
+
+  // A selection narrows what runs, the way every other client works. It is a ref because
+  // dragging over the text would otherwise re-render the whole workspace.
+  const selection = useRef('')
+
   const canRun = sessionId !== null && tab.sql.trim() !== ''
 
   const start = (explain: boolean) => {
     if (!canRun || sessionId === null) return
     void execute(tab.id, sessionId, {
       database: tab.database,
-      sql: tab.sql,
+      sql: selection.current.trim() || tab.sql,
       maxRows: tab.rowLimit,
       explain,
     })
@@ -73,7 +90,14 @@ export function QueryWorkspace({ tab, sessionId, databases }: QueryWorkspaceProp
         className="min-h-0 flex-1"
       >
         <SplitPanel id="editor" defaultSize="38%" minSize="15%">
-          <EditorPane value={tab.sql} onChange={(sql) => editQuery(tab.id, { sql })} />
+          <EditorPane
+            value={tab.sql}
+            schema={schema}
+            onChange={(sql) => editQuery(tab.id, { sql })}
+            onSelectionChange={(selected) => {
+              selection.current = selected
+            }}
+          />
         </SplitPanel>
 
         <SplitHandle orientation="vertical" />
