@@ -4,6 +4,11 @@ export type ErrorCode =
   | 'SESSION_NOT_FOUND'
   | 'BAD_CREDENTIALS'
   | 'UNKNOWN_DATABASE'
+  | 'UNKNOWN_TABLE'
+  | 'TABLE_NOT_EDITABLE'
+  | 'EMPTY_STATEMENT'
+  | 'SQL_ERROR'
+  | 'QUERY_CANCELLED'
   | 'HOST_UNREACHABLE'
   | 'TIMEOUT'
   | 'TLS_UNSUPPORTED'
@@ -30,6 +35,10 @@ function isErrorCode(value: unknown): value is ErrorCode {
 }
 
 export function toAppError(thrown: unknown): AppError {
+  // `call` already converted it. Parsing an AppError's message again would lose the
+  // code and report every failure as INTERNAL.
+  if (thrown instanceof AppError) return thrown
+
   const raw =
     thrown instanceof Error ? thrown.message : typeof thrown === 'string' ? thrown : String(thrown)
 

@@ -139,6 +139,18 @@ func (m *Manager) TableRows(
 	return s.driverSession.TableRows(ctx, page)
 }
 
+func (m *Manager) Query(
+	ctx context.Context,
+	id string,
+	query driver.Query,
+) (driver.QueryResult, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return driver.QueryResult{}, err
+	}
+	return s.driverSession.Query(ctx, query)
+}
+
 func (m *Manager) UpdateCell(ctx context.Context, id string, edit driver.CellEdit) error {
 	s, err := m.Get(id)
 	if err != nil {

@@ -15,7 +15,25 @@ var (
 	ErrPasswordNotFound  = errors.New("no stored password for profile")
 	ErrUnknownTable      = errors.New("table does not exist")
 	ErrTableNotEditable  = errors.New("table has no primary key")
+	ErrEmptyStatement    = errors.New("no statement to run")
+	ErrStatementFailed   = errors.New("statement rejected by the server")
+	ErrQueryCancelled    = errors.New("query cancelled")
 )
+
+// StatementError carries an engine's own rejection of a statement. Its message is
+// the only useful text for the user, so it survives the trip to the UI verbatim.
+type StatementError struct {
+	Number  int
+	Message string
+}
+
+func (e StatementError) Error() string {
+	return e.Message
+}
+
+func (e StatementError) Unwrap() error {
+	return ErrStatementFailed
+}
 
 type ValidationError struct {
 	Field   string

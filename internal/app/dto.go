@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 )
@@ -8,6 +10,9 @@ import (
 const (
 	DefaultPageSize = 100
 	MaxPageSize     = 1000
+
+	DefaultQueryRows = 1000
+	MaxQueryRows     = 10000
 )
 
 type Profile struct {
@@ -71,6 +76,24 @@ type TableRows struct {
 	Offset  int           `json:"offset"`
 }
 
+type QueryInput struct {
+	RunID    string `json:"runId"`
+	Database string `json:"database"`
+	SQL      string `json:"sql"`
+	MaxRows  int    `json:"maxRows"`
+	Explain  bool   `json:"explain"`
+}
+
+// QueryResult carries both shapes of outcome: a statement that returns rows fills
+// Columns, and one that does not leaves them empty and reports RowsAffected.
+type QueryResult struct {
+	Columns      []TableColumn `json:"columns"`
+	Rows         [][]*string   `json:"rows"`
+	RowsAffected int64         `json:"rowsAffected"`
+	Truncated    bool          `json:"truncated"`
+	ElapsedMs    int64         `json:"elapsedMs"`
+}
+
 type CellEditInput struct {
 	Database string            `json:"database"`
 	Table    string            `json:"table"`
@@ -116,6 +139,23 @@ func (in TablePageInput) toDriver() driver.TablePage {
 	}
 }
 
+func (in QueryInput) toDriver() driver.Query {
+	maxRows := in.MaxRows
+	if maxRows <= 0 {
+		maxRows = DefaultQueryRows
+	}
+	if maxRows > MaxQueryRows {
+		maxRows = MaxQueryRows
+	}
+
+	return driver.Query{
+		Database: in.Database,
+		SQL:      in.SQL,
+		MaxRows:  maxRows,
+		Explain:  in.Explain,
+	}
+}
+
 func (in CellEditInput) toDriver() driver.CellEdit {
 	return driver.CellEdit{
 		Database: in.Database,
@@ -127,8 +167,28 @@ func (in CellEditInput) toDriver() driver.CellEdit {
 }
 
 func toTableRowsDTO(rows driver.TableRows, page driver.TablePage) TableRows {
-	columns := make([]TableColumn, 0, len(rows.Columns))
-	for _, column := range rows.Columns {
+	return TableRows{
+		Columns: toColumnDTOs(rows.Columns),
+		Rows:    rows.Rows,
+		Total:   rows.Total,
+		Limit:   page.Limit,
+		Offset:  page.Offset,
+	}
+}
+
+func toQueryResultDTO(result driver.QueryResult, elapsed time.Duration) QueryResult {
+	return QueryResult{
+		Columns:      toColumnDTOs(result.Columns),
+		Rows:         result.Rows,
+		RowsAffected: result.RowsAffected,
+		Truncated:    result.Truncated,
+		ElapsedMs:    elapsed.Milliseconds(),
+	}
+}
+
+func toColumnDTOs(source []driver.Column) []TableColumn {
+	columns := make([]TableColumn, 0, len(source))
+	for _, column := range source {
 		columns = append(columns, TableColumn{
 			Name:       column.Name,
 			Type:       column.Type,
@@ -138,14 +198,7 @@ func toTableRowsDTO(rows driver.TableRows, page driver.TablePage) TableRows {
 			Default:    column.Default,
 		})
 	}
-
-	return TableRows{
-		Columns: columns,
-		Rows:    rows.Rows,
-		Total:   rows.Total,
-		Limit:   page.Limit,
-		Offset:  page.Offset,
-	}
+	return columns
 }
 
 func (in ProfileInput) toDomain() domain.ConnectionProfile {

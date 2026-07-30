@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -20,11 +19,11 @@ const (
 )
 
 type ConnectionAPI struct {
+	apiContext
+
 	profiles profile.Repository
 	secrets  secret.Store
 	sessions *session.Manager
-
-	ctx context.Context
 }
 
 func NewConnectionAPI(
@@ -33,15 +32,11 @@ func NewConnectionAPI(
 	sessions *session.Manager,
 ) *ConnectionAPI {
 	return &ConnectionAPI{
-		profiles: profiles,
-		secrets:  secrets,
-		sessions: sessions,
-		ctx:      context.Background(),
+		apiContext: newAPIContext(),
+		profiles:   profiles,
+		secrets:    secrets,
+		sessions:   sessions,
 	}
-}
-
-func (a *ConnectionAPI) useContext(ctx context.Context) {
-	a.ctx = ctx
 }
 
 func (a *ConnectionAPI) ListProfiles() ([]Profile, error) {
@@ -104,7 +99,7 @@ func (a *ConnectionAPI) TestConnection(input ProfileInput) (TestResult, error) {
 		return TestResult{}, wrapError(err)
 	}
 
-	ctx, cancel := context.WithTimeout(a.ctx, connectTimeout)
+	ctx, cancel := a.withTimeout(connectTimeout)
 	defer cancel()
 
 	started := time.Now()
@@ -135,7 +130,7 @@ func (a *ConnectionAPI) Connect(profileID, password string) (Session, error) {
 		return Session{}, wrapError(err)
 	}
 
-	ctx, cancel := context.WithTimeout(a.ctx, connectTimeout)
+	ctx, cancel := a.withTimeout(connectTimeout)
 	defer cancel()
 
 	opened, err := a.sessions.Open(ctx, stored, creds)
@@ -156,7 +151,7 @@ func (a *ConnectionAPI) Disconnect(sessionID string) error {
 }
 
 func (a *ConnectionAPI) ListDatabases(sessionID string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(a.ctx, queryTimeout)
+	ctx, cancel := a.withTimeout(queryTimeout)
 	defer cancel()
 
 	names, err := a.sessions.Databases(ctx, sessionID)
@@ -167,7 +162,7 @@ func (a *ConnectionAPI) ListDatabases(sessionID string) ([]string, error) {
 }
 
 func (a *ConnectionAPI) ListTables(sessionID, database string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(a.ctx, queryTimeout)
+	ctx, cancel := a.withTimeout(queryTimeout)
 	defer cancel()
 
 	names, err := a.sessions.Tables(ctx, sessionID, database)
@@ -180,7 +175,7 @@ func (a *ConnectionAPI) ListTables(sessionID, database string) ([]string, error)
 func (a *ConnectionAPI) LoadTableRows(sessionID string, page TablePageInput) (TableRows, error) {
 	target := page.toDriver()
 
-	ctx, cancel := context.WithTimeout(a.ctx, queryTimeout)
+	ctx, cancel := a.withTimeout(queryTimeout)
 	defer cancel()
 
 	rows, err := a.sessions.TableRows(ctx, sessionID, target)
@@ -191,7 +186,7 @@ func (a *ConnectionAPI) LoadTableRows(sessionID string, page TablePageInput) (Ta
 }
 
 func (a *ConnectionAPI) UpdateCell(sessionID string, edit CellEditInput) error {
-	ctx, cancel := context.WithTimeout(a.ctx, queryTimeout)
+	ctx, cancel := a.withTimeout(queryTimeout)
 	defer cancel()
 
 	return wrapError(a.sessions.UpdateCell(ctx, sessionID, edit.toDriver()))

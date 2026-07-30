@@ -31,11 +31,6 @@ export interface GridData {
   rows: Cell[][]
 }
 
-export interface ResultSet extends GridData {
-  elapsedMs: number
-  truncated: boolean
-}
-
 const NUMERIC_TYPE =
   /^(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|BIT|YEAR)/i
 

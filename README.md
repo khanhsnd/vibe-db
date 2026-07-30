@@ -35,9 +35,25 @@ toggles, since they occupy different edges:
   cleared on a change, because the cell coordinates the grid reports are positions among the
   *visible* columns and the view maps them back to real column indexes.
 
-The SQL editor is a plain textarea and its result grid renders mock data — CodeMirror and real
-query execution land next. Schema browsing stops at tables; views, procedures and functions are
-not listed yet.
+A query tab carries its own toolbar, editor buffer, database and row limit, so several tabs can sit
+on the same connection without treading on each other. The toolbar picks the database, then
+**Execute** (`F5` or `Ctrl`+`Enter`) or **Explain** runs the statement; **Stop** cancels it.
+
+- The database is applied with `USE` on a connection pinned for that one statement, so the pool's
+  other connections keep whatever they had.
+- A statement that returns rows fills the grid; one that does not reports its affected-row count.
+  Which path a statement takes is decided by its leading keyword, read past any leading comments.
+- Results are capped at the toolbar's row limit (1 000 by default, 10 000 at most). Hitting the cap
+  is reported in the status strip rather than passed off as the whole answer.
+- **Errors surface in the output panel below the editor**, with the code, the server's own wording
+  and the errno, never as a dialog. A cancel is reported as `QUERY_CANCELLED`, not as a failure.
+- Progress shows in two places: a spinner beside the toolbar buttons and a `Running…` status strip
+  under the output panel. Previous rows stay on screen until the new ones land.
+
+The editor is still a plain textarea (CodeMirror next), and one Execute runs one statement — a
+pasted multi-statement script is rejected by the server, since `multiStatements` stays off and the
+client-side splitter is not written yet. Schema browsing stops at tables; views, procedures and
+functions are not listed yet.
 
 ### Grid behaviour
 
@@ -105,6 +121,9 @@ serialises every error as a JSON envelope (`code`, `message`, `field`, `detail`)
 | `UNKNOWN_DATABASE` | MySQL errno 1049 |
 | `UNKNOWN_TABLE` | MySQL errno 1146, or the table has no columns in `information_schema` |
 | `TABLE_NOT_EDITABLE` | Cell edit attempted on a table with no primary key |
+| `EMPTY_STATEMENT` | Run requested with nothing but whitespace or semicolons |
+| `SQL_ERROR` | The server rejected the statement; `message` is its own wording, `detail` the errno |
+| `QUERY_CANCELLED` | Stop was pressed, or the run context was cancelled |
 | `HOST_UNREACHABLE` | Dial failed (refused / no route) |
 | `TIMEOUT` | Dial or context deadline exceeded |
 | `TLS_UNSUPPORTED` | Server has no TLS but a TLS mode required it |

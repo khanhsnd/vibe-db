@@ -13,6 +13,7 @@ import (
 
 type App struct {
 	Connections *ConnectionAPI
+	Queries     *QueryAPI
 
 	sessions *session.Manager
 }
@@ -28,12 +29,14 @@ func New() (*App, error) {
 
 	return &App{
 		Connections: NewConnectionAPI(jsonfile.New(profilePath), keyring.New(), sessions),
+		Queries:     NewQueryAPI(sessions),
 		sessions:    sessions,
 	}, nil
 }
 
 func (a *App) Startup(ctx context.Context) {
 	a.Connections.useContext(ctx)
+	a.Queries.useContext(ctx)
 }
 
 func (a *App) Shutdown(context.Context) {
@@ -41,5 +44,5 @@ func (a *App) Shutdown(context.Context) {
 }
 
 func (a *App) Bindings() []any {
-	return []any{a.Connections}
+	return []any{a.Connections, a.Queries}
 }

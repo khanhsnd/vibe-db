@@ -140,7 +140,7 @@ export function ResultGrid({ result, selection, onSelectionChange }: ResultGridP
 
                 {result.columns.map((column, i) => (
                   <CellView
-                    key={column.name}
+                    key={i}
                     value={row[i] ?? null}
                     numeric={isNumeric(column.type)}
                     width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
@@ -186,7 +186,7 @@ function HeaderRow({ columns, widths, onResize, onFit }: HeaderRowProps) {
 
       {columns.map((column, i) => (
         <div
-          key={column.name}
+          key={i}
           className="relative flex shrink-0 items-center gap-1.5 border-r border-line px-2"
           style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: ROW_HEIGHT }}
         >

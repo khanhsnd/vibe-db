@@ -39,6 +39,8 @@ func TestWrapErrorMapsSentinels(t *testing.T) {
 		{domain.ErrConnectionTimeout, CodeTimeout},
 		{domain.ErrTLSUnsupported, CodeTLSUnsupported},
 		{domain.ErrPasswordNotFound, CodePasswordNotFound},
+		{domain.ErrEmptyStatement, CodeEmptyStatement},
+		{domain.ErrQueryCancelled, CodeQueryCancelled},
 	}
 
 	for _, tt := range tests {
@@ -65,6 +67,22 @@ func TestWrapErrorCarriesValidationField(t *testing.T) {
 	}
 	if got.Field != "port" {
 		t.Errorf("field = %q, want %q", got.Field, "port")
+	}
+}
+
+func TestWrapErrorKeepsTheServerWordingOfAStatementError(t *testing.T) {
+	err := domain.StatementError{Number: 1054, Message: "Unknown column 'nope' in 'field list'"}
+
+	got := decode(t, wrapError(fmt.Errorf("run: %w", err)))
+
+	if got.Code != CodeSQLError {
+		t.Errorf("code = %q, want %q", got.Code, CodeSQLError)
+	}
+	if got.Message != err.Message {
+		t.Errorf("message = %q, want the server's wording %q", got.Message, err.Message)
+	}
+	if got.Detail != "error 1054" {
+		t.Errorf("detail = %q, want the error number", got.Detail)
 	}
 }
 

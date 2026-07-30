@@ -113,29 +113,9 @@ func (s *session) selectRows(
 	}
 	defer rows.Close()
 
-	holders := make([]sql.NullString, width)
-	targets := make([]any, width)
-	for i := range holders {
-		targets[i] = &holders[i]
-	}
-
-	out := [][]*string{}
-	for rows.Next() {
-		if err := rows.Scan(targets...); err != nil {
-			return nil, translateError(err)
-		}
-
-		row := make([]*string, width)
-		for i, holder := range holders {
-			row[i] = toPointer(holder)
-		}
-		out = append(out, row)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, translateError(err)
-	}
-
-	return out, nil
+	// The LIMIT clause already bounds the read, so no cap is needed here.
+	out, _, err := scanRows(rows, width, 0)
+	return out, err
 }
 
 func buildSelect(page driver.TablePage, columns []driver.Column) string {

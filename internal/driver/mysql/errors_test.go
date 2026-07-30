@@ -53,6 +53,12 @@ func TestTranslateError(t *testing.T) {
 			fmt.Errorf("handshake: %w", x509.HostnameError{Host: "db.internal"}),
 			domain.ErrTLSNotVerified,
 		},
+		{"cancelled context", context.Canceled, domain.ErrQueryCancelled},
+		{
+			"wrapped cancelled context",
+			fmt.Errorf("query: %w", context.Canceled),
+			domain.ErrQueryCancelled,
+		},
 		{"deadline exceeded", context.DeadlineExceeded, domain.ErrConnectionTimeout},
 		{
 			"wrapped deadline exceeded",
@@ -84,12 +90,23 @@ func TestTranslateError(t *testing.T) {
 	}
 }
 
-func TestTranslateErrorPassesThroughUnknownServerErrors(t *testing.T) {
+func TestTranslateErrorKeepsUnknownServerErrorsAsStatementErrors(t *testing.T) {
 	original := &gomysql.MySQLError{Number: 1064, Message: "You have an error in your SQL syntax"}
 
 	got := translateError(original)
 
-	if !errors.Is(got, original) {
-		t.Errorf("translateError() = %v, want the original error preserved", got)
+	if !errors.Is(got, domain.ErrStatementFailed) {
+		t.Fatalf("translateError() = %v, want a statement failure", got)
+	}
+
+	var statementErr domain.StatementError
+	if !errors.As(got, &statementErr) {
+		t.Fatalf("translateError() = %v, want a domain.StatementError", got)
+	}
+	if statementErr.Number != 1064 {
+		t.Errorf("number = %d, want 1064", statementErr.Number)
+	}
+	if statementErr.Message != original.Message {
+		t.Errorf("message = %q, want the server's wording %q", statementErr.Message, original.Message)
 	}
 }

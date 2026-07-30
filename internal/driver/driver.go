@@ -36,6 +36,20 @@ type TableRows struct {
 	Total   int64
 }
 
+type Query struct {
+	Database string
+	SQL      string
+	MaxRows  int
+	Explain  bool
+}
+
+type QueryResult struct {
+	Columns      []Column
+	Rows         [][]*string
+	RowsAffected int64
+	Truncated    bool
+}
+
 type CellEdit struct {
 	Database string
 	Table    string
@@ -56,6 +70,7 @@ type Session interface {
 	Tables(ctx context.Context, database string) ([]string, error)
 	TableRows(ctx context.Context, page TablePage) (TableRows, error)
 	UpdateCell(ctx context.Context, edit CellEdit) error
+	Query(ctx context.Context, query Query) (QueryResult, error)
 	Close() error
 }
 

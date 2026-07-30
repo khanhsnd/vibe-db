@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { toProfileInput, type Profile, type ProfileInput } from '@/bridge/connections'
+import { DEFAULT_QUERY_ROWS } from '@/bridge/query'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
 import { PasswordPrompt } from '@/features/connections/PasswordPrompt'
 import type { TreeNode } from '@/features/connections/tree'
@@ -45,7 +46,7 @@ export function App() {
     [profiles, statuses, databases, tables, activeDatabase],
   )
 
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selected, setSelected] = useState<TreeNode | null>(null)
   const [filter, setFilter] = useState('')
   const [dialogProfile, setDialogProfile] = useState<ProfileInput | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -137,7 +138,7 @@ export function App() {
 
   const selectNode = useCallback(
     (node: TreeNode) => {
-      setSelectedId(node.id)
+      setSelected(node)
       if (!node.database) return
 
       if (node.kind === 'database') selectDatabase(node.profileId, node.database)
@@ -162,9 +163,22 @@ export function App() {
     [profiles, sessions, startConnect, toggleNode, openTable],
   )
 
+  // A new editor inherits the selected connection and database, falling back to
+  // whichever connection is open.
   const newQuery = useCallback(() => {
-    openTab({ kind: 'query', title: 'Query', profileId: Object.keys(sessions)[0] ?? '' })
-  }, [openTab, sessions])
+    const profileId = selected?.profileId ?? Object.keys(sessions)[0] ?? ''
+    const database = selected?.database ?? activeDatabase[profileId] ?? ''
+    const count = useTabsStore.getState().tabs.filter((tab) => tab.kind === 'query').length
+
+    openTab({
+      kind: 'query',
+      title: `Query ${count + 1}`,
+      profileId,
+      database,
+      sql: '',
+      rowLimit: DEFAULT_QUERY_ROWS,
+    })
+  }, [openTab, selected, sessions, activeDatabase])
 
   const status = useMemo<StatusInfo>(() => {
     const activeProfileId = Object.keys(sessions)[0]
@@ -211,7 +225,7 @@ export function App() {
           <Sidebar
             roots={roots}
             expanded={expanded}
-            selectedId={selectedId}
+            selectedId={selected?.id ?? null}
             filter={filter}
             onFilterChange={setFilter}
             onToggle={toggleTreeNode}

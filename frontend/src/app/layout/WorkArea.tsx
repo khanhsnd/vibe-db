@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Terminal } from 'lucide-react'
 
 import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
@@ -10,14 +9,16 @@ import { useTabsStore } from '@/stores/tabs'
 
 import { TabBar } from './TabBar'
 
+const NO_DATABASES: string[] = []
+
 export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
   const activeTab = useTabsStore((s) => s.tabs.find((t) => t.id === s.activeId) ?? null)
   const sessionId = useConnectionsStore((s) =>
     activeTab ? (s.sessions[activeTab.profileId]?.id ?? null) : null,
   )
-
-  const [sql, setSql] = useState('SELECT * FROM users WHERE id > 10;')
-  const [rowLimit, setRowLimit] = useState(1000)
+  const databases = useConnectionsStore((s) =>
+    activeTab ? (s.databases[activeTab.profileId] ?? NO_DATABASES) : NO_DATABASES,
+  )
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
@@ -47,12 +48,7 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             />
           )
         ) : (
-          <QueryWorkspace
-            sql={sql}
-            onSqlChange={setSql}
-            rowLimit={rowLimit}
-            onRowLimitChange={setRowLimit}
-          />
+          <QueryWorkspace tab={activeTab} sessionId={sessionId} databases={databases} />
         )}
       </div>
     </div>

@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 
+import { useQueriesStore } from './queries'
+
 export type TabKind = 'query' | 'table'
 
 interface TabBase {
@@ -10,6 +12,9 @@ interface TabBase {
 
 export interface QueryTab extends TabBase {
   kind: 'query'
+  sql: string
+  database: string
+  rowLimit: number
 }
 
 export interface TableTab extends TabBase {
@@ -21,12 +26,15 @@ export interface TableTab extends TabBase {
 export type Tab = QueryTab | TableTab
 export type NewTab = Omit<QueryTab, 'id'> | Omit<TableTab, 'id'>
 
+type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'database' | 'rowLimit'>>
+
 interface TabsState {
   tabs: Tab[]
   activeId: string | null
   open: (tab: NewTab) => string
   close: (id: string) => void
   activate: (id: string) => void
+  editQuery: (id: string, edit: QueryEdit) => void
 }
 
 let seq = 0
@@ -56,7 +64,9 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     return id
   },
 
-  close: (id) =>
+  close: (id) => {
+    useQueriesStore.getState().discard(id)
+
     set((s) => {
       const index = s.tabs.findIndex((t) => t.id === id)
       if (index === -1) return s
@@ -66,7 +76,13 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
       const neighbour = tabs[index] ?? tabs[index - 1]
       return { tabs, activeId: neighbour?.id ?? null }
-    }),
+    })
+  },
 
   activate: (id) => set({ activeId: id }),
+
+  editQuery: (id, edit) =>
+    set((s) => ({
+      tabs: s.tabs.map((tab) => (tab.id === id && tab.kind === 'query' ? { ...tab, ...edit } : tab)),
+    })),
 }))

@@ -35,7 +35,11 @@ func translateError(err error) error {
 		if mapped, ok := errnoToDomain[mysqlErr.Number]; ok {
 			return mapped
 		}
-		return err
+		return domain.StatementError{Number: int(mysqlErr.Number), Message: mysqlErr.Message}
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return domain.ErrQueryCancelled
 	}
 
 	if errors.Is(err, mysql.ErrNoTLS) {
