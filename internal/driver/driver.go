@@ -50,11 +50,15 @@ type Query struct {
 	Explain  bool
 }
 
+// QueryResult carries Database and Table only when its rows map one-to-one onto the rows
+// of a single table; both stay empty for a result that cannot be written back.
 type QueryResult struct {
 	Columns      []Column
 	Rows         [][]*string
 	RowsAffected int64
 	Truncated    bool
+	Database     string
+	Table        string
 }
 
 type CellEdit struct {

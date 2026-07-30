@@ -51,6 +51,31 @@ on the same connection without treading on each other. The toolbar picks the dat
 - Progress shows in two places: a spinner beside the toolbar buttons and a `Running…` status strip
   under the output panel. Previous rows stay on screen until the new ones land.
 
+### The output panel
+
+The panel under the editor is a tab strip whose only pane so far is **`Result`**; a further pane —
+messages, a query plan, history — is one more entry in the list `QueryOutput` hands `ResultTabs`.
+The run status strip stays below the strip, because it describes the run rather than any one pane.
+
+Inside the pane sits a toolbar naming what is on screen, and the buttons that write it back:
+
+- **Selecting a row reveals `Discard`, `Apply` and `Refresh`.** They are hidden until then, since
+  none of them has a subject without one.
+- **Double-click a cell to edit it** (or press `Enter` on the selected cell). `Esc` abandons the
+  input. Edits are held locally and marked in the grid, so a mistyped value costs nothing.
+- `Discard` drops the pending edits, `Apply` writes each one with the same
+  `UPDATE … WHERE <primary key> LIMIT 1` the table view uses and reloads, `Refresh` reloads alone.
+- **`Refresh` and `Apply` replay the statement that produced the rows**, not whatever the editor
+  holds now, so editing the SQL after a run cannot make Apply execute something else.
+
+A result is writable only when the driver can trace its rows to one stored row each. `parseSource`
+in the MySQL adapter accepts a plain `SELECT … FROM <table>` with at most a `WHERE`, `ORDER BY` or
+`LIMIT` after it, and rejects joins, unions, `GROUP BY`, `DISTINCT`, derived tables and `EXPLAIN`.
+The named table is then looked up in `information_schema`, and the result stays read-only unless it
+carries every primary-key column exactly once — an aliased or repeated key column names no row. The
+toolbar says which case applies. This is needed because `database/sql` reports a column's type but
+not the table it came from, so the source cannot be read off the wire.
+
 One Execute runs one statement — a pasted multi-statement script is rejected by the server, since
 `multiStatements` stays off and the client-side splitter is not written yet. Schema browsing stops
 at tables; views, procedures and functions are not listed yet.
@@ -107,6 +132,10 @@ Two things about the editor's colours are load-bearing, not cosmetic:
   Double-clicking that edge fits the column to its widest cell (capped at 520 px), measured with
   a canvas against the `--font-mono` / `--text-sm` tokens. Widths are keyed by column *name*, not
   position, so hiding or showing a column does not reset them.
+
+- **Cells edit in place** only when a call site passes `onEditCell`; without it the grid is
+  read-only, which is what the table data view relies on. Cells carrying an unapplied edit are
+  named in the `dirty` set and outlined in the warning colour.
 
 The grid keeps its own selection when left uncontrolled, so a new call site gets this for free; the
 table data view passes `selection` in only because the Cell Editor needs the anchor.

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 
 import type { TableSchema } from '@/bridge/connections'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
@@ -21,6 +21,7 @@ interface QueryWorkspaceProps {
 export function QueryWorkspace({ tab, sessionId, databases }: QueryWorkspaceProps) {
   const run = useQueriesStore((s) => s.runs[tab.id] ?? IDLE_RUN)
   const execute = useQueriesStore((s) => s.execute)
+  const rerun = useQueriesStore((s) => s.rerun)
   const cancel = useQueriesStore((s) => s.cancel)
   const editQuery = useTabsStore((s) => s.editQuery)
 
@@ -48,6 +49,12 @@ export function QueryWorkspace({ tab, sessionId, databases }: QueryWorkspaceProp
       explain,
     })
   }
+
+  // Refresh replays the statement that produced the rows on screen, not whatever the
+  // editor holds now, so applying an edit cannot silently run something else.
+  const refresh = useCallback(() => {
+    if (sessionId !== null) void rerun(tab.id, sessionId)
+  }, [rerun, tab.id, sessionId])
 
   // The shortcut is bound on the window, because F5 reloads the WebView whenever
   // focus sits outside this panel. The ref keeps the listener off the keystroke path.
@@ -103,7 +110,7 @@ export function QueryWorkspace({ tab, sessionId, databases }: QueryWorkspaceProp
         <SplitHandle orientation="vertical" />
 
         <SplitPanel id="output" defaultSize="62%" minSize="20%">
-          <QueryOutput run={run} />
+          <QueryOutput run={run} sessionId={sessionId} onRefresh={refresh} />
         </SplitPanel>
       </Split>
     </div>

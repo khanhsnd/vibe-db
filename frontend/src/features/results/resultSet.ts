@@ -1,4 +1,4 @@
-import type { Cell } from '@/bridge/tables'
+import type { Cell, TableColumn } from '@/bridge/tables'
 
 export type { Cell }
 
@@ -36,6 +36,20 @@ const NUMERIC_TYPE =
 
 export function isNumeric(type: string): boolean {
   return NUMERIC_TYPE.test(type)
+}
+
+/** Identifies one grid cell, so pending edits can be looked up while rendering. */
+export function cellKey(row: number, column: number): string {
+  return `${row}:${column}`
+}
+
+/** The values that identify one stored row, in the shape `UpdateCell` expects. */
+export function primaryKeyOf(columns: TableColumn[], row: Cell[]): Record<string, string> {
+  const key: Record<string, string> = {}
+  columns.forEach((column, index) => {
+    if (column.primaryKey) key[column.name] = row[index] ?? ''
+  })
+  return key
 }
 
 export function cellText(value: Cell): string {

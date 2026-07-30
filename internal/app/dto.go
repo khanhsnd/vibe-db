@@ -91,12 +91,16 @@ type QueryInput struct {
 
 // QueryResult carries both shapes of outcome: a statement that returns rows fills
 // Columns, and one that does not leaves them empty and reports RowsAffected.
+// Database and Table name the source the rows may be written back to, and are empty
+// for a result the driver could not trace to a single table.
 type QueryResult struct {
 	Columns      []TableColumn `json:"columns"`
 	Rows         [][]*string   `json:"rows"`
 	RowsAffected int64         `json:"rowsAffected"`
 	Truncated    bool          `json:"truncated"`
 	ElapsedMs    int64         `json:"elapsedMs"`
+	Database     string        `json:"database"`
+	Table        string        `json:"table"`
 }
 
 type CellEditInput struct {
@@ -188,6 +192,8 @@ func toQueryResultDTO(result driver.QueryResult, elapsed time.Duration) QueryRes
 		RowsAffected: result.RowsAffected,
 		Truncated:    result.Truncated,
 		ElapsedMs:    elapsed.Milliseconds(),
+		Database:     result.Database,
+		Table:        result.Table,
 	}
 }
 

@@ -15,13 +15,19 @@ export interface QueryRequest {
   explain: boolean
 }
 
-/** A statement that returns rows fills `columns`; one that does not reports `rowsAffected`. */
+/**
+ * A statement that returns rows fills `columns`; one that does not reports `rowsAffected`.
+ * `database` and `table` name the source the rows can be written back to, and are empty
+ * for a result the backend could not trace to a single table.
+ */
 export interface QueryResult {
   columns: TableColumn[]
   rows: Cell[][]
   rowsAffected: number
   truncated: boolean
   elapsedMs: number
+  database: string
+  table: string
 }
 
 export const queries = {

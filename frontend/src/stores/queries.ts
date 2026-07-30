@@ -7,10 +7,12 @@ export interface QueryRun {
   running: boolean
   result: QueryResult | null
   error: AppError | null
+  /** What produced this run, so Refresh replays it instead of whatever the editor now holds. */
+  request: RunRequest | null
 }
 
 /** A stable snapshot for tabs that have not run anything, so selectors stay referentially equal. */
-export const IDLE_RUN: QueryRun = { running: false, result: null, error: null }
+export const IDLE_RUN: QueryRun = { running: false, result: null, error: null, request: null }
 
 type RunRequest = Omit<QueryRequest, 'runId'>
 
@@ -20,6 +22,7 @@ interface QueriesState {
   pending: Record<string, string>
 
   execute: (tabId: string, sessionId: string, request: RunRequest) => Promise<void>
+  rerun: (tabId: string, sessionId: string) => Promise<void>
   cancel: (tabId: string) => void
   discard: (tabId: string) => void
 }
@@ -36,21 +39,31 @@ export const useQueriesStore = create<QueriesState>((set, get) => ({
       runs: {
         ...s.runs,
         // The previous rows stay on screen until the new ones land.
-        [tabId]: { running: true, result: s.runs[tabId]?.result ?? null, error: null },
+        [tabId]: { running: true, result: s.runs[tabId]?.result ?? null, error: null, request },
       },
       pending: { ...s.pending, [tabId]: runId },
     }))
 
     try {
       const result = await queries.run(sessionId, { ...request, runId })
-      set((s) => ({ runs: { ...s.runs, [tabId]: { running: false, result, error: null } } }))
+      set((s) => ({
+        runs: { ...s.runs, [tabId]: { running: false, result, error: null, request } },
+      }))
     } catch (thrown) {
       set((s) => ({
-        runs: { ...s.runs, [tabId]: { running: false, result: null, error: toAppError(thrown) } },
+        runs: {
+          ...s.runs,
+          [tabId]: { running: false, result: null, error: toAppError(thrown), request },
+        },
       }))
     } finally {
       set((s) => ({ pending: omit(s.pending, tabId) }))
     }
+  },
+
+  rerun: async (tabId, sessionId) => {
+    const request = get().runs[tabId]?.request
+    if (request) await get().execute(tabId, sessionId, request)
   },
 
   cancel: (tabId) => {

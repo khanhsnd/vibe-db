@@ -45,7 +45,79 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 	if !rowReturning[leadingKeyword(statement)] {
 		return execStatement(ctx, conn, statement)
 	}
-	return queryStatement(ctx, conn, statement, query.MaxRows)
+
+	result, err := queryStatement(ctx, conn, statement, query.MaxRows)
+	if err != nil {
+		return driver.QueryResult{}, err
+	}
+
+	s.attachSource(ctx, query.Database, statement, &result)
+	return result, nil
+}
+
+// attachSource marks a result writable. The grid needs the table to address a row and the
+// primary key to identify it, and the wire format carries neither: database/sql reports a
+// column's type but not the table it came from. Whatever cannot be proven stays read-only.
+func (s *session) attachSource(
+	ctx context.Context,
+	fallbackDatabase, statement string,
+	result *driver.QueryResult,
+) {
+	found, ok := parseSource(statement)
+	if !ok {
+		return
+	}
+
+	database := found.database
+	if database == "" {
+		database = fallbackDatabase
+	}
+	if database == "" {
+		return
+	}
+
+	stored, err := s.columns(ctx, database, found.table)
+	if err != nil {
+		return
+	}
+
+	keys := primaryKeyNames(stored)
+	if len(keys) == 0 || !mergeSchema(result.Columns, stored, keys) {
+		return
+	}
+
+	result.Database, result.Table = database, found.table
+}
+
+// mergeSchema reports whether the result carries every primary-key column exactly once,
+// and if so copies the stored column facts — key flag, declared type, nullability — onto
+// the matching result columns. An aliased or repeated key column fails the test, because
+// the row it names can no longer be found.
+func mergeSchema(result, stored []driver.Column, keys []string) bool {
+	counts := make(map[string]int, len(result))
+	for _, column := range result {
+		counts[strings.ToLower(column.Name)]++
+	}
+	for _, key := range keys {
+		if counts[strings.ToLower(key)] != 1 {
+			return false
+		}
+	}
+
+	byName := make(map[string]driver.Column, len(stored))
+	for _, column := range stored {
+		byName[strings.ToLower(column.Name)] = column
+	}
+	for i := range result {
+		if column, ok := byName[strings.ToLower(result[i].Name)]; ok {
+			result[i].FullType = column.FullType
+			result[i].Nullable = column.Nullable
+			result[i].PrimaryKey = column.PrimaryKey
+			result[i].Default = column.Default
+		}
+	}
+
+	return true
 }
 
 func (s *session) pinned(ctx context.Context, database string) (*sql.Conn, error) {

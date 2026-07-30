@@ -126,6 +126,8 @@ export namespace app {
 	    rowsAffected: number;
 	    truncated: boolean;
 	    elapsedMs: number;
+	    database: string;
+	    table: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new QueryResult(source);
@@ -138,6 +140,8 @@ export namespace app {
 	        this.rowsAffected = source["rowsAffected"];
 	        this.truncated = source["truncated"];
 	        this.elapsedMs = source["elapsedMs"];
+	        this.database = source["database"];
+	        this.table = source["table"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

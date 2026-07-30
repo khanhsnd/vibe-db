@@ -16,12 +16,14 @@ import { ROW_HEIGHT } from '@/shared/theme/density'
 import { gridFont, widestText } from './measureText'
 import {
   boundsOf,
+  cellKey,
   cellText,
   isNumeric,
   toTSV,
   type Cell,
   type CellBounds,
   type CellRange,
+  type CellRef,
   type GridData,
 } from './resultSet'
 
@@ -31,17 +33,30 @@ const MIN_COLUMN_WIDTH = 60
 const MAX_FIT_WIDTH = 520
 const CELL_PADDING = 17
 
+const NOTHING_DIRTY: ReadonlySet<string> = new Set()
+
 interface ResultGridProps {
   result: GridData
   selection?: CellRange | null
   onSelectionChange?: (selection: CellRange) => void
+  /** Supplied only for a writable result; its absence keeps the grid read-only. */
+  onEditCell?: ((ref: CellRef, value: Cell) => void) | undefined
+  /** Cells carrying an unapplied edit, keyed by `cellKey`. */
+  dirty?: ReadonlySet<string>
 }
 
-export function ResultGrid({ result, selection, onSelectionChange }: ResultGridProps) {
+export function ResultGrid({
+  result,
+  selection,
+  onSelectionChange,
+  onEditCell,
+  dirty = NOTHING_DIRTY,
+}: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
   const [resized, setResized] = useState<Record<string, number>>({})
   const [ownSelection, setOwnSelection] = useState<CellRange | null>(null)
+  const [editing, setEditing] = useState<CellRef | null>(null)
 
   const current = selection === undefined ? ownSelection : selection
 
@@ -67,6 +82,10 @@ export function ResultGrid({ result, selection, onSelectionChange }: ResultGridP
     window.addEventListener('mouseup', stopDragging)
     return () => window.removeEventListener('mouseup', stopDragging)
   }, [])
+
+  // Rows shift under the open input whenever a new result lands, so the editor closes with
+  // it. The dependency is the row array, not the wrapper, which callers rebuild per render.
+  useEffect(() => setEditing(null), [result.rows])
 
   const totalWidth = GUTTER_WIDTH + widths.reduce((sum, w) => sum + w, 0)
   const bounds = current ? boundsOf(current) : null
@@ -99,6 +118,12 @@ export function ResultGrid({ result, selection, onSelectionChange }: ResultGridP
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!current) return
+
+    if (event.key === 'Enter' && onEditCell) {
+      event.preventDefault()
+      setEditing(current.anchor)
+      return
+    }
     if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'c') return
 
     event.preventDefault()
@@ -138,18 +163,41 @@ export function ResultGrid({ result, selection, onSelectionChange }: ResultGridP
                   {item.index + 1}
                 </div>
 
-                {result.columns.map((column, i) => (
-                  <CellView
-                    key={i}
-                    value={row[i] ?? null}
-                    numeric={isNumeric(column.type)}
-                    width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
-                    selected={within(bounds, item.index, i)}
-                    anchored={current?.anchor.row === item.index && current.anchor.column === i}
-                    onMouseDown={(event) => startSelect(event, item.index, i)}
-                    onMouseOver={() => extendSelect(item.index, i)}
-                  />
-                ))}
+                {result.columns.map((column, i) => {
+                  const width = widths[i] ?? DEFAULT_COLUMN_WIDTH
+
+                  if (onEditCell && editing?.row === item.index && editing.column === i) {
+                    return (
+                      <CellInput
+                        key={i}
+                        value={row[i] ?? null}
+                        width={width}
+                        onCommit={(value) => {
+                          onEditCell({ row: item.index, column: i }, value)
+                          setEditing(null)
+                        }}
+                        onCancel={() => setEditing(null)}
+                      />
+                    )
+                  }
+
+                  return (
+                    <CellView
+                      key={i}
+                      value={row[i] ?? null}
+                      numeric={isNumeric(column.type)}
+                      width={width}
+                      selected={within(bounds, item.index, i)}
+                      anchored={current?.anchor.row === item.index && current.anchor.column === i}
+                      edited={dirty.has(cellKey(item.index, i))}
+                      onMouseDown={(event) => startSelect(event, item.index, i)}
+                      onMouseOver={() => extendSelect(item.index, i)}
+                      onDoubleClick={
+                        onEditCell ? () => setEditing({ row: item.index, column: i }) : undefined
+                      }
+                    />
+                  )
+                })}
               </div>
             )
           })}
@@ -255,8 +303,10 @@ interface CellViewProps {
   width: number
   selected: boolean
   anchored: boolean
+  edited: boolean
   onMouseDown: (event: ReactMouseEvent) => void
   onMouseOver: () => void
+  onDoubleClick: (() => void) | undefined
 }
 
 function CellView({
@@ -265,27 +315,64 @@ function CellView({
   width,
   selected,
   anchored,
+  edited,
   onMouseDown,
   onMouseOver,
+  onDoubleClick,
 }: CellViewProps) {
   return (
     <div
       onMouseDown={onMouseDown}
       onMouseOver={onMouseOver}
+      onDoubleClick={onDoubleClick}
       className={cn(
         'flex shrink-0 cursor-default items-center overflow-hidden border-r border-line/60 px-2',
         'font-mono text-sm whitespace-nowrap',
         numeric && 'justify-end',
         selected && 'bg-accent-subtle',
         anchored && 'shadow-[inset_0_0_0_1px_var(--accent)]',
+        edited && 'shadow-[inset_0_0_0_1px_var(--warn)]',
       )}
       style={{ width }}
     >
       {value === null ? (
         <span className="text-2xs tracking-wide text-[var(--syn-null)] italic">NULL</span>
       ) : (
-        <span className="truncate text-fg">{value}</span>
+        <span className={cn('truncate', edited ? 'text-warn' : 'text-fg')}>{value}</span>
       )}
     </div>
+  )
+}
+
+interface CellInputProps {
+  value: Cell
+  width: number
+  onCommit: (value: Cell) => void
+  onCancel: () => void
+}
+
+/** Leaving a NULL cell empty commits NULL again, so opening the editor never rewrites it. */
+function CellInput({ value, width, onCommit, onCancel }: CellInputProps) {
+  const [draft, setDraft] = useState(value ?? '')
+  const commit = () => onCommit(draft === '' && value === null ? null : draft)
+
+  return (
+    <input
+      autoFocus
+      value={draft}
+      spellCheck={false}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') commit()
+        else if (event.key === 'Escape') onCancel()
+        else return
+
+        event.preventDefault()
+        event.stopPropagation()
+      }}
+      style={{ width }}
+      className="shrink-0 border-r border-line/60 bg-canvas px-2 font-mono text-sm text-fg shadow-[inset_0_0_0_1px_var(--accent)] outline-none"
+    />
   )
 }

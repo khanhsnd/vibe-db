@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { toAppError, type AppError } from '@/bridge/errors'
-import { tables, type Cell, type TableColumn, type TablePage } from '@/bridge/tables'
-import type { CellRef } from '@/features/results/resultSet'
+import { tables, type Cell, type TablePage } from '@/bridge/tables'
+import { primaryKeyOf, type CellRef } from '@/features/results/resultSet'
 
 export const PAGE_SIZES = [100, 500, 1000] as const
 export const DEFAULT_PAGE_SIZE = 100
@@ -75,12 +75,4 @@ export function useTableData(sessionId: string, database: string, table: string)
   )
 
   return { data, loading, saving, error, page, limit, goToPage, changeLimit, refresh, updateCell }
-}
-
-function primaryKeyOf(columns: TableColumn[], row: Cell[]): Record<string, string> {
-  const key: Record<string, string> = {}
-  columns.forEach((column, index) => {
-    if (column.primaryKey) key[column.name] = row[index] ?? ''
-  })
-  return key
 }
