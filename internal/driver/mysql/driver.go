@@ -1,0 +1,102 @@
+package mysql
+
+import (
+	"context"
+	"database/sql"
+	"time"
+
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/khanhsnd/vibe-db/internal/domain"
+	"github.com/khanhsnd/vibe-db/internal/driver"
+)
+
+const (
+	maxOpenConns    = 4
+	maxIdleConns    = 2
+	connMaxIdleTime = 5 * time.Minute
+)
+
+type Driver struct{}
+
+func New() *Driver {
+	return &Driver{}
+}
+
+func (*Driver) Engine() domain.Engine {
+	return domain.EngineMySQL
+}
+
+func (*Driver) Open(
+	ctx context.Context,
+	profile domain.ConnectionProfile,
+	creds driver.Credentials,
+) (driver.Session, error) {
+	dsn, err := BuildDSN(profile, creds)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxIdleTime(connMaxIdleTime)
+
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		return nil, translateError(err)
+	}
+
+	return &session{db: db}, nil
+}
+
+type session struct {
+	db *sql.DB
+}
+
+func (s *session) Ping(ctx context.Context) error {
+	return translateError(s.db.PingContext(ctx))
+}
+
+func (s *session) ServerInfo(ctx context.Context) (driver.ServerInfo, error) {
+	var version string
+	err := s.db.QueryRowContext(ctx, "SELECT VERSION()").Scan(&version)
+	if err != nil {
+		return driver.ServerInfo{}, translateError(err)
+	}
+	return driver.ServerInfo{Version: version}, nil
+}
+
+func (s *session) Databases(ctx context.Context) ([]string, error) {
+	const query = `
+		SELECT schema_name
+		FROM information_schema.schemata
+		ORDER BY schema_name`
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, translateError(err)
+	}
+	defer rows.Close()
+
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, translateError(err)
+		}
+		names = append(names, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, translateError(err)
+	}
+
+	return names, nil
+}
+
+func (s *session) Close() error {
+	return s.db.Close()
+}

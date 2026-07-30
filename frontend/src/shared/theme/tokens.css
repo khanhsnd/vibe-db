@@ -1,0 +1,104 @@
+:root {
+  --surface-canvas: #0f1115;
+  --surface-panel: #15181e;
+  --surface-elevated: #1c2027;
+  --surface-hover: #232830;
+  --surface-active: #2a303a;
+  --surface-selected: #1e2b45;
+
+  --line: #262b33;
+  --line-strong: #333a44;
+
+  --fg: #e4e7eb;
+  --fg-muted: #8b94a3;
+  --fg-faint: #5a6373;
+  --fg-on-accent: #ffffff;
+
+  --accent: #4c8dff;
+  --accent-hover: #6ba1ff;
+  --accent-subtle: #1d2b45;
+
+  --success: #3fb950;
+  --danger: #f85149;
+  --danger-subtle: #3a1d1c;
+  --warn: #d29922;
+
+  --syn-keyword: #ff7b72;
+  --syn-string: #a5d6ff;
+  --syn-number: #79c0ff;
+  --syn-func: #d2a8ff;
+  --syn-comment: #6e7681;
+  --syn-null: #7d8590;
+
+  --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.7);
+}
+
+:root[data-theme='light'] {
+  --surface-canvas: #ffffff;
+  --surface-panel: #f7f8fa;
+  --surface-elevated: #ffffff;
+  --surface-hover: #eff1f5;
+  --surface-active: #e4e7ec;
+  --surface-selected: #dce8fd;
+
+  --line: #e1e4e9;
+  --line-strong: #cbd1da;
+
+  --fg: #1a1d23;
+  --fg-muted: #5c646f;
+  --fg-faint: #8c949f;
+  --fg-on-accent: #ffffff;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-subtle: #e8f0fe;
+
+  --success: #1a7f37;
+  --danger: #cf222e;
+  --danger-subtle: #ffebe9;
+  --warn: #9a6700;
+
+  --syn-keyword: #cf222e;
+  --syn-string: #0a3069;
+  --syn-number: #0550ae;
+  --syn-func: #8250df;
+  --syn-comment: #6e7781;
+  --syn-null: #8c949f;
+
+  --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.18);
+}
+
+@theme inline {
+  --color-canvas: var(--surface-canvas);
+  --color-panel: var(--surface-panel);
+  --color-elevated: var(--surface-elevated);
+  --color-hover: var(--surface-hover);
+  --color-active: var(--surface-active);
+  --color-selected: var(--surface-selected);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-on-accent: var(--fg-on-accent);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-subtle: var(--accent-subtle);
+
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-warn: var(--warn);
+
+  --font-ui: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  --shadow-overlay: var(--shadow-overlay);
+}

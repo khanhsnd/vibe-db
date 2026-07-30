@@ -1,0 +1,83 @@
+package app
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/khanhsnd/vibe-db/internal/domain"
+)
+
+type ErrorCode string
+
+const (
+	CodeInvalidProfile   ErrorCode = "INVALID_PROFILE"
+	CodeProfileNotFound  ErrorCode = "PROFILE_NOT_FOUND"
+	CodeSessionNotFound  ErrorCode = "SESSION_NOT_FOUND"
+	CodeBadCredentials   ErrorCode = "BAD_CREDENTIALS"
+	CodeUnknownDatabase  ErrorCode = "UNKNOWN_DATABASE"
+	CodeHostUnreachable  ErrorCode = "HOST_UNREACHABLE"
+	CodeTimeout          ErrorCode = "TIMEOUT"
+	CodeTLSUnsupported   ErrorCode = "TLS_UNSUPPORTED"
+	CodeTLSNotVerified   ErrorCode = "TLS_NOT_VERIFIED"
+	CodePasswordNotFound ErrorCode = "PASSWORD_NOT_FOUND"
+	CodeInternal         ErrorCode = "INTERNAL"
+)
+
+type wireError struct {
+	Code    ErrorCode `json:"code"`
+	Message string    `json:"message"`
+	Field   string    `json:"field,omitempty"`
+	Detail  string    `json:"detail,omitempty"`
+}
+
+func (e wireError) Error() string {
+	encoded, err := json.Marshal(e)
+	if err != nil {
+		return string(e.Code) + ": " + e.Message
+	}
+	return string(encoded)
+}
+
+var sentinelToWire = []struct {
+	target  error
+	code    ErrorCode
+	message string
+}{
+	{domain.ErrProfileNotFound, CodeProfileNotFound, "This connection no longer exists."},
+	{domain.ErrSessionNotFound, CodeSessionNotFound, "This connection is no longer open."},
+	{domain.ErrBadCredentials, CodeBadCredentials, "Access denied. Check the user name and password."},
+	{domain.ErrUnknownDatabase, CodeUnknownDatabase, "That database does not exist on the server."},
+	{domain.ErrHostUnreachable, CodeHostUnreachable, "Could not reach the server. Check the host and port."},
+	{domain.ErrConnectionTimeout, CodeTimeout, "The server did not respond in time."},
+	{domain.ErrTLSUnsupported, CodeTLSUnsupported, "The server does not support TLS. Try a lower TLS mode."},
+	{domain.ErrTLSNotVerified, CodeTLSNotVerified, "The server's TLS certificate is not trusted. Use TLS mode Required to encrypt without verifying it."},
+	{domain.ErrPasswordNotFound, CodePasswordNotFound, "No saved password. Enter the password to connect."},
+}
+
+func wrapError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var validationErr domain.ValidationError
+	if errors.As(err, &validationErr) {
+		return wireError{
+			Code:    CodeInvalidProfile,
+			Message: fmt.Sprintf("The %s field %s.", validationErr.Field, validationErr.Message),
+			Field:   validationErr.Field,
+		}
+	}
+
+	for _, mapping := range sentinelToWire {
+		if errors.Is(err, mapping.target) {
+			return wireError{Code: mapping.code, Message: mapping.message, Detail: err.Error()}
+		}
+	}
+
+	return wireError{
+		Code:    CodeInternal,
+		Message: "Something went wrong while talking to the database.",
+		Detail:  err.Error(),
+	}
+}
