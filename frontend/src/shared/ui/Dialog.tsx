@@ -33,11 +33,11 @@ export function Dialog({
         >
           <div className="flex items-start gap-3 border-b border-line px-4 py-3">
             <div className="min-w-0 flex-1">
-              <RadixDialog.Title className="text-[13px] font-semibold text-fg">
+              <RadixDialog.Title className="text-base font-semibold text-fg">
                 {title}
               </RadixDialog.Title>
               {description ? (
-                <RadixDialog.Description className="mt-0.5 text-[12px] text-muted">
+                <RadixDialog.Description className="mt-0.5 text-xs text-muted">
                   {description}
                 </RadixDialog.Description>
               ) : null}

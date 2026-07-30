@@ -6,12 +6,12 @@
   --surface-active: #2a303a;
   --surface-selected: #1e2b45;
 
-  --line: #262b33;
-  --line-strong: #333a44;
+  --line: #282e37;
+  --line-strong: #3a424e;
 
-  --fg: #e4e7eb;
-  --fg-muted: #8b94a3;
-  --fg-faint: #5a6373;
+  --fg: #e8ebf0;
+  --fg-muted: #9ba5b4;
+  --fg-faint: #767f8f;
   --fg-on-accent: #ffffff;
 
   --accent: #4c8dff;
@@ -41,12 +41,12 @@
   --surface-active: #e4e7ec;
   --surface-selected: #dce8fd;
 
-  --line: #e1e4e9;
-  --line-strong: #cbd1da;
+  --line: #dfe3e8;
+  --line-strong: #c3cad3;
 
-  --fg: #1a1d23;
-  --fg-muted: #5c646f;
-  --fg-faint: #8c949f;
+  --fg: #16191f;
+  --fg-muted: #545c67;
+  --fg-faint: #79818d;
   --fg-on-accent: #ffffff;
 
   --accent: #2563eb;
@@ -93,8 +93,17 @@
   --color-danger-subtle: var(--danger-subtle);
   --color-warn: var(--warn);
 
-  --font-ui: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+
+  --text-2xs: 11px;
+  --text-2xs--line-height: 1.4;
+  --text-xs: 12px;
+  --text-xs--line-height: 1.45;
+  --text-sm: 13px;
+  --text-sm--line-height: 1.5;
+  --text-base: 14px;
+  --text-base--line-height: 1.5;
 
   --radius-sm: 4px;
   --radius-md: 6px;

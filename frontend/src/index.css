@@ -13,10 +13,9 @@
     background-color: var(--surface-canvas);
     color: var(--fg);
     font-family: var(--font-ui);
-    font-size: 13px;
-    line-height: 1.45;
-    -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
     user-select: none;
     cursor: default;
     overscroll-behavior: none;

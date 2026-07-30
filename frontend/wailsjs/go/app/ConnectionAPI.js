@@ -22,6 +22,10 @@ export function ListProfiles() {
   return window['go']['app']['ConnectionAPI']['ListProfiles']();
 }
 
+export function ListTables(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['ListTables'](arg1, arg2);
+}
+
 export function SaveProfile(arg1) {
   return window['go']['app']['ConnectionAPI']['SaveProfile'](arg1);
 }

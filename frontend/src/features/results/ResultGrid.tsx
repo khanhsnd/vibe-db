@@ -45,7 +45,7 @@ export function ResultGrid({ result }: { result: ResultSet }) {
                 style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
               >
                 <div
-                  className="sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line bg-panel pr-2 font-mono text-[11px] text-faint"
+                  className="sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line bg-panel pr-2 font-mono text-2xs text-faint"
                   style={{ width: GUTTER_WIDTH }}
                 >
                   {item.index + 1}
@@ -88,8 +88,8 @@ function HeaderRow({ columns, widths, onResize }: HeaderRowProps) {
           className="relative flex shrink-0 items-center gap-1.5 border-r border-line px-2"
           style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: ROW_HEIGHT }}
         >
-          <span className="truncate text-[12px] font-medium text-fg">{column.name}</span>
-          <span className="ml-auto shrink-0 font-mono text-[10px] text-faint uppercase">
+          <span className="truncate text-sm font-medium text-fg">{column.name}</span>
+          <span className="ml-auto shrink-0 font-mono text-2xs text-faint uppercase">
             {column.type}
           </span>
           <ResizeHandle
@@ -133,13 +133,13 @@ function CellView({ value, numeric, width }: { value: Cell; numeric: boolean; wi
     <div
       className={cn(
         'flex shrink-0 items-center overflow-hidden border-r border-line/60 px-2',
-        'selectable font-mono text-[12px] whitespace-nowrap',
+        'selectable font-mono text-sm whitespace-nowrap',
         numeric && 'justify-end',
       )}
       style={{ width }}
     >
       {value === null ? (
-        <span className="text-[11px] tracking-wide text-[var(--syn-null)] italic">NULL</span>
+        <span className="text-2xs tracking-wide text-[var(--syn-null)] italic">NULL</span>
       ) : (
         <span className="truncate text-fg">{value}</span>
       )}

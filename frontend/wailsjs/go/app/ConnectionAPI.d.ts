@@ -12,6 +12,8 @@ export function ListDatabases(arg1:string):Promise<Array<string>>;
 
 export function ListProfiles():Promise<Array<app.Profile>>;
 
+export function ListTables(arg1:string,arg2:string):Promise<Array<string>>;
+
 export function SaveProfile(arg1:app.ProfileInput):Promise<app.Profile>;
 
 export function TestConnection(arg1:app.ProfileInput):Promise<app.TestResult>;

@@ -55,4 +55,6 @@ export const connections = {
   connect: (profileId: string, password: string) => call(() => api.Connect(profileId, password)),
   disconnect: (sessionId: string) => call(() => api.Disconnect(sessionId)),
   listDatabases: (sessionId: string) => call(() => api.ListDatabases(sessionId)),
+  listTables: (sessionId: string, database: string) =>
+    call(() => api.ListTables(sessionId, database)),
 }

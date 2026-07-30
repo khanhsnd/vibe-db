@@ -97,6 +97,34 @@ func (s *session) Databases(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+func (s *session) Tables(ctx context.Context, database string) ([]string, error) {
+	const query = `
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = ? AND table_type = 'BASE TABLE'
+		ORDER BY table_name`
+
+	rows, err := s.db.QueryContext(ctx, query, database)
+	if err != nil {
+		return nil, translateError(err)
+	}
+	defer rows.Close()
+
+	names := []string{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, translateError(err)
+		}
+		names = append(names, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, translateError(err)
+	}
+
+	return names, nil
+}
+
 func (s *session) Close() error {
 	return s.db.Close()
 }

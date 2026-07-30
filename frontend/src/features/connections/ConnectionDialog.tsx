@@ -247,7 +247,7 @@ function Banner({
   return (
     <div
       role="status"
-      className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-[12px] ${TONES[tone]}`}
+      className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${TONES[tone]}`}
     >
       {icon ? <span className="mt-px shrink-0">{icon}</span> : null}
       <span className="selectable min-w-0">{text}</span>

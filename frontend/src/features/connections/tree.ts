@@ -13,8 +13,11 @@ export interface TreeNode {
   id: string
   kind: NodeKind
   label: string
+  profileId: string
+  database?: string
   children?: TreeNode[]
   status?: ConnectionStatus
+  active?: boolean
   badge?: string
 }
 

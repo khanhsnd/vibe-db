@@ -166,6 +166,17 @@ func (a *ConnectionAPI) ListDatabases(sessionID string) ([]string, error) {
 	return names, nil
 }
 
+func (a *ConnectionAPI) ListTables(sessionID, database string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(a.ctx, queryTimeout)
+	defer cancel()
+
+	names, err := a.sessions.Tables(ctx, sessionID, database)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return names, nil
+}
+
 func (a *ConnectionAPI) resolveCredentials(
 	target domain.ConnectionProfile,
 	password string,

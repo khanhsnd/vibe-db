@@ -31,7 +31,7 @@ export function ContextMenu({ items, children }: ContextMenuProps) {
                 disabled={item.disabled ?? false}
                 onSelect={item.onSelect}
                 className={cn(
-                  'mx-1 cursor-default rounded px-2 py-1 text-[12.5px] outline-none',
+                  'mx-1 cursor-default rounded px-2 py-1.5 text-sm outline-none',
                   'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
                   item.danger
                     ? 'text-danger data-[highlighted]:bg-danger-subtle'

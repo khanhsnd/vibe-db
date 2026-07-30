@@ -23,6 +23,7 @@ type Session interface {
 	Ping(ctx context.Context) error
 	ServerInfo(ctx context.Context) (ServerInfo, error)
 	Databases(ctx context.Context) ([]string, error)
+	Tables(ctx context.Context, database string) ([]string, error)
 	Close() error
 }
 

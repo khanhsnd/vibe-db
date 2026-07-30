@@ -3,7 +3,7 @@ import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttribu
 import { cn } from '@/lib/cn'
 
 const CONTROL = [
-  'h-7 w-full rounded-md border bg-canvas px-2 text-[12.5px] text-fg outline-none',
+  'h-8 w-full rounded-md border bg-canvas px-2.5 text-sm text-fg outline-none',
   'placeholder:text-faint',
   'disabled:opacity-50',
 ].join(' ')
@@ -21,14 +21,14 @@ export function Field({ label, hint, error, children }: FieldProps) {
 
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={controlId} className="text-[11.5px] font-medium text-muted">
+      <label htmlFor={controlId} className="text-xs font-medium text-muted">
         {label}
       </label>
       {children(controlId, invalid)}
       {error ? (
-        <span className="text-[11.5px] text-danger">{error}</span>
+        <span className="text-xs text-danger">{error}</span>
       ) : hint ? (
-        <span className="text-[11.5px] text-faint">{hint}</span>
+        <span className="text-xs text-faint">{hint}</span>
       ) : null}
     </div>
   )
@@ -86,7 +86,7 @@ export function Checkbox({ label, className, ...rest }: CheckboxProps) {
         className={cn('h-3.5 w-3.5 accent-[var(--accent)]', className)}
         {...rest}
       />
-      <label htmlFor={controlId} className="text-[12.5px] text-fg">
+      <label htmlFor={controlId} className="text-sm text-fg">
         {label}
       </label>
     </div>

@@ -54,7 +54,7 @@ function TabItem({ tab, active, onSelect, onClose }: TabItemProps) {
       }}
       className={cn(
         'group relative flex max-w-[220px] min-w-0 shrink-0 cursor-default items-center gap-1.5',
-        'border-r border-line px-2.5 text-[12.5px] whitespace-nowrap transition-colors',
+        'border-r border-line px-3 text-sm whitespace-nowrap transition-colors',
         active ? 'bg-canvas text-fg' : 'text-muted hover:bg-hover hover:text-fg',
       )}
     >

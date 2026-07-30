@@ -21,7 +21,7 @@ export function CommandBar({ onNewConnection }: CommandBarProps) {
         onClick={toggleSidebar}
       />
 
-      <span className="text-[12.5px] font-semibold tracking-tight text-fg">vibe-db</span>
+      <span className="text-sm font-semibold tracking-tight text-fg">vibe-db</span>
 
       <span className="mx-1 h-4 w-px bg-line" />
 

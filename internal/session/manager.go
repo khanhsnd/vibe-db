@@ -119,6 +119,14 @@ func (m *Manager) Databases(ctx context.Context, id string) ([]string, error) {
 	return s.driverSession.Databases(ctx)
 }
 
+func (m *Manager) Tables(ctx context.Context, id, database string) ([]string, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return s.driverSession.Tables(ctx, database)
+}
+
 func newID() (string, error) {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {

@@ -12,7 +12,7 @@ interface SidebarProps {
   selectedId: string | null
   filter: string
   onFilterChange: (value: string) => void
-  onToggle: (id: string) => void
+  onToggle: (node: TreeNode) => void
   onSelect: (node: TreeNode) => void
   onActivate: (node: TreeNode) => void
   onNewConnection: () => void
@@ -34,7 +34,7 @@ export function Sidebar({
   return (
     <aside className="flex h-full min-h-0 flex-col bg-panel">
       <div className="flex h-8 shrink-0 items-center gap-1 pr-1 pl-2.5">
-        <span className="text-[10.5px] font-semibold tracking-[0.08em] text-faint uppercase">
+        <span className="text-2xs font-semibold tracking-[0.08em] text-muted uppercase">
           Connections
         </span>
         <div className="flex-1" />
@@ -42,14 +42,14 @@ export function Sidebar({
       </div>
 
       <div className="shrink-0 px-2 pb-2">
-        <div className="flex h-7 items-center gap-1.5 rounded-md border border-line bg-canvas px-2 focus-within:border-accent">
-          <Search size={12} className="shrink-0 text-faint" />
+        <div className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-canvas px-2 focus-within:border-accent">
+          <Search size={13} className="shrink-0 text-faint" />
           <input
             value={filter}
             onChange={(e) => onFilterChange(e.target.value)}
             placeholder="Filter objects"
             spellCheck={false}
-            className="min-w-0 flex-1 bg-transparent text-[12px] text-fg outline-none placeholder:text-faint"
+            className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-faint"
           />
         </div>
       </div>

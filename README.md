@@ -16,11 +16,15 @@ same port.
 ## Status
 
 Working: connection profiles (create / edit / delete), Test Connection with server version and
-latency, connect / disconnect, database listing, passwords in Windows Credential Manager, and the
-full layout shell with dark and light themes.
+latency, connect / disconnect, database listing, table listing per database, passwords in Windows
+Credential Manager, and the full layout shell with dark and light themes.
+
+Clicking a database marks it as the active one for that connection and reveals its `Tables` folder,
+which loads on first expand and is cached until disconnect.
 
 The SQL editor is a plain textarea and the result grid renders mock data — CodeMirror and real
-query execution land next. Schema browsing stops at the database level.
+query execution land next. Schema browsing stops at tables; views, procedures and functions are
+not listed yet.
 
 ## Prerequisites
 

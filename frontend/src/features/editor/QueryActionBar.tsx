@@ -25,7 +25,7 @@ export function QueryActionBar({
       <Button variant="primary" icon={<Play size={12} />} onClick={onRun} disabled={running}>
         Run
       </Button>
-      <span className="mr-1 font-mono text-[10.5px] text-faint">F5</span>
+      <span className="mr-1 font-mono text-2xs text-faint">F5</span>
 
       <Button variant="default" icon={<Square size={11} />} onClick={onStop} disabled={!running}>
         Stop
@@ -35,12 +35,12 @@ export function QueryActionBar({
 
       <div className="flex-1" />
 
-      <label className="flex items-center gap-1.5 text-[11.5px] text-muted">
+      <label className="flex items-center gap-1.5 text-xs text-muted">
         Limit
         <select
           value={rowLimit}
           onChange={(e) => onRowLimitChange(Number(e.target.value))}
-          className="h-6 rounded-md border border-line bg-canvas px-1.5 font-mono text-[11.5px] text-fg outline-none focus:border-accent"
+          className="h-6 rounded-md border border-line bg-canvas px-1.5 font-mono text-xs text-fg outline-none focus:border-accent"
         >
           {ROW_LIMITS.map((limit) => (
             <option key={limit} value={limit}>

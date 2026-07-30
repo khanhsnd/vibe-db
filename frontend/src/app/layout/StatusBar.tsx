@@ -13,7 +13,7 @@ const numbers = new Intl.NumberFormat('en-US')
 
 export function StatusBar({ status, target, serverVersion, rowCount, elapsedMs }: StatusInfo) {
   return (
-    <footer className="flex h-[22px] shrink-0 items-center gap-2 border-t border-line bg-panel px-2.5 text-[11.5px] text-muted">
+    <footer className="flex h-6 shrink-0 items-center gap-2 border-t border-line bg-panel px-2.5 text-xs text-muted">
       <StatusDot status={status} />
       <span className="truncate">{target ?? 'No connection'}</span>
 
