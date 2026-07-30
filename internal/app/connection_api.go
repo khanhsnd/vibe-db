@@ -161,22 +161,35 @@ func (a *ConnectionAPI) ListDatabases(sessionID string) ([]string, error) {
 	return names, nil
 }
 
-func (a *ConnectionAPI) ListTables(sessionID, database string) ([]string, error) {
+// ListSchemas answers with nothing for an engine whose database is its schema, which is how
+// the tree knows not to draw a level there.
+func (a *ConnectionAPI) ListSchemas(sessionID, database string) ([]string, error) {
 	ctx, cancel := a.withTimeout(queryTimeout)
 	defer cancel()
 
-	names, err := a.sessions.Tables(ctx, sessionID, database)
+	names, err := a.sessions.Schemas(ctx, sessionID, database)
 	if err != nil {
 		return nil, wrapError(err)
 	}
 	return names, nil
 }
 
-func (a *ConnectionAPI) LoadSchema(sessionID, database string) ([]TableSchema, error) {
+func (a *ConnectionAPI) ListTables(sessionID string, ns Namespace) ([]string, error) {
 	ctx, cancel := a.withTimeout(queryTimeout)
 	defer cancel()
 
-	tables, err := a.sessions.Schema(ctx, sessionID, database)
+	names, err := a.sessions.Tables(ctx, sessionID, ns.toDriver())
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return names, nil
+}
+
+func (a *ConnectionAPI) LoadTableSchemas(sessionID string, ns Namespace) ([]TableSchema, error) {
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	tables, err := a.sessions.TableSchemas(ctx, sessionID, ns.toDriver())
 	if err != nil {
 		return nil, wrapError(err)
 	}

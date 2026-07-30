@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"sync"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -34,7 +35,49 @@ func (*Driver) Open(
 	profile domain.ConnectionProfile,
 	creds driver.Credentials,
 ) (driver.Session, error) {
-	dsn, err := BuildDSN(profile, creds)
+	s := &session{profile: profile, creds: creds, pools: map[string]*sql.DB{}}
+
+	// The profile's own database is what the session is judged on: reaching it proves the
+	// host, the credentials and the TLS mode, and it is where the database list is read.
+	home, err := s.pool(profile.Database)
+	if err != nil {
+		return nil, err
+	}
+	if err := home.PingContext(ctx); err != nil {
+		s.Close()
+		return nil, translateError(err)
+	}
+
+	return s, nil
+}
+
+// session keeps one pool per database it has been asked about. A PostgreSQL connection is
+// bound to the database it was opened with and cannot cross to another, so browsing a second
+// database means dialling it — lazily, on first use, and closed with the session.
+type session struct {
+	profile domain.ConnectionProfile
+	creds   driver.Credentials
+
+	mu    sync.Mutex
+	pools map[string]*sql.DB
+}
+
+func (s *session) pool(database string) (*sql.DB, error) {
+	if database == "" {
+		database = s.profile.Database
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if db, ok := s.pools[database]; ok {
+		return db, nil
+	}
+
+	profile := s.profile
+	profile.Database = database
+
+	dsn, err := BuildDSN(profile, s.creds)
 	if err != nil {
 		return nil, err
 	}
@@ -48,38 +91,66 @@ func (*Driver) Open(
 	db.SetMaxIdleConns(maxIdleConns)
 	db.SetConnMaxIdleTime(connMaxIdleTime)
 
-	if err := db.PingContext(ctx); err != nil {
-		db.Close()
-		return nil, translateError(err)
-	}
-
-	return &session{db: db}, nil
+	s.pools[database] = db
+	return db, nil
 }
 
-type session struct {
-	db *sql.DB
+func (s *session) Close() error {
+	s.mu.Lock()
+	pools := s.pools
+	s.pools = map[string]*sql.DB{}
+	s.mu.Unlock()
+
+	var first error
+	for _, db := range pools {
+		if err := db.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 func (s *session) Ping(ctx context.Context) error {
-	return translateError(s.db.PingContext(ctx))
+	db, err := s.pool("")
+	if err != nil {
+		return err
+	}
+	return translateError(db.PingContext(ctx))
 }
 
 // ServerInfo reads the setting rather than version(), which answers with the whole build
 // banner — compiler and platform included — where the status bar has room for a version.
 // A packaged build still adds its own suffix, as MySQL's VERSION() does.
 func (s *session) ServerInfo(ctx context.Context) (driver.ServerInfo, error) {
-	var version string
-	err := s.db.QueryRowContext(ctx, "SELECT current_setting('server_version')").Scan(&version)
+	db, err := s.pool("")
 	if err != nil {
+		return driver.ServerInfo{}, err
+	}
+
+	var version string
+	if err := db.QueryRowContext(ctx, "SELECT current_setting('server_version')").Scan(&version); err != nil {
 		return driver.ServerInfo{}, translateError(err)
 	}
 	return driver.ServerInfo{Version: version}, nil
 }
 
-// Databases lists the schemas of the connected database, because a PostgreSQL session
-// cannot cross to another database and the schema is what a table is qualified with. The
-// catalogue's own schemas are left out, and so is anything the user cannot enter.
+// Databases lists what the server will let this user connect to. Templates are left out,
+// since connecting to one is not what a template is for.
 func (s *session) Databases(ctx context.Context) ([]string, error) {
+	const query = `
+		SELECT datname
+		FROM pg_catalog.pg_database
+		WHERE NOT datistemplate
+		  AND datallowconn
+		  AND has_database_privilege(oid, 'CONNECT')
+		ORDER BY datname`
+
+	return s.names(ctx, "", query)
+}
+
+// Schemas lists the schemas of one database, and needs a connection to that database to do
+// it: pg_namespace only ever describes the database it is read from.
+func (s *session) Schemas(ctx context.Context, database string) ([]string, error) {
 	const query = `
 		SELECT nspname
 		FROM pg_catalog.pg_namespace
@@ -88,10 +159,10 @@ func (s *session) Databases(ctx context.Context) ([]string, error) {
 		  AND has_schema_privilege(oid, 'USAGE')
 		ORDER BY nspname`
 
-	return s.names(ctx, query)
+	return s.names(ctx, database, query)
 }
 
-func (s *session) Tables(ctx context.Context, schema string) ([]string, error) {
+func (s *session) Tables(ctx context.Context, ns driver.Namespace) ([]string, error) {
 	const query = `
 		SELECT c.relname
 		FROM pg_catalog.pg_class c
@@ -99,11 +170,20 @@ func (s *session) Tables(ctx context.Context, schema string) ([]string, error) {
 		WHERE n.nspname = $1 AND c.relkind IN ('r', 'p')
 		ORDER BY c.relname`
 
-	return s.names(ctx, query, schema)
+	return s.names(ctx, ns.Database, query, ns.Schema)
 }
 
-func (s *session) names(ctx context.Context, query string, args ...any) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, query, args...)
+func (s *session) names(
+	ctx context.Context,
+	database, query string,
+	args ...any,
+) ([]string, error) {
+	db, err := s.pool(database)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, translateError(err)
 	}
@@ -122,8 +202,4 @@ func (s *session) names(ctx context.Context, query string, args ...any) ([]strin
 	}
 
 	return names, nil
-}
-
-func (s *session) Close() error {
-	return s.db.Close()
 }

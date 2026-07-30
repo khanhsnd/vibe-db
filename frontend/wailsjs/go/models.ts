@@ -2,6 +2,7 @@ export namespace app {
 	
 	export class CellEditInput {
 	    database: string;
+	    schema: string;
 	    table: string;
 	    column: string;
 	    value?: string;
@@ -14,10 +15,25 @@ export namespace app {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.database = source["database"];
+	        this.schema = source["schema"];
 	        this.table = source["table"];
 	        this.column = source["column"];
 	        this.value = source["value"];
 	        this.key = source["key"];
+	    }
+	}
+	export class Namespace {
+	    database: string;
+	    schema: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Namespace(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
 	    }
 	}
 	export class Profile {
@@ -81,8 +97,9 @@ export namespace app {
 	    }
 	}
 	export class QueryInput {
-	    runId: string;
 	    database: string;
+	    schema: string;
+	    runId: string;
 	    sql: string;
 	    maxRows: number;
 	    explain: boolean;
@@ -93,8 +110,9 @@ export namespace app {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.runId = source["runId"];
 	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.runId = source["runId"];
 	        this.sql = source["sql"];
 	        this.maxRows = source["maxRows"];
 	        this.explain = source["explain"];
@@ -123,12 +141,13 @@ export namespace app {
 	    }
 	}
 	export class QueryResult {
+	    database: string;
+	    schema: string;
 	    columns: TableColumn[];
 	    rows: string[][];
 	    rowsAffected: number;
 	    truncated: boolean;
 	    elapsedMs: number;
-	    database: string;
 	    table: string;
 	
 	    static createFrom(source: any = {}) {
@@ -137,12 +156,13 @@ export namespace app {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
 	        this.columns = this.convertValues(source["columns"], TableColumn);
 	        this.rows = source["rows"];
 	        this.rowsAffected = source["rowsAffected"];
 	        this.truncated = source["truncated"];
 	        this.elapsedMs = source["elapsedMs"];
-	        this.database = source["database"];
 	        this.table = source["table"];
 	    }
 	
@@ -185,6 +205,7 @@ export namespace app {
 	
 	export class TablePageInput {
 	    database: string;
+	    schema: string;
 	    table: string;
 	    limit: number;
 	    offset: number;
@@ -196,6 +217,7 @@ export namespace app {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.database = source["database"];
+	        this.schema = source["schema"];
 	        this.table = source["table"];
 	        this.limit = source["limit"];
 	        this.offset = source["offset"];

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -23,7 +24,7 @@ var sqlStateToDomain = map[string]error{
 	sqlStateInvalidAuthorization: domain.ErrBadCredentials,
 	sqlStateInvalidPassword:      domain.ErrBadCredentials,
 	sqlStateInvalidCatalogName:   domain.ErrUnknownDatabase,
-	sqlStateInvalidSchemaName:    domain.ErrUnknownDatabase,
+	sqlStateInvalidSchemaName:    domain.ErrUnknownSchema,
 	sqlStateUndefinedTable:       domain.ErrUnknownTable,
 	sqlStateQueryCanceled:        domain.ErrQueryCancelled,
 }
@@ -35,8 +36,12 @@ func translateError(err error) error {
 
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
+		// The sentinel decides the code the UI switches on, but the server's own wording is
+		// the only thing that says which name it went looking for — PostgreSQL folds an
+		// unquoted identifier to lower case, and that is usually the surprise — so it is
+		// kept in the chain and reaches the user as the error's detail.
 		if mapped, ok := sqlStateToDomain[pgErr.Code]; ok {
-			return mapped
+			return fmt.Errorf("%s: %w", pgErr.Message, mapped)
 		}
 		return domain.StatementError{Code: pgErr.Code, Message: pgErr.Message}
 	}

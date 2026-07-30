@@ -8,6 +8,7 @@ var (
 	ErrSessionNotFound   = errors.New("session not found")
 	ErrBadCredentials    = errors.New("access denied for user")
 	ErrUnknownDatabase   = errors.New("database does not exist")
+	ErrUnknownSchema     = errors.New("schema does not exist")
 	ErrHostUnreachable   = errors.New("cannot reach database server")
 	ErrConnectionTimeout = errors.New("connection timed out")
 	ErrTLSUnsupported    = errors.New("server does not support TLS")

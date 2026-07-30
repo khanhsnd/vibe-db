@@ -100,14 +100,20 @@ func (s *session) Databases(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-func (s *session) Tables(ctx context.Context, database string) ([]string, error) {
+// Schemas has nothing to answer with: MySQL's schema *is* its database, so the tree stops
+// at the level Databases already returned.
+func (*session) Schemas(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+func (s *session) Tables(ctx context.Context, ns driver.Namespace) ([]string, error) {
 	const query = `
 		SELECT table_name
 		FROM information_schema.tables
 		WHERE table_schema = ? AND table_type = 'BASE TABLE'
 		ORDER BY table_name`
 
-	rows, err := s.db.QueryContext(ctx, query, database)
+	rows, err := s.db.QueryContext(ctx, query, ns.Database)
 	if err != nil {
 		return nil, translateError(err)
 	}

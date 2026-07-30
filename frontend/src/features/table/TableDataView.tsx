@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 
+import type { Namespace } from '@/bridge/connections'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import type { CellRange } from '@/features/results/resultSet'
 import { Empty } from '@/shared/ui/Empty'
@@ -15,13 +16,13 @@ const PICKER_WIDTH = 168
 
 interface TableDataViewProps {
   sessionId: string
-  database: string
+  namespace: Namespace
   table: string
 }
 
-export function TableDataView({ sessionId, database, table }: TableDataViewProps) {
+export function TableDataView({ sessionId, namespace, table }: TableDataViewProps) {
   const { data, loading, saving, error, page, limit, goToPage, changeLimit, refresh, updateCell } =
-    useTableData(sessionId, database, table)
+    useTableData(sessionId, namespace, table)
 
   const [panels, setPanels] = useState<ReadonlySet<PanelKind>>(new Set())
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())

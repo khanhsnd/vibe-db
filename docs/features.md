@@ -17,15 +17,27 @@ only the fields that still hold the old engine's default, so a typed port surviv
 tree tags every connection with its engine, and the editor loads that engine's SQL dialect for
 highlighting and completion.
 
-One field differs rather than just defaulting: **PostgreSQL needs a database**, because a session is
-bound to one for its whole life. What the tree then lists under the connection is that database's
-*schemas*, not other databases — see [decisions.md](decisions.md). The query toolbar and the tree
-say `Schema` there, and `Database` on MySQL.
+One field differs rather than just defaulting: **PostgreSQL needs a database**. A session is bound to
+one for life, so that is the database the connection bootstraps from — the one its database list is
+read in. Reaching any other database dials it separately, which the adapter does on first use.
 
 ## Browsing a schema
 
-Clicking a database — a schema, on PostgreSQL — marks it as the active one for that connection and
-reveals its `Tables` folder, which loads on first expand and is cached until disconnect.
+The tree has as many levels as the engine does:
+
+```
+MySQL         connection → database → Tables → table
+PostgreSQL    connection → database → schema  → Tables → table
+```
+
+Each level loads on first expand and is cached until disconnect: a PostgreSQL database loads its
+schemas, and whichever node owns the `Tables` folder loads its table list. Clicking the node that
+owns tables — a MySQL database, a PostgreSQL schema — marks it the active namespace for that
+connection, which is what a new query tab inherits.
+
+The query toolbar mirrors the same shape: one `Database` picker on MySQL, and a `Schema` picker
+beside it on PostgreSQL. Changing the database clears the schema, since a schema of one database
+names nothing in another.
 
 Clicking a table opens a data tab: 100 rows per page by default, ordered by primary key so paging
 is stable. The pager's `Rows` control sizes the page and can lift the bound entirely — see
@@ -47,8 +59,9 @@ A query tab carries its own toolbar, editor buffer, database and row limit, so s
 on the same connection without treading on each other. The toolbar picks the database, then
 **Execute** (`F5` or `Ctrl`+`Enter`) or **Explain** runs the statement; **Stop** cancels it.
 
-- The database is applied on a connection pinned for that one statement — `USE` on MySQL,
-  `SET search_path` on PostgreSQL — so the pool's other connections keep whatever they had.
+- The namespace is applied on a connection pinned for that one statement — `USE` on MySQL,
+  `SET search_path` on PostgreSQL — so the pool's other connections keep whatever they had. On
+  PostgreSQL the database also decides *which pool* the connection comes from.
 - A statement that returns rows fills the grid; one that does not reports its affected-row count.
   Which path a statement takes is decided by its leading keyword, read past any leading comments,
   plus a `RETURNING` clause on PostgreSQL, where that is what makes a write answer with rows.
@@ -115,7 +128,9 @@ column names no row. The toolbar says which case applies. This is needed because
 reports a column's type but not the table it came from, so the source cannot be read off the wire.
 
 One `Dialect` field decides how a quoted name is read, so `` `shop`.`users` `` is a table on MySQL
-and a string on PostgreSQL, where `"shop"."users"` is the table instead.
+and a string on PostgreSQL, where `"shop"."users"` is the table instead. The qualifier the statement
+carries is read as whatever the engine's inner level is: a database on MySQL, a schema on
+PostgreSQL, whose statements cannot name another database at all.
 
 ## Grid behaviour
 

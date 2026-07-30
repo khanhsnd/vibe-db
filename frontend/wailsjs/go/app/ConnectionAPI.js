@@ -22,16 +22,20 @@ export function ListProfiles() {
   return window['go']['app']['ConnectionAPI']['ListProfiles']();
 }
 
+export function ListSchemas(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['ListSchemas'](arg1, arg2);
+}
+
 export function ListTables(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ListTables'](arg1, arg2);
 }
 
-export function LoadSchema(arg1, arg2) {
-  return window['go']['app']['ConnectionAPI']['LoadSchema'](arg1, arg2);
-}
-
 export function LoadTableRows(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadTableRows'](arg1, arg2);
+}
+
+export function LoadTableSchemas(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['LoadTableSchemas'](arg1, arg2);
 }
 
 export function SaveProfile(arg1) {

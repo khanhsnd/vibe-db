@@ -42,9 +42,9 @@ func TestTranslateError(t *testing.T) {
 			domain.ErrUnknownDatabase,
 		},
 		{
-			"3F000 is an unknown database, because a schema is what the UI browses",
+			"3F000 is an unknown schema, which is its own level of the tree",
 			&pgconn.PgError{Code: "3F000", Message: `schema "nope" does not exist`},
-			domain.ErrUnknownDatabase,
+			domain.ErrUnknownSchema,
 		},
 		{
 			"42P01 is an unknown table",

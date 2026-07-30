@@ -23,13 +23,21 @@ type Column struct {
 	Default    *string
 }
 
+// Namespace is where a table lives. MySQL has one level and fills Database alone;
+// PostgreSQL has two and fills both, since a table is addressed by a schema inside the
+// database the session is bound to.
+type Namespace struct {
+	Database string
+	Schema   string
+}
+
 // TablePage is one window onto a table's rows. A Limit of zero or less reads every row and
 // makes Offset meaningless, the same convention as Query.MaxRows.
 type TablePage struct {
-	Database string
-	Table    string
-	Limit    int
-	Offset   int
+	Namespace
+	Table  string
+	Limit  int
+	Offset int
 }
 
 // TableSchema is the completion-sized view of a table: names only, no types, because
@@ -46,29 +54,29 @@ type TableRows struct {
 }
 
 type Query struct {
-	Database string
-	SQL      string
-	MaxRows  int
-	Explain  bool
+	Namespace
+	SQL     string
+	MaxRows int
+	Explain bool
 }
 
-// QueryResult carries Database and Table only when its rows map one-to-one onto the rows
-// of a single table; both stay empty for a result that cannot be written back.
+// QueryResult carries its Namespace and Table only when its rows map one-to-one onto the
+// rows of a single table; both stay empty for a result that cannot be written back.
 type QueryResult struct {
+	Namespace
 	Columns      []Column
 	Rows         [][]*string
 	RowsAffected int64
 	Truncated    bool
-	Database     string
 	Table        string
 }
 
 type CellEdit struct {
-	Database string
-	Table    string
-	Column   string
-	Value    *string
-	Key      map[string]string
+	Namespace
+	Table  string
+	Column string
+	Value  *string
+	Key    map[string]string
 }
 
 type Driver interface {
@@ -80,8 +88,12 @@ type Session interface {
 	Ping(ctx context.Context) error
 	ServerInfo(ctx context.Context) (ServerInfo, error)
 	Databases(ctx context.Context) ([]string, error)
-	Tables(ctx context.Context, database string) ([]string, error)
-	Schema(ctx context.Context, database string) ([]TableSchema, error)
+	// Schemas lists the level below a database, and returns nothing for an engine that has
+	// none. It is read lazily, one database at a time, because PostgreSQL can only see the
+	// schemas of a database something is connected to.
+	Schemas(ctx context.Context, database string) ([]string, error)
+	Tables(ctx context.Context, ns Namespace) ([]string, error)
+	TableSchemas(ctx context.Context, ns Namespace) ([]TableSchema, error)
 	TableRows(ctx context.Context, page TablePage) (TableRows, error)
 	UpdateCell(ctx context.Context, edit CellEdit) error
 	Query(ctx context.Context, query Query) (QueryResult, error)

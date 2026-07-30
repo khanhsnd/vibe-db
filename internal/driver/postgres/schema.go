@@ -7,10 +7,13 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
 
-// Schema reads every table and column of a schema in one query. Views, materialised views
-// and foreign tables are included, because completion cares about what can be selected
+// TableSchemas reads every table and column of a schema in one query. Views, materialised
+// views and foreign tables are included, because completion cares about what can be selected
 // from, not about storage.
-func (s *session) Schema(ctx context.Context, schema string) ([]driver.TableSchema, error) {
+func (s *session) TableSchemas(
+	ctx context.Context,
+	ns driver.Namespace,
+) ([]driver.TableSchema, error) {
 	const query = `
 		SELECT c.relname, a.attname
 		FROM pg_catalog.pg_class c
@@ -21,7 +24,12 @@ func (s *session) Schema(ctx context.Context, schema string) ([]driver.TableSche
 		  AND a.attnum > 0 AND NOT a.attisdropped
 		ORDER BY c.relname, a.attnum`
 
-	rows, err := s.db.QueryContext(ctx, query, schema)
+	db, err := s.pool(ns.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(ctx, query, ns.Schema)
 	if err != nil {
 		return nil, translateError(err)
 	}

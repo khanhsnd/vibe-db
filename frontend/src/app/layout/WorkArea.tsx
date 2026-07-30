@@ -4,7 +4,7 @@ import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
 import { TableDataView } from '@/features/table/TableDataView'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
-import { useConnectionsStore } from '@/stores/connections'
+import { databaseKey, useConnectionsStore } from '@/stores/connections'
 import { useTabsStore } from '@/stores/tabs'
 
 import { TabBar } from './TabBar'
@@ -21,6 +21,11 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
   )
   const engine = useConnectionsStore((s) =>
     activeTab ? (s.profiles.find((p) => p.id === activeTab.profileId)?.engine ?? '') : '',
+  )
+  const schemas = useConnectionsStore((s) =>
+    activeTab
+      ? (s.schemas[databaseKey(activeTab.profileId, activeTab.namespace.database)] ?? NO_DATABASES)
+      : NO_DATABASES,
   )
 
   return (
@@ -46,7 +51,7 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             <TableDataView
               key={activeTab.id}
               sessionId={sessionId}
-              database={activeTab.database}
+              namespace={activeTab.namespace}
               table={activeTab.table}
             />
           )
@@ -56,6 +61,7 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             tab={activeTab}
             sessionId={sessionId}
             databases={databases}
+            schemas={schemas}
             engine={engine}
           />
         )}

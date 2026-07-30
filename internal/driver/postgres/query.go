@@ -30,7 +30,7 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 	}
 
 	// A pooled connection is pinned for the call so the search path applies to the statement.
-	conn, err := s.pinned(ctx, query.Database)
+	conn, err := s.pinned(ctx, query.Namespace)
 	if err != nil {
 		return driver.QueryResult{}, err
 	}
@@ -49,7 +49,7 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 		return driver.QueryResult{}, translateError(err)
 	}
 
-	s.attachSource(ctx, query.Database, statement, &result)
+	s.attachSource(ctx, query.Namespace, statement, &result)
 	return result, nil
 }
 
@@ -64,9 +64,13 @@ func returnsRows(statement string) bool {
 // attachSource marks a result writable. The grid needs the table to address a row and the
 // primary key to identify it, and the wire format carries neither: database/sql reports a
 // column's type but not the table it came from. Whatever cannot be proven stays read-only.
+//
+// A statement can name its own schema but never its own database, since the session cannot
+// leave the one it was opened with.
 func (s *session) attachSource(
 	ctx context.Context,
-	fallbackSchema, statement string,
+	ns driver.Namespace,
+	statement string,
 	result *driver.QueryResult,
 ) {
 	found, ok := dialect.ParseSource(statement)
@@ -74,15 +78,14 @@ func (s *session) attachSource(
 		return
 	}
 
-	schema := found.Namespace
-	if schema == "" {
-		schema = fallbackSchema
+	if found.Namespace != "" {
+		ns.Schema = found.Namespace
 	}
-	if schema == "" {
+	if ns.Schema == "" {
 		return
 	}
 
-	stored, err := s.columns(ctx, schema, found.Table)
+	stored, err := s.columns(ctx, ns, found.Table)
 	if err != nil {
 		return
 	}
@@ -92,22 +95,27 @@ func (s *session) attachSource(
 		return
 	}
 
-	result.Database, result.Table = schema, found.Table
+	result.Namespace, result.Table = ns, found.Table
 }
 
 // pinned holds one pooled connection for the call and points its search path at the chosen
 // schema, so an unqualified table name in the statement resolves there. pg_catalog stays
 // searchable whatever the path says, so built-in functions still resolve.
-func (s *session) pinned(ctx context.Context, schema string) (*sql.Conn, error) {
-	conn, err := s.db.Conn(ctx)
+func (s *session) pinned(ctx context.Context, ns driver.Namespace) (*sql.Conn, error) {
+	db, err := s.pool(ns.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		return nil, translateError(err)
 	}
-	if schema == "" {
+	if ns.Schema == "" {
 		return conn, nil
 	}
 
-	if _, err := conn.ExecContext(ctx, "SET search_path TO "+dialect.QuoteIdent(schema)); err != nil {
+	if _, err := conn.ExecContext(ctx, "SET search_path TO "+dialect.QuoteIdent(ns.Schema)); err != nil {
 		conn.Close()
 		return nil, translateError(err)
 	}

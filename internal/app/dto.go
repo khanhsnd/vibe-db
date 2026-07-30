@@ -56,11 +56,17 @@ type Session struct {
 	ServerVersion string `json:"serverVersion"`
 }
 
-type TablePageInput struct {
+// Namespace is where a table lives. Schema is empty on MySQL, whose database is its schema.
+type Namespace struct {
 	Database string `json:"database"`
-	Table    string `json:"table"`
-	Limit    int    `json:"limit"`
-	Offset   int    `json:"offset"`
+	Schema   string `json:"schema"`
+}
+
+type TablePageInput struct {
+	Namespace
+	Table  string `json:"table"`
+	Limit  int    `json:"limit"`
+	Offset int    `json:"offset"`
 }
 
 type TableColumn struct {
@@ -86,33 +92,33 @@ type TableSchema struct {
 }
 
 type QueryInput struct {
-	RunID    string `json:"runId"`
-	Database string `json:"database"`
-	SQL      string `json:"sql"`
-	MaxRows  int    `json:"maxRows"`
-	Explain  bool   `json:"explain"`
+	Namespace
+	RunID   string `json:"runId"`
+	SQL     string `json:"sql"`
+	MaxRows int    `json:"maxRows"`
+	Explain bool   `json:"explain"`
 }
 
 // QueryResult carries both shapes of outcome: a statement that returns rows fills
 // Columns, and one that does not leaves them empty and reports RowsAffected.
-// Database and Table name the source the rows may be written back to, and are empty
+// The namespace and Table name the source the rows may be written back to, and are empty
 // for a result the driver could not trace to a single table.
 type QueryResult struct {
+	Namespace
 	Columns      []TableColumn `json:"columns"`
 	Rows         [][]*string   `json:"rows"`
 	RowsAffected int64         `json:"rowsAffected"`
 	Truncated    bool          `json:"truncated"`
 	ElapsedMs    int64         `json:"elapsedMs"`
-	Database     string        `json:"database"`
 	Table        string        `json:"table"`
 }
 
 type CellEditInput struct {
-	Database string            `json:"database"`
-	Table    string            `json:"table"`
-	Column   string            `json:"column"`
-	Value    *string           `json:"value"`
-	Key      map[string]string `json:"key"`
+	Namespace
+	Table  string            `json:"table"`
+	Column string            `json:"column"`
+	Value  *string           `json:"value"`
+	Key    map[string]string `json:"key"`
 }
 
 func toProfileDTO(profile domain.ConnectionProfile, hasPassword bool) Profile {
@@ -130,21 +136,29 @@ func toProfileDTO(profile domain.ConnectionProfile, hasPassword bool) Profile {
 	}
 }
 
+func (n Namespace) toDriver() driver.Namespace {
+	return driver.Namespace{Database: n.Database, Schema: n.Schema}
+}
+
+func toNamespaceDTO(ns driver.Namespace) Namespace {
+	return Namespace{Database: ns.Database, Schema: ns.Schema}
+}
+
 func (in TablePageInput) toDriver() driver.TablePage {
 	return driver.TablePage{
-		Database: in.Database,
-		Table:    in.Table,
-		Limit:    driverRows(in.Limit, DefaultPageSize),
-		Offset:   max(in.Offset, 0),
+		Namespace: in.Namespace.toDriver(),
+		Table:     in.Table,
+		Limit:     driverRows(in.Limit, DefaultPageSize),
+		Offset:    max(in.Offset, 0),
 	}
 }
 
 func (in QueryInput) toDriver() driver.Query {
 	return driver.Query{
-		Database: in.Database,
-		SQL:      in.SQL,
-		MaxRows:  driverRows(in.MaxRows, DefaultQueryRows),
-		Explain:  in.Explain,
+		Namespace: in.Namespace.toDriver(),
+		SQL:       in.SQL,
+		MaxRows:   driverRows(in.MaxRows, DefaultQueryRows),
+		Explain:   in.Explain,
 	}
 }
 
@@ -165,11 +179,11 @@ func driverRows(rows, fallback int) int {
 
 func (in CellEditInput) toDriver() driver.CellEdit {
 	return driver.CellEdit{
-		Database: in.Database,
-		Table:    in.Table,
-		Column:   in.Column,
-		Value:    in.Value,
-		Key:      in.Key,
+		Namespace: in.Namespace.toDriver(),
+		Table:     in.Table,
+		Column:    in.Column,
+		Value:     in.Value,
+		Key:       in.Key,
 	}
 }
 
@@ -185,12 +199,12 @@ func toTableRowsDTO(rows driver.TableRows, page driver.TablePage) TableRows {
 
 func toQueryResultDTO(result driver.QueryResult, elapsed time.Duration) QueryResult {
 	return QueryResult{
+		Namespace:    toNamespaceDTO(result.Namespace),
 		Columns:      toColumnDTOs(result.Columns),
 		Rows:         result.Rows,
 		RowsAffected: result.RowsAffected,
 		Truncated:    result.Truncated,
 		ElapsedMs:    elapsed.Milliseconds(),
-		Database:     result.Database,
 		Table:        result.Table,
 	}
 }

@@ -35,10 +35,12 @@ errors are all there already, and an engine differs from another only in
 | catalogue reads | `information_schema` | `pg_catalog`, for `format_type` |
 | placeholders | `?` | `$1` |
 | `sqlkit.Dialect` | backtick quoting, `#` comments | double-quote quoting |
+| levels above a table | one pool, `USE <database>` | a pool per database, `SET search_path` |
 
-`driver.Session` calls the thing a table is qualified with a *database*, because MySQL does.
-PostgreSQL cannot cross databases inside a session, so its adapter reads that field as a
-**schema** — see [decisions.md](decisions.md).
+A table is addressed by a `driver.Namespace` — `(database, schema)` — and how many of its parts an
+engine fills is the one structural difference between the two adapters. MySQL fills `Database`
+alone; PostgreSQL fills both and needs a connection pool per database to do it, because a session
+cannot leave the database it was opened with. See [decisions.md](decisions.md).
 
 ## Two Wails v2 constraints that shaped the design
 

@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 
+import type { Namespace } from '@/bridge/connections'
+
 import { useQueriesStore } from './queries'
 
 export type TabKind = 'query' | 'table'
@@ -8,25 +10,24 @@ interface TabBase {
   id: string
   title: string
   profileId: string
+  namespace: Namespace
 }
 
 export interface QueryTab extends TabBase {
   kind: 'query'
   sql: string
-  database: string
   rowLimit: number
 }
 
 export interface TableTab extends TabBase {
   kind: 'table'
-  database: string
   table: string
 }
 
 export type Tab = QueryTab | TableTab
 export type NewTab = Omit<QueryTab, 'id'> | Omit<TableTab, 'id'>
 
-type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'database' | 'rowLimit'>>
+type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'namespace' | 'rowLimit'>>
 
 interface TabsState {
   tabs: Tab[]
@@ -43,7 +44,8 @@ const nextId = () => `tab-${++seq}`
 const sameTable = (tab: Tab, target: Omit<TableTab, 'id'>) =>
   tab.kind === 'table' &&
   tab.profileId === target.profileId &&
-  tab.database === target.database &&
+  tab.namespace.database === target.namespace.database &&
+  tab.namespace.schema === target.namespace.schema &&
   tab.table === target.table
 
 export const useTabsStore = create<TabsState>((set, get) => ({

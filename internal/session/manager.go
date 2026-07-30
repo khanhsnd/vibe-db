@@ -119,20 +119,36 @@ func (m *Manager) Databases(ctx context.Context, id string) ([]string, error) {
 	return s.driverSession.Databases(ctx)
 }
 
-func (m *Manager) Tables(ctx context.Context, id, database string) ([]string, error) {
+func (m *Manager) Schemas(ctx context.Context, id, database string) ([]string, error) {
 	s, err := m.Get(id)
 	if err != nil {
 		return nil, err
 	}
-	return s.driverSession.Tables(ctx, database)
+	return s.driverSession.Schemas(ctx, database)
 }
 
-func (m *Manager) Schema(ctx context.Context, id, database string) ([]driver.TableSchema, error) {
+func (m *Manager) Tables(
+	ctx context.Context,
+	id string,
+	ns driver.Namespace,
+) ([]string, error) {
 	s, err := m.Get(id)
 	if err != nil {
 		return nil, err
 	}
-	return s.driverSession.Schema(ctx, database)
+	return s.driverSession.Tables(ctx, ns)
+}
+
+func (m *Manager) TableSchemas(
+	ctx context.Context,
+	id string,
+	ns driver.Namespace,
+) ([]driver.TableSchema, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return s.driverSession.TableSchemas(ctx, ns)
 }
 
 func (m *Manager) TableRows(

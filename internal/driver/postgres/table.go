@@ -12,12 +12,17 @@ import (
 )
 
 func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.TableRows, error) {
-	columns, err := s.columns(ctx, page.Database, page.Table)
+	columns, err := s.columns(ctx, page.Namespace, page.Table)
 	if err != nil {
 		return driver.TableRows{}, err
 	}
 
-	total, err := s.countRows(ctx, page.Database, page.Table)
+	total, err := s.countRows(ctx, page.Namespace, page.Table)
+	if err != nil {
+		return driver.TableRows{}, err
+	}
+
+	db, err := s.pool(page.Database)
 	if err != nil {
 		return driver.TableRows{}, err
 	}
@@ -26,7 +31,7 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 
 	// The statement itself bounds the read — either through its LIMIT clause or because the
 	// caller asked for every row — so no cap is applied here.
-	result, err := sqlkit.Read(ctx, s.db, query, 0, args...)
+	result, err := sqlkit.Read(ctx, db, query, 0, args...)
 	if err != nil {
 		return driver.TableRows{}, translateError(err)
 	}
@@ -35,7 +40,7 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 }
 
 func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
-	columns, err := s.columns(ctx, edit.Database, edit.Table)
+	columns, err := s.columns(ctx, edit.Namespace, edit.Table)
 	if err != nil {
 		return err
 	}
@@ -50,8 +55,13 @@ func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 		}
 	}
 
+	db, err := s.pool(edit.Database)
+	if err != nil {
+		return err
+	}
+
 	query, args := buildUpdate(edit, keys)
-	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+	if _, err := db.ExecContext(ctx, query, args...); err != nil {
 		return translateError(err)
 	}
 	return nil
@@ -60,7 +70,11 @@ func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 // columns reads a table's shape from pg_catalog rather than information_schema, because
 // format_type renders the declared type — `character varying(80)`, `numeric(10,2)` — that
 // information_schema only offers in pieces.
-func (s *session) columns(ctx context.Context, schema, table string) ([]driver.Column, error) {
+func (s *session) columns(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) ([]driver.Column, error) {
 	const query = `
 		SELECT a.attname,
 		       t.typname,
@@ -77,7 +91,12 @@ func (s *session) columns(ctx context.Context, schema, table string) ([]driver.C
 		WHERE n.nspname = $1 AND c.relname = $2 AND a.attnum > 0 AND NOT a.attisdropped
 		ORDER BY a.attnum`
 
-	rows, err := s.db.QueryContext(ctx, query, schema, table)
+	db, err := s.pool(ns.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(ctx, query, ns.Schema, table)
 	if err != nil {
 		return nil, translateError(err)
 	}
@@ -113,11 +132,20 @@ func (s *session) columns(ctx context.Context, schema, table string) ([]driver.C
 	return columns, nil
 }
 
-func (s *session) countRows(ctx context.Context, schema, table string) (int64, error) {
-	var total int64
-	query := "SELECT COUNT(*) FROM " + dialect.Qualify(schema, table)
+func (s *session) countRows(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) (int64, error) {
+	db, err := s.pool(ns.Database)
+	if err != nil {
+		return 0, err
+	}
 
-	if err := s.db.QueryRowContext(ctx, query).Scan(&total); err != nil {
+	var total int64
+	query := "SELECT COUNT(*) FROM " + dialect.Qualify(ns.Schema, table)
+
+	if err := db.QueryRowContext(ctx, query).Scan(&total); err != nil {
 		return 0, translateError(err)
 	}
 	return total, nil
@@ -132,7 +160,7 @@ func buildSelect(page driver.TablePage, columns []driver.Column) (string, []any)
 	}
 
 	query := "SELECT " + strings.Join(names, ", ") +
-		" FROM " + dialect.Qualify(page.Database, page.Table)
+		" FROM " + dialect.Qualify(page.Schema, page.Table)
 	if keys := sqlkit.PrimaryKeyNames(columns); len(keys) > 0 {
 		query += " ORDER BY " + strings.Join(dialect.QuoteAll(keys), ", ")
 	}
@@ -155,7 +183,7 @@ func buildUpdate(edit driver.CellEdit, keys []string) (string, []any) {
 		args = append(args, edit.Key[key])
 	}
 
-	query := "UPDATE " + dialect.Qualify(edit.Database, edit.Table) +
+	query := "UPDATE " + dialect.Qualify(edit.Schema, edit.Table) +
 		" SET " + dialect.QuoteIdent(edit.Column) + " = $1" +
 		" WHERE " + strings.Join(conditions, " AND ")
 

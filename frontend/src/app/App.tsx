@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { toProfileInput, type Profile, type ProfileInput } from '@/bridge/connections'
+import { NO_NAMESPACE, toProfileInput, type Profile, type ProfileInput } from '@/bridge/connections'
 import { DEFAULT_QUERY_ROWS } from '@/bridge/rows'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
 import { PasswordPrompt } from '@/features/connections/PasswordPrompt'
-import type { TreeNode } from '@/features/connections/tree'
+import { isExpandable, ownsObjects, type TreeNode } from '@/features/connections/tree'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { Split, SplitHandle, SplitPanel, usePanelRef } from '@/shared/ui/Split'
 import { buildTree, useConnectionsStore } from '@/stores/connections'
@@ -29,21 +29,31 @@ export function App() {
   const sessions = useConnectionsStore((s) => s.sessions)
   const statuses = useConnectionsStore((s) => s.statuses)
   const databases = useConnectionsStore((s) => s.databases)
+  const schemas = useConnectionsStore((s) => s.schemas)
   const tables = useConnectionsStore((s) => s.tables)
-  const activeDatabase = useConnectionsStore((s) => s.activeDatabase)
+  const activeNamespace = useConnectionsStore((s) => s.activeNamespace)
   const expanded = useConnectionsStore((s) => s.expanded)
   const error = useConnectionsStore((s) => s.error)
   const loadProfiles = useConnectionsStore((s) => s.loadProfiles)
   const connect = useConnectionsStore((s) => s.connect)
   const disconnect = useConnectionsStore((s) => s.disconnect)
   const deleteProfile = useConnectionsStore((s) => s.deleteProfile)
-  const selectDatabase = useConnectionsStore((s) => s.selectDatabase)
+  const selectNamespace = useConnectionsStore((s) => s.selectNamespace)
+  const loadSchemas = useConnectionsStore((s) => s.loadSchemas)
   const loadTables = useConnectionsStore((s) => s.loadTables)
   const toggleNode = useConnectionsStore((s) => s.toggleNode)
 
   const roots = useMemo(
-    () => buildTree({ profiles, statuses, databases, tables, activeDatabase }),
-    [profiles, statuses, databases, tables, activeDatabase],
+    () =>
+      buildTree({
+        profiles,
+        statuses,
+        databases,
+        schemas,
+        tables,
+        activeNamespace,
+      }),
+    [profiles, statuses, databases, schemas, tables, activeNamespace],
   )
 
   const [selected, setSelected] = useState<TreeNode | null>(null)
@@ -102,7 +112,10 @@ export function App() {
         connected
           ? { label: 'Disconnect', onSelect: () => void disconnect(profileId) }
           : { label: 'Connect', onSelect: () => startConnect(profile) },
-        { label: 'Edit Connection…', onSelect: () => openEditConnection(profile) },
+        {
+          label: 'Edit Connection…',
+          onSelect: () => openEditConnection(profile),
+        },
         {
           label: 'Delete Connection',
           danger: true,
@@ -114,22 +127,37 @@ export function App() {
     [profiles, sessions, disconnect, startConnect, openEditConnection, deleteProfile],
   )
 
+  // Each level loads what the level below it will need: a PostgreSQL database its schemas,
+  // and the Tables folder its table list.
+  const revealNode = useCallback(
+    (node: TreeNode) => {
+      const ns = node.namespace
+      if (!ns) return
+
+      if (node.kind === 'database' && !ownsObjects(node)) {
+        void loadSchemas(node.profileId, ns.database)
+      }
+      if (node.kind === 'folder') void loadTables(node.profileId, ns)
+    },
+    [loadSchemas, loadTables],
+  )
+
   const toggleTreeNode = useCallback(
     (node: TreeNode) => {
       toggleNode(node.id)
-      if (node.kind === 'folder' && node.database) void loadTables(node.profileId, node.database)
+      revealNode(node)
     },
-    [toggleNode, loadTables],
+    [toggleNode, revealNode],
   )
 
   const openTable = useCallback(
     (node: TreeNode) => {
-      if (node.kind !== 'table' || !node.database) return
+      if (node.kind !== 'table' || !node.namespace) return
       openTab({
         kind: 'table',
         title: node.label,
         profileId: node.profileId,
-        database: node.database,
+        namespace: node.namespace,
         table: node.label,
       })
     },
@@ -139,15 +167,18 @@ export function App() {
   const selectNode = useCallback(
     (node: TreeNode) => {
       setSelected(node)
-      if (!node.database) return
 
-      if (node.kind === 'database') selectDatabase(node.profileId, node.database)
-      if (node.kind === 'folder') {
-        if (!expanded.has(node.id)) toggleNode(node.id)
-        void loadTables(node.profileId, node.database)
-      }
+      const ns = node.namespace
+      if (!ns) return
+
+      // The node that owns tables is the one a query tab can run against. A PostgreSQL
+      // database is not that node — its schemas are — so clicking one only opens it.
+      if (ownsObjects(node)) selectNamespace(node.profileId, ns)
+      else if (isExpandable(node) && !expanded.has(node.id)) toggleNode(node.id)
+
+      revealNode(node)
     },
-    [expanded, selectDatabase, toggleNode, loadTables],
+    [expanded, selectNamespace, toggleNode, revealNode],
   )
 
   const activateNode = useCallback(
@@ -163,22 +194,22 @@ export function App() {
     [profiles, sessions, startConnect, toggleNode, openTable],
   )
 
-  // A new editor inherits the selected connection and database, falling back to
+  // A new editor inherits the selected connection and namespace, falling back to
   // whichever connection is open.
   const newQuery = useCallback(() => {
     const profileId = selected?.profileId ?? Object.keys(sessions)[0] ?? ''
-    const database = selected?.database ?? activeDatabase[profileId] ?? ''
+    const namespace = selected?.namespace ?? activeNamespace[profileId] ?? NO_NAMESPACE
     const count = useTabsStore.getState().tabs.filter((tab) => tab.kind === 'query').length
 
     openTab({
       kind: 'query',
       title: `Query ${count + 1}`,
       profileId,
-      database,
+      namespace,
       sql: '',
       rowLimit: DEFAULT_QUERY_ROWS,
     })
-  }, [openTab, selected, sessions, activeDatabase])
+  }, [openTab, selected, sessions, activeNamespace])
 
   const status = useMemo<StatusInfo>(() => {
     const activeProfileId = Object.keys(sessions)[0]
@@ -245,11 +276,7 @@ export function App() {
 
       <StatusBar {...status} />
 
-      <ConnectionDialog
-        open={dialogOpen}
-        initial={dialogProfile}
-        onOpenChange={setDialogOpen}
-      />
+      <ConnectionDialog open={dialogOpen} initial={dialogProfile} onOpenChange={setDialogOpen} />
 
       <PasswordPrompt
         open={promptFor !== null}

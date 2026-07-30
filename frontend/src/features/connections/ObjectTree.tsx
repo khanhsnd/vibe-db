@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  Boxes,
   ChevronDown,
   ChevronRight,
   CircleCheck,
@@ -23,6 +24,7 @@ import { flatten, type NodeKind, type TreeNode } from './tree'
 const ICONS: Record<NodeKind, typeof Table2> = {
   connection: Server,
   database: Database,
+  schema: Boxes,
   folder: Folder,
   table: Table2,
   view: Eye,

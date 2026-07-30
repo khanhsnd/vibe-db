@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, CircleSlash, Terminal } from 'lucide-react'
 
 import type { AppError } from '@/bridge/errors'
+import type { QueryResult } from '@/bridge/query'
 import { cn } from '@/lib/cn'
 import { Empty } from '@/shared/ui/Empty'
 import type { QueryRun } from '@/stores/queries'
@@ -77,10 +78,12 @@ export function ResultPane({ run, sessionId, onRefresh }: ResultPaneProps) {
   )
 }
 
-function label(grid: { database: string; table: string } | null, editable: boolean): string {
+function label(grid: QueryResult | null, editable: boolean): string {
   if (grid === null) return 'No rows'
   if (!editable) return 'Read-only — rows cannot be traced to a single table'
-  return `${grid.database}.${grid.table} — double-click a cell to edit`
+
+  const qualified = [grid.database, grid.schema, grid.table].filter((part) => part !== '').join('.')
+  return `${qualified} — double-click a cell to edit`
 }
 
 function ErrorPanel({ error }: { error: AppError }) {

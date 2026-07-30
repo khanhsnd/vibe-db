@@ -9,6 +9,23 @@ export type Session = app.Session
 export type TestResult = app.TestResult
 export type TableSchema = app.TableSchema
 
+/**
+ * Where a table lives. `schema` is empty on MySQL, whose database is its schema, and on a
+ * PostgreSQL database node, which names no schema yet and so addresses no tables.
+ */
+export type Namespace = app.Namespace
+
+export const NO_NAMESPACE: Namespace = { database: '', schema: '' }
+
+export function namespaceOf(database: string, schema = ''): Namespace {
+  return { database, schema }
+}
+
+/** How a namespace reads to a person: `shop`, or `shop.public` where there is a schema. */
+export function namespaceLabel(ns: Namespace): string {
+  return ns.schema === '' ? ns.database : `${ns.database}.${ns.schema}`
+}
+
 export type TLSMode = 'disabled' | 'preferred' | 'required' | 'verify-ca'
 
 export const TLS_MODES: ReadonlyArray<{ value: TLSMode; label: string }> = [
@@ -28,9 +45,9 @@ export interface EngineInfo {
   // PostgreSQL binds a session to one database for its whole life, so a profile that names
   // none has nothing to connect to. MySQL can be browsed without one.
   needsDatabase: boolean
-  // What the tree and the query toolbar are listing under a connection: MySQL qualifies a
-  // table with a database, PostgreSQL with a schema of the one database it is bound to.
-  namespace: string
+  // Whether a table is qualified with a schema inside its database. MySQL's database *is*
+  // its schema, so its tree has one level fewer.
+  hasSchemas: boolean
 }
 
 // The order here is the order of the dialog's Engine list, and the first entry is what an
@@ -42,7 +59,7 @@ export const ENGINES = [
     port: 3306,
     user: 'root',
     needsDatabase: false,
-    namespace: 'Database',
+    hasSchemas: false,
   },
   {
     value: 'postgres',
@@ -50,7 +67,7 @@ export const ENGINES = [
     port: 5432,
     user: 'postgres',
     needsDatabase: true,
-    namespace: 'Schema',
+    hasSchemas: true,
   },
 ] as const satisfies readonly EngineInfo[]
 
@@ -112,8 +129,9 @@ export const connections = {
   connect: (profileId: string, password: string) => call(() => api.Connect(profileId, password)),
   disconnect: (sessionId: string) => call(() => api.Disconnect(sessionId)),
   listDatabases: (sessionId: string) => call(() => api.ListDatabases(sessionId)),
-  listTables: (sessionId: string, database: string) =>
-    call(() => api.ListTables(sessionId, database)),
-  loadSchema: (sessionId: string, database: string) =>
-    call(() => api.LoadSchema(sessionId, database)),
+  listSchemas: (sessionId: string, database: string) =>
+    call(() => api.ListSchemas(sessionId, database)),
+  listTables: (sessionId: string, ns: Namespace) => call(() => api.ListTables(sessionId, ns)),
+  loadTableSchemas: (sessionId: string, ns: Namespace) =>
+    call(() => api.LoadTableSchemas(sessionId, ns)),
 }

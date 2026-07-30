@@ -35,7 +35,7 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 	}
 
 	// A pooled connection is pinned for the call so USE applies to the statement.
-	conn, err := s.pinned(ctx, query.Database)
+	conn, err := s.pinned(ctx, query.Namespace)
 	if err != nil {
 		return driver.QueryResult{}, err
 	}
@@ -54,7 +54,7 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 		return driver.QueryResult{}, translateError(err)
 	}
 
-	s.attachSource(ctx, query.Database, statement, &result)
+	s.attachSource(ctx, query.Namespace, statement, &result)
 	return result, nil
 }
 
@@ -63,7 +63,8 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 // column's type but not the table it came from. Whatever cannot be proven stays read-only.
 func (s *session) attachSource(
 	ctx context.Context,
-	fallbackDatabase, statement string,
+	ns driver.Namespace,
+	statement string,
 	result *driver.QueryResult,
 ) {
 	found, ok := dialect.ParseSource(statement)
@@ -71,15 +72,14 @@ func (s *session) attachSource(
 		return
 	}
 
-	database := found.Namespace
-	if database == "" {
-		database = fallbackDatabase
+	if found.Namespace != "" {
+		ns.Database = found.Namespace
 	}
-	if database == "" {
+	if ns.Database == "" {
 		return
 	}
 
-	stored, err := s.columns(ctx, database, found.Table)
+	stored, err := s.columns(ctx, ns, found.Table)
 	if err != nil {
 		return
 	}
@@ -89,19 +89,19 @@ func (s *session) attachSource(
 		return
 	}
 
-	result.Database, result.Table = database, found.Table
+	result.Namespace, result.Table = ns, found.Table
 }
 
-func (s *session) pinned(ctx context.Context, database string) (*sql.Conn, error) {
+func (s *session) pinned(ctx context.Context, ns driver.Namespace) (*sql.Conn, error) {
 	conn, err := s.db.Conn(ctx)
 	if err != nil {
 		return nil, translateError(err)
 	}
-	if database == "" {
+	if ns.Database == "" {
 		return conn, nil
 	}
 
-	if _, err := conn.ExecContext(ctx, "USE "+dialect.QuoteIdent(database)); err != nil {
+	if _, err := conn.ExecContext(ctx, "USE "+dialect.QuoteIdent(ns.Database)); err != nil {
 		conn.Close()
 		return nil, translateError(err)
 	}

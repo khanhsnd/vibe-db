@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 
+import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { ALL_ROWS, DEFAULT_PAGE_SIZE } from '@/bridge/rows'
 import { tables, type Cell, type TablePage } from '@/bridge/tables'
 import { primaryKeyOf, type CellRef } from '@/features/results/resultSet'
 
-export function useTableData(sessionId: string, database: string, table: string) {
+export function useTableData(sessionId: string, namespace: Namespace, table: string) {
+  const { database, schema } = namespace
+
   const [page, setPage] = useState(0)
   const [limit, setLimit] = useState<number>(DEFAULT_PAGE_SIZE)
   const [nonce, setNonce] = useState(0)
@@ -19,7 +22,13 @@ export function useTableData(sessionId: string, database: string, table: string)
     setLoading(true)
 
     tables
-      .loadRows(sessionId, { database, table, limit, offset: limit === ALL_ROWS ? 0 : page * limit })
+      .loadRows(sessionId, {
+        database,
+        schema,
+        table,
+        limit,
+        offset: limit === ALL_ROWS ? 0 : page * limit,
+      })
       .then((next) => {
         if (!active) return
         setData(next)
@@ -35,7 +44,7 @@ export function useTableData(sessionId: string, database: string, table: string)
     return () => {
       active = false
     }
-  }, [sessionId, database, table, limit, page, nonce])
+  }, [sessionId, database, schema, table, limit, page, nonce])
 
   const refresh = useCallback(() => setNonce((current) => current + 1), [])
 
@@ -56,6 +65,7 @@ export function useTableData(sessionId: string, database: string, table: string)
       try {
         await tables.updateCell(sessionId, {
           database,
+          schema,
           table,
           column: column.name,
           value,
@@ -69,7 +79,7 @@ export function useTableData(sessionId: string, database: string, table: string)
         setSaving(false)
       }
     },
-    [data, sessionId, database, table, refresh],
+    [data, sessionId, database, schema, table, refresh],
   )
 
   return { data, loading, saving, error, page, limit, goToPage, changeLimit, refresh, updateCell }

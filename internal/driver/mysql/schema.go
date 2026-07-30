@@ -7,16 +7,19 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
 
-// Schema reads every table and column of a database in one query. Views are included,
+// TableSchemas reads every table and column of a database in one query. Views are included,
 // because completion cares about what can be selected from, not about storage.
-func (s *session) Schema(ctx context.Context, database string) ([]driver.TableSchema, error) {
+func (s *session) TableSchemas(
+	ctx context.Context,
+	ns driver.Namespace,
+) ([]driver.TableSchema, error) {
 	const query = `
 		SELECT table_name, column_name
 		FROM information_schema.columns
 		WHERE table_schema = ?
 		ORDER BY table_name, ordinal_position`
 
-	rows, err := s.db.QueryContext(ctx, query, database)
+	rows, err := s.db.QueryContext(ctx, query, ns.Database)
 	if err != nil {
 		return nil, translateError(err)
 	}

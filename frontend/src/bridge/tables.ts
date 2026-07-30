@@ -16,6 +16,7 @@ export interface TableColumn {
 
 export interface TablePageRequest {
   database: string
+  schema: string
   table: string
   limit: number
   offset: number
@@ -31,6 +32,7 @@ export interface TablePage {
 
 export interface CellEdit {
   database: string
+  schema: string
   table: string
   column: string
   value: Cell

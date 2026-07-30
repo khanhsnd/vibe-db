@@ -11,7 +11,12 @@ func TestBuildSelectOrdersByPrimaryKey(t *testing.T) {
 		{Name: "id", PrimaryKey: true},
 		{Name: "email"},
 	}
-	page := driver.TablePage{Database: "shop", Table: "users", Limit: 100, Offset: 200}
+	page := driver.TablePage{
+		Namespace: driver.Namespace{Database: "shop"},
+		Table:     "users",
+		Limit:     100,
+		Offset:    200,
+	}
 
 	got, args := buildSelect(page, columns)
 	want := "SELECT `id`, `email` FROM `shop`.`users` ORDER BY `id` LIMIT ? OFFSET ?"
@@ -26,7 +31,11 @@ func TestBuildSelectOrdersByPrimaryKey(t *testing.T) {
 
 func TestBuildSelectWithoutPrimaryKeyHasNoOrderBy(t *testing.T) {
 	columns := []driver.Column{{Name: "email"}}
-	page := driver.TablePage{Database: "shop", Table: "log", Limit: 100}
+	page := driver.TablePage{
+		Namespace: driver.Namespace{Database: "shop"},
+		Table:     "log",
+		Limit:     100,
+	}
 
 	got, _ := buildSelect(page, columns)
 	want := "SELECT `email` FROM `shop`.`log` LIMIT ? OFFSET ?"
@@ -38,7 +47,11 @@ func TestBuildSelectWithoutPrimaryKeyHasNoOrderBy(t *testing.T) {
 
 func TestBuildSelectWithoutLimitReadsEveryRow(t *testing.T) {
 	columns := []driver.Column{{Name: "id", PrimaryKey: true}}
-	page := driver.TablePage{Database: "shop", Table: "users", Offset: 200}
+	page := driver.TablePage{
+		Namespace: driver.Namespace{Database: "shop"},
+		Table:     "users",
+		Offset:    200,
+	}
 
 	got, args := buildSelect(page, columns)
 	want := "SELECT `id` FROM `shop`.`users` ORDER BY `id`"
@@ -53,11 +66,11 @@ func TestBuildSelectWithoutLimitReadsEveryRow(t *testing.T) {
 
 func TestBuildUpdateBindsValueThenKeysInOrder(t *testing.T) {
 	edit := driver.CellEdit{
-		Database: "shop",
-		Table:    "order_items",
-		Column:   "quantity",
-		Value:    nil,
-		Key:      map[string]string{"order_id": "7", "sku": "A-1"},
+		Namespace: driver.Namespace{Database: "shop"},
+		Table:     "order_items",
+		Column:    "quantity",
+		Value:     nil,
+		Key:       map[string]string{"order_id": "7", "sku": "A-1"},
 	}
 
 	query, args := buildUpdate(edit, []string{"order_id", "sku"})

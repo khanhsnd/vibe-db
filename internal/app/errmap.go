@@ -16,6 +16,7 @@ const (
 	CodeSessionNotFound  ErrorCode = "SESSION_NOT_FOUND"
 	CodeBadCredentials   ErrorCode = "BAD_CREDENTIALS"
 	CodeUnknownDatabase  ErrorCode = "UNKNOWN_DATABASE"
+	CodeUnknownSchema    ErrorCode = "UNKNOWN_SCHEMA"
 	CodeUnknownTable     ErrorCode = "UNKNOWN_TABLE"
 	CodeTableNotEditable ErrorCode = "TABLE_NOT_EDITABLE"
 	CodeEmptyStatement   ErrorCode = "EMPTY_STATEMENT"
@@ -53,6 +54,7 @@ var sentinelToWire = []struct {
 	{domain.ErrSessionNotFound, CodeSessionNotFound, "This connection is no longer open."},
 	{domain.ErrBadCredentials, CodeBadCredentials, "Access denied. Check the user name and password."},
 	{domain.ErrUnknownDatabase, CodeUnknownDatabase, "That database does not exist on the server."},
+	{domain.ErrUnknownSchema, CodeUnknownSchema, "That schema no longer exists. Refresh the database."},
 	{domain.ErrUnknownTable, CodeUnknownTable, "That table no longer exists. Refresh the table list."},
 	{domain.ErrTableNotEditable, CodeTableNotEditable, "This table has no primary key, so a single row cannot be identified for editing."},
 	{domain.ErrEmptyStatement, CodeEmptyStatement, "There is no statement to run."},

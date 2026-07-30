@@ -1,21 +1,25 @@
 # Deliberate choices — do not "fix" these
 
-- **A PostgreSQL schema is browsed where a MySQL database is.** `driver.Session` has one notion of
-  a namespace a table is qualified with, and a PostgreSQL session cannot cross to another database
-  the way `USE` crosses to another MySQL one. So the adapter answers `Databases()` with the schemas
-  of the one database the profile names, and pins a statement with `SET search_path` where MySQL
-  uses `USE`. The alternative — listing real databases — would mean a pool per database and a
-  reconnect on every click, for a level of the tree the connection cannot leave anyway. The
-  profile's `database` is therefore required for PostgreSQL, and the UI says *Schema* wherever the
-  engine calls it that.
+- **A PostgreSQL session keeps one connection pool per database.** A PostgreSQL connection is bound
+  for life to the database it was opened with, and `pg_namespace` only ever describes that one. But
+  a client has to show every database, so `driver.Namespace` carries `(database, schema)` and the
+  adapter dials a database on first use, keeping its pool until the session closes. The profile's
+  `database` is the one it bootstraps from and is therefore required; `Databases()` is read there,
+  and `Schemas(database)` needs that database's own pool. MySQL fills `Database` alone, because its
+  database *is* its schema, and its tree has one level fewer — which the frontend decides from
+  `ENGINES[…].hasSchemas`, not from a null check.
+- **A statement is pinned per namespace, not per session.** One pooled connection is held for the
+  call and pointed at the namespace — `USE` on MySQL, `SET search_path` on PostgreSQL — so the
+  pool's other connections keep whatever they had.
 - **`multiStatements` stays `false`** in the MySQL DSN. Statements are split client-side, which
   removes an injection surface and allows per-statement timing.
 - **TLS modes keep libpq's meaning on PostgreSQL.** The four modes the dialog offers map onto
   `disable` / `prefer` / `require` / `verify-ca`, so `Verify CA` checks the chain but not the host
   name. MySQL's `tls=true` checks both. The label names what the *engine* will do, rather than
   papering over a difference the server decides.
-- **Connection pools are capped at 4 open / 2 idle** per session. A GUI needs no more, and it is
-  half of the memory story.
+- **Connection pools are capped at 4 open / 2 idle.** A GUI needs no more, and it is half of the
+  memory story. The cap is per pool, so a PostgreSQL session browsing three databases holds three
+  pools of four.
 - **Reads are bounded by default** — 1 000 rows for a query, a 100-row page for table data — rather
   than streamed unbounded into the UI. That bound is the mechanism keeping the memory claims in
   [memory.md](memory.md) true. A toolbar can lift it, through an explicit `All` or a typed count,

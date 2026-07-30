@@ -1,6 +1,9 @@
+import type { Namespace } from '@/bridge/connections'
+
 export type NodeKind =
   | 'connection'
   | 'database'
+  | 'schema'
   | 'folder'
   | 'table'
   | 'view'
@@ -14,7 +17,8 @@ export interface TreeNode {
   kind: NodeKind
   label: string
   profileId: string
-  database?: string
+  /** Where this node's tables live. Absent on a connection, which has no namespace yet. */
+  namespace?: Namespace
   children?: TreeNode[]
   status?: ConnectionStatus
   active?: boolean
@@ -30,6 +34,15 @@ export interface FlatNode {
 
 export function isExpandable(node: TreeNode): boolean {
   return node.children !== undefined
+}
+
+/**
+ * Whether this node is the one that holds the object folders, and so the one whose namespace
+ * addresses tables. A MySQL database is that node; a PostgreSQL database is not, because its
+ * children are schemas and they hold the folders.
+ */
+export function ownsObjects(node: TreeNode): boolean {
+  return node.children?.[0]?.kind === 'folder'
 }
 
 export function flatten(roots: TreeNode[], expanded: ReadonlySet<string>): FlatNode[] {

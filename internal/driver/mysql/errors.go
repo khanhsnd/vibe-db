@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/go-sql-driver/mysql"
@@ -30,8 +31,11 @@ func translateError(err error) error {
 
 	var mysqlErr *mysql.MySQLError
 	if errors.As(err, &mysqlErr) {
+		// The sentinel decides the code the UI switches on; the server's own wording names
+		// the object it could not find, so it stays in the chain and reaches the user as
+		// the error's detail.
 		if mapped, ok := errnoToDomain[mysqlErr.Number]; ok {
-			return mapped
+			return fmt.Errorf("%s: %w", mysqlErr.Message, mapped)
 		}
 		return domain.StatementError{
 			Code:    strconv.FormatUint(uint64(mysqlErr.Number), 10),

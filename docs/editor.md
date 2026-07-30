@@ -14,7 +14,7 @@ with nothing selected it sends the whole buffer.
 
 Completion fires as you type and on `Ctrl`+`Space`, over four sources:
 
-- **Tables** of the tab's database, with their column count as the hint.
+- **Tables** of the tab's namespace, with their column count as the hint.
 - **Qualified columns**, after `table.` or `alias.` — `FROM orders o … o.` resolves the alias.
 - **Bare columns** anywhere else in the statement — after `SELECT`, after `WHERE`, after
   `ORDER BY` — drawn from every table that statement names, each labelled with its table. A join
@@ -25,10 +25,20 @@ Completion fires as you type and on `Ctrl`+`Space`, over four sources:
 The last two are suppressed after a dot and inside strings and comments, where only the qualified
 schema has anything useful to say.
 
-`ConnectionAPI.LoadSchema` reads a whole database's tables and columns in one catalogue scan —
+`ConnectionAPI.LoadTableSchemas` reads a whole namespace's tables and columns in one catalogue scan —
 `information_schema.columns` on MySQL, `pg_attribute` on PostgreSQL — cached per
-connection-and-database until disconnect. Switching the toolbar's database reconfigures completion
-in place rather than rebuilding the editor.
+connection-and-namespace until disconnect. Switching the toolbar's database or schema reconfigures
+completion in place rather than rebuilding the editor.
+
+**Completion inserts the form that will actually run.** PostgreSQL folds an unquoted identifier to
+lower case, so a table created as `AIFolders` reaches the server as `aifolders` and only resolves
+when it is quoted. `quoterFor` in `sqlLanguage.ts` therefore gives a PostgreSQL completion an
+`apply` of `"AIFolders"` while the label stays readable; a name that is already lower-case and
+plain is offered bare. MySQL folds nothing, so its names go in as they are stored.
+
+Typing such a name by hand still fails, and it is the server that says so — which is why a mapped
+SQLSTATE keeps the server's own wording in the error's `detail`. `relation "aifolders" does not
+exist` names the folded spelling, and that is the entire clue.
 
 One upstream limitation is worth knowing: a table whose name is a reserved keyword — `user`,
 `plugin` — is tokenised as a keyword, so `FROM user u` does not register the alias `u` and `u.`

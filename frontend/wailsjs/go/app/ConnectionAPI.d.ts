@@ -12,11 +12,13 @@ export function ListDatabases(arg1:string):Promise<Array<string>>;
 
 export function ListProfiles():Promise<Array<app.Profile>>;
 
-export function ListTables(arg1:string,arg2:string):Promise<Array<string>>;
+export function ListSchemas(arg1:string,arg2:string):Promise<Array<string>>;
 
-export function LoadSchema(arg1:string,arg2:string):Promise<Array<app.TableSchema>>;
+export function ListTables(arg1:string,arg2:app.Namespace):Promise<Array<string>>;
 
 export function LoadTableRows(arg1:string,arg2:app.TablePageInput):Promise<app.TableRows>;
+
+export function LoadTableSchemas(arg1:string,arg2:app.Namespace):Promise<Array<app.TableSchema>>;
 
 export function SaveProfile(arg1:app.ProfileInput):Promise<app.Profile>;
 

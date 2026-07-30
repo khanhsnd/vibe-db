@@ -7,6 +7,7 @@ import type { Cell, TableColumn } from './tables'
 export interface QueryRequest {
   runId: string
   database: string
+  schema: string
   sql: string
   maxRows: number
   explain: boolean
@@ -14,7 +15,7 @@ export interface QueryRequest {
 
 /**
  * A statement that returns rows fills `columns`; one that does not reports `rowsAffected`.
- * `database` and `table` name the source the rows can be written back to, and are empty
+ * The namespace and `table` name the source the rows can be written back to, and are empty
  * for a result the backend could not trace to a single table.
  */
 export interface QueryResult {
@@ -24,6 +25,7 @@ export interface QueryResult {
   truncated: boolean
   elapsedMs: number
   database: string
+  schema: string
   table: string
 }
 

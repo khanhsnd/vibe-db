@@ -11,12 +11,12 @@ import (
 )
 
 func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.TableRows, error) {
-	columns, err := s.columns(ctx, page.Database, page.Table)
+	columns, err := s.columns(ctx, page.Namespace, page.Table)
 	if err != nil {
 		return driver.TableRows{}, err
 	}
 
-	total, err := s.countRows(ctx, page.Database, page.Table)
+	total, err := s.countRows(ctx, page.Namespace, page.Table)
 	if err != nil {
 		return driver.TableRows{}, err
 	}
@@ -34,7 +34,7 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 }
 
 func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
-	columns, err := s.columns(ctx, edit.Database, edit.Table)
+	columns, err := s.columns(ctx, edit.Namespace, edit.Table)
 	if err != nil {
 		return err
 	}
@@ -56,14 +56,18 @@ func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 	return nil
 }
 
-func (s *session) columns(ctx context.Context, database, table string) ([]driver.Column, error) {
+func (s *session) columns(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) ([]driver.Column, error) {
 	const query = `
 		SELECT column_name, data_type, column_type, is_nullable, column_key, column_default
 		FROM information_schema.columns
 		WHERE table_schema = ? AND table_name = ?
 		ORDER BY ordinal_position`
 
-	rows, err := s.db.QueryContext(ctx, query, database, table)
+	rows, err := s.db.QueryContext(ctx, query, ns.Database, table)
 	if err != nil {
 		return nil, translateError(err)
 	}
@@ -97,9 +101,13 @@ func (s *session) columns(ctx context.Context, database, table string) ([]driver
 	return columns, nil
 }
 
-func (s *session) countRows(ctx context.Context, database, table string) (int64, error) {
+func (s *session) countRows(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) (int64, error) {
 	var total int64
-	query := "SELECT COUNT(*) FROM " + dialect.Qualify(database, table)
+	query := "SELECT COUNT(*) FROM " + dialect.Qualify(ns.Database, table)
 
 	if err := s.db.QueryRowContext(ctx, query).Scan(&total); err != nil {
 		return 0, translateError(err)

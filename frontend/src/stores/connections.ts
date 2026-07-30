@@ -4,6 +4,9 @@ import { type AppError, toAppError } from '@/bridge/errors'
 import {
   connections,
   engineInfo,
+  namespaceOf,
+  NO_NAMESPACE,
+  type Namespace,
   type Profile,
   type ProfileInput,
   type Session,
@@ -13,21 +16,28 @@ import type { ConnectionStatus, TreeNode } from '@/features/connections/tree'
 
 export const connectionNodeId = (profileId: string) => `conn:${profileId}`
 export const databaseNodeId = (profileId: string, database: string) => `db:${profileId}:${database}`
-export const tablesNodeId = (profileId: string, database: string) =>
-  `tables:${profileId}:${database}`
-export const tableNodeId = (profileId: string, database: string, table: string) =>
-  `table:${profileId}:${database}:${table}`
+export const schemaNodeId = (profileId: string, ns: Namespace) =>
+  `schema:${namespaceKey(profileId, ns)}`
+export const tablesNodeId = (profileId: string, ns: Namespace) =>
+  `tables:${namespaceKey(profileId, ns)}`
+export const tableNodeId = (profileId: string, ns: Namespace, table: string) =>
+  `table:${namespaceKey(profileId, ns)}:${table}`
 
 export const databaseKey = (profileId: string, database: string) => `${profileId}:${database}`
+export const namespaceKey = (profileId: string, ns: Namespace) =>
+  `${profileId}:${ns.database}:${ns.schema}`
 
 interface ConnectionsState {
   profiles: Profile[]
   sessions: Record<string, Session>
   statuses: Record<string, ConnectionStatus>
   databases: Record<string, string[]>
+  /** Keyed by connection and database: the level below a database, empty for MySQL. */
+  schemas: Record<string, string[]>
+  /** Both keyed by connection and namespace, since a table name only means something there. */
   tables: Record<string, string[]>
-  schemas: Record<string, TableSchema[]>
-  activeDatabase: Record<string, string>
+  tableSchemas: Record<string, TableSchema[]>
+  activeNamespace: Record<string, Namespace>
   expanded: ReadonlySet<string>
   loading: boolean
   error: AppError | null
@@ -37,9 +47,10 @@ interface ConnectionsState {
   deleteProfile: (profileId: string) => Promise<void>
   connect: (profileId: string, password: string) => Promise<void>
   disconnect: (profileId: string) => Promise<void>
-  selectDatabase: (profileId: string, database: string) => void
-  loadTables: (profileId: string, database: string) => Promise<void>
-  loadSchema: (profileId: string, database: string) => Promise<void>
+  selectNamespace: (profileId: string, ns: Namespace) => void
+  loadSchemas: (profileId: string, database: string) => Promise<void>
+  loadTables: (profileId: string, ns: Namespace) => Promise<void>
+  loadTableSchemas: (profileId: string, ns: Namespace) => Promise<void>
   toggleNode: (nodeId: string) => void
   clearError: () => void
 }
@@ -49,9 +60,10 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   sessions: {},
   statuses: {},
   databases: {},
-  tables: {},
   schemas: {},
-  activeDatabase: {},
+  tables: {},
+  tableSchemas: {},
+  activeNamespace: {},
   expanded: new Set<string>(),
   loading: false,
   error: null,
@@ -113,14 +125,14 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
       set((s) => {
         const sessions = { ...s.sessions }
         const databases = { ...s.databases }
-        const activeDatabase = { ...s.activeDatabase }
+        const activeNamespace = { ...s.activeNamespace }
         delete sessions[profileId]
         delete databases[profileId]
-        delete activeDatabase[profileId]
+        delete activeNamespace[profileId]
 
         const own = (key: string) => !key.startsWith(`${profileId}:`)
-        const tables = Object.fromEntries(Object.entries(s.tables).filter(([key]) => own(key)))
-        const schemas = Object.fromEntries(Object.entries(s.schemas).filter(([key]) => own(key)))
+        const drop = <T>(source: Record<string, T>) =>
+          Object.fromEntries(Object.entries(source).filter(([key]) => own(key)))
 
         const expanded = new Set(s.expanded)
         expanded.delete(connectionNodeId(profileId))
@@ -128,47 +140,64 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
         return {
           sessions,
           databases,
-          tables,
-          schemas,
-          activeDatabase,
+          activeNamespace,
           expanded,
+          schemas: drop(s.schemas),
+          tables: drop(s.tables),
+          tableSchemas: drop(s.tableSchemas),
           statuses: { ...s.statuses, [profileId]: 'idle' },
         }
       })
     }
   },
 
-  selectDatabase: (profileId, database) =>
+  selectNamespace: (profileId, ns) =>
     set((s) => ({
-      activeDatabase: { ...s.activeDatabase, [profileId]: database },
-      expanded: new Set(s.expanded).add(databaseNodeId(profileId, database)),
+      activeNamespace: { ...s.activeNamespace, [profileId]: ns },
+      expanded: new Set(s.expanded).add(
+        ns.schema === '' ? databaseNodeId(profileId, ns.database) : schemaNodeId(profileId, ns),
+      ),
     })),
 
-  loadTables: async (profileId, database) => {
-    const { sessions, tables } = get()
-    const session = sessions[profileId]
-    const key = databaseKey(profileId, database)
-    if (!session || tables[key]) return
-
-    try {
-      const names = await connections.listTables(session.id, database)
-      set((s) => ({ tables: { ...s.tables, [key]: names } }))
-    } catch (thrown) {
-      set({ error: toAppError(thrown) })
-    }
-  },
-
-  // Cached until disconnect, like tables: a schema read costs one information_schema
-  // scan, and the editor asks for it on every keystroke.
-  loadSchema: async (profileId, database) => {
+  loadSchemas: async (profileId, database) => {
     const { sessions, schemas } = get()
     const session = sessions[profileId]
     const key = databaseKey(profileId, database)
     if (!session || schemas[key]) return
 
     try {
-      const tables = await connections.loadSchema(session.id, database)
-      set((s) => ({ schemas: { ...s.schemas, [key]: tables } }))
+      const names = await connections.listSchemas(session.id, database)
+      set((s) => ({ schemas: { ...s.schemas, [key]: names } }))
+    } catch (thrown) {
+      set({ error: toAppError(thrown) })
+    }
+  },
+
+  loadTables: async (profileId, ns) => {
+    const { sessions, tables } = get()
+    const session = sessions[profileId]
+    const key = namespaceKey(profileId, ns)
+    if (!session || tables[key]) return
+
+    try {
+      const names = await connections.listTables(session.id, ns)
+      set((s) => ({ tables: { ...s.tables, [key]: names } }))
+    } catch (thrown) {
+      set({ error: toAppError(thrown) })
+    }
+  },
+
+  // Cached until disconnect, like tables: a schema read costs one catalogue scan, and the
+  // editor asks for it on every keystroke.
+  loadTableSchemas: async (profileId, ns) => {
+    const { sessions, tableSchemas } = get()
+    const session = sessions[profileId]
+    const key = namespaceKey(profileId, ns)
+    if (!session || tableSchemas[key]) return
+
+    try {
+      const tables = await connections.loadTableSchemas(session.id, ns)
+      set((s) => ({ tableSchemas: { ...s.tableSchemas, [key]: tables } }))
     } catch (thrown) {
       set({ error: toAppError(thrown) })
     }
@@ -189,59 +218,95 @@ interface TreeInput {
   profiles: Profile[]
   statuses: Record<string, ConnectionStatus>
   databases: Record<string, string[]>
+  schemas: Record<string, string[]>
   tables: Record<string, string[]>
-  activeDatabase: Record<string, string>
+  activeNamespace: Record<string, Namespace>
 }
 
 export function buildTree({
   profiles,
   statuses,
   databases,
+  schemas,
   tables,
-  activeDatabase,
+  activeNamespace,
 }: TreeInput): TreeNode[] {
-  return profiles.map((profile) => ({
-    id: connectionNodeId(profile.id),
-    kind: 'connection',
-    label: profile.name,
-    profileId: profile.id,
-    status: statuses[profile.id] ?? 'idle',
-    badge: engineInfo(profile.engine).label,
-    children: (databases[profile.id] ?? []).map((database) =>
-      databaseNode(profile.id, database, tables, activeDatabase[profile.id] === database),
-    ),
-  }))
+  return profiles.map((profile) => {
+    const { label, hasSchemas } = engineInfo(profile.engine)
+    const active = activeNamespace[profile.id] ?? NO_NAMESPACE
+
+    return {
+      id: connectionNodeId(profile.id),
+      kind: 'connection',
+      label: profile.name,
+      profileId: profile.id,
+      status: statuses[profile.id] ?? 'idle',
+      badge: label,
+      children: (databases[profile.id] ?? []).map((database) =>
+        hasSchemas
+          ? schemaParentNode(profile.id, database, schemas, tables, active)
+          : namespaceNode(profile.id, 'database', namespaceOf(database), database, tables, active),
+      ),
+    }
+  })
 }
 
-function databaseNode(
+// A PostgreSQL database holds no tables of its own — its schemas do — so it only carries the
+// level below it, and the schema list arrives on first expand.
+function schemaParentNode(
   profileId: string,
   database: string,
+  schemas: Record<string, string[]>,
   tables: Record<string, string[]>,
-  active: boolean,
+  active: Namespace,
 ): TreeNode {
-  const names = tables[databaseKey(profileId, database)]
+  const names = schemas[databaseKey(profileId, database)]
 
   return {
     id: databaseNodeId(profileId, database),
     kind: 'database',
     label: database,
     profileId,
-    database,
-    active,
+    namespace: namespaceOf(database),
+    ...(names ? { badge: String(names.length) } : {}),
+    children: (names ?? []).map((schema) =>
+      namespaceNode(profileId, 'schema', namespaceOf(database, schema), schema, tables, active),
+    ),
+  }
+}
+
+// The node that owns tables, whichever level of the tree that turns out to be.
+function namespaceNode(
+  profileId: string,
+  kind: 'database' | 'schema',
+  ns: Namespace,
+  label: string,
+  tables: Record<string, string[]>,
+  active: Namespace,
+): TreeNode {
+  const names = tables[namespaceKey(profileId, ns)]
+
+  return {
+    id: kind === 'schema' ? schemaNodeId(profileId, ns) : databaseNodeId(profileId, ns.database),
+    kind,
+    label,
+    profileId,
+    namespace: ns,
+    active: active.database === ns.database && active.schema === ns.schema,
     children: [
       {
-        id: tablesNodeId(profileId, database),
+        id: tablesNodeId(profileId, ns),
         kind: 'folder',
         label: 'Tables',
         profileId,
-        database,
+        namespace: ns,
         ...(names ? { badge: String(names.length) } : {}),
         children: (names ?? []).map((table) => ({
-          id: tableNodeId(profileId, database, table),
+          id: tableNodeId(profileId, ns, table),
           kind: 'table',
           label: table,
           profileId,
-          database,
+          namespace: ns,
         })),
       },
     ],

@@ -66,6 +66,7 @@ export function useResultEdits(
 
         await tables.updateCell(sessionId, {
           database: result.database,
+          schema: result.schema,
           table: result.table,
           column: column.name,
           value: edit.value,

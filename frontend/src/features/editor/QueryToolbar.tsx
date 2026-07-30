@@ -1,5 +1,6 @@
-import { Database, ListTree, Loader2, Play, Square } from 'lucide-react'
+import { Boxes, Database, ListTree, Loader2, Play, Square } from 'lucide-react'
 
+import type { Namespace } from '@/bridge/connections'
 import { DEFAULT_QUERY_ROWS, QUERY_ROW_LIMITS } from '@/bridge/rows'
 import { Button } from '@/shared/ui/Button'
 import { TOOLBAR_CONTROL } from '@/shared/ui/Field'
@@ -7,13 +8,15 @@ import { RowLimit } from '@/shared/ui/RowLimit'
 
 interface QueryToolbarProps {
   databases: string[]
-  database: string
-  // What the engine calls the namespace on offer — a database, or a PostgreSQL schema.
-  namespace: string
+  schemas: string[]
+  namespace: Namespace
+  /** Whether this engine has a schema below a database, and so a second picker. */
+  hasSchemas: boolean
   rowLimit: number
   running: boolean
   canRun: boolean
   onDatabaseChange: (database: string) => void
+  onSchemaChange: (schema: string) => void
   onRowLimitChange: (limit: number) => void
   onExecute: () => void
   onExplain: () => void
@@ -22,12 +25,14 @@ interface QueryToolbarProps {
 
 export function QueryToolbar({
   databases,
-  database,
+  schemas,
   namespace,
+  hasSchemas,
   rowLimit,
   running,
   canRun,
   onDatabaseChange,
+  onSchemaChange,
   onRowLimitChange,
   onExecute,
   onExplain,
@@ -39,22 +44,26 @@ export function QueryToolbar({
       className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line bg-panel px-2"
     >
       <Database size={13} className="shrink-0 text-faint" />
-      <select
-        aria-label={namespace}
-        value={database}
-        disabled={databases.length === 0}
-        onChange={(e) => onDatabaseChange(e.target.value)}
-        className={`${TOOLBAR_CONTROL} max-w-[180px] font-mono`}
-      >
-        <option value="">
-          {databases.length === 0 ? 'Not connected' : `No ${namespace.toLowerCase()}`}
-        </option>
-        {databases.map((name) => (
-          <option key={name} value={name}>
-            {name}
-          </option>
-        ))}
-      </select>
+      <NamespaceSelect
+        label="Database"
+        value={namespace.database}
+        options={databases}
+        empty={databases.length === 0 ? 'Not connected' : 'No database'}
+        onChange={onDatabaseChange}
+      />
+
+      {hasSchemas ? (
+        <>
+          <Boxes size={13} className="shrink-0 text-faint" />
+          <NamespaceSelect
+            label="Schema"
+            value={namespace.schema}
+            options={schemas}
+            empty={namespace.database === '' ? 'No database' : 'No schema'}
+            onChange={onSchemaChange}
+          />
+        </>
+      ) : null}
 
       <span className="mx-1 h-4 w-px bg-line" />
 
@@ -100,5 +109,32 @@ export function QueryToolbar({
         />
       </div>
     </div>
+  )
+}
+
+interface NamespaceSelectProps {
+  label: string
+  value: string
+  options: string[]
+  empty: string
+  onChange: (value: string) => void
+}
+
+function NamespaceSelect({ label, value, options, empty, onChange }: NamespaceSelectProps) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      disabled={options.length === 0}
+      onChange={(e) => onChange(e.target.value)}
+      className={`${TOOLBAR_CONTROL} max-w-[180px] font-mono`}
+    >
+      <option value="">{empty}</option>
+      {options.map((name) => (
+        <option key={name} value={name}>
+          {name}
+        </option>
+      ))}
+    </select>
   )
 }

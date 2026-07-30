@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
 
-import { engineInfo, type TableSchema } from '@/bridge/connections'
+import { engineInfo, namespaceOf, type TableSchema } from '@/bridge/connections'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
-import { databaseKey, useConnectionsStore } from '@/stores/connections'
+import { namespaceKey, useConnectionsStore } from '@/stores/connections'
 import { IDLE_RUN, useQueriesStore } from '@/stores/queries'
 import { useTabsStore, type QueryTab } from '@/stores/tabs'
 
@@ -16,24 +16,42 @@ interface QueryWorkspaceProps {
   tab: QueryTab
   sessionId: string | null
   databases: string[]
+  schemas: string[]
   engine: string
 }
 
-export function QueryWorkspace({ tab, sessionId, databases, engine }: QueryWorkspaceProps) {
+export function QueryWorkspace({
+  tab,
+  sessionId,
+  databases,
+  schemas,
+  engine,
+}: QueryWorkspaceProps) {
   const run = useQueriesStore((s) => s.runs[tab.id] ?? IDLE_RUN)
   const execute = useQueriesStore((s) => s.execute)
   const rerun = useQueriesStore((s) => s.rerun)
   const cancel = useQueriesStore((s) => s.cancel)
   const editQuery = useTabsStore((s) => s.editQuery)
 
-  const schema = useConnectionsStore(
-    (s) => s.schemas[databaseKey(tab.profileId, tab.database)] ?? NO_SCHEMA,
+  const { hasSchemas } = engineInfo(engine)
+  const { database, schema } = tab.namespace
+
+  const tableSchemas = useConnectionsStore(
+    (s) => s.tableSchemas[namespaceKey(tab.profileId, tab.namespace)] ?? NO_SCHEMA,
   )
-  const loadSchema = useConnectionsStore((s) => s.loadSchema)
+  const loadSchemas = useConnectionsStore((s) => s.loadSchemas)
+  const loadTableSchemas = useConnectionsStore((s) => s.loadTableSchemas)
+
+  // The toolbar's own schema list, for a database the tree may never have been expanded on.
+  useEffect(() => {
+    if (hasSchemas && database !== '') void loadSchemas(tab.profileId, database)
+  }, [hasSchemas, loadSchemas, tab.profileId, database])
 
   useEffect(() => {
-    if (tab.database !== '') void loadSchema(tab.profileId, tab.database)
-  }, [loadSchema, tab.profileId, tab.database])
+    if (hasSchemas ? schema !== '' : database !== '') {
+      void loadTableSchemas(tab.profileId, tab.namespace)
+    }
+  }, [hasSchemas, loadTableSchemas, tab.profileId, tab.namespace, database, schema])
 
   // A selection narrows what runs, the way every other client works. It is a ref because
   // dragging over the text would otherwise re-render the whole workspace.
@@ -44,7 +62,8 @@ export function QueryWorkspace({ tab, sessionId, databases, engine }: QueryWorks
   const start = (explain: boolean) => {
     if (!canRun || sessionId === null) return
     void execute(tab.id, sessionId, {
-      database: tab.database,
+      database,
+      schema,
       sql: selection.current.trim() || tab.sql,
       maxRows: tab.rowLimit,
       explain,
@@ -80,12 +99,16 @@ export function QueryWorkspace({ tab, sessionId, databases, engine }: QueryWorks
     <div className="flex h-full min-h-0 flex-col">
       <QueryToolbar
         databases={databases}
-        database={tab.database}
-        namespace={engineInfo(engine).namespace}
+        schemas={schemas}
+        namespace={tab.namespace}
+        hasSchemas={hasSchemas}
         rowLimit={tab.rowLimit}
         running={run.running}
         canRun={canRun}
-        onDatabaseChange={(database) => editQuery(tab.id, { database })}
+        // Changing database drops the schema with it, since a schema of one database names
+        // nothing in another.
+        onDatabaseChange={(next) => editQuery(tab.id, { namespace: namespaceOf(next) })}
+        onSchemaChange={(next) => editQuery(tab.id, { namespace: namespaceOf(database, next) })}
         onRowLimitChange={(rowLimit) => editQuery(tab.id, { rowLimit })}
         onExecute={() => start(false)}
         onExplain={() => start(true)}
@@ -101,7 +124,7 @@ export function QueryWorkspace({ tab, sessionId, databases, engine }: QueryWorks
         <SplitPanel id="editor" defaultSize="38%" minSize="15%">
           <EditorPane
             value={tab.sql}
-            schema={schema}
+            schema={tableSchemas}
             engine={engine}
             onChange={(sql) => editQuery(tab.id, { sql })}
             onSelectionChange={(selected) => {

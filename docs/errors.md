@@ -15,7 +15,8 @@ frontend depends on.
 |---|---|---|
 | `INVALID_PROFILE` | Validation failed; `field` names the offending input | as MySQL, plus a missing `database` |
 | `BAD_CREDENTIALS` | errno 1045 / 1698 | SQLSTATE 28P01 / 28000 |
-| `UNKNOWN_DATABASE` | errno 1049 | SQLSTATE 3D000 (database) / 3F000 (schema) |
+| `UNKNOWN_DATABASE` | errno 1049 | SQLSTATE 3D000 |
+| `UNKNOWN_SCHEMA` | — (a MySQL database *is* its schema) | SQLSTATE 3F000, which PostgreSQL raises for DDL against a missing schema; a *read* through one is 42P01 below |
 | `UNKNOWN_TABLE` | errno 1146, or no columns in `information_schema` | SQLSTATE 42P01, or no rows in `pg_attribute` |
 | `QUERY_CANCELLED` | Stop was pressed, or the run context was cancelled | as MySQL, plus SQLSTATE 57014 |
 | `TLS_UNSUPPORTED` | `mysql.ErrNoTLS` | pgx refusing a TLS-less server |
@@ -23,6 +24,12 @@ frontend depends on.
 
 `domain.StatementError.Code` is a string for exactly that last row: MySQL numbers its errors and
 PostgreSQL gives a SQLSTATE like `42P01`.
+
+**A mapped code keeps the server's wording in `detail`.** Both adapters wrap the sentinel with the
+engine's own message rather than replacing it, because the sentinel says *what kind* of thing was
+missing and only the server says *which name* it went looking for — and on PostgreSQL that name has
+been folded to lower case unless it was quoted. `errors.Is` still reaches the sentinel through the
+wrapping, so the `code` the UI switches on is unchanged.
 
 The rest do not vary by engine. Everything below `TLS_NOT_VERIFIED` is raised above the driver
 layer, and the three transport rows are mapped once in `sqlkit.TransportError`.

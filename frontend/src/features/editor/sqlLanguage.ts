@@ -23,7 +23,10 @@ const SNIPPETS: readonly Completion[] = [
   snippet('left join', 'LEFT JOIN ${table} ON ${left} = ${right}'),
   snippet('group by', 'GROUP BY ${columns}\nHAVING ${condition}'),
   snippet('order by', 'ORDER BY ${column} DESC'),
-  snippet('with', 'WITH ${name} AS (\n\tSELECT ${columns}\n\tFROM ${table}\n)\nSELECT *\nFROM ${name}'),
+  snippet(
+    'with',
+    'WITH ${name} AS (\n\tSELECT ${columns}\n\tFROM ${table}\n)\nSELECT *\nFROM ${name}',
+  ),
   snippet('case', 'CASE WHEN ${condition} THEN ${value} ELSE ${fallback} END'),
 ]
 
@@ -40,15 +43,37 @@ function firstLine(template: string): string {
   return line.replace(/\$\{(\w*)\}/g, '$1')
 }
 
+/**
+ * How a name has to be written to resolve to the object it names. PostgreSQL folds an
+ * unquoted identifier to lower case, so `AIFolders` reaches the server as `aifolders` and
+ * a mixed-case table can only be read quoted. Completion inserts the form that will run,
+ * which is the difference between a working statement and `UNKNOWN_TABLE`.
+ *
+ * MySQL folds nothing, so its names are offered as they are stored.
+ */
+function quoterFor(engine: string): (name: string) => string {
+  if (engine !== 'postgres') return (name) => name
+
+  return (name) => (/^[a-z_][a-z0-9_$]*$/.test(name) ? name : `"${name.replaceAll('"', '""')}"`)
+}
+
 // lang-sql keys its namespace by table name and resolves `FROM users u` aliases itself,
-// so one flat map of the active database is the whole schema it needs.
-function toNamespace(tables: TableSchema[]): SQLNamespace {
+// so one flat map of the active namespace is the whole schema it needs.
+function toNamespace(tables: TableSchema[], quote: (name: string) => string): SQLNamespace {
   return Object.fromEntries(
     tables.map((table) => [
       table.name,
       {
-        self: { label: table.name, type: 'type', detail: `${table.columns.length} columns` },
-        children: table.columns,
+        self: {
+          label: table.name,
+          apply: quote(table.name),
+          type: 'type',
+          detail: `${table.columns.length} columns`,
+        },
+        children: table.columns.map((column) => ({
+          label: column,
+          apply: quote(column),
+        })),
       },
     ]),
   )
@@ -57,7 +82,10 @@ function toNamespace(tables: TableSchema[]): SQLNamespace {
 // lang-sql only offers columns behind a `table.` prefix. Everywhere else in a statement
 // — after SELECT, after WHERE, after ORDER BY — the columns of the tables that statement
 // already names are what is being reached for, so they are offered bare.
-function bareColumnSource(tables: TableSchema[]): CompletionSource {
+function bareColumnSource(
+  tables: TableSchema[],
+  quote: (name: string) => string,
+): CompletionSource {
   const byName = new Map(tables.map((table) => [table.name.toLowerCase(), table]))
 
   return (context) => {
@@ -67,6 +95,7 @@ function bareColumnSource(tables: TableSchema[]): CompletionSource {
     const options = tablesInStatement(context.state, context.pos, byName).flatMap((table) =>
       table.columns.map((column) => ({
         label: column,
+        apply: quote(column),
         type: 'property',
         detail: table.name,
         boost: 1,
@@ -116,15 +145,20 @@ const OFF_LIMITS = [
 ]
 
 export function sqlLanguage(tables: TableSchema[], engine: string): Extension {
+  const quote = quoterFor(engine)
   const support = sql({
     dialect: dialectFor(engine),
-    schema: toNamespace(tables),
+    schema: toNamespace(tables, quote),
     upperCaseKeywords: true,
   })
 
   return [
     support,
-    support.language.data.of({ autocomplete: ifNotIn(OFF_LIMITS, completeFromList(SNIPPETS)) }),
-    support.language.data.of({ autocomplete: ifNotIn(OFF_LIMITS, bareColumnSource(tables)) }),
+    support.language.data.of({
+      autocomplete: ifNotIn(OFF_LIMITS, completeFromList(SNIPPETS)),
+    }),
+    support.language.data.of({
+      autocomplete: ifNotIn(OFF_LIMITS, bareColumnSource(tables, quote)),
+    }),
   ]
 }
