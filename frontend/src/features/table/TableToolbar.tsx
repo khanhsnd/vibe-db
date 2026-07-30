@@ -8,7 +8,7 @@ const ITEMS: ReadonlyArray<{ kind: PanelKind; label: string }> = [
 ]
 
 interface TableToolbarProps {
-  active: PanelKind | null
+  active: ReadonlySet<PanelKind>
   onToggle: (kind: PanelKind) => void
 }
 
@@ -22,11 +22,11 @@ export function TableToolbar({ active, onToggle }: TableToolbarProps) {
         <button
           key={item.kind}
           type="button"
-          aria-pressed={active === item.kind}
+          aria-pressed={active.has(item.kind)}
           onClick={() => onToggle(item.kind)}
           className={cn(
             'inline-flex h-6 items-center rounded-md px-2 text-xs font-medium transition-colors',
-            active === item.kind
+            active.has(item.kind)
               ? 'bg-selected text-fg'
               : 'text-muted hover:bg-hover hover:text-fg',
           )}

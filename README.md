@@ -24,14 +24,35 @@ Clicking a database marks it as the active one for that connection and reveals i
 which loads on first expand and is cached until disconnect.
 
 Clicking a table opens a data tab: 100 rows per page by default (500 and 1 000 also offered, which
-is the hard cap), ordered by primary key so paging is stable. Above the grid sit `Cell Editor` and
-`Column`, which toggle a panel under it. `Cell Editor` edits the selected cell — Discard reverts
-the draft, Apply issues `UPDATE … WHERE <primary key> LIMIT 1` and reloads, Refresh reloads. A
-table with no primary key is read-only, because no single row can be identified.
+is the hard cap), ordered by primary key so paging is stable. Above the grid sit two independent
+toggles, since they occupy different edges:
+
+- **`Cell Editor`** opens a panel under the grid for the selected cell. Discard reverts the draft,
+  Apply issues `UPDATE … WHERE <primary key> LIMIT 1` and reloads, Refresh reloads. A table with no
+  primary key is read-only, because no single row can be identified.
+- **`Column`** opens a checkbox list to the left of the grid that picks which columns show.
+  Unchecking the last visible column is blocked, so the grid can never go blank. Selection is
+  cleared on a change, because the cell coordinates the grid reports are positions among the
+  *visible* columns and the view maps them back to real column indexes.
 
 The SQL editor is a plain textarea and its result grid renders mock data — CodeMirror and real
 query execution land next. Schema browsing stops at tables; views, procedures and functions are
 not listed yet.
+
+### Grid behaviour
+
+`ResultGrid` is shared by every table in the app, so these apply everywhere it is used:
+
+- **Cells select, text does not.** Dragging paints a rectangular cell range instead of running a
+  text selection across column boundaries; shift-click extends from the anchor. `Ctrl`/`Cmd`+`C`
+  copies the range as tab-separated rows, with `NULL` written out the way the grid shows it.
+- **Columns resize** by dragging the right edge, which reveals an expand icon on hover.
+  Double-clicking that edge fits the column to its widest cell (capped at 520 px), measured with
+  a canvas against the `--font-mono` / `--text-sm` tokens. Widths are keyed by column *name*, not
+  position, so hiding or showing a column does not reset them.
+
+The grid keeps its own selection when left uncontrolled, so a new call site gets this for free; the
+table data view passes `selection` in only because the Cell Editor needs the anchor.
 
 ## Prerequisites
 

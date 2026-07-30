@@ -1,29 +1,56 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { UnfoldHorizontal } from 'lucide-react'
 
+import { copyText } from '@/lib/clipboard'
 import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
 
-import { isNumeric, type Cell, type CellRef, type GridData } from './resultSet'
+import { gridFont, widestText } from './measureText'
+import {
+  boundsOf,
+  cellText,
+  isNumeric,
+  toTSV,
+  type Cell,
+  type CellBounds,
+  type CellRange,
+  type GridData,
+} from './resultSet'
 
 const GUTTER_WIDTH = 52
 const DEFAULT_COLUMN_WIDTH = 160
 const MIN_COLUMN_WIDTH = 60
+const MAX_FIT_WIDTH = 520
+const CELL_PADDING = 17
 
 interface ResultGridProps {
   result: GridData
-  selected?: CellRef | null
-  onSelect?: (ref: CellRef) => void
+  selection?: CellRange | null
+  onSelectionChange?: (selection: CellRange) => void
 }
 
-export function ResultGrid({ result, selected, onSelect }: ResultGridProps) {
+export function ResultGrid({ result, selection, onSelectionChange }: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [resized, setResized] = useState<number[]>([])
+  const dragging = useRef(false)
+  const [resized, setResized] = useState<Record<string, number>>({})
+  const [ownSelection, setOwnSelection] = useState<CellRange | null>(null)
 
-  const widths =
-    resized.length === result.columns.length
-      ? resized
-      : result.columns.map(() => DEFAULT_COLUMN_WIDTH)
+  const current = selection === undefined ? ownSelection : selection
+
+  const select = (next: CellRange) => {
+    if (selection === undefined) setOwnSelection(next)
+    onSelectionChange?.(next)
+  }
+
+  const widths = result.columns.map((column) => resized[column.name] ?? DEFAULT_COLUMN_WIDTH)
 
   const virtualizer = useVirtualizer({
     count: result.rows.length,
@@ -32,15 +59,66 @@ export function ResultGrid({ result, selected, onSelect }: ResultGridProps) {
     overscan: 16,
   })
 
-  const totalWidth = GUTTER_WIDTH + widths.reduce((sum, w) => sum + w, 0)
+  useEffect(() => {
+    const stopDragging = () => {
+      dragging.current = false
+    }
 
-  const resizeColumn = (index: number, width: number) =>
-    setResized(widths.map((w, i) => (i === index ? Math.max(MIN_COLUMN_WIDTH, width) : w)))
+    window.addEventListener('mouseup', stopDragging)
+    return () => window.removeEventListener('mouseup', stopDragging)
+  }, [])
+
+  const totalWidth = GUTTER_WIDTH + widths.reduce((sum, w) => sum + w, 0)
+  const bounds = current ? boundsOf(current) : null
+
+  const setWidth = (name: string, width: number) =>
+    setResized((previous) => ({ ...previous, [name]: Math.max(MIN_COLUMN_WIDTH, width) }))
+
+  const fitColumn = (index: number) => {
+    const column = result.columns[index]
+    if (!column) return
+
+    const header = `${column.name}  ${column.type.toUpperCase()}`
+    const texts = [header, ...result.rows.map((row) => cellText(row[index] ?? null))]
+    const content = widestText(texts, gridFont()) + CELL_PADDING
+
+    setWidth(column.name, Math.min(content, MAX_FIT_WIDTH))
+  }
+
+  const startSelect = (event: ReactMouseEvent, row: number, column: number) => {
+    dragging.current = true
+    const focus = { row, column }
+    select(event.shiftKey && current ? { anchor: current.anchor, focus } : { anchor: focus, focus })
+  }
+
+  const extendSelect = (row: number, column: number) => {
+    if (!dragging.current || !current) return
+    if (current.focus.row === row && current.focus.column === column) return
+    select({ anchor: current.anchor, focus: { row, column } })
+  }
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!current) return
+    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'c') return
+
+    event.preventDefault()
+    void copyText(toTSV(current, result))
+  }
 
   return (
-    <div ref={scrollRef} className="scroll-thin h-full overflow-auto bg-canvas">
+    <div
+      ref={scrollRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className="scroll-thin h-full overflow-auto bg-canvas"
+    >
       <div className="w-full" style={{ minWidth: totalWidth }}>
-        <HeaderRow columns={result.columns} widths={widths} onResize={resizeColumn} />
+        <HeaderRow
+          columns={result.columns}
+          widths={widths}
+          onResize={setWidth}
+          onFit={fitColumn}
+        />
 
         <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => {
@@ -66,8 +144,10 @@ export function ResultGrid({ result, selected, onSelect }: ResultGridProps) {
                     value={row[i] ?? null}
                     numeric={isNumeric(column.type)}
                     width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
-                    selected={selected?.row === item.index && selected.column === i}
-                    onSelect={onSelect ? () => onSelect({ row: item.index, column: i }) : undefined}
+                    selected={within(bounds, item.index, i)}
+                    anchored={current?.anchor.row === item.index && current.anchor.column === i}
+                    onMouseDown={(event) => startSelect(event, item.index, i)}
+                    onMouseOver={() => extendSelect(item.index, i)}
                   />
                 ))}
               </div>
@@ -79,13 +159,24 @@ export function ResultGrid({ result, selected, onSelect }: ResultGridProps) {
   )
 }
 
+function within(bounds: CellBounds | null, row: number, column: number): boolean {
+  return (
+    bounds !== null &&
+    row >= bounds.rowStart &&
+    row <= bounds.rowEnd &&
+    column >= bounds.columnStart &&
+    column <= bounds.columnEnd
+  )
+}
+
 interface HeaderRowProps {
   columns: GridData['columns']
   widths: number[]
-  onResize: (index: number, width: number) => void
+  onResize: (name: string, width: number) => void
+  onFit: (index: number) => void
 }
 
-function HeaderRow({ columns, widths, onResize }: HeaderRowProps) {
+function HeaderRow({ columns, widths, onResize, onFit }: HeaderRowProps) {
   return (
     <div className="sticky top-0 z-2 flex border-b border-line-strong bg-panel">
       <div
@@ -104,7 +195,9 @@ function HeaderRow({ columns, widths, onResize }: HeaderRowProps) {
             {column.type}
           </span>
           <ResizeHandle
-            onResize={(delta) => onResize(i, (widths[i] ?? DEFAULT_COLUMN_WIDTH) + delta)}
+            width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
+            onResize={(width) => onResize(column.name, width)}
+            onFit={() => onFit(i)}
           />
         </div>
       ))}
@@ -112,15 +205,21 @@ function HeaderRow({ columns, widths, onResize }: HeaderRowProps) {
   )
 }
 
-function ResizeHandle({ onResize }: { onResize: (delta: number) => void }) {
+interface ResizeHandleProps {
+  width: number
+  onResize: (width: number) => void
+  onFit: () => void
+}
+
+function ResizeHandle({ width, onResize, onFit }: ResizeHandleProps) {
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault()
     event.stopPropagation()
-    let lastX = event.clientX
+
+    const startX = event.clientX
+    const startWidth = width
 
     const onMove = (moveEvent: PointerEvent) => {
-      onResize(moveEvent.clientX - lastX)
-      lastX = moveEvent.clientX
+      onResize(startWidth + moveEvent.clientX - startX)
     }
     const onUp = () => {
       window.removeEventListener('pointermove', onMove)
@@ -134,8 +233,19 @@ function ResizeHandle({ onResize }: { onResize: (delta: number) => void }) {
   return (
     <div
       onPointerDown={onPointerDown}
-      className="absolute top-0 -right-px z-1 h-full w-1.5 cursor-col-resize hover:bg-accent"
-    />
+      onDoubleClick={(event) => {
+        event.stopPropagation()
+        onFit()
+      }}
+      title="Drag to resize, double-click to fit contents"
+      className="group/resize absolute top-0 -right-0.5 z-1 flex h-full w-1.5 cursor-col-resize justify-center"
+    >
+      <span className="h-full w-px group-hover/resize:bg-accent" />
+      <UnfoldHorizontal
+        size={13}
+        className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-accent opacity-0 group-hover/resize:opacity-100"
+      />
+    </div>
   )
 }
 
@@ -144,18 +254,30 @@ interface CellViewProps {
   numeric: boolean
   width: number
   selected: boolean
-  onSelect: (() => void) | undefined
+  anchored: boolean
+  onMouseDown: (event: ReactMouseEvent) => void
+  onMouseOver: () => void
 }
 
-function CellView({ value, numeric, width, selected, onSelect }: CellViewProps) {
+function CellView({
+  value,
+  numeric,
+  width,
+  selected,
+  anchored,
+  onMouseDown,
+  onMouseOver,
+}: CellViewProps) {
   return (
     <div
-      onMouseDown={onSelect}
+      onMouseDown={onMouseDown}
+      onMouseOver={onMouseOver}
       className={cn(
         'flex shrink-0 cursor-default items-center overflow-hidden border-r border-line/60 px-2',
-        'selectable font-mono text-sm whitespace-nowrap',
+        'font-mono text-sm whitespace-nowrap',
         numeric && 'justify-end',
-        selected && 'bg-accent-subtle shadow-[inset_0_0_0_1px_var(--accent)]',
+        selected && 'bg-accent-subtle',
+        anchored && 'shadow-[inset_0_0_0_1px_var(--accent)]',
       )}
       style={{ width }}
     >
