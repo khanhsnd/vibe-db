@@ -17,23 +17,43 @@ func TestBuildSelectOrdersByPrimaryKey(t *testing.T) {
 		{Name: "id", PrimaryKey: true},
 		{Name: "email"},
 	}
+	page := driver.TablePage{Database: "shop", Table: "users", Limit: 100, Offset: 200}
 
-	got := buildSelect(driver.TablePage{Database: "shop", Table: "users"}, columns)
+	got, args := buildSelect(page, columns)
 	want := "SELECT `id`, `email` FROM `shop`.`users` ORDER BY `id` LIMIT ? OFFSET ?"
+
+	if got != want {
+		t.Errorf("buildSelect =\n%s\nwant\n%s", got, want)
+	}
+	if len(args) != 2 || args[0] != 100 || args[1] != 200 {
+		t.Errorf("args = %v, want [100 200]", args)
+	}
+}
+
+func TestBuildSelectWithoutPrimaryKeyHasNoOrderBy(t *testing.T) {
+	columns := []driver.Column{{Name: "email"}}
+	page := driver.TablePage{Database: "shop", Table: "log", Limit: 100}
+
+	got, _ := buildSelect(page, columns)
+	want := "SELECT `email` FROM `shop`.`log` LIMIT ? OFFSET ?"
 
 	if got != want {
 		t.Errorf("buildSelect =\n%s\nwant\n%s", got, want)
 	}
 }
 
-func TestBuildSelectWithoutPrimaryKeyHasNoOrderBy(t *testing.T) {
-	columns := []driver.Column{{Name: "email"}}
+func TestBuildSelectWithoutLimitReadsEveryRow(t *testing.T) {
+	columns := []driver.Column{{Name: "id", PrimaryKey: true}}
+	page := driver.TablePage{Database: "shop", Table: "users", Offset: 200}
 
-	got := buildSelect(driver.TablePage{Database: "shop", Table: "log"}, columns)
-	want := "SELECT `email` FROM `shop`.`log` LIMIT ? OFFSET ?"
+	got, args := buildSelect(page, columns)
+	want := "SELECT `id` FROM `shop`.`users` ORDER BY `id`"
 
 	if got != want {
 		t.Errorf("buildSelect =\n%s\nwant\n%s", got, want)
+	}
+	if args != nil {
+		t.Errorf("args = %v, want none: an offset without a limit binds nothing", args)
 	}
 }
 

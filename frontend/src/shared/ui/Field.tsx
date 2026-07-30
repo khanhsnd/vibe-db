@@ -8,6 +8,13 @@ const CONTROL = [
   'disabled:opacity-50',
 ].join(' ')
 
+/** A control sized for a toolbar strip rather than a form: shorter, tighter, never full width. */
+export const TOOLBAR_CONTROL = [
+  'h-6 rounded-md border border-line bg-canvas px-1.5 text-xs text-fg outline-none',
+  'focus:border-accent',
+  'disabled:opacity-45',
+].join(' ')
+
 interface FieldProps {
   label: string
   hint?: string | undefined

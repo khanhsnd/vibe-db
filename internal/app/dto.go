@@ -8,11 +8,14 @@ import (
 )
 
 const (
-	DefaultPageSize = 100
-	MaxPageSize     = 1000
-
+	DefaultPageSize  = 100
 	DefaultQueryRows = 1000
-	MaxQueryRows     = 10000
+
+	// AllRows asks for every row rather than a page or a capped read. Bounded reads are what
+	// keep the memory numbers honest, so lifting the bound is opt-in from a toolbar and never
+	// a default: a missing or nonsensical count still falls back to the default above, which
+	// means the Go zero value cannot accidentally mean unbounded.
+	AllRows = -1
 )
 
 type Profile struct {
@@ -127,41 +130,35 @@ func toProfileDTO(profile domain.ConnectionProfile, hasPassword bool) Profile {
 }
 
 func (in TablePageInput) toDriver() driver.TablePage {
-	limit := in.Limit
-	if limit <= 0 {
-		limit = DefaultPageSize
-	}
-	if limit > MaxPageSize {
-		limit = MaxPageSize
-	}
-
-	offset := in.Offset
-	if offset < 0 {
-		offset = 0
-	}
-
 	return driver.TablePage{
 		Database: in.Database,
 		Table:    in.Table,
-		Limit:    limit,
-		Offset:   offset,
+		Limit:    driverRows(in.Limit, DefaultPageSize),
+		Offset:   max(in.Offset, 0),
 	}
 }
 
 func (in QueryInput) toDriver() driver.Query {
-	maxRows := in.MaxRows
-	if maxRows <= 0 {
-		maxRows = DefaultQueryRows
-	}
-	if maxRows > MaxQueryRows {
-		maxRows = MaxQueryRows
-	}
-
 	return driver.Query{
 		Database: in.Database,
 		SQL:      in.SQL,
-		MaxRows:  maxRows,
+		MaxRows:  driverRows(in.MaxRows, DefaultQueryRows),
 		Explain:  in.Explain,
+	}
+}
+
+// driverRows translates a wire row count into the driver's convention, where a non-positive
+// limit reads everything. A typed count is passed through unclamped: a ceiling would be
+// theatre next to an All option, and silently answering a different question than the one
+// asked is worse than a slow grid.
+func driverRows(rows, fallback int) int {
+	switch {
+	case rows == AllRows:
+		return 0
+	case rows <= 0:
+		return fallback
+	default:
+		return rows
 	}
 }
 

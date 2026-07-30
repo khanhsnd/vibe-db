@@ -20,7 +20,8 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 		return driver.TableRows{}, err
 	}
 
-	rows, err := s.selectRows(ctx, buildSelect(page, columns), page.Limit, page.Offset, len(columns))
+	query, args := buildSelect(page, columns)
+	rows, err := s.selectRows(ctx, query, args, len(columns))
 	if err != nil {
 		return driver.TableRows{}, err
 	}
@@ -105,20 +106,24 @@ func (s *session) countRows(ctx context.Context, database, table string) (int64,
 func (s *session) selectRows(
 	ctx context.Context,
 	query string,
-	limit, offset, width int,
+	args []any,
+	width int,
 ) ([][]*string, error) {
-	rows, err := s.db.QueryContext(ctx, query, limit, offset)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, translateError(err)
 	}
 	defer rows.Close()
 
-	// The LIMIT clause already bounds the read, so no cap is needed here.
+	// The statement itself bounds the read — either through its LIMIT clause or because the
+	// caller asked for every row — so no cap is applied here.
 	out, _, err := scanRows(rows, width, 0)
 	return out, err
 }
 
-func buildSelect(page driver.TablePage, columns []driver.Column) string {
+// buildSelect returns the statement and its arguments together, because a page that asks for
+// every row carries no LIMIT clause and therefore no arguments to bind.
+func buildSelect(page driver.TablePage, columns []driver.Column) (string, []any) {
 	names := make([]string, len(columns))
 	for i, column := range columns {
 		names[i] = quoteIdent(column.Name)
@@ -129,7 +134,10 @@ func buildSelect(page driver.TablePage, columns []driver.Column) string {
 		query += " ORDER BY " + strings.Join(quoteAll(keys), ", ")
 	}
 
-	return query + " LIMIT ? OFFSET ?"
+	if page.Limit <= 0 {
+		return query, nil
+	}
+	return query + " LIMIT ? OFFSET ?", []any{page.Limit, page.Offset}
 }
 
 func buildUpdate(edit driver.CellEdit, keys []string) (string, []any) {

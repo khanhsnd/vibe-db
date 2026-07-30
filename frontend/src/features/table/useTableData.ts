@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import { toAppError, type AppError } from '@/bridge/errors'
+import { ALL_ROWS, DEFAULT_PAGE_SIZE } from '@/bridge/rows'
 import { tables, type Cell, type TablePage } from '@/bridge/tables'
 import { primaryKeyOf, type CellRef } from '@/features/results/resultSet'
-
-export const PAGE_SIZES = [100, 500, 1000] as const
-export const DEFAULT_PAGE_SIZE = 100
 
 export function useTableData(sessionId: string, database: string, table: string) {
   const [page, setPage] = useState(0)
@@ -21,7 +19,7 @@ export function useTableData(sessionId: string, database: string, table: string)
     setLoading(true)
 
     tables
-      .loadRows(sessionId, { database, table, limit, offset: page * limit })
+      .loadRows(sessionId, { database, table, limit, offset: limit === ALL_ROWS ? 0 : page * limit })
       .then((next) => {
         if (!active) return
         setData(next)

@@ -1,9 +1,9 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 import type { AppError } from '@/bridge/errors'
+import { ALL_ROWS, DEFAULT_PAGE_SIZE, PAGE_SIZES } from '@/bridge/rows'
 import { IconButton } from '@/shared/ui/IconButton'
-
-import { PAGE_SIZES } from './useTableData'
+import { RowLimit } from '@/shared/ui/RowLimit'
 
 const numbers = new Intl.NumberFormat('en-US')
 
@@ -26,9 +26,11 @@ export function TablePager({
   onPageChange,
   onLimitChange,
 }: TablePagerProps) {
-  const pageCount = Math.max(1, Math.ceil(total / limit))
-  const first = total === 0 ? 0 : page * limit + 1
-  const last = Math.min(total, (page + 1) * limit)
+  // All collapses the walk into a single page, so it is sized by the total rather than the limit.
+  const size = limit === ALL_ROWS ? Math.max(total, 1) : limit
+  const pageCount = Math.max(1, Math.ceil(total / size))
+  const first = total === 0 ? 0 : page * size + 1
+  const last = Math.min(total, (page + 1) * size)
 
   return (
     <div className="flex h-8 shrink-0 items-center gap-2 border-t border-line bg-panel px-2 text-xs text-muted">
@@ -59,20 +61,13 @@ export function TablePager({
 
       {error ? <span className="truncate text-danger">{error.message}</span> : null}
 
-      <label className="flex shrink-0 items-center gap-1.5">
-        Rows
-        <select
-          value={limit}
-          onChange={(e) => onLimitChange(Number(e.target.value))}
-          className="h-6 rounded-md border border-line bg-canvas px-1.5 font-mono text-xs text-fg outline-none focus:border-accent"
-        >
-          {PAGE_SIZES.map((size) => (
-            <option key={size} value={size}>
-              {size}
-            </option>
-          ))}
-        </select>
-      </label>
+      <RowLimit
+        label="Rows"
+        presets={PAGE_SIZES}
+        fallback={DEFAULT_PAGE_SIZE}
+        value={limit}
+        onChange={onLimitChange}
+      />
     </div>
   )
 }

@@ -4,9 +4,6 @@ import type { app } from '@wailsjs/go/models'
 import { call } from './errors'
 import type { Cell, TableColumn } from './tables'
 
-export const QUERY_ROW_LIMITS = [100, 1000, 10_000] as const
-export const DEFAULT_QUERY_ROWS = 1000
-
 export interface QueryRequest {
   runId: string
   database: string

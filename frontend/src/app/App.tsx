@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { toProfileInput, type Profile, type ProfileInput } from '@/bridge/connections'
-import { DEFAULT_QUERY_ROWS } from '@/bridge/query'
+import { DEFAULT_QUERY_ROWS } from '@/bridge/rows'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
 import { PasswordPrompt } from '@/features/connections/PasswordPrompt'
 import type { TreeNode } from '@/features/connections/tree'

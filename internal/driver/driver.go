@@ -23,6 +23,8 @@ type Column struct {
 	Default    *string
 }
 
+// TablePage is one window onto a table's rows. A Limit of zero or less reads every row and
+// makes Offset meaningless, the same convention as Query.MaxRows.
 type TablePage struct {
 	Database string
 	Table    string

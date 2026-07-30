@@ -1,10 +1,9 @@
 import { Database, ListTree, Loader2, Play, Square } from 'lucide-react'
 
-import { QUERY_ROW_LIMITS } from '@/bridge/query'
+import { DEFAULT_QUERY_ROWS, QUERY_ROW_LIMITS } from '@/bridge/rows'
 import { Button } from '@/shared/ui/Button'
-
-const SELECT_CLASS =
-  'h-6 rounded-md border border-line bg-canvas px-1.5 text-xs text-fg outline-none focus:border-accent disabled:opacity-45'
+import { TOOLBAR_CONTROL } from '@/shared/ui/Field'
+import { RowLimit } from '@/shared/ui/RowLimit'
 
 interface QueryToolbarProps {
   databases: string[]
@@ -42,7 +41,7 @@ export function QueryToolbar({
         value={database}
         disabled={databases.length === 0}
         onChange={(e) => onDatabaseChange(e.target.value)}
-        className={`${SELECT_CLASS} max-w-[180px] font-mono`}
+        className={`${TOOLBAR_CONTROL} max-w-[180px] font-mono`}
       >
         <option value="">{databases.length === 0 ? 'Not connected' : 'No database'}</option>
         {databases.map((name) => (
@@ -86,20 +85,15 @@ export function QueryToolbar({
 
       <div className="min-w-2 flex-1" />
 
-      <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted">
-        Limit
-        <select
+      <div className="flex shrink-0 items-center text-xs text-muted">
+        <RowLimit
+          label="Limit"
+          presets={QUERY_ROW_LIMITS}
+          fallback={DEFAULT_QUERY_ROWS}
           value={rowLimit}
-          onChange={(e) => onRowLimitChange(Number(e.target.value))}
-          className={`${SELECT_CLASS} font-mono`}
-        >
-          {QUERY_ROW_LIMITS.map((limit) => (
-            <option key={limit} value={limit}>
-              {limit.toLocaleString('en-US')}
-            </option>
-          ))}
-        </select>
-      </label>
+          onChange={onRowLimitChange}
+        />
+      </div>
     </div>
   )
 }
