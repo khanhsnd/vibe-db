@@ -14,6 +14,36 @@ type ServerInfo struct {
 	Version string
 }
 
+type Column struct {
+	Name       string
+	Type       string
+	FullType   string
+	Nullable   bool
+	PrimaryKey bool
+	Default    *string
+}
+
+type TablePage struct {
+	Database string
+	Table    string
+	Limit    int
+	Offset   int
+}
+
+type TableRows struct {
+	Columns []Column
+	Rows    [][]*string
+	Total   int64
+}
+
+type CellEdit struct {
+	Database string
+	Table    string
+	Column   string
+	Value    *string
+	Key      map[string]string
+}
+
 type Driver interface {
 	Engine() domain.Engine
 	Open(ctx context.Context, profile domain.ConnectionProfile, creds Credentials) (Session, error)
@@ -24,6 +54,8 @@ type Session interface {
 	ServerInfo(ctx context.Context) (ServerInfo, error)
 	Databases(ctx context.Context) ([]string, error)
 	Tables(ctx context.Context, database string) ([]string, error)
+	TableRows(ctx context.Context, page TablePage) (TableRows, error)
+	UpdateCell(ctx context.Context, edit CellEdit) error
 	Close() error
 }
 

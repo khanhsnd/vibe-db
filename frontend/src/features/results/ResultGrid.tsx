@@ -4,17 +4,26 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
 
-import { isNumeric, type Cell, type ResultSet } from './resultSet'
+import { isNumeric, type Cell, type CellRef, type GridData } from './resultSet'
 
 const GUTTER_WIDTH = 52
 const DEFAULT_COLUMN_WIDTH = 160
 const MIN_COLUMN_WIDTH = 60
 
-export function ResultGrid({ result }: { result: ResultSet }) {
+interface ResultGridProps {
+  result: GridData
+  selected?: CellRef | null
+  onSelect?: (ref: CellRef) => void
+}
+
+export function ResultGrid({ result, selected, onSelect }: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [widths, setWidths] = useState<number[]>(() =>
-    result.columns.map(() => DEFAULT_COLUMN_WIDTH),
-  )
+  const [resized, setResized] = useState<number[]>([])
+
+  const widths =
+    resized.length === result.columns.length
+      ? resized
+      : result.columns.map(() => DEFAULT_COLUMN_WIDTH)
 
   const virtualizer = useVirtualizer({
     count: result.rows.length,
@@ -26,7 +35,7 @@ export function ResultGrid({ result }: { result: ResultSet }) {
   const totalWidth = GUTTER_WIDTH + widths.reduce((sum, w) => sum + w, 0)
 
   const resizeColumn = (index: number, width: number) =>
-    setWidths((prev) => prev.map((w, i) => (i === index ? Math.max(MIN_COLUMN_WIDTH, width) : w)))
+    setResized(widths.map((w, i) => (i === index ? Math.max(MIN_COLUMN_WIDTH, width) : w)))
 
   return (
     <div ref={scrollRef} className="scroll-thin h-full overflow-auto bg-canvas">
@@ -57,6 +66,8 @@ export function ResultGrid({ result }: { result: ResultSet }) {
                     value={row[i] ?? null}
                     numeric={isNumeric(column.type)}
                     width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
+                    selected={selected?.row === item.index && selected.column === i}
+                    onSelect={onSelect ? () => onSelect({ row: item.index, column: i }) : undefined}
                   />
                 ))}
               </div>
@@ -69,7 +80,7 @@ export function ResultGrid({ result }: { result: ResultSet }) {
 }
 
 interface HeaderRowProps {
-  columns: ResultSet['columns']
+  columns: GridData['columns']
   widths: number[]
   onResize: (index: number, width: number) => void
 }
@@ -128,13 +139,23 @@ function ResizeHandle({ onResize }: { onResize: (delta: number) => void }) {
   )
 }
 
-function CellView({ value, numeric, width }: { value: Cell; numeric: boolean; width: number }) {
+interface CellViewProps {
+  value: Cell
+  numeric: boolean
+  width: number
+  selected: boolean
+  onSelect: (() => void) | undefined
+}
+
+function CellView({ value, numeric, width, selected, onSelect }: CellViewProps) {
   return (
     <div
+      onMouseDown={onSelect}
       className={cn(
-        'flex shrink-0 items-center overflow-hidden border-r border-line/60 px-2',
+        'flex shrink-0 cursor-default items-center overflow-hidden border-r border-line/60 px-2',
         'selectable font-mono text-sm whitespace-nowrap',
         numeric && 'justify-end',
+        selected && 'bg-accent-subtle shadow-[inset_0_0_0_1px_var(--accent)]',
       )}
       style={{ width }}
     >

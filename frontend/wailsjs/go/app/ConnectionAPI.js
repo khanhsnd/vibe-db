@@ -26,10 +26,18 @@ export function ListTables(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ListTables'](arg1, arg2);
 }
 
+export function LoadTableRows(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['LoadTableRows'](arg1, arg2);
+}
+
 export function SaveProfile(arg1) {
   return window['go']['app']['ConnectionAPI']['SaveProfile'](arg1);
 }
 
 export function TestConnection(arg1) {
   return window['go']['app']['ConnectionAPI']['TestConnection'](arg1);
+}
+
+export function UpdateCell(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['UpdateCell'](arg1, arg2);
 }

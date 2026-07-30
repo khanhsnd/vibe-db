@@ -85,7 +85,7 @@ func TestTranslateError(t *testing.T) {
 }
 
 func TestTranslateErrorPassesThroughUnknownServerErrors(t *testing.T) {
-	original := &gomysql.MySQLError{Number: 1146, Message: "Table 'x' doesn't exist"}
+	original := &gomysql.MySQLError{Number: 1064, Message: "You have an error in your SQL syntax"}
 
 	got := translateError(original)
 

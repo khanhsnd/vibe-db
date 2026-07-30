@@ -16,13 +16,20 @@ same port.
 ## Status
 
 Working: connection profiles (create / edit / delete), Test Connection with server version and
-latency, connect / disconnect, database listing, table listing per database, passwords in Windows
-Credential Manager, and the full layout shell with dark and light themes.
+latency, connect / disconnect, database listing, table listing per database, table data browsing
+with pagination and single-cell editing, passwords in Windows Credential Manager, and the full
+layout shell with dark and light themes.
 
 Clicking a database marks it as the active one for that connection and reveals its `Tables` folder,
 which loads on first expand and is cached until disconnect.
 
-The SQL editor is a plain textarea and the result grid renders mock data — CodeMirror and real
+Clicking a table opens a data tab: 100 rows per page by default (500 and 1 000 also offered, which
+is the hard cap), ordered by primary key so paging is stable. Above the grid sit `Cell Editor` and
+`Column`, which toggle a panel under it. `Cell Editor` edits the selected cell — Discard reverts
+the draft, Apply issues `UPDATE … WHERE <primary key> LIMIT 1` and reloads, Refresh reloads. A
+table with no primary key is read-only, because no single row can be identified.
+
+The SQL editor is a plain textarea and its result grid renders mock data — CodeMirror and real
 query execution land next. Schema browsing stops at tables; views, procedures and functions are
 not listed yet.
 
@@ -75,6 +82,8 @@ serialises every error as a JSON envelope (`code`, `message`, `field`, `detail`)
 | `INVALID_PROFILE` | Validation failed; `field` names the offending input |
 | `BAD_CREDENTIALS` | MySQL errno 1045 / 1698 |
 | `UNKNOWN_DATABASE` | MySQL errno 1049 |
+| `UNKNOWN_TABLE` | MySQL errno 1146, or the table has no columns in `information_schema` |
+| `TABLE_NOT_EDITABLE` | Cell edit attempted on a table with no primary key |
 | `HOST_UNREACHABLE` | Dial failed (refused / no route) |
 | `TIMEOUT` | Dial or context deadline exceeded |
 | `TLS_UNSUPPORTED` | Server has no TLS but a TLS mode required it |

@@ -14,6 +14,7 @@ import (
 const (
 	errAccessDenied         = 1045
 	errUnknownDatabase      = 1049
+	errUnknownTable         = 1146
 	errAccessDeniedNoPasswd = 1698
 )
 
@@ -21,6 +22,7 @@ var errnoToDomain = map[uint16]error{
 	errAccessDenied:         domain.ErrBadCredentials,
 	errAccessDeniedNoPasswd: domain.ErrBadCredentials,
 	errUnknownDatabase:      domain.ErrUnknownDatabase,
+	errUnknownTable:         domain.ErrUnknownTable,
 }
 
 func translateError(err error) error {

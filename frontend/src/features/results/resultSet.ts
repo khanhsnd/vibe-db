@@ -1,13 +1,23 @@
+import type { Cell } from '@/bridge/tables'
+
+export type { Cell }
+
 export interface ResultColumn {
   name: string
   type: string
 }
 
-export type Cell = string | null
+export interface CellRef {
+  row: number
+  column: number
+}
 
-export interface ResultSet {
+export interface GridData {
   columns: ResultColumn[]
   rows: Cell[][]
+}
+
+export interface ResultSet extends GridData {
   elapsedMs: number
   truncated: boolean
 }

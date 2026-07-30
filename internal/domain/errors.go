@@ -13,6 +13,8 @@ var (
 	ErrTLSUnsupported    = errors.New("server does not support TLS")
 	ErrTLSNotVerified    = errors.New("server TLS certificate could not be verified")
 	ErrPasswordNotFound  = errors.New("no stored password for profile")
+	ErrUnknownTable      = errors.New("table does not exist")
+	ErrTableNotEditable  = errors.New("table has no primary key")
 )
 
 type ValidationError struct {

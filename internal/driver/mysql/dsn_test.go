@@ -73,7 +73,6 @@ func TestBuildDSNCarriesConnectionSettings(t *testing.T) {
 		"root:",
 		"tcp(127.0.0.1:3306)",
 		"/shop?",
-		"parseTime=true",
 		"interpolateParams=true",
 		"timeout=5s",
 	} {
@@ -84,6 +83,10 @@ func TestBuildDSNCarriesConnectionSettings(t *testing.T) {
 
 	if strings.Contains(dsn, "multiStatements=true") {
 		t.Error("multiStatements must stay off; statements are split client-side")
+	}
+
+	if strings.Contains(dsn, "parseTime=true") {
+		t.Error("parseTime must stay off; the grid shows and edits MySQL's own text form")
 	}
 }
 

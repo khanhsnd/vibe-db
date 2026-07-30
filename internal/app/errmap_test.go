@@ -33,6 +33,8 @@ func TestWrapErrorMapsSentinels(t *testing.T) {
 		{domain.ErrSessionNotFound, CodeSessionNotFound},
 		{domain.ErrBadCredentials, CodeBadCredentials},
 		{domain.ErrUnknownDatabase, CodeUnknownDatabase},
+		{domain.ErrUnknownTable, CodeUnknownTable},
+		{domain.ErrTableNotEditable, CodeTableNotEditable},
 		{domain.ErrHostUnreachable, CodeHostUnreachable},
 		{domain.ErrConnectionTimeout, CodeTimeout},
 		{domain.ErrTLSUnsupported, CodeTLSUnsupported},

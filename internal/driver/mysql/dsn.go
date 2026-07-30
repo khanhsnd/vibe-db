@@ -31,8 +31,7 @@ func BuildDSN(profile domain.ConnectionProfile, creds driver.Credentials) (strin
 	cfg.DBName = profile.Database
 	cfg.TLSConfig = tlsConfig
 	cfg.Timeout = dialTimeout
-	cfg.Loc = time.Local
-	cfg.ParseTime = true
+	cfg.ParseTime = false
 	cfg.InterpolateParams = true
 	cfg.MultiStatements = false
 

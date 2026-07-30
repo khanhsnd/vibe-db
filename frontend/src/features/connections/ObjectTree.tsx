@@ -81,7 +81,10 @@ export function ObjectTree({
                 aria-level={depth + 1}
                 aria-selected={selected}
                 aria-expanded={expandable ? isOpen : undefined}
-                onClick={() => onSelect(node)}
+                onClick={() => {
+                  onSelect(node)
+                  if (!expandable) onActivate(node)
+                }}
                 onContextMenu={() => onSelect(node)}
                 onDoubleClick={() => onActivate(node)}
                 className={cn(

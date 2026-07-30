@@ -127,6 +127,26 @@ func (m *Manager) Tables(ctx context.Context, id, database string) ([]string, er
 	return s.driverSession.Tables(ctx, database)
 }
 
+func (m *Manager) TableRows(
+	ctx context.Context,
+	id string,
+	page driver.TablePage,
+) (driver.TableRows, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return driver.TableRows{}, err
+	}
+	return s.driverSession.TableRows(ctx, page)
+}
+
+func (m *Manager) UpdateCell(ctx context.Context, id string, edit driver.CellEdit) error {
+	s, err := m.Get(id)
+	if err != nil {
+		return err
+	}
+	return s.driverSession.UpdateCell(ctx, edit)
+}
+
 func newID() (string, error) {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {

@@ -16,6 +16,8 @@ const (
 	CodeSessionNotFound  ErrorCode = "SESSION_NOT_FOUND"
 	CodeBadCredentials   ErrorCode = "BAD_CREDENTIALS"
 	CodeUnknownDatabase  ErrorCode = "UNKNOWN_DATABASE"
+	CodeUnknownTable     ErrorCode = "UNKNOWN_TABLE"
+	CodeTableNotEditable ErrorCode = "TABLE_NOT_EDITABLE"
 	CodeHostUnreachable  ErrorCode = "HOST_UNREACHABLE"
 	CodeTimeout          ErrorCode = "TIMEOUT"
 	CodeTLSUnsupported   ErrorCode = "TLS_UNSUPPORTED"
@@ -48,6 +50,8 @@ var sentinelToWire = []struct {
 	{domain.ErrSessionNotFound, CodeSessionNotFound, "This connection is no longer open."},
 	{domain.ErrBadCredentials, CodeBadCredentials, "Access denied. Check the user name and password."},
 	{domain.ErrUnknownDatabase, CodeUnknownDatabase, "That database does not exist on the server."},
+	{domain.ErrUnknownTable, CodeUnknownTable, "That table no longer exists. Refresh the table list."},
+	{domain.ErrTableNotEditable, CodeTableNotEditable, "This table has no primary key, so a single row cannot be identified for editing."},
 	{domain.ErrHostUnreachable, CodeHostUnreachable, "Could not reach the server. Check the host and port."},
 	{domain.ErrConnectionTimeout, CodeTimeout, "The server did not respond in time."},
 	{domain.ErrTLSUnsupported, CodeTLSUnsupported, "The server does not support TLS. Try a lower TLS mode."},

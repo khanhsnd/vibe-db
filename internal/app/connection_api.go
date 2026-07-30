@@ -177,6 +177,26 @@ func (a *ConnectionAPI) ListTables(sessionID, database string) ([]string, error)
 	return names, nil
 }
 
+func (a *ConnectionAPI) LoadTableRows(sessionID string, page TablePageInput) (TableRows, error) {
+	target := page.toDriver()
+
+	ctx, cancel := context.WithTimeout(a.ctx, queryTimeout)
+	defer cancel()
+
+	rows, err := a.sessions.TableRows(ctx, sessionID, target)
+	if err != nil {
+		return TableRows{}, wrapError(err)
+	}
+	return toTableRowsDTO(rows, target), nil
+}
+
+func (a *ConnectionAPI) UpdateCell(sessionID string, edit CellEditInput) error {
+	ctx, cancel := context.WithTimeout(a.ctx, queryTimeout)
+	defer cancel()
+
+	return wrapError(a.sessions.UpdateCell(ctx, sessionID, edit.toDriver()))
+}
+
 func (a *ConnectionAPI) resolveCredentials(
 	target domain.ConnectionProfile,
 	password string,

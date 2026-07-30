@@ -121,6 +121,20 @@ export function App() {
     [toggleNode, loadTables],
   )
 
+  const openTable = useCallback(
+    (node: TreeNode) => {
+      if (node.kind !== 'table' || !node.database) return
+      openTab({
+        kind: 'table',
+        title: node.label,
+        profileId: node.profileId,
+        database: node.database,
+        table: node.label,
+      })
+    },
+    [openTab],
+  )
+
   const selectNode = useCallback(
     (node: TreeNode) => {
       setSelectedId(node.id)
@@ -143,14 +157,14 @@ export function App() {
         else toggleNode(node.id)
         return
       }
-      if (node.kind === 'table') openTab({ kind: 'table', title: node.label, sessionId: null })
+      openTable(node)
     },
-    [profiles, sessions, startConnect, toggleNode, openTab],
+    [profiles, sessions, startConnect, toggleNode, openTable],
   )
 
   const newQuery = useCallback(() => {
-    openTab({ kind: 'query', title: 'Query', sessionId: null })
-  }, [openTab])
+    openTab({ kind: 'query', title: 'Query', profileId: Object.keys(sessions)[0] ?? '' })
+  }, [openTab, sessions])
 
   const status = useMemo<StatusInfo>(() => {
     const activeProfileId = Object.keys(sessions)[0]
