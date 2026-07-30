@@ -11,19 +11,28 @@ A new failure mode needs a `domain` sentinel, a mapping in `errmap.go`, an entry
 `ErrorCode` union, and a row in the table below. `errmap_test.go` guards the JSON contract the
 frontend depends on.
 
+| Code | MySQL | PostgreSQL |
+|---|---|---|
+| `INVALID_PROFILE` | Validation failed; `field` names the offending input | as MySQL, plus a missing `database` |
+| `BAD_CREDENTIALS` | errno 1045 / 1698 | SQLSTATE 28P01 / 28000 |
+| `UNKNOWN_DATABASE` | errno 1049 | SQLSTATE 3D000 (database) / 3F000 (schema) |
+| `UNKNOWN_TABLE` | errno 1146, or no columns in `information_schema` | SQLSTATE 42P01, or no rows in `pg_attribute` |
+| `QUERY_CANCELLED` | Stop was pressed, or the run context was cancelled | as MySQL, plus SQLSTATE 57014 |
+| `TLS_UNSUPPORTED` | `mysql.ErrNoTLS` | pgx refusing a TLS-less server |
+| `SQL_ERROR` | Any other server rejection; `message` is its own wording, `detail` the errno | the same, `detail` the SQLSTATE |
+
+`domain.StatementError.Code` is a string for exactly that last row: MySQL numbers its errors and
+PostgreSQL gives a SQLSTATE like `42P01`.
+
+The rest do not vary by engine. Everything below `TLS_NOT_VERIFIED` is raised above the driver
+layer, and the three transport rows are mapped once in `sqlkit.TransportError`.
+
 | Code | Cause |
 |---|---|
-| `INVALID_PROFILE` | Validation failed; `field` names the offending input |
-| `BAD_CREDENTIALS` | MySQL errno 1045 / 1698 |
-| `UNKNOWN_DATABASE` | MySQL errno 1049 |
-| `UNKNOWN_TABLE` | MySQL errno 1146, or the table has no columns in `information_schema` |
 | `TABLE_NOT_EDITABLE` | Cell edit attempted on a table with no primary key |
 | `EMPTY_STATEMENT` | Run requested with nothing but whitespace or semicolons |
-| `SQL_ERROR` | The server rejected the statement; `message` is its own wording, `detail` the errno |
-| `QUERY_CANCELLED` | Stop was pressed, or the run context was cancelled |
 | `HOST_UNREACHABLE` | Dial failed (refused / no route) |
 | `TIMEOUT` | Dial or context deadline exceeded |
-| `TLS_UNSUPPORTED` | Server has no TLS but a TLS mode required it |
 | `TLS_NOT_VERIFIED` | Certificate chain or hostname did not verify |
 | `PROFILE_NOT_FOUND` / `SESSION_NOT_FOUND` | Stale id from the frontend |
 | `PASSWORD_NOT_FOUND` | Nothing stored in the credential store |

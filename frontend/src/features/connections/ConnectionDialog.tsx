@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react'
 
 import {
-  DEFAULT_MYSQL_PORT,
+  ENGINES,
   TLS_MODES,
   emptyProfileInput,
+  engineInfo,
   connections,
+  withEngine,
   type ProfileInput,
 } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
@@ -41,8 +43,15 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
     setSaveError(null)
   }, [open, initial])
 
+  const engine = engineInfo(form.engine)
+
   const update = <K extends keyof ProfileInput>(key: K, value: ProfileInput[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
+    setProbe({ state: 'idle' })
+  }
+
+  const changeEngine = (value: string) => {
+    setForm((prev) => withEngine(prev, value))
     setProbe({ state: 'idle' })
   }
 
@@ -79,7 +88,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
       open={open}
       onOpenChange={onOpenChange}
       title={initial?.id ? 'Edit Connection' : 'New Connection'}
-      description="MySQL"
+      description={engine.label}
       width={480}
       footer={
         <>
@@ -97,17 +106,36 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
       }
     >
       <div className="flex flex-col gap-3">
-        <Field label="Name" error={fieldError('name')}>
-          {(id, invalid) => (
-            <TextInput
-              id={id}
-              invalid={invalid}
-              value={form.name}
-              placeholder="localhost"
-              onChange={(e) => update('name', e.target.value)}
-            />
-          )}
-        </Field>
+        <div className="grid grid-cols-[150px_1fr] gap-2">
+          <Field label="Engine" error={fieldError('engine')}>
+            {(id, invalid) => (
+              <SelectInput
+                id={id}
+                invalid={invalid}
+                value={engine.value}
+                onChange={(e) => changeEngine(e.target.value)}
+              >
+                {ENGINES.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </SelectInput>
+            )}
+          </Field>
+
+          <Field label="Name" error={fieldError('name')}>
+            {(id, invalid) => (
+              <TextInput
+                id={id}
+                invalid={invalid}
+                value={form.name}
+                placeholder="localhost"
+                onChange={(e) => update('name', e.target.value)}
+              />
+            )}
+          </Field>
+        </div>
 
         <div className="grid grid-cols-[1fr_110px] gap-2">
           <Field label="Host" error={fieldError('host')}>
@@ -128,7 +156,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                 invalid={invalid}
                 inputMode="numeric"
                 value={form.port === 0 ? '' : String(form.port)}
-                placeholder={String(DEFAULT_MYSQL_PORT)}
+                placeholder={String(engine.port)}
                 onChange={(e) => update('port', Number(e.target.value.replace(/\D/g, '')) || 0)}
               />
             )}
@@ -163,7 +191,11 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Default database" hint="Optional" error={fieldError('database')}>
+          <Field
+            label={engine.needsDatabase ? 'Database' : 'Default database'}
+            hint={engine.needsDatabase ? 'Required' : 'Optional'}
+            error={fieldError('database')}
+          >
             {(id, invalid) => (
               <TextInput
                 id={id}
@@ -198,7 +230,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
           onChange={(e) => update('savePassword', e.target.checked)}
         />
 
-        <ProbeResult probe={probe} />
+        <ProbeResult probe={probe} engine={engine.label} />
         {saveError && saveError.code !== 'INVALID_PROFILE' ? (
           <Banner tone="danger" text={saveError.message} />
         ) : null}
@@ -207,7 +239,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
   )
 }
 
-function ProbeResult({ probe }: { probe: Probe }) {
+function ProbeResult({ probe, engine }: { probe: Probe; engine: string }) {
   if (probe.state === 'idle') return null
 
   if (probe.state === 'testing') {
@@ -221,7 +253,7 @@ function ProbeResult({ probe }: { probe: Probe }) {
       <Banner
         tone="success"
         icon={<CheckCircle2 size={13} />}
-        text={`Connected to ${probe.version} in ${probe.latencyMs} ms`}
+        text={`Connected to ${engine} ${probe.version} in ${probe.latencyMs} ms`}
       />
     )
   }

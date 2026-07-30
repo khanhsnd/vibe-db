@@ -19,6 +19,9 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
   const databases = useConnectionsStore((s) =>
     activeTab ? (s.databases[activeTab.profileId] ?? NO_DATABASES) : NO_DATABASES,
   )
+  const engine = useConnectionsStore((s) =>
+    activeTab ? (s.profiles.find((p) => p.id === activeTab.profileId)?.engine ?? '') : '',
+  )
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
@@ -53,6 +56,7 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             tab={activeTab}
             sessionId={sessionId}
             databases={databases}
+            engine={engine}
           />
         )}
       </div>

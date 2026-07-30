@@ -5,7 +5,7 @@ import {
   type Completion,
   type CompletionSource,
 } from '@codemirror/autocomplete'
-import { MySQL, sql, type SQLNamespace } from '@codemirror/lang-sql'
+import { MySQL, PostgreSQL, sql, type SQLDialect, type SQLNamespace } from '@codemirror/lang-sql'
 import type { EditorState, Extension } from '@codemirror/state'
 
 import type { TableSchema } from '@/bridge/connections'
@@ -78,6 +78,10 @@ function bareColumnSource(tables: TableSchema[]): CompletionSource {
   }
 }
 
+function dialectFor(engine: string): SQLDialect {
+  return engine === 'postgres' ? PostgreSQL : MySQL
+}
+
 // Any word in the statement that names a table counts, rather than only the one after
 // FROM. That reads aliased and joined tables for free, and it also catches the tables
 // whose name is a reserved word, which the parser hands back as a keyword token.
@@ -91,9 +95,11 @@ function tablesInStatement(
   const end = doc.indexOf(';', pos)
   const statement = doc.slice(start, end === -1 ? doc.length : end)
 
+  // Both quotings are read whatever the engine, since only one of them can be an
+  // identifier in a given statement and the other cannot name a table anyway.
   const found = new Map<string, TableSchema>()
-  for (const [word] of statement.matchAll(/`[^`]+`|[\w$]+/g)) {
-    const table = byName.get(word.replaceAll('`', '').toLowerCase())
+  for (const [word] of statement.matchAll(/`[^`]+`|"[^"]+"|[\w$]+/g)) {
+    const table = byName.get(word.replaceAll('`', '').replaceAll('"', '').toLowerCase())
     if (table) found.set(table.name, table)
   }
   return [...found.values()]
@@ -109,9 +115,9 @@ const OFF_LIMITS = [
   'BlockComment',
 ]
 
-export function sqlLanguage(tables: TableSchema[]): Extension {
+export function sqlLanguage(tables: TableSchema[], engine: string): Extension {
   const support = sql({
-    dialect: MySQL,
+    dialect: dialectFor(engine),
     schema: toNamespace(tables),
     upperCaseKeywords: true,
   })

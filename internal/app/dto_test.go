@@ -1,6 +1,51 @@
 package app
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/khanhsnd/vibe-db/internal/domain"
+)
+
+func TestProfileInputEngineDecidesTheDefaultPort(t *testing.T) {
+	tests := []struct {
+		name       string
+		in         ProfileInput
+		wantEngine domain.Engine
+		wantPort   int
+	}{
+		{
+			name:       "a blank engine is MySQL, as a profile written before the second engine means",
+			in:         ProfileInput{Name: "local"},
+			wantEngine: domain.EngineMySQL,
+			wantPort:   domain.DefaultMySQLPort,
+		},
+		{
+			name:       "postgres without a port",
+			in:         ProfileInput{Name: "local", Engine: "postgres"},
+			wantEngine: domain.EnginePostgres,
+			wantPort:   domain.DefaultPostgresPort,
+		},
+		{
+			name:       "a named port wins over the engine default",
+			in:         ProfileInput{Name: "local", Engine: "postgres", Port: 6543},
+			wantEngine: domain.EnginePostgres,
+			wantPort:   6543,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.in.toDomain()
+
+			if got.Engine != tt.wantEngine {
+				t.Errorf("Engine = %q, want %q", got.Engine, tt.wantEngine)
+			}
+			if got.Port != tt.wantPort {
+				t.Errorf("Port = %d, want %d", got.Port, tt.wantPort)
+			}
+		})
+	}
+}
 
 func TestQueryInputMaxRows(t *testing.T) {
 	tests := []struct {

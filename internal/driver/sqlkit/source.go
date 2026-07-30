@@ -1,46 +1,49 @@
-package mysql
+package sqlkit
 
 import (
 	"strings"
 	"unicode"
 )
 
-// source is the table a result set can be written back to.
-type source struct {
-	database string
-	table    string
+// Source is the table a result set can be written back to. Namespace is the database or
+// schema the statement qualified the table with, and is empty when it named none.
+type Source struct {
+	Namespace string
+	Table     string
 }
 
 // tailClauses are the only clauses allowed after the table of a writable SELECT. A JOIN,
 // a UNION, a second table or a GROUP BY breaks the one-result-row-per-stored-row mapping
 // that addressing a row by its primary key depends on, so anything else disqualifies it.
 var tailClauses = map[string]bool{
-	"where": true,
-	"order": true,
-	"limit": true,
-	"for":   true,
-	"lock":  true,
+	"where":  true,
+	"order":  true,
+	"limit":  true,
+	"offset": true,
+	"fetch":  true,
+	"for":    true,
+	"lock":   true,
 }
 
-// parseSource reads the single table a plain SELECT draws from. It reports false for every
+// ParseSource reads the single table a plain SELECT draws from. It reports false for every
 // statement whose rows cannot be traced back to exactly one stored row.
-func parseSource(statement string) (source, bool) {
-	tokens := scanTokens(statement)
+func (d Dialect) ParseSource(statement string) (Source, bool) {
+	tokens := d.scanTokens(statement)
 	if len(tokens) < 4 || !strings.EqualFold(tokens[0], "select") {
-		return source{}, false
+		return Source{}, false
 	}
 	if strings.EqualFold(tokens[1], "distinct") || strings.EqualFold(tokens[1], "distinctrow") {
-		return source{}, false
+		return Source{}, false
 	}
 
 	from := indexFold(tokens, "from")
 	if from < 0 || from+1 >= len(tokens) {
-		return source{}, false
+		return Source{}, false
 	}
 
-	found, ok := splitQualified(tokens[from+1])
+	found, ok := d.splitQualified(tokens[from+1])
 	if !ok {
-		return source{}, false
+		return Source{}, false
 	}
 
 	rest := tokens[from+2:]
@@ -51,16 +54,22 @@ func parseSource(statement string) (source, bool) {
 		rest = rest[1:] // the alias
 	}
 	if len(rest) > 0 && !tailClauses[strings.ToLower(rest[0])] {
-		return source{}, false
+		return Source{}, false
 	}
 
 	return found, true
 }
 
+// HasClause reports whether a statement carries the named keyword at parenthesis depth
+// zero, so the same word inside a subquery, a string or a comment does not count.
+func (d Dialect) HasClause(statement, keyword string) bool {
+	return indexFold(d.scanTokens(statement), keyword) >= 0
+}
+
 // scanTokens splits a statement into its words at parenthesis depth zero. Comments are
 // dropped and quoted text collapses to a placeholder, so only structure survives — a
 // subquery, a function call or a string can no longer be mistaken for a clause.
-func scanTokens(statement string) []string {
+func (d Dialect) scanTokens(statement string) []string {
 	tokens := []string{}
 	word := strings.Builder{}
 	depth := 0
@@ -80,18 +89,18 @@ func scanTokens(statement string) []string {
 
 	for i := 0; i < len(statement); i++ {
 		switch c := statement[i]; {
-		case c == '\'' || c == '"':
-			emit("?")
-			i = skipDelimited(statement, i, c)
-
-		case c == '`':
-			end := skipDelimited(statement, i, '`')
+		case c == d.IdentQuote:
+			end := skipDelimited(statement, i, d.IdentQuote)
 			if depth == 0 {
 				word.WriteString(statement[i:min(end+1, len(statement))])
 			}
 			i = end
 
-		case c == '#', c == '-' && peek(statement, i) == '-':
+		case c == '\'' || c == '"':
+			emit("?")
+			i = skipDelimited(statement, i, c)
+
+		case c == '#' && d.HashComments, c == '-' && peek(statement, i) == '-':
 			flush()
 			i = skipLine(statement, i)
 
@@ -127,15 +136,16 @@ func scanTokens(statement string) []string {
 	return tokens
 }
 
-// splitQualified reads `db`.`table`, db.table or a bare table name.
-func splitQualified(token string) (source, bool) {
+// splitQualified reads a quoted or bare table name, with or without the namespace in front
+// of it: `db`.`table`, "schema"."table", db.table or table.
+func (d Dialect) splitQualified(token string) (Source, bool) {
 	parts := []string{}
 	part := strings.Builder{}
 	quoted := false
 
 	for i := 0; i < len(token); i++ {
 		switch c := token[i]; {
-		case c == '`':
+		case c == d.IdentQuote:
 			quoted = !quoted
 		case c == '.' && !quoted:
 			parts = append(parts, part.String())
@@ -148,12 +158,12 @@ func splitQualified(token string) (source, bool) {
 
 	switch len(parts) {
 	case 1:
-		return source{table: parts[0]}, isIdentifier(parts[0])
+		return Source{Table: parts[0]}, isIdentifier(parts[0])
 	case 2:
-		return source{database: parts[0], table: parts[1]},
+		return Source{Namespace: parts[0], Table: parts[1]},
 			isIdentifier(parts[0]) && isIdentifier(parts[1])
 	default:
-		return source{}, false
+		return Source{}, false
 	}
 }
 

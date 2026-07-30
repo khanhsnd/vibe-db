@@ -1,14 +1,12 @@
 package mysql
 
 import (
-	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
-	"net"
+	"strconv"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/khanhsnd/vibe-db/internal/domain"
+	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
 
 const (
@@ -35,52 +33,19 @@ func translateError(err error) error {
 		if mapped, ok := errnoToDomain[mysqlErr.Number]; ok {
 			return mapped
 		}
-		return domain.StatementError{Number: int(mysqlErr.Number), Message: mysqlErr.Message}
-	}
-
-	if errors.Is(err, context.Canceled) {
-		return domain.ErrQueryCancelled
+		return domain.StatementError{
+			Code:    strconv.FormatUint(uint64(mysqlErr.Number), 10),
+			Message: mysqlErr.Message,
+		}
 	}
 
 	if errors.Is(err, mysql.ErrNoTLS) {
 		return domain.ErrTLSUnsupported
 	}
 
-	if isCertVerificationError(err) {
-		return domain.ErrTLSNotVerified
-	}
-
-	if errors.Is(err, context.DeadlineExceeded) {
-		return domain.ErrConnectionTimeout
-	}
-
-	var netErr net.Error
-	if errors.As(err, &netErr) {
-		if netErr.Timeout() {
-			return domain.ErrConnectionTimeout
-		}
-		return domain.ErrHostUnreachable
+	if mapped := sqlkit.TransportError(err); mapped != nil {
+		return mapped
 	}
 
 	return err
-}
-
-func isCertVerificationError(err error) bool {
-	var verificationErr *tls.CertificateVerificationError
-	if errors.As(err, &verificationErr) {
-		return true
-	}
-
-	var unknownAuthority x509.UnknownAuthorityError
-	if errors.As(err, &unknownAuthority) {
-		return true
-	}
-
-	var hostnameErr x509.HostnameError
-	if errors.As(err, &hostnameErr) {
-		return true
-	}
-
-	var invalidErr x509.CertificateInvalidError
-	return errors.As(err, &invalidErr)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
 
 // Schema reads every table and column of a database in one query. Views are included,
@@ -27,22 +28,11 @@ func (s *session) Schema(ctx context.Context, database string) ([]driver.TableSc
 		if err := rows.Scan(&table, &column); err != nil {
 			return nil, translateError(err)
 		}
-		tables = appendColumn(tables, table, column)
+		tables = sqlkit.AppendColumn(tables, table, column)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, translateError(err)
 	}
 
 	return tables, nil
-}
-
-// appendColumn folds the flat (table, column) rows into one entry per table. It only
-// looks at the last entry, which the query's ORDER BY makes sufficient.
-func appendColumn(tables []driver.TableSchema, table, column string) []driver.TableSchema {
-	last := len(tables) - 1
-	if last >= 0 && tables[last].Name == table {
-		tables[last].Columns = append(tables[last].Columns, column)
-		return tables
-	}
-	return append(tables, driver.TableSchema{Name: table, Columns: []string{column}})
 }

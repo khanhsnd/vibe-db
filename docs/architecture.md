@@ -9,7 +9,7 @@ internal/app  ->  session / profile / secret  ->  internal/driver  ->  internal/
 - **`internal/domain`** — `ConnectionProfile`, `Validate()`, sentinel errors. Pure; imports nothing
   of ours. Business rules live here, not in the API layer.
 - **`internal/driver`** — the `Driver`/`Session` interfaces plus a `Registry` keyed by engine.
-  `driver/mysql` is the sole adapter.
+  `driver/mysql` and `driver/postgres` are the adapters, and `driver/sqlkit` is what they share.
 - **`internal/app`** — the Wails boundary and the only package bound to JavaScript. Speaks `dto.go`
   wire types, never domain types, and maps every error to a stable code (see
   [errors.md](errors.md)).
@@ -20,8 +20,25 @@ internal/app  ->  session / profile / secret  ->  internal/driver  ->  internal/
 ## Adding a database engine
 
 Add `internal/driver/<engine>` implementing `driver.Driver` and `driver.Session`, translate its
-native errors to `domain` sentinels, and register it in `internal/app/app.go`. Nothing above the
-driver layer should need to change — if it does, an abstraction leaked.
+native errors to `domain` sentinels, add the engine to `domain.Engine` and to `ENGINES` in
+`frontend/src/bridge/connections.ts`, and register it in `internal/app/app.go`. Nothing between
+those two ends should need to change — if it does, an abstraction leaked.
+
+Reach for `internal/driver/sqlkit` before writing anything: row scanning, result-column
+reflection, statement classification, source parsing, identifier quoting and the transport
+errors are all there already, and an engine differs from another only in
+
+| Part | MySQL | PostgreSQL |
+|---|---|---|
+| `dsn.go` | go-sql-driver config, `tls=…` | libpq keyword/value, `sslmode=…` |
+| `errors.go` | errno → sentinel | SQLSTATE → sentinel |
+| catalogue reads | `information_schema` | `pg_catalog`, for `format_type` |
+| placeholders | `?` | `$1` |
+| `sqlkit.Dialect` | backtick quoting, `#` comments | double-quote quoting |
+
+`driver.Session` calls the thing a table is qualified with a *database*, because MySQL does.
+PostgreSQL cannot cross databases inside a session, so its adapter reads that field as a
+**schema** — see [decisions.md](decisions.md).
 
 ## Two Wails v2 constraints that shaped the design
 

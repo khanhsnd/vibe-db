@@ -53,6 +53,7 @@ export namespace app {
 	export class ProfileInput {
 	    id: string;
 	    name: string;
+	    engine: string;
 	    host: string;
 	    port: number;
 	    user: string;
@@ -69,6 +70,7 @@ export namespace app {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.name = source["name"];
+	        this.engine = source["engine"];
 	        this.host = source["host"];
 	        this.port = source["port"];
 	        this.user = source["user"];

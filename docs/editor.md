@@ -1,9 +1,11 @@
 # Editor and completion
 
-The editor is CodeMirror 6 with the MySQL dialect (`@codemirror/lang-sql`): line numbers, syntax
-highlighting off the same `--syn-*` tokens as the rest of the app, bracket matching, undo history
-and soft wrapping. Each tab owns its editor, so the caret and the undo stack do not follow a tab
-switch.
+The editor is CodeMirror 6 (`@codemirror/lang-sql`): line numbers, syntax highlighting off the same
+`--syn-*` tokens as the rest of the app, bracket matching, undo history and soft wrapping. Each tab
+owns its editor, so the caret and the undo stack do not follow a tab switch.
+
+The dialect follows the connection's engine — `MySQL` or `PostgreSQL` — and rides in the same
+compartment as the schema, so it reconfigures in place rather than rebuilding the editor.
 
 **A selection narrows what runs.** Highlight one statement of a script and Execute sends only that;
 with nothing selected it sends the whole buffer.
@@ -23,15 +25,16 @@ Completion fires as you type and on `Ctrl`+`Space`, over four sources:
 The last two are suppressed after a dot and inside strings and comments, where only the qualified
 schema has anything useful to say.
 
-`ConnectionAPI.LoadSchema` reads a whole database's tables and columns in one
-`information_schema.columns` scan, cached per connection-and-database until disconnect. Switching
-the toolbar's database reconfigures completion in place rather than rebuilding the editor.
+`ConnectionAPI.LoadSchema` reads a whole database's tables and columns in one catalogue scan —
+`information_schema.columns` on MySQL, `pg_attribute` on PostgreSQL — cached per
+connection-and-database until disconnect. Switching the toolbar's database reconfigures completion
+in place rather than rebuilding the editor.
 
-One upstream limitation is worth knowing: a table whose name is a reserved MySQL keyword — `user`,
+One upstream limitation is worth knowing: a table whose name is a reserved keyword — `user`,
 `plugin` — is tokenised as a keyword, so `FROM user u` does not register the alias `u` and `u.`
-falls back to keyword matches. Quoting it (`FROM \`user\` u`) restores column completion. Bare
-column completion is unaffected, because it matches words against the schema rather than trusting
-the parser's token types.
+falls back to keyword matches. Quoting it (`FROM \`user\` u`, or `FROM "user" u` on PostgreSQL)
+restores column completion. Bare column completion is unaffected, because it matches words against
+the schema rather than trusting the parser's token types, and it reads both quotings.
 
 ## Two colours that are load-bearing, not cosmetic
 

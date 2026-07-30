@@ -8,6 +8,8 @@ import { RowLimit } from '@/shared/ui/RowLimit'
 interface QueryToolbarProps {
   databases: string[]
   database: string
+  // What the engine calls the namespace on offer — a database, or a PostgreSQL schema.
+  namespace: string
   rowLimit: number
   running: boolean
   canRun: boolean
@@ -21,6 +23,7 @@ interface QueryToolbarProps {
 export function QueryToolbar({
   databases,
   database,
+  namespace,
   rowLimit,
   running,
   canRun,
@@ -37,13 +40,15 @@ export function QueryToolbar({
     >
       <Database size={13} className="shrink-0 text-faint" />
       <select
-        aria-label="Database"
+        aria-label={namespace}
         value={database}
         disabled={databases.length === 0}
         onChange={(e) => onDatabaseChange(e.target.value)}
         className={`${TOOLBAR_CONTROL} max-w-[180px] font-mono`}
       >
-        <option value="">{databases.length === 0 ? 'Not connected' : 'No database'}</option>
+        <option value="">
+          {databases.length === 0 ? 'Not connected' : `No ${namespace.toLowerCase()}`}
+        </option>
         {databases.map((name) => (
           <option key={name} value={name}>
             {name}

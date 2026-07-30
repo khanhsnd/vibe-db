@@ -103,8 +103,8 @@ func TestTranslateErrorKeepsUnknownServerErrorsAsStatementErrors(t *testing.T) {
 	if !errors.As(got, &statementErr) {
 		t.Fatalf("translateError() = %v, want a domain.StatementError", got)
 	}
-	if statementErr.Number != 1064 {
-		t.Errorf("number = %d, want 1064", statementErr.Number)
+	if statementErr.Code != "1064" {
+		t.Errorf("code = %q, want 1064", statementErr.Code)
 	}
 	if statementErr.Message != original.Message {
 		t.Errorf("message = %q, want the server's wording %q", statementErr.Message, original.Message)

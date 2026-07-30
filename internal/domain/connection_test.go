@@ -30,8 +30,18 @@ func TestValidate(t *testing.T) {
 		{"port too high", func(p *ConnectionProfile) { p.Port = 70000 }, "port"},
 		{"port negative", func(p *ConnectionProfile) { p.Port = -1 }, "port"},
 		{"blank user", func(p *ConnectionProfile) { p.User = "" }, "user"},
-		{"unsupported engine", func(p *ConnectionProfile) { p.Engine = "postgres" }, "engine"},
+		{"unsupported engine", func(p *ConnectionProfile) { p.Engine = "oracle" }, "engine"},
 		{"unknown tls mode", func(p *ConnectionProfile) { p.TLSMode = "sometimes" }, "tlsMode"},
+		{
+			"postgres without a database",
+			func(p *ConnectionProfile) { p.Engine = EnginePostgres },
+			"database",
+		},
+		{
+			"postgres with a database",
+			func(p *ConnectionProfile) { p.Engine, p.Database = EnginePostgres, "shop" },
+			"",
+		},
 	}
 
 	for _, tt := range tests {
@@ -67,6 +77,15 @@ func TestAddressBracketsIPv6(t *testing.T) {
 
 	if got, want := p.Address(), "[::1]:3306"; got != want {
 		t.Errorf("Address() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultPortPerEngine(t *testing.T) {
+	if got := EngineMySQL.DefaultPort(); got != DefaultMySQLPort {
+		t.Errorf("EngineMySQL.DefaultPort() = %d, want %d", got, DefaultMySQLPort)
+	}
+	if got := EnginePostgres.DefaultPort(); got != DefaultPostgresPort {
+		t.Errorf("EnginePostgres.DefaultPort() = %d, want %d", got, DefaultPostgresPort)
 	}
 }
 

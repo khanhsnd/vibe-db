@@ -85,7 +85,7 @@ func wrapError(err error) error {
 		return wireError{
 			Code:    CodeSQLError,
 			Message: statementErr.Message,
-			Detail:  fmt.Sprintf("error %d", statementErr.Number),
+			Detail:  "error " + statementErr.Code,
 		}
 	}
 

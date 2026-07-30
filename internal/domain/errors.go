@@ -22,8 +22,10 @@ var (
 
 // StatementError carries an engine's own rejection of a statement. Its message is
 // the only useful text for the user, so it survives the trip to the UI verbatim.
+// Code is the engine's own identifier for the failure and is a string rather than a
+// number, because MySQL numbers its errors and PostgreSQL gives a SQLSTATE like `42P01`.
 type StatementError struct {
-	Number  int
+	Code    string
 	Message string
 }
 

@@ -6,8 +6,10 @@ repository.
 ## What this is
 
 `vibe-db` is a desktop database client in the Navicat Premium mould — a Go backend in a Wails v2
-shell (OS WebView2, no bundled Chromium) with a React 19 + TypeScript frontend. MySQL is the only
-engine implemented; the driver layer is a port so others are added as adapters.
+shell (OS WebView2, no bundled Chromium) with a React 19 + TypeScript frontend. MySQL and
+PostgreSQL are implemented; the driver layer is a port so others are added as adapters, and
+`internal/driver/sqlkit` already holds everything about a `database/sql` adapter that does not
+vary by engine.
 
 ## Rules that must not be broken
 

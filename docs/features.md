@@ -1,18 +1,31 @@
 # Features and UI behaviour
 
-Working: connection profiles (create / edit / delete), Test Connection with server version and
-latency, connect / disconnect, database listing, table listing per database, table data browsing
-with pagination and single-cell editing, query tabs with completion, passwords in Windows
-Credential Manager, and the full layout shell with dark and light themes.
+Working: connection profiles (create / edit / delete) for **MySQL and PostgreSQL**, Test Connection
+with server version and latency, connect / disconnect, database listing, table listing per database,
+table data browsing with pagination and single-cell editing, query tabs with completion, passwords
+in Windows Credential Manager, and the full layout shell with dark and light themes.
 
 Not there yet: schema browsing stops at tables — views, procedures and functions are not listed.
 One Execute runs one statement; a pasted multi-statement script is rejected by the server, since
 `multiStatements` stays off and the client-side splitter is not written yet.
 
+## Picking an engine
+
+The connection dialog leads with `Engine`, and everything that follows takes its defaults from it:
+port 3306 and user `root` for MySQL, 5432 and `postgres` for PostgreSQL. Switching engine rewrites
+only the fields that still hold the old engine's default, so a typed port survives the switch. The
+tree tags every connection with its engine, and the editor loads that engine's SQL dialect for
+highlighting and completion.
+
+One field differs rather than just defaulting: **PostgreSQL needs a database**, because a session is
+bound to one for its whole life. What the tree then lists under the connection is that database's
+*schemas*, not other databases — see [decisions.md](decisions.md). The query toolbar and the tree
+say `Schema` there, and `Database` on MySQL.
+
 ## Browsing a schema
 
-Clicking a database marks it as the active one for that connection and reveals its `Tables` folder,
-which loads on first expand and is cached until disconnect.
+Clicking a database — a schema, on PostgreSQL — marks it as the active one for that connection and
+reveals its `Tables` folder, which loads on first expand and is cached until disconnect.
 
 Clicking a table opens a data tab: 100 rows per page by default, ordered by primary key so paging
 is stable. The pager's `Rows` control sizes the page and can lift the bound entirely — see
@@ -20,8 +33,9 @@ is stable. The pager's `Rows` control sizes the page and can lift the bound enti
 different edges:
 
 - **`Cell Editor`** opens a panel under the grid for the selected cell. Discard reverts the draft,
-  Apply issues `UPDATE … WHERE <primary key> LIMIT 1` and reloads, Refresh reloads. A table with no
-  primary key is read-only, because no single row can be identified.
+  Apply issues `UPDATE … WHERE <primary key>` and reloads, Refresh reloads. A table with no primary
+  key is read-only, because no single row can be identified. MySQL adds a `LIMIT 1` belt to the
+  braces; PostgreSQL has no such clause and does not need one, since the key already names one row.
 - **`Column`** opens a checkbox list to the left of the grid that picks which columns show.
   Unchecking the last visible column is blocked, so the grid can never go blank. Selection is
   cleared on a change, because the cell coordinates the grid reports are positions among the
@@ -33,12 +47,14 @@ A query tab carries its own toolbar, editor buffer, database and row limit, so s
 on the same connection without treading on each other. The toolbar picks the database, then
 **Execute** (`F5` or `Ctrl`+`Enter`) or **Explain** runs the statement; **Stop** cancels it.
 
-- The database is applied with `USE` on a connection pinned for that one statement, so the pool's
-  other connections keep whatever they had.
+- The database is applied on a connection pinned for that one statement — `USE` on MySQL,
+  `SET search_path` on PostgreSQL — so the pool's other connections keep whatever they had.
 - A statement that returns rows fills the grid; one that does not reports its affected-row count.
-  Which path a statement takes is decided by its leading keyword, read past any leading comments.
+  Which path a statement takes is decided by its leading keyword, read past any leading comments,
+  plus a `RETURNING` clause on PostgreSQL, where that is what makes a write answer with rows.
 - **Errors surface in the output panel below the editor**, with the code, the server's own wording
-  and the errno, never as a dialog. A cancel is reported as `QUERY_CANCELLED`, not as a failure.
+  and the engine's error code, never as a dialog. A cancel is reported as `QUERY_CANCELLED`, not as
+  a failure.
 - Progress shows in two places: a spinner beside the toolbar buttons and a `Running…` status strip
   under the output panel. Previous rows stay on screen until the new ones land.
 
@@ -64,9 +80,9 @@ value can never mean unbounded.
 
 Two consequences of that convention are worth knowing:
 
-- `buildSelect` in the MySQL adapter **drops the `LIMIT … OFFSET …` clause** for an unbounded page,
+- `buildSelect` in either adapter **drops the `LIMIT … OFFSET …` clause** for an unbounded page,
   and therefore returns its arguments alongside the statement — an offset with no limit binds
-  nothing. `MaxRows` needs no equivalent, since `scanRows` already reads to the end on a
+  nothing. `MaxRows` needs no equivalent, since `sqlkit.ScanRows` already reads to the end on a
   non-positive cap.
 - There is no ceiling on a typed count in either control. One would be theatre next to an `All`
   option, and silently answering a different question than the one asked is worse than a slow grid.
@@ -84,19 +100,22 @@ Inside the pane sits a toolbar naming what is on screen, and the buttons that wr
 - **Double-click a cell to edit it** (or press `Enter` on the selected cell). `Esc` abandons the
   input. Edits are held locally and marked in the grid, so a mistyped value costs nothing.
 - `Discard` drops the pending edits, `Apply` writes each one with the same
-  `UPDATE … WHERE <primary key> LIMIT 1` the table view uses and reloads, `Refresh` reloads alone.
+  `UPDATE … WHERE <primary key>` the table view uses and reloads, `Refresh` reloads alone.
 - **`Refresh` and `Apply` replay the statement that produced the rows**, not whatever the editor
   holds now, so editing the SQL after a run cannot make Apply execute something else.
 
 ### When a result is writable
 
-A result is writable only when the driver can trace its rows to one stored row each. `parseSource`
-in the MySQL adapter accepts a plain `SELECT … FROM <table>` with at most a `WHERE`, `ORDER BY` or
-`LIMIT` after it, and rejects joins, unions, `GROUP BY`, `DISTINCT`, derived tables and `EXPLAIN`.
-The named table is then looked up in `information_schema`, and the result stays read-only unless it
-carries every primary-key column exactly once — an aliased or repeated key column names no row. The
-toolbar says which case applies. This is needed because `database/sql` reports a column's type but
-not the table it came from, so the source cannot be read off the wire.
+A result is writable only when the driver can trace its rows to one stored row each.
+`sqlkit.Dialect.ParseSource` accepts a plain `SELECT … FROM <table>` with at most a `WHERE`,
+`ORDER BY`, `LIMIT` or `OFFSET` after it, and rejects joins, unions, `GROUP BY`, `DISTINCT`, derived
+tables and `EXPLAIN`. The named table is then looked up in the catalogue, and the result stays
+read-only unless it carries every primary-key column exactly once — an aliased or repeated key
+column names no row. The toolbar says which case applies. This is needed because `database/sql`
+reports a column's type but not the table it came from, so the source cannot be read off the wire.
+
+One `Dialect` field decides how a quoted name is read, so `` `shop`.`users` `` is a table on MySQL
+and a string on PostgreSQL, where `"shop"."users"` is the table instead.
 
 ## Grid behaviour
 

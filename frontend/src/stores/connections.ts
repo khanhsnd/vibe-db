@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { type AppError, toAppError } from '@/bridge/errors'
 import {
   connections,
+  engineInfo,
   type Profile,
   type ProfileInput,
   type Session,
@@ -205,6 +206,7 @@ export function buildTree({
     label: profile.name,
     profileId: profile.id,
     status: statuses[profile.id] ?? 'idle',
+    badge: engineInfo(profile.engine).label,
     children: (databases[profile.id] ?? []).map((database) =>
       databaseNode(profile.id, database, tables, activeDatabase[profile.id] === database),
     ),

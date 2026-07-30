@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 
-import type { TableSchema } from '@/bridge/connections'
+import { engineInfo, type TableSchema } from '@/bridge/connections'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import { databaseKey, useConnectionsStore } from '@/stores/connections'
 import { IDLE_RUN, useQueriesStore } from '@/stores/queries'
@@ -16,9 +16,10 @@ interface QueryWorkspaceProps {
   tab: QueryTab
   sessionId: string | null
   databases: string[]
+  engine: string
 }
 
-export function QueryWorkspace({ tab, sessionId, databases }: QueryWorkspaceProps) {
+export function QueryWorkspace({ tab, sessionId, databases, engine }: QueryWorkspaceProps) {
   const run = useQueriesStore((s) => s.runs[tab.id] ?? IDLE_RUN)
   const execute = useQueriesStore((s) => s.execute)
   const rerun = useQueriesStore((s) => s.rerun)
@@ -80,6 +81,7 @@ export function QueryWorkspace({ tab, sessionId, databases }: QueryWorkspaceProp
       <QueryToolbar
         databases={databases}
         database={tab.database}
+        namespace={engineInfo(engine).namespace}
         rowLimit={tab.rowLimit}
         running={run.running}
         canRun={canRun}
@@ -100,6 +102,7 @@ export function QueryWorkspace({ tab, sessionId, databases }: QueryWorkspaceProp
           <EditorPane
             value={tab.sql}
             schema={schema}
+            engine={engine}
             onChange={(sql) => editQuery(tab.id, { sql })}
             onSelectionChange={(selected) => {
               selection.current = selected

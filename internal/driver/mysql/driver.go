@@ -8,6 +8,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
 
 const (
@@ -15,6 +16,8 @@ const (
 	maxIdleConns    = 2
 	connMaxIdleTime = 5 * time.Minute
 )
+
+var dialect = sqlkit.MySQL
 
 type Driver struct{}
 

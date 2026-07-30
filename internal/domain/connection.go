@@ -8,7 +8,34 @@ import (
 
 type Engine string
 
-const EngineMySQL Engine = "mysql"
+const (
+	EngineMySQL    Engine = "mysql"
+	EnginePostgres Engine = "postgres"
+)
+
+const (
+	DefaultMySQLPort    = 3306
+	DefaultPostgresPort = 5432
+)
+
+// DefaultPort is the port an engine listens on when the profile names none.
+func (e Engine) DefaultPort() int {
+	switch e {
+	case EnginePostgres:
+		return DefaultPostgresPort
+	default:
+		return DefaultMySQLPort
+	}
+}
+
+func (e Engine) Valid() bool {
+	switch e {
+	case EngineMySQL, EnginePostgres:
+		return true
+	default:
+		return false
+	}
+}
 
 type TLSMode string
 
@@ -18,8 +45,6 @@ const (
 	TLSRequired  TLSMode = "required"
 	TLSVerifyCA  TLSMode = "verify-ca"
 )
-
-const DefaultMySQLPort = 3306
 
 func (m TLSMode) Valid() bool {
 	switch m {
@@ -55,8 +80,13 @@ func (p ConnectionProfile) Validate() error {
 	if strings.TrimSpace(p.User) == "" {
 		return ValidationError{Field: "user", Message: "is required"}
 	}
-	if p.Engine != EngineMySQL {
+	if !p.Engine.Valid() {
 		return ValidationError{Field: "engine", Message: "is not supported"}
+	}
+	// A PostgreSQL session is bound to one database for its whole life and cannot cross to
+	// another, so a profile that names none has nothing to connect to.
+	if p.Engine == EnginePostgres && strings.TrimSpace(p.Database) == "" {
+		return ValidationError{Field: "database", Message: "is required for PostgreSQL"}
 	}
 	if !p.TLSMode.Valid() {
 		return ValidationError{Field: "tlsMode", Message: "is not a known TLS mode"}

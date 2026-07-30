@@ -34,6 +34,7 @@ type Profile struct {
 type ProfileInput struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
+	Engine       string `json:"engine"`
 	Host         string `json:"host"`
 	Port         int    `json:"port"`
 	User         string `json:"user"`
@@ -217,10 +218,18 @@ func toColumnDTOs(source []driver.Column) []TableColumn {
 	return columns
 }
 
+// toDomain fills in what the dialog may leave blank. An unnamed engine is MySQL, which is
+// what a profile written before the second engine existed means, and the port then follows
+// from the engine rather than from a constant.
 func (in ProfileInput) toDomain() domain.ConnectionProfile {
+	engine := domain.Engine(in.Engine)
+	if engine == "" {
+		engine = domain.EngineMySQL
+	}
+
 	port := in.Port
 	if port == 0 {
-		port = domain.DefaultMySQLPort
+		port = engine.DefaultPort()
 	}
 
 	tlsMode := domain.TLSMode(in.TLSMode)
@@ -231,7 +240,7 @@ func (in ProfileInput) toDomain() domain.ConnectionProfile {
 	return domain.ConnectionProfile{
 		ID:           in.ID,
 		Name:         in.Name,
-		Engine:       domain.EngineMySQL,
+		Engine:       engine,
 		Host:         in.Host,
 		Port:         port,
 		User:         in.User,

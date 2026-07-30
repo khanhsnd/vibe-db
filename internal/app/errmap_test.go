@@ -71,7 +71,7 @@ func TestWrapErrorCarriesValidationField(t *testing.T) {
 }
 
 func TestWrapErrorKeepsTheServerWordingOfAStatementError(t *testing.T) {
-	err := domain.StatementError{Number: 1054, Message: "Unknown column 'nope' in 'field list'"}
+	err := domain.StatementError{Code: "1054", Message: "Unknown column 'nope' in 'field list'"}
 
 	got := decode(t, wrapError(fmt.Errorf("run: %w", err)))
 
@@ -82,7 +82,7 @@ func TestWrapErrorKeepsTheServerWordingOfAStatementError(t *testing.T) {
 		t.Errorf("message = %q, want the server's wording %q", got.Message, err.Message)
 	}
 	if got.Detail != "error 1054" {
-		t.Errorf("detail = %q, want the error number", got.Detail)
+		t.Errorf("detail = %q, want the engine's own error code", got.Detail)
 	}
 }
 

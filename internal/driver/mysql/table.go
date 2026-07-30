@@ -7,6 +7,7 @@ import (
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
 
 func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.TableRows, error) {
@@ -21,12 +22,15 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 	}
 
 	query, args := buildSelect(page, columns)
-	rows, err := s.selectRows(ctx, query, args, len(columns))
+
+	// The statement itself bounds the read — either through its LIMIT clause or because the
+	// caller asked for every row — so no cap is applied here.
+	result, err := sqlkit.Read(ctx, s.db, query, 0, args...)
 	if err != nil {
-		return driver.TableRows{}, err
+		return driver.TableRows{}, translateError(err)
 	}
 
-	return driver.TableRows{Columns: columns, Rows: rows, Total: total}, nil
+	return driver.TableRows{Columns: columns, Rows: result.Rows, Total: total}, nil
 }
 
 func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
@@ -35,7 +39,7 @@ func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 		return err
 	}
 
-	keys := primaryKeyNames(columns)
+	keys := sqlkit.PrimaryKeyNames(columns)
 	if len(keys) == 0 {
 		return domain.ErrTableNotEditable
 	}
@@ -80,7 +84,7 @@ func (s *session) columns(ctx context.Context, database, table string) ([]driver
 			FullType:   fullType,
 			Nullable:   nullable == "YES",
 			PrimaryKey: key == "PRI",
-			Default:    toPointer(defaultValue),
+			Default:    sqlkit.TextOrNil(defaultValue),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -95,7 +99,7 @@ func (s *session) columns(ctx context.Context, database, table string) ([]driver
 
 func (s *session) countRows(ctx context.Context, database, table string) (int64, error) {
 	var total int64
-	query := "SELECT COUNT(*) FROM " + qualify(database, table)
+	query := "SELECT COUNT(*) FROM " + dialect.Qualify(database, table)
 
 	if err := s.db.QueryRowContext(ctx, query).Scan(&total); err != nil {
 		return 0, translateError(err)
@@ -103,35 +107,18 @@ func (s *session) countRows(ctx context.Context, database, table string) (int64,
 	return total, nil
 }
 
-func (s *session) selectRows(
-	ctx context.Context,
-	query string,
-	args []any,
-	width int,
-) ([][]*string, error) {
-	rows, err := s.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, translateError(err)
-	}
-	defer rows.Close()
-
-	// The statement itself bounds the read — either through its LIMIT clause or because the
-	// caller asked for every row — so no cap is applied here.
-	out, _, err := scanRows(rows, width, 0)
-	return out, err
-}
-
 // buildSelect returns the statement and its arguments together, because a page that asks for
 // every row carries no LIMIT clause and therefore no arguments to bind.
 func buildSelect(page driver.TablePage, columns []driver.Column) (string, []any) {
 	names := make([]string, len(columns))
 	for i, column := range columns {
-		names[i] = quoteIdent(column.Name)
+		names[i] = dialect.QuoteIdent(column.Name)
 	}
 
-	query := "SELECT " + strings.Join(names, ", ") + " FROM " + qualify(page.Database, page.Table)
-	if keys := primaryKeyNames(columns); len(keys) > 0 {
-		query += " ORDER BY " + strings.Join(quoteAll(keys), ", ")
+	query := "SELECT " + strings.Join(names, ", ") +
+		" FROM " + dialect.Qualify(page.Database, page.Table)
+	if keys := sqlkit.PrimaryKeyNames(columns); len(keys) > 0 {
+		query += " ORDER BY " + strings.Join(dialect.QuoteAll(keys), ", ")
 	}
 
 	if page.Limit <= 0 {
@@ -146,48 +133,14 @@ func buildUpdate(edit driver.CellEdit, keys []string) (string, []any) {
 	args = append(args, edit.Value)
 
 	for i, key := range keys {
-		conditions[i] = quoteIdent(key) + " = ?"
+		conditions[i] = dialect.QuoteIdent(key) + " = ?"
 		args = append(args, edit.Key[key])
 	}
 
-	query := "UPDATE " + qualify(edit.Database, edit.Table) +
-		" SET " + quoteIdent(edit.Column) + " = ?" +
+	query := "UPDATE " + dialect.Qualify(edit.Database, edit.Table) +
+		" SET " + dialect.QuoteIdent(edit.Column) + " = ?" +
 		" WHERE " + strings.Join(conditions, " AND ") +
 		" LIMIT 1"
 
 	return query, args
-}
-
-func primaryKeyNames(columns []driver.Column) []string {
-	names := []string{}
-	for _, column := range columns {
-		if column.PrimaryKey {
-			names = append(names, column.Name)
-		}
-	}
-	return names
-}
-
-func quoteAll(names []string) []string {
-	quoted := make([]string, len(names))
-	for i, name := range names {
-		quoted[i] = quoteIdent(name)
-	}
-	return quoted
-}
-
-func qualify(database, table string) string {
-	return quoteIdent(database) + "." + quoteIdent(table)
-}
-
-func quoteIdent(name string) string {
-	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
-}
-
-func toPointer(value sql.NullString) *string {
-	if !value.Valid {
-		return nil
-	}
-	text := value.String
-	return &text
 }

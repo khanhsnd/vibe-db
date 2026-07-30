@@ -47,16 +47,23 @@ interface EditorPaneProps {
   onChange: (value: string) => void
   onSelectionChange: (selected: string) => void
   schema: TableSchema[]
+  engine: string
 }
 
-export function EditorPane({ value, onChange, onSelectionChange, schema }: EditorPaneProps) {
+export function EditorPane({
+  value,
+  onChange,
+  onSelectionChange,
+  schema,
+  engine,
+}: EditorPaneProps) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
 
   const emit = useRef({ onChange, onSelectionChange })
   emit.current = { onChange, onSelectionChange }
 
-  const seed = useRef({ value, schema })
+  const seed = useRef({ value, schema, engine })
 
   useEffect(() => {
     const parent = host.current
@@ -68,7 +75,7 @@ export function EditorPane({ value, onChange, onSelectionChange, schema }: Edito
         doc: seed.current.value,
         extensions: [
           baseExtensions,
-          language.of(sqlLanguage(seed.current.schema)),
+          language.of(sqlLanguage(seed.current.schema, seed.current.engine)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) emit.current.onChange(update.state.doc.toString())
             if (update.docChanged || update.selectionSet) {
@@ -88,8 +95,8 @@ export function EditorPane({ value, onChange, onSelectionChange, schema }: Edito
   }, [])
 
   useEffect(() => {
-    view.current?.dispatch({ effects: language.reconfigure(sqlLanguage(schema)) })
-  }, [schema])
+    view.current?.dispatch({ effects: language.reconfigure(sqlLanguage(schema, engine)) })
+  }, [schema, engine])
 
   // The store owns the buffer, but echoing our own edits back would reset the caret,
   // so only a genuine divergence is written into the document.

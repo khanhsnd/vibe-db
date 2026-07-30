@@ -21,7 +21,7 @@ wails doctor
 | Dev build, hot reload | `wails dev` (from repo root) |
 | Production build | `wails build` → `build/bin/vibe-db.exe` |
 | Go tests | `go test ./...` |
-| Single Go test | `go test ./internal/driver/mysql -run TestBuildDSNTLSModes -v` |
+| Single Go test | `go test ./internal/driver/postgres -run TestBuildDSNTLSModes -v` |
 | Go vet + format | `go vet ./...` and `gofmt -l internal main.go` |
 | Frontend typecheck | `pnpm typecheck` (in `frontend/`) |
 | Frontend build | `pnpm build` (in `frontend/`) — runs `tsc -b` then `vite build` |
@@ -30,6 +30,11 @@ There is **no frontend test runner installed**. Do not write frontend tests assu
 Testing Library exists — add the dependency first, or verify frontend behaviour by running the app.
 
 ## Verifying against a real database
+
+Both engines are exercised through the same UI, but each has a failure mode the other cannot show —
+`USE` versus `SET search_path`, an errno versus a SQLSTATE, `LIMIT 1` on an update versus none. A
+change to either adapter deserves a run against both servers, and a PostgreSQL profile needs a
+database name before it will connect at all.
 
 `wails dev` serves the frontend *with* the Wails runtime and bindings on `http://localhost:34115`,
 so `window.go.app.ConnectionAPI` is callable from an ordinary browser. This is the most effective
