@@ -2,11 +2,13 @@ import type { Cell, TableColumn } from '@/bridge/tables'
 
 export type { Cell }
 
-export const NULL_TEXT = 'NULL'
+export const NULL_TEXT = '(Null)'
 
 export interface ResultColumn {
   name: string
+  /** The bare type, which classifies the column. `fullType` carries its length and modifiers. */
   type: string
+  fullType: string
 }
 
 export interface CellRef {
@@ -29,13 +31,6 @@ export interface CellBounds {
 export interface GridData {
   columns: ResultColumn[]
   rows: Cell[][]
-}
-
-const NUMERIC_TYPE =
-  /^(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT|DECIMAL|NUMERIC|FLOAT|DOUBLE|BIT|YEAR)/i
-
-export function isNumeric(type: string): boolean {
-  return NUMERIC_TYPE.test(type)
 }
 
 /** Identifies one grid cell, so pending edits can be looked up while rendering. */

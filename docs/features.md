@@ -134,18 +134,7 @@ PostgreSQL, whose statements cannot name another database at all.
 
 ## Grid behaviour
 
-`ResultGrid` is shared by every table in the app, so these apply everywhere it is used:
-
-- **Cells select, text does not.** Dragging paints a rectangular cell range instead of running a
-  text selection across column boundaries; shift-click extends from the anchor. `Ctrl`/`Cmd`+`C`
-  copies the range as tab-separated rows, with `NULL` written out the way the grid shows it.
-- **Columns resize** by dragging the right edge, which reveals an expand icon on hover.
-  Double-clicking that edge fits the column to its widest cell (capped at 520 px), measured with
-  a canvas against the `--font-mono` / `--text-sm` tokens. Widths are keyed by column *name*, not
-  position, so hiding or showing a column does not reset them.
-- **Cells edit in place** only when a call site passes `onEditCell`; without it the grid is
-  read-only, which is what the table data view relies on. Cells carrying an unapplied edit are
-  named in the `dirty` set and outlined in the warning colour.
-
-The grid keeps its own selection when left uncontrolled, so a new call site gets this for free; the
-table data view passes `selection` in only because the Cell Editor needs the anchor.
+Every table in the app is one component, `ResultGrid`, and it looks and behaves the same wherever it
+appears: a two-line header, drag-selected cell ranges, in-place editing, resizable columns.
+**[grid.md](grid.md) is the specification** — read it before changing any table, and add to it rather
+than to a call site.

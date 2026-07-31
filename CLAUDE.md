@@ -28,6 +28,9 @@ vary by engine.
    in an infinite loop.
 6. **pnpm is the package manager** (`wails.json` invokes it); do not switch to npm. There is **no
    frontend test runner installed** — do not write tests assuming vitest or Testing Library exists.
+7. **Anything that shows rows and columns is `ResultGrid`** — never a `<table>` or a second grid.
+   Its look and behaviour are fixed by [docs/grid.md](docs/grid.md); add features to the grid, and
+   update that file in the same change.
 
 ## Where to read before changing something
 
@@ -37,6 +40,7 @@ vary by engine.
 | Touch a layer boundary, or add an engine | [docs/architecture.md](docs/architecture.md) |
 | Add or change a failure mode | [docs/errors.md](docs/errors.md) |
 | Change UI behaviour, or find out what exists | [docs/features.md](docs/features.md) |
+| Touch any table, grid, cell or selection | [docs/grid.md](docs/grid.md) |
 | Touch the SQL editor or completion | [docs/editor.md](docs/editor.md) |
 | Write a component, a store, or a style | [docs/frontend.md](docs/frontend.md) |
 | Wonder why something looks wrong | [docs/decisions.md](docs/decisions.md) |

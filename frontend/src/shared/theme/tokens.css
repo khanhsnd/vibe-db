@@ -11,6 +11,9 @@
   --line: #282e37;
   --line-strong: #3a424e;
 
+  --grid-row-selected: #1a2740;
+  --grid-cell-selected: #274468;
+
   --fg: #e8ebf0;
   --fg-muted: #9ba5b4;
   --fg-faint: #767f8f;
@@ -48,6 +51,9 @@
   --line: #dfe3e8;
   --line-strong: #c3cad3;
 
+  --grid-row-selected: #dbe9fc;
+  --grid-cell-selected: #bfd8f8;
+
   --fg: #16191f;
   --fg-muted: #545c67;
   --fg-faint: #79818d;
@@ -82,6 +88,10 @@
 
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+
+  --color-grid-row-selected: var(--grid-row-selected);
+  --color-grid-cell-selected: var(--grid-cell-selected);
+  --color-null: var(--syn-null);
 
   --color-fg: var(--fg);
   --color-muted: var(--fg-muted);

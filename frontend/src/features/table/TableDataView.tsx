@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 
 import type { Namespace } from '@/bridge/connections'
+import type { Cell } from '@/bridge/tables'
 import { ResultGrid } from '@/features/results/ResultGrid'
-import type { CellRange } from '@/features/results/resultSet'
+import type { CellRange, CellRef } from '@/features/results/resultSet'
 import { Empty } from '@/shared/ui/Empty'
 
 import { CellEditor } from './CellEditor'
@@ -48,16 +49,22 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
   const target = useMemo(() => {
     if (!selection) return null
 
-    const entry = visible[selection.anchor.column]
-    const row = rows[selection.anchor.row]
+    const entry = visible[selection.focus.column]
+    const row = rows[selection.focus.row]
     if (!entry || !row) return null
 
     return {
-      ref: { row: selection.anchor.row, column: entry.index },
+      ref: { row: selection.focus.row, column: entry.index },
       column: entry.column,
       value: row[entry.index] ?? null,
     }
   }, [selection, visible, rows])
+
+  /** The grid reports positions among the visible columns, which map back to real indexes. */
+  const editCell = (ref: CellRef, value: Cell) => {
+    const entry = visible[ref.column]
+    if (entry) void updateCell({ row: ref.row, column: entry.index }, value)
+  }
 
   const togglePanel = (kind: PanelKind) =>
     setPanels((current) => {
@@ -102,7 +109,12 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
           {error && !data ? (
             <Empty title={error.message} hint={error.detail} />
           ) : (
-            <ResultGrid result={grid} selection={selection} onSelectionChange={setSelection} />
+            <ResultGrid
+              result={grid}
+              selection={selection}
+              onSelectionChange={setSelection}
+              onEditCell={editable ? editCell : undefined}
+            />
           )}
         </div>
       </div>
