@@ -72,6 +72,13 @@ export function columnRange(column: number, rowCount: number): CellRange {
   }
 }
 
+export function rowRange(row: number, columnCount: number): CellRange {
+  return {
+    anchor: { row, column: 0 },
+    focus: { row, column: Math.max(columnCount - 1, 0) },
+  }
+}
+
 export function boundsOf(range: CellRange): CellBounds {
   return {
     rowStart: Math.min(range.anchor.row, range.focus.row),
@@ -88,6 +95,18 @@ export function oneRange(range: CellRange): Selection {
 /** The cell the pointer last landed on: the live rectangle's focus. */
 export function focusOf(selection: Selection | null): CellRef | null {
   return selection?.ranges.at(-1)?.focus ?? null
+}
+
+/**
+ * The live rectangle's top-left, which is where a paste starts — not the focus, because a row
+ * selected from the gutter focuses its *last* column and a paste into it must begin at the first.
+ */
+export function originOf(selection: Selection | null): CellRef | null {
+  const live = selection?.ranges.at(-1)
+  if (!live) return null
+
+  const { rowStart, columnStart } = boundsOf(live)
+  return { row: rowStart, column: columnStart }
 }
 
 /** Every row the selection touches, once each and in order, which is what a delete acts on. */

@@ -11,7 +11,7 @@ import type { QueryRun } from '@/stores/queries'
 import { GridFooter } from './GridFooter'
 import { GridPager } from './GridPager'
 import { ResultGrid } from './ResultGrid'
-import { selectedRows, type Selection } from './resultSet'
+import { oneRange, rowRange, selectedRows, type Selection } from './resultSet'
 import { useGridEdits, type EditSource } from './useGridEdits'
 import { usePageWindow } from './usePageWindow'
 
@@ -75,10 +75,16 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
     reach(0, next)
   }
 
-  /** A draft row lands after every fetched row, so the page holding it is the one to show. */
+  /**
+   * A draft row lands after every fetched row, so the page holding it is the one to show — and
+   * it becomes the selection, because a paste that follows the add means that row.
+   */
   const addRow = () => {
+    const at = paged.lastPlace(edits.rows.length + 1)
+
     edits.addRow()
-    paged.goToPage(paged.pageCount)
+    paged.goToPage(at.page)
+    setSelection(oneRange(rowRange(at.row, grid?.columns.length ?? 0)))
   }
 
   const deleteRows = () => edits.deleteRows(selectedRows(selection).map(absolute))

@@ -16,7 +16,9 @@ export function usePageWindow(rows: Cell[][]) {
   const [page, setPage] = useState(0)
   const [size, setSize] = useState<number>(DEFAULT_PAGE_SIZE)
 
-  const step = size === ALL_ROWS ? Math.max(rows.length, 1) : size
+  const spanOf = (count: number) => (size === ALL_ROWS ? Math.max(count, 1) : size)
+
+  const step = spanOf(rows.length)
   const pageCount = Math.max(1, Math.ceil(rows.length / step))
   const current = Math.min(page, pageCount - 1)
   const offset = current * step
@@ -24,6 +26,16 @@ export function usePageWindow(rows: Cell[][]) {
   const window = useMemo(() => rows.slice(offset, offset + step), [rows, offset, step])
 
   const goToPage = useCallback((next: number) => setPage(Math.max(0, next)), [])
+
+  /**
+   * Where the last of `total` rows will sit, so an appended row can be paged to and selected in
+   * one go. It takes the count rather than reading `rows`, because the caller is adding to them.
+   */
+  const lastPlace = (total: number) => {
+    const span = spanOf(total)
+    const page = Math.max(0, Math.ceil(total / span) - 1)
+    return { page, row: total - 1 - page * span }
+  }
 
   const changeSize = useCallback((next: number) => {
     setSize(next)
@@ -39,6 +51,7 @@ export function usePageWindow(rows: Cell[][]) {
     total: rows.length,
     rows: window,
     goToPage,
+    lastPlace,
     changeSize,
   }
 }

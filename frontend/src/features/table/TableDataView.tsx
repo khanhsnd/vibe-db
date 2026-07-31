@@ -5,7 +5,14 @@ import type { TablePage } from '@/bridge/tables'
 import { GridFooter } from '@/features/results/GridFooter'
 import { GridPager } from '@/features/results/GridPager'
 import { ResultGrid } from '@/features/results/ResultGrid'
-import { focusOf, selectedRows, type CellRef, type Selection } from '@/features/results/resultSet'
+import {
+  focusOf,
+  oneRange,
+  rowRange,
+  selectedRows,
+  type CellRef,
+  type Selection,
+} from '@/features/results/resultSet'
 import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
 import { Empty } from '@/shared/ui/Empty'
 
@@ -85,6 +92,12 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
       else next.add(name)
       return next
     })
+  }
+
+  /** The draft lands after every fetched row, and is selected so a paste that follows means it. */
+  const addRow = () => {
+    setSelection(oneRange(rowRange(edits.rows.length, visible.length)))
+    edits.addRow()
   }
 
   const showAllColumns = () => {
@@ -177,7 +190,7 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
         selected={selection !== null}
         pending={edits.pending}
         busy={edits.saving || loading}
-        onAddRow={edits.addRow}
+        onAddRow={addRow}
         onDeleteRow={() => edits.deleteRows(selectedRows(selection))}
         onApply={() => void edits.apply()}
         onDiscard={edits.discard}

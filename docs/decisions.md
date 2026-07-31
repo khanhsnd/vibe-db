@@ -32,3 +32,8 @@
   on Windows the file relies on inherited ACLs, so the file is not a safe place for secrets
   regardless.
 - **Wails v2 is intentional over v3**, which is still alpha.
+- **The clipboard goes through the Wails runtime, not `navigator.clipboard`.** Reading in a WebView2
+  wants a `clipboard-read` permission the page has no way to ask for, so `bridge/clipboard.ts` calls
+  `ClipboardGetText` / `ClipboardSetText` and keeps the browser API — then a hidden textarea — as
+  fallbacks. That is also why it lives in `bridge`: it is the only directory allowed to import
+  `wailsjs/**`.

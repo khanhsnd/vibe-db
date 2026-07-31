@@ -8,7 +8,7 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { UnfoldHorizontal } from 'lucide-react'
 
-import { copyText, readText } from '@/lib/clipboard'
+import { copyText, readText } from '@/bridge/clipboard'
 import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
@@ -21,6 +21,7 @@ import {
   columnRange,
   focusOf,
   oneRange,
+  originOf,
   parseCell,
   toTSV,
   type Cell,
@@ -149,13 +150,23 @@ export function ResultGrid({
     if (result.rows.length > 0) select(oneRange(columnRange(index, result.rows.length)))
   }
 
-  /** One clipboard line per row from the top, and never a row the grid does not already show. */
-  const pasteColumn = async (index: number) => {
+  /**
+   * Writes a clipboard block outwards from one cell — a line per row, a tab per column — and
+   * never past the rows or columns the grid shows, so a paste can only overwrite what is there.
+   * A copied row therefore goes back whole, which is what pasting into a fresh row means.
+   */
+  const paste = async (at: CellRef) => {
     const text = await readText()
     if (!onEditCell || text === '') return
 
-    text.split(/\r?\n/).forEach((line, row) => {
-      if (row < result.rows.length) onEditCell({ row, column: index }, parseCell(line))
+    text.split(/\r?\n/).forEach((line, down) => {
+      const row = at.row + down
+      if (row >= result.rows.length) return
+
+      line.split('\t').forEach((value, across) => {
+        const column = at.column + across
+        if (column < result.columns.length) onEditCell({ row, column }, parseCell(value))
+      })
     })
   }
 
@@ -176,7 +187,7 @@ export function ResultGrid({
             {
               label: 'Paste',
               disabled: result.rows.length === 0,
-              onSelect: () => void pasteColumn(index),
+              onSelect: () => void paste({ row: 0, column: index }),
             },
           ]
         : []),
@@ -277,10 +288,18 @@ export function ResultGrid({
       setEditing(focus)
       return
     }
-    if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'c') return
+    if (!(event.ctrlKey || event.metaKey)) return
 
-    event.preventDefault()
-    void copyText(toTSV(current, result))
+    const key = event.key.toLowerCase()
+    const origin = originOf(current)
+
+    if (key === 'c') {
+      event.preventDefault()
+      void copyText(toTSV(current, result))
+    } else if (key === 'v' && onEditCell && origin) {
+      event.preventDefault()
+      void paste(origin)
+    }
   }
 
   return (
@@ -315,7 +334,10 @@ export function ResultGrid({
             const row = result.rows[item.index]
             if (!row) return null
 
-            const banded = rowTouched(bounds, item.index)
+            // A row is banded across its width only when the selection covers the whole of it;
+            // a column selection touches every row and must not paint the grid over.
+            const banded = rowCovered(bounds, item.index, lastColumn)
+            const touched = rowTouched(bounds, item.index)
             // A row on its way out reads as struck through whatever the selection says,
             // because the strike is inherited by every cell below it.
             const removed = isDeleted(item.index)
@@ -339,7 +361,7 @@ export function ResultGrid({
                     'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
                     removed
                       ? 'bg-grid-row-deleted text-danger'
-                      : banded
+                      : touched
                         ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
                         : 'bg-panel text-faint',
                   )}
@@ -426,6 +448,17 @@ function within(bounds: CellBounds[], row: number, column: number): boolean {
 
 function rowTouched(bounds: CellBounds[], row: number): boolean {
   return bounds.some((one) => row >= one.rowStart && row <= one.rowEnd)
+}
+
+/** Whether one rectangle holds the whole row — every column of it, not merely some. */
+function rowCovered(bounds: CellBounds[], row: number, lastColumn: number): boolean {
+  return bounds.some(
+    (one) =>
+      row >= one.rowStart &&
+      row <= one.rowEnd &&
+      one.columnStart === 0 &&
+      one.columnEnd >= lastColumn,
+  )
 }
 
 function columnTouched(bounds: CellBounds[], column: number): boolean {

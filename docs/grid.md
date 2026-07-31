@@ -18,7 +18,7 @@ which are single-column lists of names, not data.
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. Mono 13 px. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
-| Selection | Three depths: every row the selection touches gets a soft band (`--grid-row-selected`) and an accent bar down its gutter, cells inside any rectangle get a stronger fill (`--grid-cell-selected`), and the **focus** cell — the pointer's last landing, which is the live rectangle's focus — is solid `--accent` with `--fg-on-accent` text. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
+| Selection | Three depths: cells inside any rectangle get a fill (`--grid-cell-selected`), the **focus** cell — the pointer's last landing, which is the live rectangle's focus — is solid `--accent` with `--fg-on-accent` text, and a row the selection holds *end to end* is banded across its width (`--grid-row-selected`). A row the selection merely touches gets the band and the accent bar **on its gutter alone**, because a selected column touches every row and must not paint the whole grid. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
 | Hover | A row highlight, applied *only* to rows outside the selection. Both are background colours, so a selected row must not also carry `hover:bg-hover` or the tint flickers away under the pointer. |
 | Pending edit | A warning-coloured inset ring plus warning text, from `isDirty`. It is a predicate rather than a set of keys so a call site that hides columns can answer in its own coordinates. Every cell of a row that is not on the server yet is pending, so a new row is ringed whole. |
 | Row for deletion | A row that `isDeleted` answers for is banded in `--grid-row-deleted` and struck through — set on the row, so every cell inherits it — and its gutter number turns `text-danger`. Deletion wins over the selection band, because it is the more consequential fact. It is a predicate for the same reason `isDirty` is one: a call site that pages answers in its own coordinates. |
@@ -39,6 +39,13 @@ which are single-column lists of names, not data.
   — clicking an already selected row does not toggle it off, because a rectangle cannot be split.
 - **`Ctrl`/`Cmd`+`C`** copies every rectangle as tab-separated rows, top to bottom, so rows picked in
   any order still copy in the order they read.
+- **`Ctrl`/`Cmd`+`V` pastes from the live rectangle's top-left** — a line per row, a tab per column —
+  and writes nothing past the rows or columns on screen, so a paste can only overwrite what is
+  already there. The origin is the top-left and not the focus, because a row taken from the gutter
+  focuses its *last* column. `(Null)` comes back as NULL, `parseCell` being the inverse of the
+  `NULL_TEXT` a copy wrote, so a row copied from the gutter pastes back whole and unchanged. One
+  paste, one behaviour: the header menu's own item is the same call with the column's first row as
+  its origin.
 - Anything acting on rows asks `selectedRows`, which answers each touched row once and in order —
   that, not a range, is what `deleteRows` takes.
 - **Double-click a cell, or press `Enter`, to edit it** — but only where the call site passed
@@ -47,11 +54,9 @@ which are single-column lists of names, not data.
 - **Right-clicking a header selects the whole column and opens the grid's own menu**, never the
   WebView's. The menu carries **Copy column** (the column's cells as one line each, the same text a
   `Ctrl`+`C` over that range would write), **Copy field name**, and — only where `onEditCell` was
-  passed — **Paste column**, which takes one clipboard line per row from the top and stops at the
-  last row the grid shows, so a paste never invents rows. `(Null)` pasted back is NULL again, because
-  `parseCell` is the inverse of the `NULL_TEXT` the copy wrote. A call site appends its own items
-  through `columnMenuItems`; today only `TableDataView` does, with **Hide column** and **Show all
-  columns**, because hiding is its state and not the grid's.
+  passed — **Paste**, which is the paste below with the column's first row as its origin. A call site
+  appends its own items through `columnMenuItems`; today only `TableDataView` does, with **Hide
+  column** and **Show all columns**, because hiding is its state and not the grid's.
 - **Columns resize** by dragging the right edge of the header, and **double-clicking that edge fits
   the column** to the widest of its name, its type line and its cells, capped at 520 px and measured
   on a canvas against the `--font-mono` / `--text-sm` tokens. Widths are keyed by column *name*, so
@@ -67,7 +72,8 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
 +  −  │  ✓  ✗  ↻  ■                          … whatever the surface counts …
 ```
 
-- **Add** appends an empty row at the end of the grid; **Delete** marks the selected rows, so both
+- **Add** appends an empty row at the end of the grid **and selects it**, so a paste that follows the
+  add means the new row and not the one that was copied; **Delete** marks the selected rows, so both
   are pending like an edited cell. **Apply** writes every pending change — edits, then inserts, then
   deletions — and reloads; **Discard** drops them all. **Refresh** reloads alone. **Stop** appears
   only where there is something to cancel, which today is a running statement.
@@ -81,6 +87,8 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
   `partial` is also what keeps `Next` alive on the last page: the caller can go and fetch the rest.
 - The bar carries `--surface-footer` rather than `--surface-panel`, so it reads as controls and not
   as the status line that may sit directly below it.
+- **Its buttons refuse focus** (`mousedown` is prevented), so pressing one leaves the keyboard on the
+  grid. Add-then-paste is one gesture, and the keystroke would otherwise land on the button.
 
 `useGridEdits` is the state behind it, and it is the same hook on both surfaces: pending cell
 edits, appended draft rows, and rows marked for deletion, all keyed by row number and therefore all
