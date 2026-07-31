@@ -6,7 +6,11 @@ export function Connect(arg1:string,arg2:string):Promise<app.Session>;
 
 export function DeleteProfile(arg1:string):Promise<void>;
 
+export function DeleteRow(arg1:string,arg2:app.RowDeleteInput):Promise<void>;
+
 export function Disconnect(arg1:string):Promise<void>;
+
+export function InsertRow(arg1:string,arg2:app.RowInsertInput):Promise<void>;
 
 export function ListDatabases(arg1:string):Promise<Array<string>>;
 

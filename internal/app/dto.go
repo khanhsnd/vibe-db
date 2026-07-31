@@ -121,6 +121,26 @@ type CellEditInput struct {
 	Key    map[string]string `json:"key"`
 }
 
+type RowValueInput struct {
+	Column string  `json:"column"`
+	Value  *string `json:"value"`
+}
+
+// RowInsertInput carries only the columns a new row filled in, so an untouched column takes
+// the server's default rather than an explicit NULL. The values are a list rather than a map
+// because Wails' binding generator cannot express a map of nullable values.
+type RowInsertInput struct {
+	Namespace
+	Table  string          `json:"table"`
+	Values []RowValueInput `json:"values"`
+}
+
+type RowDeleteInput struct {
+	Namespace
+	Table string            `json:"table"`
+	Key   map[string]string `json:"key"`
+}
+
 func toProfileDTO(profile domain.ConnectionProfile, hasPassword bool) Profile {
 	return Profile{
 		ID:           profile.ID,
@@ -183,6 +203,27 @@ func (in CellEditInput) toDriver() driver.CellEdit {
 		Table:     in.Table,
 		Column:    in.Column,
 		Value:     in.Value,
+		Key:       in.Key,
+	}
+}
+
+func (in RowInsertInput) toDriver() driver.RowInsert {
+	values := make(map[string]*string, len(in.Values))
+	for _, value := range in.Values {
+		values[value.Column] = value.Value
+	}
+
+	return driver.RowInsert{
+		Namespace: in.Namespace.toDriver(),
+		Table:     in.Table,
+		Values:    values,
+	}
+}
+
+func (in RowDeleteInput) toDriver() driver.RowDelete {
+	return driver.RowDelete{
+		Namespace: in.Namespace.toDriver(),
+		Table:     in.Table,
 		Key:       in.Key,
 	}
 }

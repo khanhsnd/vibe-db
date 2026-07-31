@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, CircleSlash, Terminal } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CircleSlash, Table2, Terminal } from 'lucide-react'
 
 import type { AppError } from '@/bridge/errors'
 import type { QueryResult } from '@/bridge/query'
@@ -7,10 +7,10 @@ import { cn } from '@/lib/cn'
 import { Empty } from '@/shared/ui/Empty'
 import type { QueryRun } from '@/stores/queries'
 
+import { GridFooter } from './GridFooter'
 import { ResultGrid } from './ResultGrid'
-import { ResultToolbar } from './ResultToolbar'
 import type { CellRange } from './resultSet'
-import { useResultEdits } from './useResultEdits'
+import { useGridEdits, type EditSource } from './useGridEdits'
 
 const numbers = new Intl.NumberFormat('en-US')
 
@@ -21,32 +21,22 @@ interface ResultPaneProps {
   run: QueryRun
   sessionId: string | null
   onRefresh: () => void
+  onStop: () => void
 }
 
-export function ResultPane({ run, sessionId, onRefresh }: ResultPaneProps) {
+export function ResultPane({ run, sessionId, onRefresh, onStop }: ResultPaneProps) {
   const [selection, setSelection] = useState<CellRange | null>(null)
   const { running, result, error } = run
 
   const grid = result !== null && result.columns.length > 0 ? result : null
   const editable = grid !== null && grid.table !== '' && sessionId !== null
-  const edits = useResultEdits(grid, sessionId, onRefresh)
+  const edits = useGridEdits(sourceOf(grid), sessionId, onRefresh)
 
   // A selection names a row of the result that produced it, so it does not survive a new one.
   useEffect(() => setSelection(null), [grid])
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
-      <ResultToolbar
-        label={label(grid, editable)}
-        editable={editable}
-        selected={grid !== null && selection !== null}
-        dirty={edits.dirty.size > 0}
-        busy={edits.saving || running}
-        onDiscard={edits.discard}
-        onApply={() => void edits.apply()}
-        onRefresh={onRefresh}
-      />
-
       <div className="min-h-0 flex-1">
         {error !== null ? (
           <ErrorPanel error={error} />
@@ -56,7 +46,8 @@ export function ResultPane({ run, sessionId, onRefresh }: ResultPaneProps) {
             selection={selection}
             onSelectionChange={setSelection}
             onEditCell={editable ? edits.setCell : undefined}
-            dirty={edits.dirty}
+            isDirty={edits.isDirty}
+            deleted={edits.deleted}
           />
         ) : result !== null ? (
           <SuccessPanel rowsAffected={result.rowsAffected} />
@@ -74,8 +65,42 @@ export function ResultPane({ run, sessionId, onRefresh }: ResultPaneProps) {
           {edits.error.message}
         </p>
       ) : null}
+
+      <GridFooter
+        editable={editable}
+        selected={selection !== null}
+        pending={edits.pending}
+        busy={edits.saving || running}
+        onAddRow={edits.addRow}
+        onDeleteRow={() => edits.deleteRows(selection)}
+        onApply={() => void edits.apply()}
+        onDiscard={edits.discard}
+        onRefresh={onRefresh}
+        onStop={onStop}
+        running={running}
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Table2 size={12} className="shrink-0 text-faint" />
+          <span className="truncate font-mono">{label(grid, editable)}</span>
+        </span>
+      </GridFooter>
     </div>
   )
+}
+
+/**
+ * Every result's rows go through the hook, read-only ones included, because the grid shows
+ * what the hook returns. `table` is empty for a result the backend could not trace, and it is
+ * `editable` — not this — that keeps a write off it.
+ */
+function sourceOf(grid: QueryResult | null): EditSource | null {
+  if (grid === null) return null
+
+  return {
+    target: { database: grid.database, schema: grid.schema, table: grid.table },
+    columns: grid.columns,
+    rows: grid.rows,
+  }
 }
 
 function label(grid: QueryResult | null, editable: boolean): string {

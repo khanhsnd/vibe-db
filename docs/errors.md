@@ -36,7 +36,7 @@ layer, and the three transport rows are mapped once in `sqlkit.TransportError`.
 
 | Code | Cause |
 |---|---|
-| `TABLE_NOT_EDITABLE` | Cell edit attempted on a table with no primary key |
+| `TABLE_NOT_EDITABLE` | Cell edit or row delete attempted on a table with no primary key, or with only part of one supplied — `sqlkit.EditableKeys` refuses both |
 | `EMPTY_STATEMENT` | Run requested with nothing but whitespace or semicolons |
 | `HOST_UNREACHABLE` | Dial failed (refused / no route) |
 | `TIMEOUT` | Dial or context deadline exceeded |

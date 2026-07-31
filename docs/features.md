@@ -2,8 +2,9 @@
 
 Working: connection profiles (create / edit / delete) for **MySQL and PostgreSQL**, Test Connection
 with server version and latency, connect / disconnect, database listing, table listing per database,
-table data browsing with pagination and single-cell editing, query tabs with completion, passwords
-in Windows Credential Manager, and the full layout shell with dark and light themes.
+table data browsing with pagination, cell editing plus row insert and delete on any grid whose rows
+can be traced to one table, query tabs with completion, passwords in Windows Credential Manager, and
+the full layout shell with dark and light themes.
 
 Not there yet: schema browsing stops at tables — views, procedures and functions are not listed.
 One Execute runs one statement; a pasted multi-statement script is rejected by the server, since
@@ -50,14 +51,18 @@ beside it on PostgreSQL. Changing the database clears the schema, since a schema
 names nothing in another.
 
 **Double-clicking** a table opens a data tab; a single click only selects it, and reads nothing from
-the server. A tab loads 100 rows per page by default, ordered by primary key so paging is stable. The pager's `Rows` control sizes the page and can lift the bound entirely — see
-[the row limit](#the-row-limit). Above the grid sit two independent toggles, since they occupy
+the server. A tab loads 100 rows per page by default, ordered by primary key so paging is stable.
+**Paging lives on the right of the bar under the grid**, beside the `Rows` control that sizes it and
+can lift the bound entirely — see [the row limit](#the-row-limit). The left of that bar is where rows
+are added, deleted, applied and discarded: it is the same `GridFooter` every grid has, and
+[grid.md](grid.md) specifies it. Above the grid sit two independent toggles, since they occupy
 different edges:
 
-- **`Cell Editor`** opens a panel under the grid for the selected cell. Discard reverts the draft,
-  Apply issues `UPDATE … WHERE <primary key>` and reloads, Refresh reloads. A table with no primary
-  key is read-only, because no single row can be identified. MySQL adds a `LIMIT 1` belt to the
-  braces; PostgreSQL has no such clause and does not need one, since the key already names one row.
+- **`Cell Editor`** opens a panel under the grid for the selected cell. Discard reverts the draft and
+  Apply stages the value on the cell, exactly as double-clicking it in the grid does — the footer's
+  ✓ is what writes `UPDATE … WHERE <primary key>` and reloads. A table with no primary key is
+  read-only, because no single row can be identified. MySQL adds a `LIMIT 1` belt to the braces;
+  PostgreSQL has no such clause and does not need one, since the key already names one row.
 - **`Column`** opens a checkbox list to the left of the grid that picks which columns show.
   Unchecking the last visible column is blocked, so the grid can never go blank. Selection is
   cleared on a change, because the cell coordinates the grid reports are positions among the
@@ -120,14 +125,15 @@ The panel under the editor is a tab strip whose only pane so far is **`Result`**
 messages, a query plan, history — is one more entry in the list `QueryOutput` hands `ResultTabs`.
 The run status strip stays below the strip, because it describes the run rather than any one pane.
 
-Inside the pane sits a toolbar naming what is on screen, and the buttons that write it back:
+Under the pane sits the same `GridFooter` the table view has, with the source of the rows named on
+its right — the qualified table, or why the result is read-only:
 
-- **Selecting a row reveals `Discard`, `Apply` and `Refresh`.** They are hidden until then, since
-  none of them has a subject without one.
+- **The editing icons show only for a writable result.** For one that no `UPDATE` can name they are
+  not there at all; `Refresh` and `Stop` remain.
 - **Double-click a cell to edit it** (or press `Enter` on the selected cell). `Esc` abandons the
   input. Edits are held locally and marked in the grid, so a mistyped value costs nothing.
-- `Discard` drops the pending edits, `Apply` writes each one with the same
-  `UPDATE … WHERE <primary key>` the table view uses and reloads, `Refresh` reloads alone.
+- ✗ drops every pending change, ✓ writes them — edits with the same `UPDATE … WHERE <primary key>`
+  the table view uses, then inserts, then deletions — and reloads. ↻ reloads alone.
 - **`Refresh` and `Apply` replay the statement that produced the rows**, not whatever the editor
   holds now, so editing the SQL after a run cannot make Apply execute something else.
 
@@ -138,7 +144,7 @@ A result is writable only when the driver can trace its rows to one stored row e
 `ORDER BY`, `LIMIT` or `OFFSET` after it, and rejects joins, unions, `GROUP BY`, `DISTINCT`, derived
 tables and `EXPLAIN`. The named table is then looked up in the catalogue, and the result stays
 read-only unless it carries every primary-key column exactly once — an aliased or repeated key
-column names no row. The toolbar says which case applies. This is needed because `database/sql`
+column names no row. The footer says which case applies. This is needed because `database/sql`
 reports a column's type but not the table it came from, so the source cannot be read off the wire.
 
 One `Dialect` field decides how a quoted name is read, so `` `shop`.`users` `` is a table on MySQL

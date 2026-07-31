@@ -136,7 +136,12 @@ export function QueryWorkspace({
         <SplitHandle orientation="vertical" />
 
         <SplitPanel id="output" defaultSize="62%" minSize="20%">
-          <QueryOutput run={run} sessionId={sessionId} onRefresh={refresh} />
+          <QueryOutput
+            run={run}
+            sessionId={sessionId}
+            onRefresh={refresh}
+            onStop={() => cancel(tab.id)}
+          />
         </SplitPanel>
       </Split>
     </div>

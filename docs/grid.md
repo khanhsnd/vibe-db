@@ -20,7 +20,8 @@ which are single-column lists of names, not data.
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
 | Selection | Three depths: every row the selection touches gets a soft band (`--grid-row-selected`) and an accent bar down its gutter, cells inside the rectangle get a stronger fill (`--grid-cell-selected`), and the **focus** cell — the one the pointer last landed on — is solid `--accent` with `--fg-on-accent` text. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
 | Hover | A row highlight, applied *only* to rows outside the selection. Both are background colours, so a selected row must not also carry `hover:bg-hover` or the tint flickers away under the pointer. |
-| Pending edit | A warning-coloured inset ring plus warning text, from the `dirty` set. |
+| Pending edit | A warning-coloured inset ring plus warning text, from `isDirty`. It is a predicate rather than a set of keys so a call site that hides columns can answer in its own coordinates. Every cell of a row that is not on the server yet is pending, so a new row is ringed whole. |
+| Row for deletion | A row named by the `deleted` set is banded in `--grid-row-deleted` and struck through — set on the row, so every cell inherits it — and its gutter number turns `text-danger`. Deletion wins over the selection band, because it is the more consequential fact. |
 
 ## How it behaves
 
@@ -43,6 +44,31 @@ which are single-column lists of names, not data.
 - **The grid keeps its own selection when uncontrolled.** Pass `selection` +
   `onSelectionChange` only when something outside needs the focused cell.
 
+## The bar under it
+
+Every grid sits above one `GridFooter`, which is where a row is *acted on* rather than read:
+
+```
++  −  │  ✓  ✗  ↻  ■                          … whatever the surface counts …
+```
+
+- **Add** appends an empty row at the end of the grid; **Delete** marks the selected rows, so both
+  are pending like an edited cell. **Apply** writes every pending change — edits, then inserts, then
+  deletions — and reloads; **Discard** drops them all. **Refresh** reloads alone. **Stop** appears
+  only where there is something to cancel, which today is a running statement.
+- **The four editing icons are hidden outright when the rows cannot be written back**, rather than
+  shown disabled: a result that no `UPDATE` can name has no use for them. `Refresh` always shows.
+- Delete is the only one that needs a selection; Apply and Discard need something pending.
+- The right-hand side is the caller's: the table view hands it `TablePager` (arrows, the
+  offset window, the page count and the `Rows` size), and a query result hands it the source label.
+- The bar carries `--surface-footer` rather than `--surface-panel`, so it reads as controls and not
+  as the status line that may sit directly below it.
+
+`useGridEdits` is the state behind it, and it is the same hook on both surfaces: pending cell
+edits, appended draft rows, and rows marked for deletion, all keyed by row number and therefore all
+dropped when a fresh read lands. An insert carries **only the cells that were filled in**, so a
+column left alone takes the server's own default rather than an explicit NULL.
+
 ## When you add to it
 
 1. New colour goes in `shared/theme/tokens.css` as a `--grid-*` token with a light-theme override
@@ -54,10 +80,11 @@ which are single-column lists of names, not data.
 
 ## Where the two call sites legitimately differ
 
-Only in what an edit *means*, never in how the grid looks or reads:
+Not in what an edit means — `useGridEdits` and `GridFooter` make that identical — only in what
+surrounds the grid:
 
-- `ResultPane` holds edits locally in `useResultEdits` and marks them `dirty` until **Apply** writes
-  them, because a query result is a snapshot the user may be poking at.
-- `TableDataView` writes each edit at once through `useTableData.updateCell` and reloads, matching
-  its Cell Editor panel. It also maps the grid's *visible* column index back to the real one, since
-  the column picker can hide columns.
+- `ResultPane` names its target from the result the backend traced (`database` / `schema` / `table`,
+  all empty for a result no `UPDATE` can name), and its footer can also **Stop** the run.
+- `TableDataView` pages, and can hide columns, so it maps the grid's *visible* column index back to
+  the real one on the way in — for edits and for `isDirty` alike. Its Cell Editor panel stages a
+  value on the focused cell exactly as the grid's own inline editor does; the footer still commits.

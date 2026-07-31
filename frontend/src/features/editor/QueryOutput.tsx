@@ -11,14 +11,17 @@ interface QueryOutputProps {
   run: QueryRun
   sessionId: string | null
   onRefresh: () => void
+  onStop: () => void
 }
 
-export function QueryOutput({ run, sessionId, onRefresh }: QueryOutputProps) {
+export function QueryOutput({ run, sessionId, onRefresh, onStop }: QueryOutputProps) {
   const panes = [
     {
       id: 'result',
       label: 'Result',
-      content: <ResultPane run={run} sessionId={sessionId} onRefresh={onRefresh} />,
+      content: (
+        <ResultPane run={run} sessionId={sessionId} onRefresh={onRefresh} onStop={onStop} />
+      ),
     },
   ]
 

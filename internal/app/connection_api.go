@@ -216,6 +216,20 @@ func (a *ConnectionAPI) UpdateCell(sessionID string, edit CellEditInput) error {
 	return wrapError(a.sessions.UpdateCell(ctx, sessionID, edit.toDriver()))
 }
 
+func (a *ConnectionAPI) InsertRow(sessionID string, insert RowInsertInput) error {
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	return wrapError(a.sessions.InsertRow(ctx, sessionID, insert.toDriver()))
+}
+
+func (a *ConnectionAPI) DeleteRow(sessionID string, removal RowDeleteInput) error {
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	return wrapError(a.sessions.DeleteRow(ctx, sessionID, removal.toDriver()))
+}
+
 func (a *ConnectionAPI) resolveCredentials(
 	target domain.ConnectionProfile,
 	password string,

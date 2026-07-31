@@ -1,6 +1,8 @@
 :root {
   --surface-canvas: #0f1115;
   --surface-panel: #15181e;
+  /** The action bar under a grid, a shade off panel so the two bars do not read as one. */
+  --surface-footer: #1b2028;
   --surface-elevated: #1c2027;
   --surface-hover: #232830;
   --surface-active: #2a303a;
@@ -13,6 +15,7 @@
 
   --grid-row-selected: #1a2740;
   --grid-cell-selected: #274468;
+  --grid-row-deleted: #3a1d1c;
 
   --fg: #e8ebf0;
   --fg-muted: #9ba5b4;
@@ -41,6 +44,7 @@
 :root[data-theme='light'] {
   --surface-canvas: #ffffff;
   --surface-panel: #f7f8fa;
+  --surface-footer: #eceef2;
   --surface-elevated: #ffffff;
   --surface-hover: #eff1f5;
   --surface-active: #e4e7ec;
@@ -53,6 +57,7 @@
 
   --grid-row-selected: #dbe9fc;
   --grid-cell-selected: #bfd8f8;
+  --grid-row-deleted: #ffe3e1;
 
   --fg: #16191f;
   --fg-muted: #545c67;
@@ -81,6 +86,7 @@
 @theme inline {
   --color-canvas: var(--surface-canvas);
   --color-panel: var(--surface-panel);
+  --color-footer: var(--surface-footer);
   --color-elevated: var(--surface-elevated);
   --color-hover: var(--surface-hover);
   --color-active: var(--surface-active);
@@ -91,6 +97,7 @@
 
   --color-grid-row-selected: var(--grid-row-selected);
   --color-grid-cell-selected: var(--grid-cell-selected);
+  --color-grid-row-deleted: var(--grid-row-deleted);
   --color-null: var(--syn-null);
 
   --color-fg: var(--fg);

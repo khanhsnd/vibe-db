@@ -91,3 +91,66 @@ func TestBuildUpdateBindsValueThenKeysInOrder(t *testing.T) {
 		t.Error("key args must follow the primary-key column order, not map order")
 	}
 }
+
+func TestBuildInsertNamesOnlyFilledColumnsInTableOrder(t *testing.T) {
+	columns := []driver.Column{
+		{Name: "id", PrimaryKey: true},
+		{Name: "email"},
+		{Name: "created_at"},
+	}
+	value := "a@b.c"
+	insert := driver.RowInsert{
+		Namespace: driver.Namespace{Database: "shop"},
+		Table:     "users",
+		Values:    map[string]*string{"email": &value, "id": nil},
+	}
+
+	query, args := buildInsert(insert, columns)
+
+	want := "INSERT INTO `shop`.`users` (`id`, `email`) VALUES (?, ?)"
+	if query != want {
+		t.Errorf("query =\n%s\nwant\n%s", query, want)
+	}
+	if len(args) != 2 {
+		t.Fatalf("len(args) = %d, want 2: created_at was never filled in", len(args))
+	}
+	if args[0] != (*string)(nil) || args[1] != &value {
+		t.Error("insert args must follow the table's column order, not map order")
+	}
+}
+
+func TestBuildInsertWithNothingFilledInTakesEveryDefault(t *testing.T) {
+	columns := []driver.Column{{Name: "id", PrimaryKey: true}}
+	insert := driver.RowInsert{
+		Namespace: driver.Namespace{Database: "shop"},
+		Table:     "users",
+	}
+
+	query, args := buildInsert(insert, columns)
+
+	want := "INSERT INTO `shop`.`users` () VALUES ()"
+	if query != want {
+		t.Errorf("query =\n%s\nwant\n%s", query, want)
+	}
+	if args != nil {
+		t.Errorf("args = %v, want none", args)
+	}
+}
+
+func TestBuildDeletePinsEveryKeyColumn(t *testing.T) {
+	removal := driver.RowDelete{
+		Namespace: driver.Namespace{Database: "shop"},
+		Table:     "order_items",
+		Key:       map[string]string{"order_id": "7", "sku": "A-1"},
+	}
+
+	query, args := buildDelete(removal, []string{"order_id", "sku"})
+
+	want := "DELETE FROM `shop`.`order_items` WHERE `order_id` = ? AND `sku` = ? LIMIT 1"
+	if query != want {
+		t.Errorf("query =\n%s\nwant\n%s", query, want)
+	}
+	if len(args) != 2 || args[0] != "7" || args[1] != "A-1" {
+		t.Errorf("args = %v, want [7 A-1] in primary-key column order", args)
+	}
+}

@@ -1,6 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
-import type { AppError } from '@/bridge/errors'
 import { ALL_ROWS, DEFAULT_PAGE_SIZE, PAGE_SIZES } from '@/bridge/rows'
 import { IconButton } from '@/shared/ui/IconButton'
 import { RowLimit } from '@/shared/ui/RowLimit'
@@ -12,17 +11,16 @@ interface TablePagerProps {
   limit: number
   total: number
   loading: boolean
-  error: AppError | null
   onPageChange: (page: number) => void
   onLimitChange: (limit: number) => void
 }
 
+/** The right-hand side of the grid footer: where in the walk we are, and how big a step is. */
 export function TablePager({
   page,
   limit,
   total,
   loading,
-  error,
   onPageChange,
   onLimitChange,
 }: TablePagerProps) {
@@ -33,7 +31,9 @@ export function TablePager({
   const last = Math.min(total, (page + 1) * size)
 
   return (
-    <div className="flex h-8 shrink-0 items-center gap-2 border-t border-line bg-panel px-2 text-xs text-muted">
+    <div className="flex shrink-0 items-center gap-2">
+      {loading ? <span className="text-faint">Loading…</span> : null}
+
       <IconButton
         label="Previous page"
         icon={<ChevronLeft size={14} />}
@@ -47,19 +47,13 @@ export function TablePager({
         onClick={() => onPageChange(page + 1)}
       />
 
-      <span className="shrink-0 font-mono">
+      <span className="font-mono">
         {numbers.format(first)}–{numbers.format(last)} of {numbers.format(total)}
       </span>
       <span className="text-faint">·</span>
-      <span className="shrink-0">
+      <span>
         Page {numbers.format(page + 1)} of {numbers.format(pageCount)}
       </span>
-
-      {loading ? <span className="shrink-0 text-faint">Loading…</span> : null}
-
-      <div className="min-w-2 flex-1" />
-
-      {error ? <span className="truncate text-danger">{error.message}</span> : null}
 
       <RowLimit
         label="Rows"

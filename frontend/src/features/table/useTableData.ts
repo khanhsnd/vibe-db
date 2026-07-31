@@ -3,8 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { ALL_ROWS, DEFAULT_PAGE_SIZE } from '@/bridge/rows'
-import { tables, type Cell, type TablePage } from '@/bridge/tables'
-import { primaryKeyOf, type CellRef } from '@/features/results/resultSet'
+import { tables, type TablePage } from '@/bridge/tables'
 
 export function useTableData(sessionId: string, namespace: Namespace, table: string) {
   const { database, schema } = namespace
@@ -14,7 +13,6 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
   const [nonce, setNonce] = useState(0)
   const [data, setData] = useState<TablePage | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<AppError | null>(null)
 
   useEffect(() => {
@@ -55,32 +53,5 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
     setPage(0)
   }, [])
 
-  const updateCell = useCallback(
-    async (ref: CellRef, value: Cell) => {
-      const column = data?.columns[ref.column]
-      const row = data?.rows[ref.row]
-      if (!column || !row) return
-
-      setSaving(true)
-      try {
-        await tables.updateCell(sessionId, {
-          database,
-          schema,
-          table,
-          column: column.name,
-          value,
-          key: primaryKeyOf(data.columns, row),
-        })
-        setError(null)
-        refresh()
-      } catch (thrown) {
-        setError(toAppError(thrown))
-      } finally {
-        setSaving(false)
-      }
-    },
-    [data, sessionId, database, schema, table, refresh],
-  )
-
-  return { data, loading, saving, error, page, limit, goToPage, changeLimit, refresh, updateCell }
+  return { data, loading, error, page, limit, goToPage, changeLimit, refresh }
 }

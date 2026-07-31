@@ -8,18 +8,11 @@ interface CellEditorProps {
   value: Cell
   editable: boolean
   busy: boolean
+  /** Stages the value on the cell, exactly as the grid's own editor does. */
   onApply: (value: Cell) => void
-  onRefresh: () => void
 }
 
-export function CellEditor({
-  column,
-  value,
-  editable,
-  busy,
-  onApply,
-  onRefresh,
-}: CellEditorProps) {
+export function CellEditor({ column, value, editable, busy, onApply }: CellEditorProps) {
   const [draft, setDraft] = useState(value ?? '')
   const [isNull, setIsNull] = useState(value === null)
 
@@ -66,9 +59,6 @@ export function CellEditor({
           disabled={!dirty || !editable || busy}
         >
           Apply
-        </Button>
-        <Button variant="subtle" onClick={onRefresh} disabled={busy}>
-          Refresh
         </Button>
       </div>
 

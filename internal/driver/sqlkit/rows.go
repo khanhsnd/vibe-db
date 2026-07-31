@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"strings"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 )
 
@@ -152,6 +153,22 @@ func PrimaryKeyNames(columns []driver.Column) []string {
 		}
 	}
 	return names
+}
+
+// EditableKeys returns the primary-key columns a write must pin its WHERE clause to, and
+// refuses the write unless the caller carried a value for every one of them: a table with
+// no key, or a key only partly supplied, names no single stored row.
+func EditableKeys(columns []driver.Column, key map[string]string) ([]string, error) {
+	keys := PrimaryKeyNames(columns)
+	if len(keys) == 0 {
+		return nil, domain.ErrTableNotEditable
+	}
+	for _, name := range keys {
+		if _, ok := key[name]; !ok {
+			return nil, domain.ErrTableNotEditable
+		}
+	}
+	return keys, nil
 }
 
 // AppendColumn folds the flat (table, column) rows of a schema read into one entry per

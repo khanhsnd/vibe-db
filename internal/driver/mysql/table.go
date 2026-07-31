@@ -39,17 +39,43 @@ func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 		return err
 	}
 
-	keys := sqlkit.PrimaryKeyNames(columns)
-	if len(keys) == 0 {
-		return domain.ErrTableNotEditable
-	}
-	for _, key := range keys {
-		if _, ok := edit.Key[key]; !ok {
-			return domain.ErrTableNotEditable
-		}
+	keys, err := sqlkit.EditableKeys(columns, edit.Key)
+	if err != nil {
+		return err
 	}
 
 	query, args := buildUpdate(edit, keys)
+	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+		return translateError(err)
+	}
+	return nil
+}
+
+func (s *session) InsertRow(ctx context.Context, insert driver.RowInsert) error {
+	columns, err := s.columns(ctx, insert.Namespace, insert.Table)
+	if err != nil {
+		return err
+	}
+
+	query, args := buildInsert(insert, columns)
+	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
+		return translateError(err)
+	}
+	return nil
+}
+
+func (s *session) DeleteRow(ctx context.Context, removal driver.RowDelete) error {
+	columns, err := s.columns(ctx, removal.Namespace, removal.Table)
+	if err != nil {
+		return err
+	}
+
+	keys, err := sqlkit.EditableKeys(columns, removal.Key)
+	if err != nil {
+		return err
+	}
+
+	query, args := buildDelete(removal, keys)
 	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
 		return translateError(err)
 	}
@@ -147,6 +173,50 @@ func buildUpdate(edit driver.CellEdit, keys []string) (string, []any) {
 
 	query := "UPDATE " + dialect.Qualify(edit.Database, edit.Table) +
 		" SET " + dialect.QuoteIdent(edit.Column) + " = ?" +
+		" WHERE " + strings.Join(conditions, " AND ") +
+		" LIMIT 1"
+
+	return query, args
+}
+
+// buildInsert names only the columns the new row carried, so an untouched column takes its
+// server-side default. The column order is the table's own rather than the map's, which is
+// unordered. A row that filled in nothing is MySQL's empty-column form.
+func buildInsert(insert driver.RowInsert, columns []driver.Column) (string, []any) {
+	names := make([]string, 0, len(insert.Values))
+	holders := make([]string, 0, len(insert.Values))
+	args := make([]any, 0, len(insert.Values))
+
+	for _, column := range columns {
+		value, ok := insert.Values[column.Name]
+		if !ok {
+			continue
+		}
+		names = append(names, dialect.QuoteIdent(column.Name))
+		holders = append(holders, "?")
+		args = append(args, value)
+	}
+
+	target := dialect.Qualify(insert.Database, insert.Table)
+	if len(names) == 0 {
+		return "INSERT INTO " + target + " () VALUES ()", nil
+	}
+
+	return "INSERT INTO " + target +
+		" (" + strings.Join(names, ", ") + ")" +
+		" VALUES (" + strings.Join(holders, ", ") + ")", args
+}
+
+func buildDelete(removal driver.RowDelete, keys []string) (string, []any) {
+	conditions := make([]string, len(keys))
+	args := make([]any, 0, len(keys))
+
+	for i, key := range keys {
+		conditions[i] = dialect.QuoteIdent(key) + " = ?"
+		args = append(args, removal.Key[key])
+	}
+
+	query := "DELETE FROM " + dialect.Qualify(removal.Database, removal.Table) +
 		" WHERE " + strings.Join(conditions, " AND ") +
 		" LIMIT 1"
 

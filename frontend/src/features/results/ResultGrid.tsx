@@ -16,7 +16,6 @@ import { ColumnTypeIcon, isNumeric } from './columnType'
 import { gridFont, widestText } from './measureText'
 import {
   boundsOf,
-  cellKey,
   cellText,
   toTSV,
   type Cell,
@@ -37,7 +36,8 @@ const TYPE_ICON_WIDTH = 17
 /** Pixels scrolled per frame while a drag is held past an edge of the viewport. */
 const EDGE_STEP = 14
 
-const NOTHING_DIRTY: ReadonlySet<string> = new Set()
+const NOTHING_DIRTY = () => false
+const NOTHING_DELETED: ReadonlySet<number> = new Set()
 
 /** Where a drag started, so extending it never depends on the render that began it. */
 interface Drag {
@@ -58,8 +58,13 @@ interface ResultGridProps {
   onSelectionChange?: (selection: CellRange) => void
   /** Supplied only for a writable result; its absence keeps the grid read-only. */
   onEditCell?: ((ref: CellRef, value: Cell) => void) | undefined
-  /** Cells carrying an unapplied edit, keyed by `cellKey`. */
-  dirty?: ReadonlySet<string>
+  /**
+   * Whether a cell carries an unapplied edit. A predicate rather than a set of keys, so a
+   * call site that hides columns can answer in its own coordinates without rebuilding one.
+   */
+  isDirty?: (row: number, column: number) => boolean
+  /** Rows marked for deletion but not yet written back, by row index. */
+  deleted?: ReadonlySet<number>
 }
 
 export function ResultGrid({
@@ -67,7 +72,8 @@ export function ResultGrid({
   selection,
   onSelectionChange,
   onEditCell,
-  dirty = NOTHING_DIRTY,
+  isDirty = NOTHING_DIRTY,
+  deleted = NOTHING_DELETED,
 }: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -244,13 +250,20 @@ export function ResultGrid({
 
             const banded =
               bounds !== null && item.index >= bounds.rowStart && item.index <= bounds.rowEnd
+            // A row on its way out reads as struck through whatever the selection says,
+            // because the strike is inherited by every cell below it.
+            const removed = deleted.has(item.index)
 
             return (
               <div
                 key={item.key}
                 className={cn(
                   'absolute top-0 left-0 flex w-full border-b border-line/60',
-                  banded ? 'bg-grid-row-selected' : 'hover:bg-hover',
+                  removed
+                    ? 'bg-grid-row-deleted line-through'
+                    : banded
+                      ? 'bg-grid-row-selected'
+                      : 'hover:bg-hover',
                 )}
                 style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
               >
@@ -258,9 +271,11 @@ export function ResultGrid({
                   data-gutter=""
                   className={cn(
                     'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
-                    banded
-                      ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
-                      : 'bg-panel text-faint',
+                    removed
+                      ? 'bg-grid-row-deleted text-danger'
+                      : banded
+                        ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
+                        : 'bg-panel text-faint',
                   )}
                   style={{ width: GUTTER_WIDTH }}
                 >
@@ -293,7 +308,7 @@ export function ResultGrid({
                       width={width}
                       inRange={within(bounds, item.index, i)}
                       focused={current?.focus.row === item.index && current.focus.column === i}
-                      edited={dirty.has(cellKey(item.index, i))}
+                      edited={isDirty(item.index, i)}
                     />
                   )
                 })}

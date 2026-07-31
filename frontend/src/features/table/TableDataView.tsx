@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 
 import type { Namespace } from '@/bridge/connections'
-import type { Cell } from '@/bridge/tables'
+import type { TablePage } from '@/bridge/tables'
+import { GridFooter } from '@/features/results/GridFooter'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import type { CellRange, CellRef } from '@/features/results/resultSet'
+import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
 import { Empty } from '@/shared/ui/Empty'
 
 import { CellEditor } from './CellEditor'
@@ -22,16 +24,19 @@ interface TableDataViewProps {
 }
 
 export function TableDataView({ sessionId, namespace, table }: TableDataViewProps) {
-  const { data, loading, saving, error, page, limit, goToPage, changeLimit, refresh, updateCell } =
-    useTableData(sessionId, namespace, table)
+  const { data, loading, error, page, limit, goToPage, changeLimit, refresh } = useTableData(
+    sessionId,
+    namespace,
+    table,
+  )
 
   const [panels, setPanels] = useState<ReadonlySet<PanelKind>>(new Set())
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
   const [selection, setSelection] = useState<CellRange | null>(null)
 
   const columns = data?.columns ?? []
-  const rows = data?.rows ?? []
   const editable = columns.some((column) => column.primaryKey)
+  const edits = useGridEdits(sourceOf(data, namespace, table), sessionId, refresh)
 
   const visible = useMemo(
     () => columns.flatMap((column, index) => (hidden.has(column.name) ? [] : [{ column, index }])),
@@ -41,16 +46,16 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
   const grid = useMemo(
     () => ({
       columns: visible.map((entry) => entry.column),
-      rows: rows.map((row) => visible.map((entry) => row[entry.index] ?? null)),
+      rows: edits.rows.map((row) => visible.map((entry) => row[entry.index] ?? null)),
     }),
-    [rows, visible],
+    [edits.rows, visible],
   )
 
   const target = useMemo(() => {
     if (!selection) return null
 
     const entry = visible[selection.focus.column]
-    const row = rows[selection.focus.row]
+    const row = edits.rows[selection.focus.row]
     if (!entry || !row) return null
 
     return {
@@ -58,13 +63,10 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
       column: entry.column,
       value: row[entry.index] ?? null,
     }
-  }, [selection, visible, rows])
+  }, [selection, visible, edits.rows])
 
   /** The grid reports positions among the visible columns, which map back to real indexes. */
-  const editCell = (ref: CellRef, value: Cell) => {
-    const entry = visible[ref.column]
-    if (entry) void updateCell({ row: ref.row, column: entry.index }, value)
-  }
+  const realColumn = (column: number) => visible[column]?.index ?? -1
 
   const togglePanel = (kind: PanelKind) =>
     setPanels((current) => {
@@ -94,6 +96,8 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
     changeLimit(next)
   }
 
+  const failure = edits.error ?? (data ? error : null)
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
       <TableToolbar active={panels} onToggle={togglePanel} />
@@ -113,7 +117,14 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
               result={grid}
               selection={selection}
               onSelectionChange={setSelection}
-              onEditCell={editable ? editCell : undefined}
+              onEditCell={
+                editable
+                  ? (ref: CellRef, value) =>
+                      edits.setCell({ row: ref.row, column: realColumn(ref.column) }, value)
+                  : undefined
+              }
+              isDirty={(row, column) => edits.isDirty(row, realColumn(column))}
+              deleted={edits.deleted}
             />
           )}
         </div>
@@ -129,23 +140,49 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
               column={target.column}
               value={target.value}
               editable={editable}
-              busy={saving}
-              onApply={(value) => void updateCell(target.ref, value)}
-              onRefresh={refresh}
+              busy={edits.saving}
+              onApply={(value) => edits.setCell(target.ref, value)}
             />
           )}
         </div>
       ) : null}
 
-      <TablePager
-        page={page}
-        limit={limit}
-        total={data?.total ?? 0}
-        loading={loading}
-        error={data ? error : null}
-        onPageChange={changePage}
-        onLimitChange={changePageSize}
-      />
+      {failure !== null ? (
+        <p className="shrink-0 truncate border-t border-danger/40 bg-danger-subtle px-2 py-1 text-xs text-danger">
+          {failure.message}
+        </p>
+      ) : null}
+
+      <GridFooter
+        editable={editable}
+        selected={selection !== null}
+        pending={edits.pending}
+        busy={edits.saving || loading}
+        onAddRow={edits.addRow}
+        onDeleteRow={() => edits.deleteRows(selection)}
+        onApply={() => void edits.apply()}
+        onDiscard={edits.discard}
+        onRefresh={refresh}
+      >
+        <TablePager
+          page={page}
+          limit={limit}
+          total={data?.total ?? 0}
+          loading={loading}
+          onPageChange={changePage}
+          onLimitChange={changePageSize}
+        />
+      </GridFooter>
     </div>
   )
+}
+
+function sourceOf(data: TablePage | null, namespace: Namespace, table: string): EditSource | null {
+  if (data === null) return null
+
+  return {
+    target: { database: namespace.database, schema: namespace.schema, table },
+    columns: data.columns,
+    rows: data.rows,
+  }
 }

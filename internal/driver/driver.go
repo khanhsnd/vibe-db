@@ -79,6 +79,21 @@ type CellEdit struct {
 	Key    map[string]string
 }
 
+// RowInsert carries only the columns a new row actually filled in, so a column left alone
+// takes the server's own default instead of an explicit NULL.
+type RowInsert struct {
+	Namespace
+	Table  string
+	Values map[string]*string
+}
+
+// RowDelete names one stored row the way CellEdit does, by its primary key.
+type RowDelete struct {
+	Namespace
+	Table string
+	Key   map[string]string
+}
+
 type Driver interface {
 	Engine() domain.Engine
 	Open(ctx context.Context, profile domain.ConnectionProfile, creds Credentials) (Session, error)
@@ -96,6 +111,8 @@ type Session interface {
 	TableSchemas(ctx context.Context, ns Namespace) ([]TableSchema, error)
 	TableRows(ctx context.Context, page TablePage) (TableRows, error)
 	UpdateCell(ctx context.Context, edit CellEdit) error
+	InsertRow(ctx context.Context, insert RowInsert) error
+	DeleteRow(ctx context.Context, removal RowDelete) error
 	Query(ctx context.Context, query Query) (QueryResult, error)
 	Close() error
 }

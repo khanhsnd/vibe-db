@@ -10,8 +10,16 @@ export function DeleteProfile(arg1) {
   return window['go']['app']['ConnectionAPI']['DeleteProfile'](arg1);
 }
 
+export function DeleteRow(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['DeleteRow'](arg1, arg2);
+}
+
 export function Disconnect(arg1) {
   return window['go']['app']['ConnectionAPI']['Disconnect'](arg1);
+}
+
+export function InsertRow(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['InsertRow'](arg1, arg2);
 }
 
 export function ListDatabases(arg1) {

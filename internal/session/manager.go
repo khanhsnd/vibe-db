@@ -183,6 +183,22 @@ func (m *Manager) UpdateCell(ctx context.Context, id string, edit driver.CellEdi
 	return s.driverSession.UpdateCell(ctx, edit)
 }
 
+func (m *Manager) InsertRow(ctx context.Context, id string, insert driver.RowInsert) error {
+	s, err := m.Get(id)
+	if err != nil {
+		return err
+	}
+	return s.driverSession.InsertRow(ctx, insert)
+}
+
+func (m *Manager) DeleteRow(ctx context.Context, id string, removal driver.RowDelete) error {
+	s, err := m.Get(id)
+	if err != nil {
+		return err
+	}
+	return s.driverSession.DeleteRow(ctx, removal)
+}
+
 func newID() (string, error) {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {
