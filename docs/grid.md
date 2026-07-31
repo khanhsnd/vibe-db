@@ -14,7 +14,7 @@ which are single-column lists of names, not data.
 
 | Part | Rule |
 |---|---|
-| Header | Two lines, 40 px: the column **name** in bold mono on top, its **type** below in muted 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx`. Never uppercased — the server's own casing stands. |
+| Header | Two lines, 40 px: the column **name** in bold mono on top, its **type** below in muted 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx`. Never uppercased — the server's own casing stands. On the right of every header sits the **`⋮` options button**, and beside the name of the sorted column an arrow saying which way. |
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. Mono 13 px. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
@@ -52,11 +52,19 @@ which are single-column lists of names, not data.
   `onEditCell`; without it the grid is read-only. The cell under a double-click is taken from the
   press that preceded it, because pointer capture retargets the click that follows.
 - **Right-clicking a header selects the whole column and opens the grid's own menu**, never the
-  WebView's. The menu carries **Copy column** (the column's cells as one line each, the same text a
-  `Ctrl`+`C` over that range would write), **Copy field name**, and — only where `onEditCell` was
-  passed — **Paste**, which is the paste below with the column's first row as its origin. A call site
-  appends its own items through `columnMenuItems`; today only `TableDataView` does, with **Hide
-  column** and **Show all columns**, because hiding is its state and not the grid's.
+  WebView's. **The `⋮` button on the header opens that same menu** from a left click, by dispatching
+  the `contextmenu` event Radix already listens for — one menu with two ways in, rather than a second
+  menu that drifts from the first. The menu carries **Sort Ascending**, **Sort Descending** and
+  **Remove All Sorts** where `onSortChange` was passed, then **Copy column** (the column's cells as
+  one line each, the same text a `Ctrl`+`C` over that range would write), **Copy field name**, and —
+  only where `onEditCell` was passed — **Paste**, which is the paste below with the column's first
+  row as its origin. A call site appends its own items through `columnMenuItems`; today only
+  `TableDataView` does, with **Hide column** and **Show all columns**, because hiding is its state
+  and not the grid's.
+- **The grid never reorders its own rows.** It reports the column and direction through
+  `onSortChange` and marks the header from `sort`; who sorts is the call site, because only it knows
+  where the rows come from. One column at a time — hence *Remove All Sorts* clearing the one there
+  is. A sort always sends the reader back to page one, and always drops the selection.
 - **Columns resize** by dragging the right edge of the header, and **double-clicking that edge fits
   the column** to the widest of its name, its type line and its cells, capped at 520 px and measured
   on a canvas against the `--font-mono` / `--text-sm` tokens. Widths are keyed by column *name*, so
@@ -110,13 +118,19 @@ Not in what an edit means — `useGridEdits` and `GridFooter` make that identica
 surrounds the grid:
 
 - `ResultPane` pages in memory, so it maps the grid's *page-local* row index back to the whole
-  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's rows alike. Its footer
+  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's rows alike. **It sorts in
+  memory too**, and for the same reason keeps the sort as a list of row numbers (`sortedOrder`)
+  rather than reordered rows: a pending change is keyed by the number a row had when it was read.
+  Draft rows stay pinned after every fetched row, so **Add** still lands on the last page. A sort
+  only reaches the rows already fetched, and it is dropped when the statement changes. Its footer
   can also **Stop** the run, and **Add** jumps to the last page, which is where a draft row lands.
   Asking for a page past the rows it holds replays the statement for as many as that page needs
   (`reach`), so `All` really does load all; the page number therefore survives a read of the same
   statement, and only a different one sends the reader back to page one.
 - `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
-  index back to the real one on the way in. Its Cell Editor panel stages a value on the focused cell
+  index back to the real one on the way in. **It sorts on the server too** — the sort travels in
+  `TablePageRequest` and becomes the read's `ORDER BY`, because ordering the hundred rows in hand
+  would only shuffle what the reader can already see. Its Cell Editor panel stages a value on the focused cell
   exactly as the grid's own inline editor does; the footer still commits. It is also the only site
   that adds to the header menu, since `ColumnPicker` and that menu toggle one set of hidden names.
 

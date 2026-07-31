@@ -3,15 +3,22 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { UnfoldHorizontal } from 'lucide-react'
+import {
+  ArrowDownNarrowWide,
+  ArrowUpNarrowWide,
+  EllipsisVertical,
+  UnfoldHorizontal,
+} from 'lucide-react'
 
 import { copyText, readText } from '@/bridge/clipboard'
 import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
+import { IconButton } from '@/shared/ui/IconButton'
 
 import { ColumnTypeIcon, isNumeric } from './columnType'
 import { gridFont, widestText } from './measureText'
@@ -31,6 +38,7 @@ import {
   type GridData,
   type ResultColumn,
   type Selection,
+  type SortKey,
 } from './resultSet'
 
 const GUTTER_WIDTH = 52
@@ -40,6 +48,8 @@ const MIN_COLUMN_WIDTH = 60
 const MAX_FIT_WIDTH = 520
 const CELL_PADDING = 17
 const TYPE_ICON_WIDTH = 17
+/** The room the header's options button takes on the right, beyond a cell's own padding. */
+const MENU_WIDTH = 20
 /** Pixels scrolled per frame while a drag is held past an edge of the viewport. */
 const EDGE_STEP = 14
 
@@ -76,6 +86,13 @@ interface ResultGridProps {
    * reason `isDirty` is one: a call site that pages answers in its own coordinates. */
   isDeleted?: (row: number) => boolean
   /**
+   * The column the rows arrived in order of, which the header marks. Reordering is the call
+   * site's — a server-paged surface sorts in its statement, an in-memory one sorts its rows —
+   * so the sort items appear on the header menu only where `onSortChange` was passed.
+   */
+  sort?: SortKey | null
+  onSortChange?: (sort: SortKey | null) => void
+  /**
    * Items appended to a header's context menu, for what only the call site can do — hiding a
    * column is its own state, not the grid's.
    */
@@ -89,6 +106,8 @@ export function ResultGrid({
   onEditCell,
   isDirty = NOTHING_DIRTY,
   isDeleted = NOTHING_DELETED,
+  sort = null,
+  onSortChange,
   columnMenuItems,
 }: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -138,8 +157,9 @@ export function ResultGrid({
     const font = gridFont()
     const cells = result.rows.map((row) => cellText(row[index] ?? null))
     const content = Math.max(
-      widestText([column.name, ...cells], font),
-      widestText([typeLabel(column)], font) + TYPE_ICON_WIDTH,
+      widestText(cells, font),
+      widestText([column.name], font) + MENU_WIDTH,
+      widestText([typeLabel(column)], font) + TYPE_ICON_WIDTH + MENU_WIDTH,
     )
 
     setWidth(column.name, Math.min(content + CELL_PADDING, MAX_FIT_WIDTH))
@@ -174,9 +194,29 @@ export function ResultGrid({
     const column = result.columns[index]
     if (!column) return []
 
+    const sorting: MenuItem[] = onSortChange
+      ? [
+          {
+            label: 'Sort Ascending',
+            onSelect: () => onSortChange({ column: column.name, descending: false }),
+          },
+          {
+            label: 'Sort Descending',
+            onSelect: () => onSortChange({ column: column.name, descending: true }),
+          },
+          {
+            label: 'Remove All Sorts',
+            disabled: sort === null,
+            onSelect: () => onSortChange(null),
+          },
+        ]
+      : []
+
     return [
+      ...sorting,
       {
         label: 'Copy column',
+        separatorBefore: sorting.length > 0,
         disabled: result.rows.length === 0,
         onSelect: () =>
           void copyText(toTSV(oneRange(columnRange(index, result.rows.length)), result)),
@@ -314,6 +354,7 @@ export function ResultGrid({
           columns={result.columns}
           widths={widths}
           bounds={bounds}
+          sort={sort}
           onResize={setWidth}
           onFit={fitColumn}
           onSelectColumn={selectColumn}
@@ -469,6 +510,7 @@ interface HeaderRowProps {
   columns: GridData['columns']
   widths: number[]
   bounds: CellBounds[]
+  sort: SortKey | null
   onResize: (name: string, width: number) => void
   onFit: (index: number) => void
   onSelectColumn: (index: number) => void
@@ -479,6 +521,7 @@ function HeaderRow({
   columns,
   widths,
   bounds,
+  sort,
   onResize,
   onFit,
   onSelectColumn,
@@ -493,24 +536,36 @@ function HeaderRow({
 
       {columns.map((column, i) => {
         const active = columnTouched(bounds, i)
+        const sorted = sort?.column === column.name ? sort : null
 
         return (
           <ContextMenu key={i} items={menuFor(i)}>
             <div
               onContextMenu={() => onSelectColumn(i)}
               className={cn(
-                'relative flex shrink-0 flex-col justify-center border-r border-line px-2',
+                'relative flex shrink-0 flex-col justify-center border-r border-line pr-7 pl-2',
                 active ? 'bg-grid-cell-selected' : 'bg-panel',
               )}
               style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: HEADER_HEIGHT }}
             >
-              <span className="truncate font-mono text-sm font-semibold text-fg">
-                {column.name}
+              <span className="flex items-center gap-1">
+                <span className="min-w-0 truncate font-mono text-sm font-semibold text-fg">
+                  {column.name}
+                </span>
+                {sorted ? <SortMark descending={sorted.descending} /> : null}
               </span>
               <span className="flex items-center gap-1 text-2xs text-muted">
                 <ColumnTypeIcon type={column.type} />
                 <span className="truncate font-mono">{typeLabel(column)}</span>
               </span>
+
+              <IconButton
+                label={`${column.name} options`}
+                icon={<EllipsisVertical size={14} />}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={openColumnMenu}
+                className="absolute top-1/2 right-1 z-1 -translate-y-1/2"
+              />
 
               <ResizeHandle
                 width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
@@ -523,6 +578,29 @@ function HeaderRow({
       })}
     </div>
   )
+}
+
+/**
+ * Opens the header's own menu from a left click, by handing Radix the event it already
+ * listens for. One menu with two ways in — the alternative is a second menu beside it that
+ * drifts from the first, and the column is selected either way.
+ */
+function openColumnMenu(event: ReactMouseEvent<HTMLButtonElement>) {
+  const { left, bottom } = event.currentTarget.getBoundingClientRect()
+
+  event.currentTarget.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: left,
+      clientY: bottom,
+    }),
+  )
+}
+
+function SortMark({ descending }: { descending: boolean }) {
+  const Icon = descending ? ArrowDownNarrowWide : ArrowUpNarrowWide
+  return <Icon size={12} className="shrink-0 text-accent" />
 }
 
 interface ResizeHandleProps {

@@ -31,6 +31,13 @@ type Namespace struct {
 	Schema   string
 }
 
+// TableSort orders a table read by one of its columns. An empty Column leaves the primary
+// key in force, which is what a page is cut from when the reader has chosen nothing.
+type TableSort struct {
+	Column     string
+	Descending bool
+}
+
 // TablePage is one window onto a table's rows. A Limit of zero or less reads every row and
 // makes Offset meaningless, the same convention as Query.MaxRows.
 type TablePage struct {
@@ -38,6 +45,7 @@ type TablePage struct {
 	Table  string
 	Limit  int
 	Offset int
+	Sort   TableSort
 }
 
 // TableSchema is the completion-sized view of a table: names only, no types, because

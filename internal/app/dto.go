@@ -62,11 +62,19 @@ type Namespace struct {
 	Schema   string `json:"schema"`
 }
 
+// TableSortInput is the column the reader sorted by. An empty Column means none, and the
+// table falls back to its primary key.
+type TableSortInput struct {
+	Column     string `json:"column"`
+	Descending bool   `json:"descending"`
+}
+
 type TablePageInput struct {
 	Namespace
-	Table  string `json:"table"`
-	Limit  int    `json:"limit"`
-	Offset int    `json:"offset"`
+	Table  string         `json:"table"`
+	Limit  int            `json:"limit"`
+	Offset int            `json:"offset"`
+	Sort   TableSortInput `json:"sort"`
 }
 
 type TableColumn struct {
@@ -170,6 +178,7 @@ func (in TablePageInput) toDriver() driver.TablePage {
 		Table:     in.Table,
 		Limit:     driverRows(in.Limit, DefaultPageSize),
 		Offset:    max(in.Offset, 0),
+		Sort:      driver.TableSort{Column: in.Sort.Column, Descending: in.Sort.Descending},
 	}
 }
 

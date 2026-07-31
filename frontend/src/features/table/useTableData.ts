@@ -4,12 +4,20 @@ import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { ALL_ROWS, DEFAULT_PAGE_SIZE } from '@/bridge/rows'
 import { tables, type TablePage } from '@/bridge/tables'
+import type { SortKey } from '@/features/results/resultSet'
 
+const NO_SORT = { column: '', descending: false }
+
+/**
+ * The rows are paged on the server, so the sort has to be too: ordering the page in hand
+ * would only shuffle the hundred rows the reader can already see.
+ */
 export function useTableData(sessionId: string, namespace: Namespace, table: string) {
   const { database, schema } = namespace
 
   const [page, setPage] = useState(0)
   const [limit, setLimit] = useState<number>(DEFAULT_PAGE_SIZE)
+  const [sort, setSort] = useState<SortKey | null>(null)
   const [nonce, setNonce] = useState(0)
   const [data, setData] = useState<TablePage | null>(null)
   const [loading, setLoading] = useState(true)
@@ -26,6 +34,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
         table,
         limit,
         offset: limit === ALL_ROWS ? 0 : page * limit,
+        sort: sort ?? NO_SORT,
       })
       .then((next) => {
         if (!active) return
@@ -42,7 +51,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
     return () => {
       active = false
     }
-  }, [sessionId, database, schema, table, limit, page, nonce])
+  }, [sessionId, database, schema, table, limit, page, sort, nonce])
 
   const refresh = useCallback(() => setNonce((current) => current + 1), [])
 
@@ -53,5 +62,11 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
     setPage(0)
   }, [])
 
-  return { data, loading, error, page, limit, goToPage, changeLimit, refresh }
+  /** A new order makes the page number meaningless, so the reader goes back to the first. */
+  const changeSort = useCallback((next: SortKey | null) => {
+    setSort(next)
+    setPage(0)
+  }, [])
+
+  return { data, loading, error, page, limit, sort, goToPage, changeLimit, changeSort, refresh }
 }

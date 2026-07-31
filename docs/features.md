@@ -51,7 +51,9 @@ beside it on PostgreSQL. Changing the database clears the schema, since a schema
 names nothing in another.
 
 **Double-clicking** a table opens a data tab; a single click only selects it, and reads nothing from
-the server. A tab loads 100 rows per page by default, ordered by primary key so paging is stable.
+the server. A tab loads 100 rows per page by default, ordered by primary key so paging is stable —
+until a header's `⋮` menu sorts it by a column of its own, which travels into the read's `ORDER BY`
+and therefore orders the whole table rather than the page on screen.
 **Paging lives on the right of the bar under the grid**, beside the `Rows` control that sizes it and
 can lift the bound entirely — see [the row limit](#the-row-limit). The left of that bar is where rows
 are added, deleted, applied and discarded: it is the same `GridFooter` every grid has, and
@@ -94,6 +96,9 @@ on the same connection without treading on each other. The toolbar picks the dat
   loads all, and paging is never stuck at the limit. Two things follow from the replay: a statement
   with no `ORDER BY` may reshuffle what lands on a page, and the reader keeps their page number
   across a read of the same statement — only a different statement sends them back to page one.
+- **A header's `⋮` menu sorts the result in memory**, since there is no statement to re-order: it
+  reaches the rows fetched so far and no further, so on a truncated read it sorts the prefix rather
+  than the table. Fetching more re-sorts what arrives. A different statement drops the sort.
 - **Errors surface in the output panel below the editor**, with the code, the server's own wording
   and the engine's error code, never as a dialog. A cancel is reported as `QUERY_CANCELLED`, not as
   a failure.

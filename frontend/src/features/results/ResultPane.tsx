@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, CircleSlash, Terminal } from 'lucide-react'
 
 import type { AppError } from '@/bridge/errors'
@@ -11,7 +11,14 @@ import type { QueryRun } from '@/stores/queries'
 import { GridFooter } from './GridFooter'
 import { GridPager } from './GridPager'
 import { ResultGrid } from './ResultGrid'
-import { oneRange, rowRange, selectedRows, type Selection } from './resultSet'
+import {
+  oneRange,
+  rowRange,
+  selectedRows,
+  sortedOrder,
+  type Selection,
+  type SortKey,
+} from './resultSet'
 import { useGridEdits, type EditSource } from './useGridEdits'
 import { usePageWindow } from './usePageWindow'
 
@@ -31,25 +38,42 @@ interface ResultPaneProps {
 
 export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: ResultPaneProps) {
   const [selection, setSelection] = useState<Selection | null>(null)
+  const [sort, setSort] = useState<SortKey | null>(null)
   const { running, result, error } = run
 
   const grid = result !== null && result.columns.length > 0 ? result : null
   const editable = grid !== null && grid.table !== '' && sessionId !== null
   const edits = useGridEdits(sourceOf(grid), sessionId, onRefresh)
-  const paged = usePageWindow(edits.rows)
+
+  /**
+   * The rows are already in memory, so the sort is too — no statement to re-order. It is a
+   * list of row numbers rather than reordered rows, because every pending change is keyed by
+   * the number a row had when it was read.
+   */
+  const order = useMemo(
+    () => sortedOrder(edits.rows, grid?.columns ?? [], sort, grid?.rows.length ?? 0),
+    [edits.rows, grid, sort],
+  )
+  const ordered = useMemo(() => order.map((row) => edits.rows[row] ?? []), [order, edits.rows])
+  const paged = usePageWindow(ordered)
 
   // A selection names rows of the result that produced it, so it never survives a new one.
   useEffect(() => setSelection(null), [grid])
 
-  // The page number survives a read of the same statement — growing the fetch, or reloading
-  // after an edit, must leave the reader where they were — but not a different statement.
+  // The page number and the sort survive a read of the same statement — growing the fetch, or
+  // reloading after an edit, must leave the reader where they were — but not a different one,
+  // whose columns the sort may not even name.
   const statement = run.request?.sql ?? ''
   useEffect(() => {
+    setSort(null)
     paged.goToPage(0)
   }, [statement, paged.goToPage])
 
-  /** The grid counts rows within the page; the edits hook counts them across the whole result. */
-  const absolute = (row: number) => row + paged.offset
+  /**
+   * The grid counts rows within the page, and in the order it drew them; the edits hook counts
+   * them across the whole result, in the order they were read.
+   */
+  const absolute = (row: number) => order[row + paged.offset] ?? row + paged.offset
 
   /**
    * The fetch is a prefix of the result and the pager grows it: a page beyond what the last read
@@ -73,6 +97,16 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
     setSelection(null)
     paged.changeSize(next)
     reach(0, next)
+  }
+
+  /**
+   * A new order only reaches the rows already fetched, so it sends the reader back to the
+   * first page: the row that was on this one is now somewhere else entirely.
+   */
+  const changeSort = (next: SortKey | null) => {
+    setSelection(null)
+    setSort(next)
+    paged.goToPage(0)
   }
 
   /**
@@ -106,6 +140,8 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
             }
             isDirty={(row, column) => edits.isDirty(absolute(row), column)}
             isDeleted={(row) => edits.deleted.has(absolute(row))}
+            sort={sort}
+            onSortChange={changeSort}
           />
         ) : result !== null ? (
           <SuccessPanel rowsAffected={result.rowsAffected} />

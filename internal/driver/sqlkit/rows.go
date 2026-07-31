@@ -145,6 +145,34 @@ func MergeSchema(result, stored []driver.Column, keys []string) bool {
 	return true
 }
 
+// OrderBy renders the ORDER BY clause of a table read, the sort the reader chose taking
+// precedence over the primary key that otherwise makes a page stable. A name the table does
+// not carry is dropped rather than quoted in, so no caller can write the clause itself.
+func (d Dialect) OrderBy(sort driver.TableSort, columns []driver.Column) string {
+	if named(columns, sort.Column) {
+		clause := " ORDER BY " + d.QuoteIdent(sort.Column)
+		if sort.Descending {
+			return clause + " DESC"
+		}
+		return clause
+	}
+
+	keys := PrimaryKeyNames(columns)
+	if len(keys) == 0 {
+		return ""
+	}
+	return " ORDER BY " + strings.Join(d.QuoteAll(keys), ", ")
+}
+
+func named(columns []driver.Column, name string) bool {
+	for _, column := range columns {
+		if column.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func PrimaryKeyNames(columns []driver.Column) []string {
 	names := []string{}
 	for _, column := range columns {

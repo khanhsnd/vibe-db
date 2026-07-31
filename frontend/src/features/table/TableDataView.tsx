@@ -12,6 +12,7 @@ import {
   selectedRows,
   type CellRef,
   type Selection,
+  type SortKey,
 } from '@/features/results/resultSet'
 import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
 import { Empty } from '@/shared/ui/Empty'
@@ -31,11 +32,8 @@ interface TableDataViewProps {
 }
 
 export function TableDataView({ sessionId, namespace, table }: TableDataViewProps) {
-  const { data, loading, error, page, limit, goToPage, changeLimit, refresh } = useTableData(
-    sessionId,
-    namespace,
-    table,
-  )
+  const { data, loading, error, page, limit, sort, goToPage, changeLimit, changeSort, refresh } =
+    useTableData(sessionId, namespace, table)
 
   const [panels, setPanels] = useState<ReadonlySet<PanelKind>>(new Set())
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
@@ -115,6 +113,11 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
     changeLimit(next)
   }
 
+  const changeOrder = (next: SortKey | null) => {
+    setSelection(null)
+    changeSort(next)
+  }
+
   const failure = edits.error ?? (data ? error : null)
 
   return (
@@ -144,6 +147,8 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
               }
               isDirty={(row, column) => edits.isDirty(row, realColumn(column))}
               isDeleted={(row) => edits.deleted.has(row)}
+              sort={sort}
+              onSortChange={changeOrder}
               columnMenuItems={(column) => [
                 {
                   label: 'Hide column',

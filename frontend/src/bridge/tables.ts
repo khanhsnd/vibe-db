@@ -14,12 +14,19 @@ export interface TableColumn {
   default: Cell
 }
 
+/** The column the read is ordered by; an empty name leaves the table's primary key in force. */
+export interface TableSortRequest {
+  column: string
+  descending: boolean
+}
+
 export interface TablePageRequest {
   database: string
   schema: string
   table: string
   limit: number
   offset: number
+  sort: TableSortRequest
 }
 
 export interface TablePage {
@@ -61,7 +68,9 @@ export interface RowDelete {
 
 export const tables = {
   loadRows: (sessionId: string, page: TablePageRequest): Promise<TablePage> =>
-    call(() => api.LoadTableRows(sessionId, page)) as unknown as Promise<TablePage>,
+    call(() =>
+      api.LoadTableRows(sessionId, page as unknown as app.TablePageInput),
+    ) as unknown as Promise<TablePage>,
 
   updateCell: (sessionId: string, edit: CellEdit): Promise<void> =>
     call(() => api.UpdateCell(sessionId, edit as unknown as app.CellEditInput)),

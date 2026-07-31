@@ -196,10 +196,8 @@ func buildSelect(page driver.TablePage, columns []driver.Column) (string, []any)
 	}
 
 	query := "SELECT " + strings.Join(names, ", ") +
-		" FROM " + dialect.Qualify(page.Schema, page.Table)
-	if keys := sqlkit.PrimaryKeyNames(columns); len(keys) > 0 {
-		query += " ORDER BY " + strings.Join(dialect.QuoteAll(keys), ", ")
-	}
+		" FROM " + dialect.Qualify(page.Schema, page.Table) +
+		dialect.OrderBy(page.Sort, columns)
 
 	if page.Limit <= 0 {
 		return query, nil

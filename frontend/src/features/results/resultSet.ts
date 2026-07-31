@@ -1,5 +1,7 @@
 import type { Cell, TableColumn } from '@/bridge/tables'
 
+import { isNumeric } from './columnType'
+
 export type { Cell }
 
 export const NULL_TEXT = '(Null)'
@@ -9,6 +11,15 @@ export interface ResultColumn {
   /** The bare type, which classifies the column. `fullType` carries its length and modifiers. */
   type: string
   fullType: string
+}
+
+/**
+ * The one column a grid is sorted by, named rather than numbered: a call site that hides
+ * columns reports positions of its own, and a server sorts by name.
+ */
+export interface SortKey {
+  column: string
+  descending: boolean
 }
 
 export interface CellRef {
@@ -63,6 +74,40 @@ export function cellText(value: Cell): string {
 /** The inverse of `cellText`, so what a copy wrote means the same when it is pasted back. */
 export function parseCell(text: string): Cell {
   return text === NULL_TEXT ? null : text
+}
+
+/**
+ * The row numbers of `rows` in sorted order, for a surface whose rows are all in memory — a
+ * server-paged one sorts in its `ORDER BY` instead. Rows from `pinned` on are the drafts a
+ * grid appended: they are not on the server, so they stay where they were added, which is
+ * what keeps a paste after an Add landing on the row that was added.
+ *
+ * NULL sorts last either way, rather than following any one engine's rule, because the two
+ * engines disagree and a query result belongs to neither.
+ */
+export function sortedOrder(
+  rows: Cell[][],
+  columns: ResultColumn[],
+  sort: SortKey | null,
+  pinned = rows.length,
+): number[] {
+  const order = rows.map((_, index) => index)
+  const index = columns.findIndex((column) => column.name === sort?.column)
+  if (!sort || index < 0) return order
+
+  const numeric = isNumeric(columns[index]?.type ?? '')
+  const sign = sort.descending ? -1 : 1
+
+  return [
+    ...order.slice(0, pinned).sort((a, b) => {
+      const left = rows[a]?.[index] ?? null
+      const right = rows[b]?.[index] ?? null
+
+      if (left === null || right === null) return left === right ? 0 : left === null ? 1 : -1
+      return sign * (numeric ? Number(left) - Number(right) : left.localeCompare(right))
+    }),
+    ...order.slice(pinned),
+  ]
 }
 
 export function columnRange(column: number, rowCount: number): CellRange {

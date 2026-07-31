@@ -44,6 +44,48 @@ func TestMergeSchemaNeedsEveryKeyColumnExactlyOnce(t *testing.T) {
 	}
 }
 
+func TestOrderBy(t *testing.T) {
+	columns := []driver.Column{
+		{Name: "id", PrimaryKey: true},
+		{Name: "email"},
+	}
+
+	tests := []struct {
+		name string
+		sort driver.TableSort
+		want string
+	}{
+		{"no sort falls back to the primary key", driver.TableSort{}, " ORDER BY `id`"},
+		{"ascending", driver.TableSort{Column: "email"}, " ORDER BY `email`"},
+		{
+			"descending",
+			driver.TableSort{Column: "email", Descending: true},
+			" ORDER BY `email` DESC",
+		},
+		{
+			"a column the table has not got is dropped",
+			driver.TableSort{Column: "1; DROP TABLE users"},
+			" ORDER BY `id`",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := MySQL.OrderBy(tt.sort, columns); got != tt.want {
+				t.Errorf("OrderBy = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestOrderByWithoutPrimaryKeyOrSortIsEmpty(t *testing.T) {
+	got := MySQL.OrderBy(driver.TableSort{}, []driver.Column{{Name: "email"}})
+
+	if got != "" {
+		t.Errorf("OrderBy = %q, want no clause", got)
+	}
+}
+
 func TestPrimaryKeyNamesKeepsOrdinalOrder(t *testing.T) {
 	columns := []driver.Column{
 		{Name: "order_id", PrimaryKey: true},
