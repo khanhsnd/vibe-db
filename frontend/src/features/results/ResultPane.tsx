@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, CircleSlash, Table2, Terminal } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, CircleSlash, Terminal } from 'lucide-react'
 
 import type { AppError } from '@/bridge/errors'
 import type { QueryResult } from '@/bridge/query'
+import { ALL_ROWS } from '@/bridge/rows'
 import { cn } from '@/lib/cn'
 import { Empty } from '@/shared/ui/Empty'
 import type { QueryRun } from '@/stores/queries'
 
 import { GridFooter } from './GridFooter'
+import { GridPager } from './GridPager'
 import { ResultGrid } from './ResultGrid'
 import type { CellRange } from './resultSet'
 import { useGridEdits, type EditSource } from './useGridEdits'
+import { usePageWindow } from './usePageWindow'
 
 const numbers = new Intl.NumberFormat('en-US')
 
@@ -21,19 +24,70 @@ interface ResultPaneProps {
   run: QueryRun
   sessionId: string | null
   onRefresh: () => void
+  /** Replays the statement asking for this many rows, so the pager can reach past the first read. */
+  onFetch: (maxRows: number) => void
   onStop: () => void
 }
 
-export function ResultPane({ run, sessionId, onRefresh, onStop }: ResultPaneProps) {
+export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: ResultPaneProps) {
   const [selection, setSelection] = useState<CellRange | null>(null)
   const { running, result, error } = run
 
   const grid = result !== null && result.columns.length > 0 ? result : null
   const editable = grid !== null && grid.table !== '' && sessionId !== null
   const edits = useGridEdits(sourceOf(grid), sessionId, onRefresh)
+  const paged = usePageWindow(edits.rows)
 
-  // A selection names a row of the result that produced it, so it does not survive a new one.
+  // A selection names rows of the result that produced it, so it never survives a new one.
   useEffect(() => setSelection(null), [grid])
+
+  // The page number survives a read of the same statement — growing the fetch, or reloading
+  // after an edit, must leave the reader where they were — but not a different statement.
+  const statement = run.request?.sql ?? ''
+  useEffect(() => {
+    paged.goToPage(0)
+  }, [statement, paged.goToPage])
+
+  /** The grid counts rows within the page; the edits hook counts them across the whole result. */
+  const absolute = (row: number) => row + paged.offset
+
+  /**
+   * The fetch is a prefix of the result and the pager grows it: a page beyond what the last read
+   * returned replays the statement asking for enough rows to fill it. Everything already held is
+   * still paged in memory, so only reaching past the prefix costs a read.
+   */
+  const reach = (page: number, size: number) => {
+    if (grid === null || !grid.truncated) return
+
+    if (size === ALL_ROWS) onFetch(ALL_ROWS)
+    else if ((page + 1) * size > grid.rows.length) onFetch((page + 1) * size)
+  }
+
+  const changePage = (next: number) => {
+    setSelection(null)
+    paged.goToPage(next)
+    reach(next, paged.size)
+  }
+
+  const changeSize = (next: number) => {
+    setSelection(null)
+    paged.changeSize(next)
+    reach(0, next)
+  }
+
+  /** A draft row lands after every fetched row, so the page holding it is the one to show. */
+  const addRow = () => {
+    edits.addRow()
+    paged.goToPage(paged.pageCount)
+  }
+
+  const deleteRows = () => {
+    if (selection === null) return
+    edits.deleteRows({
+      anchor: { ...selection.anchor, row: absolute(selection.anchor.row) },
+      focus: { ...selection.focus, row: absolute(selection.focus.row) },
+    })
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
@@ -42,12 +96,16 @@ export function ResultPane({ run, sessionId, onRefresh, onStop }: ResultPaneProp
           <ErrorPanel error={error} />
         ) : grid !== null ? (
           <ResultGrid
-            result={{ columns: grid.columns, rows: edits.rows }}
+            result={{ columns: grid.columns, rows: paged.rows }}
             selection={selection}
             onSelectionChange={setSelection}
-            onEditCell={editable ? edits.setCell : undefined}
-            isDirty={edits.isDirty}
-            deleted={edits.deleted}
+            onEditCell={
+              editable
+                ? (ref, value) => edits.setCell({ ...ref, row: absolute(ref.row) }, value)
+                : undefined
+            }
+            isDirty={(row, column) => edits.isDirty(absolute(row), column)}
+            isDeleted={(row) => edits.deleted.has(absolute(row))}
           />
         ) : result !== null ? (
           <SuccessPanel rowsAffected={result.rowsAffected} />
@@ -71,18 +129,25 @@ export function ResultPane({ run, sessionId, onRefresh, onStop }: ResultPaneProp
         selected={selection !== null}
         pending={edits.pending}
         busy={edits.saving || running}
-        onAddRow={edits.addRow}
-        onDeleteRow={() => edits.deleteRows(selection)}
+        onAddRow={addRow}
+        onDeleteRow={deleteRows}
         onApply={() => void edits.apply()}
         onDiscard={edits.discard}
         onRefresh={onRefresh}
         onStop={onStop}
         running={running}
       >
-        <span className="flex min-w-0 items-center gap-1.5">
-          <Table2 size={12} className="shrink-0 text-faint" />
-          <span className="truncate font-mono">{label(grid, editable)}</span>
-        </span>
+        {grid !== null ? (
+          <GridPager
+            page={paged.page}
+            size={paged.size}
+            total={paged.total}
+            partial={grid.truncated}
+            loading={running}
+            onPageChange={changePage}
+            onSizeChange={changeSize}
+          />
+        ) : null}
       </GridFooter>
     </div>
   )
@@ -101,14 +166,6 @@ function sourceOf(grid: QueryResult | null): EditSource | null {
     columns: grid.columns,
     rows: grid.rows,
   }
-}
-
-function label(grid: QueryResult | null, editable: boolean): string {
-  if (grid === null) return 'No rows'
-  if (!editable) return 'Read-only — rows cannot be traced to a single table'
-
-  const qualified = [grid.database, grid.schema, grid.table].filter((part) => part !== '').join('.')
-  return `${qualified} — double-click a cell to edit`
 }
 
 function ErrorPanel({ error }: { error: AppError }) {

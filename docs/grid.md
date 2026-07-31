@@ -21,7 +21,7 @@ which are single-column lists of names, not data.
 | Selection | Three depths: every row the selection touches gets a soft band (`--grid-row-selected`) and an accent bar down its gutter, cells inside the rectangle get a stronger fill (`--grid-cell-selected`), and the **focus** cell — the one the pointer last landed on — is solid `--accent` with `--fg-on-accent` text. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
 | Hover | A row highlight, applied *only* to rows outside the selection. Both are background colours, so a selected row must not also carry `hover:bg-hover` or the tint flickers away under the pointer. |
 | Pending edit | A warning-coloured inset ring plus warning text, from `isDirty`. It is a predicate rather than a set of keys so a call site that hides columns can answer in its own coordinates. Every cell of a row that is not on the server yet is pending, so a new row is ringed whole. |
-| Row for deletion | A row named by the `deleted` set is banded in `--grid-row-deleted` and struck through — set on the row, so every cell inherits it — and its gutter number turns `text-danger`. Deletion wins over the selection band, because it is the more consequential fact. |
+| Row for deletion | A row that `isDeleted` answers for is banded in `--grid-row-deleted` and struck through — set on the row, so every cell inherits it — and its gutter number turns `text-danger`. Deletion wins over the selection band, because it is the more consequential fact. It is a predicate for the same reason `isDirty` is one: a call site that pages answers in its own coordinates. |
 
 ## How it behaves
 
@@ -59,8 +59,11 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
 - **The four editing icons are hidden outright when the rows cannot be written back**, rather than
   shown disabled: a result that no `UPDATE` can name has no use for them. `Refresh` always shows.
 - Delete is the only one that needs a selection; Apply and Discard need something pending.
-- The right-hand side is the caller's: the table view hands it `TablePager` (arrows, the
-  offset window, the page count and the `Rows` size), and a query result hands it the source label.
+- The right-hand side is the caller's, and both surfaces hand it the same `GridPager`: arrows, the
+  offset window, the page count and the `Rows` size. Only where the rows come from differs — the
+  table view walks the server, and a query result is paged inside `usePageWindow` out of the rows
+  it already holds. A `+` on the pager's total says those rows are a *prefix* of the result, and
+  `partial` is also what keeps `Next` alive on the last page: the caller can go and fetch the rest.
 - The bar carries `--surface-footer` rather than `--surface-panel`, so it reads as controls and not
   as the status line that may sit directly below it.
 
@@ -83,8 +86,16 @@ column left alone takes the server's own default rather than an explicit NULL.
 Not in what an edit means — `useGridEdits` and `GridFooter` make that identical — only in what
 surrounds the grid:
 
-- `ResultPane` names its target from the result the backend traced (`database` / `schema` / `table`,
-  all empty for a result no `UPDATE` can name), and its footer can also **Stop** the run.
-- `TableDataView` pages, and can hide columns, so it maps the grid's *visible* column index back to
-  the real one on the way in — for edits and for `isDirty` alike. Its Cell Editor panel stages a
-  value on the focused cell exactly as the grid's own inline editor does; the footer still commits.
+- `ResultPane` pages in memory, so it maps the grid's *page-local* row index back to the whole
+  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's range alike. Its footer
+  can also **Stop** the run, and **Add** jumps to the last page, which is where a draft row lands.
+  Asking for a page past the rows it holds replays the statement for as many as that page needs
+  (`reach`), so `All` really does load all; the page number therefore survives a read of the same
+  statement, and only a different one sends the reader back to page one.
+- `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
+  index back to the real one on the way in. Its Cell Editor panel stages a value on the focused cell
+  exactly as the grid's own inline editor does; the footer still commits.
+
+Both mappings exist because the grid always reports the coordinates it drew, never the ones the
+server knows. Neither one lets the *other* axis drift: a paged surface leaves columns alone and a
+column-hiding surface leaves rows alone.

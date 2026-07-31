@@ -22,7 +22,11 @@ interface QueriesState {
   pending: Record<string, string>
 
   execute: (tabId: string, sessionId: string, request: RunRequest) => Promise<void>
-  rerun: (tabId: string, sessionId: string) => Promise<void>
+  /**
+   * Replays the statement that produced the rows on screen. `maxRows` overrides what it asked
+   * for, which is how the pager reaches rows the first read stopped short of.
+   */
+  rerun: (tabId: string, sessionId: string, maxRows?: number) => Promise<void>
   cancel: (tabId: string) => void
   discard: (tabId: string) => void
 }
@@ -61,9 +65,11 @@ export const useQueriesStore = create<QueriesState>((set, get) => ({
     }
   },
 
-  rerun: async (tabId, sessionId) => {
+  rerun: async (tabId, sessionId, maxRows) => {
     const request = get().runs[tabId]?.request
-    if (request) await get().execute(tabId, sessionId, request)
+    if (!request) return
+
+    await get().execute(tabId, sessionId, maxRows === undefined ? request : { ...request, maxRows })
   },
 
   cancel: (tabId) => {

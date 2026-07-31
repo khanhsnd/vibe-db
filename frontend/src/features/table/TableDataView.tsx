@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import type { Namespace } from '@/bridge/connections'
 import type { TablePage } from '@/bridge/tables'
 import { GridFooter } from '@/features/results/GridFooter'
+import { GridPager } from '@/features/results/GridPager'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import type { CellRange, CellRef } from '@/features/results/resultSet'
 import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
@@ -10,7 +11,6 @@ import { Empty } from '@/shared/ui/Empty'
 
 import { CellEditor } from './CellEditor'
 import { ColumnPicker } from './ColumnPicker'
-import { TablePager } from './TablePager'
 import { TableToolbar, type PanelKind } from './TableToolbar'
 import { useTableData } from './useTableData'
 
@@ -124,7 +124,7 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
                   : undefined
               }
               isDirty={(row, column) => edits.isDirty(row, realColumn(column))}
-              deleted={edits.deleted}
+              isDeleted={(row) => edits.deleted.has(row)}
             />
           )}
         </div>
@@ -164,13 +164,13 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
         onDiscard={edits.discard}
         onRefresh={refresh}
       >
-        <TablePager
+        <GridPager
           page={page}
-          limit={limit}
+          size={limit}
           total={data?.total ?? 0}
           loading={loading}
           onPageChange={changePage}
-          onLimitChange={changePageSize}
+          onSizeChange={changePageSize}
         />
       </GridFooter>
     </div>

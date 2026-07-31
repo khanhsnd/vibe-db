@@ -84,6 +84,14 @@ on the same connection without treading on each other. The toolbar picks the dat
 - A statement that returns rows fills the grid; one that does not reports its affected-row count.
   Which path a statement takes is decided by its leading keyword, read past any leading comments,
   plus a `RETURNING` clause on PostgreSQL, where that is what makes a write answer with rows.
+- **Rows are paged under the grid by the same pager the table view has.** What a read returned is a
+  *prefix* of the result, and the pager cuts pages out of it in memory — turning to a page it
+  already holds reads nothing. A total shown as `1,000+` says the prefix stopped at the toolbar's
+  `Limit`, and that is also what keeps `Next` alive on the last page: asking for a page past the
+  prefix, or picking `Rows` `All`, **replays the statement for as many rows as that needs**. So `All`
+  loads all, and paging is never stuck at the limit. Two things follow from the replay: a statement
+  with no `ORDER BY` may reshuffle what lands on a page, and the reader keeps their page number
+  across a read of the same statement — only a different statement sends them back to page one.
 - **Errors surface in the output panel below the editor**, with the code, the server's own wording
   and the engine's error code, never as a dialog. A cancel is reported as `QUERY_CANCELLED`, not as
   a failure.
@@ -100,8 +108,8 @@ last valid count rather than fighting the typist.
 
 | Control | Presets | Default | What it sizes |
 |---|---|---|---|
-| Query toolbar `Limit` | 100, 1 000, 10 000 | 1 000 | The rows one Execute may return. Hitting the limit is reported in the status strip rather than passed off as the whole answer. |
-| Table pager `Rows` | 100, 500, 1 000 | 100 | One page of the offset/limit walk. `All` collapses the walk to a single page, so the pager sizes itself by the row total and the arrows go dead. |
+| Query toolbar `Limit` | 100, 1 000, 10 000 | 1 000 | The rows one **Execute** may return — the first prefix, not a ceiling, since the pager can replay for more. Hitting it is reported as a `+` on the pager's total rather than passed off as the whole answer. It sizes the *next* Execute, so a pager that grew past it leaves it alone. |
+| Grid pager `Rows` | 100, 500, 1 000 | 100 | One page of the grid. `All` collapses the walk to a single page, so the pager sizes itself by the row total and the arrows go dead — and on a query result it first fetches every row, because otherwise `All` would only mean all of the prefix. |
 
 `All` is deliberately the *only* way to fetch unbounded, so the bounded defaults of
 [decisions.md](decisions.md) cannot be lost by accident. It travels the wire as the sentinel

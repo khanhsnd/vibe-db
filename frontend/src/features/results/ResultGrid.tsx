@@ -37,7 +37,7 @@ const TYPE_ICON_WIDTH = 17
 const EDGE_STEP = 14
 
 const NOTHING_DIRTY = () => false
-const NOTHING_DELETED: ReadonlySet<number> = new Set()
+const NOTHING_DELETED = () => false
 
 /** Where a drag started, so extending it never depends on the render that began it. */
 interface Drag {
@@ -63,8 +63,9 @@ interface ResultGridProps {
    * call site that hides columns can answer in its own coordinates without rebuilding one.
    */
   isDirty?: (row: number, column: number) => boolean
-  /** Rows marked for deletion but not yet written back, by row index. */
-  deleted?: ReadonlySet<number>
+  /** Whether a row is marked for deletion but not written back yet. A predicate for the same
+   * reason `isDirty` is one: a call site that pages answers in its own coordinates. */
+  isDeleted?: (row: number) => boolean
 }
 
 export function ResultGrid({
@@ -73,7 +74,7 @@ export function ResultGrid({
   onSelectionChange,
   onEditCell,
   isDirty = NOTHING_DIRTY,
-  deleted = NOTHING_DELETED,
+  isDeleted = NOTHING_DELETED,
 }: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -252,7 +253,7 @@ export function ResultGrid({
               bounds !== null && item.index >= bounds.rowStart && item.index <= bounds.rowEnd
             // A row on its way out reads as struck through whatever the selection says,
             // because the strike is inherited by every cell below it.
-            const removed = deleted.has(item.index)
+            const removed = isDeleted(item.index)
 
             return (
               <div

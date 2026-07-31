@@ -11,16 +11,23 @@ interface QueryOutputProps {
   run: QueryRun
   sessionId: string | null
   onRefresh: () => void
+  onFetch: (maxRows: number) => void
   onStop: () => void
 }
 
-export function QueryOutput({ run, sessionId, onRefresh, onStop }: QueryOutputProps) {
+export function QueryOutput({ run, sessionId, onRefresh, onFetch, onStop }: QueryOutputProps) {
   const panes = [
     {
       id: 'result',
       label: 'Result',
       content: (
-        <ResultPane run={run} sessionId={sessionId} onRefresh={onRefresh} onStop={onStop} />
+        <ResultPane
+          run={run}
+          sessionId={sessionId}
+          onRefresh={onRefresh}
+          onFetch={onFetch}
+          onStop={onStop}
+        />
       ),
     },
   ]
@@ -59,14 +66,6 @@ function StatusStrip({ run }: { run: QueryRun }) {
           </span>
           <span className="text-faint">·</span>
           <span className="shrink-0 font-mono">{numbers.format(result.elapsedMs)} ms</span>
-          {result.truncated ? (
-            <>
-              <span className="text-faint">·</span>
-              <span className="shrink-0 text-warn">
-                capped at the row limit, more rows on the server
-              </span>
-            </>
-          ) : null}
         </>
       ) : (
         <span className="shrink-0 text-faint">Idle</span>

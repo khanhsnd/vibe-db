@@ -76,6 +76,15 @@ export function QueryWorkspace({
     if (sessionId !== null) void rerun(tab.id, sessionId)
   }, [rerun, tab.id, sessionId])
 
+  // The same replay, but for as many rows as the pager needs. The toolbar's own Limit is left
+  // alone: it sizes the *next* Execute, not the result already on screen.
+  const fetchRows = useCallback(
+    (maxRows: number) => {
+      if (sessionId !== null) void rerun(tab.id, sessionId, maxRows)
+    },
+    [rerun, tab.id, sessionId],
+  )
+
   // The shortcut is bound on the window, because F5 reloads the WebView whenever
   // focus sits outside this panel. The ref keeps the listener off the keystroke path.
   const latest = useRef(start)
@@ -140,6 +149,7 @@ export function QueryWorkspace({
             run={run}
             sessionId={sessionId}
             onRefresh={refresh}
+            onFetch={fetchRows}
             onStop={() => cancel(tab.id)}
           />
         </SplitPanel>
