@@ -18,7 +18,7 @@ which are single-column lists of names, not data.
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. Mono 13 px. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
-| Selection | Three depths: every row the selection touches gets a soft band (`--grid-row-selected`) and an accent bar down its gutter, cells inside the rectangle get a stronger fill (`--grid-cell-selected`), and the **focus** cell — the one the pointer last landed on — is solid `--accent` with `--fg-on-accent` text. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
+| Selection | Three depths: every row the selection touches gets a soft band (`--grid-row-selected`) and an accent bar down its gutter, cells inside any rectangle get a stronger fill (`--grid-cell-selected`), and the **focus** cell — the pointer's last landing, which is the live rectangle's focus — is solid `--accent` with `--fg-on-accent` text. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
 | Hover | A row highlight, applied *only* to rows outside the selection. Both are background colours, so a selected row must not also carry `hover:bg-hover` or the tint flickers away under the pointer. |
 | Pending edit | A warning-coloured inset ring plus warning text, from `isDirty`. It is a predicate rather than a set of keys so a call site that hides columns can answer in its own coordinates. Every cell of a row that is not on the server yet is pending, so a new row is ringed whole. |
 | Row for deletion | A row that `isDeleted` answers for is banded in `--grid-row-deleted` and struck through — set on the row, so every cell inherits it — and its gutter number turns `text-danger`. Deletion wins over the selection band, because it is the more consequential fact. It is a predicate for the same reason `isDirty` is one: a call site that pages answers in its own coordinates. |
@@ -31,12 +31,27 @@ which are single-column lists of names, not data.
   an edge keeps scrolling (`EDGE_STEP` per frame) so a range can run beyond one screenful. Past the
   edge, not near it — otherwise a click landing by the bottom row moves the grid under the pointer.
   `user-select: none` is already global in `index.css`; nothing in the grid may opt back in.
-- **Shift-click extends** from the existing anchor. **Dragging in the gutter selects whole rows**,
-  with the column range pinned across every column.
-- **`Ctrl`/`Cmd`+`C`** copies the rectangle as tab-separated rows.
+- **A selection is a list of rectangles, not one.** `Selection.ranges` holds them and the **last is
+  live**: **Shift**-click reopens it from its own anchor, **`Ctrl`/`Cmd`**-click leaves every
+  rectangle standing and starts a new one beside them, and a plain press starts over. Together with
+  **dragging in the gutter, which selects whole rows** with the columns pinned across every column,
+  that is how `Ctrl` picks rows one at a time and `Shift` picks a run of them. `Ctrl` only ever adds
+  — clicking an already selected row does not toggle it off, because a rectangle cannot be split.
+- **`Ctrl`/`Cmd`+`C`** copies every rectangle as tab-separated rows, top to bottom, so rows picked in
+  any order still copy in the order they read.
+- Anything acting on rows asks `selectedRows`, which answers each touched row once and in order —
+  that, not a range, is what `deleteRows` takes.
 - **Double-click a cell, or press `Enter`, to edit it** — but only where the call site passed
   `onEditCell`; without it the grid is read-only. The cell under a double-click is taken from the
   press that preceded it, because pointer capture retargets the click that follows.
+- **Right-clicking a header selects the whole column and opens the grid's own menu**, never the
+  WebView's. The menu carries **Copy column** (the column's cells as one line each, the same text a
+  `Ctrl`+`C` over that range would write), **Copy field name**, and — only where `onEditCell` was
+  passed — **Paste column**, which takes one clipboard line per row from the top and stops at the
+  last row the grid shows, so a paste never invents rows. `(Null)` pasted back is NULL again, because
+  `parseCell` is the inverse of the `NULL_TEXT` the copy wrote. A call site appends its own items
+  through `columnMenuItems`; today only `TableDataView` does, with **Hide column** and **Show all
+  columns**, because hiding is its state and not the grid's.
 - **Columns resize** by dragging the right edge of the header, and **double-clicking that edge fits
   the column** to the widest of its name, its type line and its cells, capped at 520 px and measured
   on a canvas against the `--font-mono` / `--text-sm` tokens. Widths are keyed by column *name*, so
@@ -87,14 +102,15 @@ Not in what an edit means — `useGridEdits` and `GridFooter` make that identica
 surrounds the grid:
 
 - `ResultPane` pages in memory, so it maps the grid's *page-local* row index back to the whole
-  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's range alike. Its footer
+  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's rows alike. Its footer
   can also **Stop** the run, and **Add** jumps to the last page, which is where a draft row lands.
   Asking for a page past the rows it holds replays the statement for as many as that page needs
   (`reach`), so `All` really does load all; the page number therefore survives a read of the same
   statement, and only a different one sends the reader back to page one.
 - `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
   index back to the real one on the way in. Its Cell Editor panel stages a value on the focused cell
-  exactly as the grid's own inline editor does; the footer still commits.
+  exactly as the grid's own inline editor does; the footer still commits. It is also the only site
+  that adds to the header menu, since `ColumnPicker` and that menu toggle one set of hidden names.
 
 Both mappings exist because the grid always reports the coordinates it drew, never the ones the
 server knows. Neither one lets the *other* axis drift: a paged surface leaves columns alone and a

@@ -8,15 +8,20 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { UnfoldHorizontal } from 'lucide-react'
 
-import { copyText } from '@/lib/clipboard'
+import { copyText, readText } from '@/lib/clipboard'
 import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
+import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 
 import { ColumnTypeIcon, isNumeric } from './columnType'
 import { gridFont, widestText } from './measureText'
 import {
   boundsOf,
   cellText,
+  columnRange,
+  focusOf,
+  oneRange,
+  parseCell,
   toTSV,
   type Cell,
   type CellBounds,
@@ -24,6 +29,7 @@ import {
   type CellRef,
   type GridData,
   type ResultColumn,
+  type Selection,
 } from './resultSet'
 
 const GUTTER_WIDTH = 52
@@ -45,6 +51,8 @@ interface Drag {
   focus: CellRef
   /** A drag begun in the row gutter selects whole rows, so its columns stay pinned. */
   wholeRow: boolean
+  /** The rectangles the drag is not touching — everything a `Ctrl`+drag must leave standing. */
+  kept: CellRange[]
 }
 
 interface Hit {
@@ -54,8 +62,8 @@ interface Hit {
 
 interface ResultGridProps {
   result: GridData
-  selection?: CellRange | null
-  onSelectionChange?: (selection: CellRange) => void
+  selection?: Selection | null
+  onSelectionChange?: (selection: Selection) => void
   /** Supplied only for a writable result; its absence keeps the grid read-only. */
   onEditCell?: ((ref: CellRef, value: Cell) => void) | undefined
   /**
@@ -66,6 +74,11 @@ interface ResultGridProps {
   /** Whether a row is marked for deletion but not written back yet. A predicate for the same
    * reason `isDirty` is one: a call site that pages answers in its own coordinates. */
   isDeleted?: (row: number) => boolean
+  /**
+   * Items appended to a header's context menu, for what only the call site can do — hiding a
+   * column is its own state, not the grid's.
+   */
+  columnMenuItems?: (column: ResultColumn) => MenuItem[]
 }
 
 export function ResultGrid({
@@ -75,6 +88,7 @@ export function ResultGrid({
   onEditCell,
   isDirty = NOTHING_DIRTY,
   isDeleted = NOTHING_DELETED,
+  columnMenuItems,
 }: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -83,12 +97,12 @@ export function ResultGrid({
   const pointer = useRef({ x: 0, y: 0 })
   const frame = useRef(0)
   const [resized, setResized] = useState<Record<string, number>>({})
-  const [ownSelection, setOwnSelection] = useState<CellRange | null>(null)
+  const [ownSelection, setOwnSelection] = useState<Selection | null>(null)
   const [editing, setEditing] = useState<CellRef | null>(null)
 
   const current = selection === undefined ? ownSelection : selection
 
-  const select = (next: CellRange) => {
+  const select = (next: Selection) => {
     if (selection === undefined) setOwnSelection(next)
     onSelectionChange?.(next)
   }
@@ -110,7 +124,8 @@ export function ResultGrid({
   useEffect(() => setEditing(null), [result.rows])
 
   const totalWidth = GUTTER_WIDTH + widths.reduce((sum, w) => sum + w, 0)
-  const bounds = current ? boundsOf(current) : null
+  const bounds = current?.ranges.map(boundsOf) ?? []
+  const focus = focusOf(current)
 
   const setWidth = (name: string, width: number) =>
     setResized((previous) => ({ ...previous, [name]: Math.max(MIN_COLUMN_WIDTH, width) }))
@@ -129,6 +144,46 @@ export function ResultGrid({
     setWidth(column.name, Math.min(content + CELL_PADDING, MAX_FIT_WIDTH))
   }
 
+  /** A header carries the whole column, so right-clicking one selects it before it acts. */
+  const selectColumn = (index: number) => {
+    if (result.rows.length > 0) select(oneRange(columnRange(index, result.rows.length)))
+  }
+
+  /** One clipboard line per row from the top, and never a row the grid does not already show. */
+  const pasteColumn = async (index: number) => {
+    const text = await readText()
+    if (!onEditCell || text === '') return
+
+    text.split(/\r?\n/).forEach((line, row) => {
+      if (row < result.rows.length) onEditCell({ row, column: index }, parseCell(line))
+    })
+  }
+
+  const columnMenu = (index: number): MenuItem[] => {
+    const column = result.columns[index]
+    if (!column) return []
+
+    return [
+      {
+        label: 'Copy column',
+        disabled: result.rows.length === 0,
+        onSelect: () =>
+          void copyText(toTSV(oneRange(columnRange(index, result.rows.length)), result)),
+      },
+      { label: 'Copy field name', onSelect: () => void copyText(column.name) },
+      ...(onEditCell
+        ? [
+            {
+              label: 'Paste',
+              disabled: result.rows.length === 0,
+              onSelect: () => void pasteColumn(index),
+            },
+          ]
+        : []),
+      ...(columnMenuItems?.(column) ?? []),
+    ]
+  }
+
   /** Reads a cell straight off the pointer, so a drag needs no per-cell handlers. */
   const cellAt = (clientX: number, clientY: number, wholeRow: boolean): CellRef => {
     const rect = bodyRef.current?.getBoundingClientRect()
@@ -144,11 +199,11 @@ export function ResultGrid({
     const state = drag.current
     if (!state) return
 
-    const focus = cellAt(clientX, clientY, state.wholeRow)
-    if (focus.row === state.focus.row && focus.column === state.focus.column) return
+    const next = cellAt(clientX, clientY, state.wholeRow)
+    if (next.row === state.focus.row && next.column === state.focus.column) return
 
-    state.focus = focus
-    select({ anchor: state.anchor, focus })
+    state.focus = next
+    select({ ranges: [...state.kept, { anchor: state.anchor, focus: next }] })
   }
 
   const autoScroll = () => {
@@ -173,13 +228,22 @@ export function ResultGrid({
 
     const wholeRow = inGutter(event.target)
     const hit = cellAt(event.clientX, event.clientY, wholeRow)
-    const anchor =
-      event.shiftKey && current ? current.anchor : wholeRow ? { row: hit.row, column: 0 } : hit
+    const live = current?.ranges.at(-1)
 
-    drag.current = { anchor, focus: hit, wholeRow }
+    // Shift reopens the live rectangle; Ctrl leaves every rectangle standing and starts a new
+    // one beside them; a plain press starts over.
+    const kept = event.shiftKey
+      ? (current?.ranges.slice(0, -1) ?? [])
+      : event.ctrlKey || event.metaKey
+        ? (current?.ranges ?? [])
+        : []
+    const anchor =
+      event.shiftKey && live ? live.anchor : wholeRow ? { row: hit.row, column: 0 } : hit
+
+    drag.current = { anchor, focus: hit, wholeRow, kept }
     lastHit.current = { ref: hit, wholeRow }
     pointer.current = { x: event.clientX, y: event.clientY }
-    select({ anchor, focus: hit })
+    select({ ranges: [...kept, { anchor, focus: hit }] })
 
     event.currentTarget.setPointerCapture(event.pointerId)
     scrollRef.current?.focus()
@@ -208,9 +272,9 @@ export function ResultGrid({
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (!current) return
 
-    if (event.key === 'Enter' && onEditCell) {
+    if (event.key === 'Enter' && onEditCell && focus) {
       event.preventDefault()
-      setEditing(current.focus)
+      setEditing(focus)
       return
     }
     if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'c') return
@@ -233,6 +297,8 @@ export function ResultGrid({
           bounds={bounds}
           onResize={setWidth}
           onFit={fitColumn}
+          onSelectColumn={selectColumn}
+          menuFor={columnMenu}
         />
 
         <div
@@ -249,8 +315,7 @@ export function ResultGrid({
             const row = result.rows[item.index]
             if (!row) return null
 
-            const banded =
-              bounds !== null && item.index >= bounds.rowStart && item.index <= bounds.rowEnd
+            const banded = rowTouched(bounds, item.index)
             // A row on its way out reads as struck through whatever the selection says,
             // because the strike is inherited by every cell below it.
             const removed = isDeleted(item.index)
@@ -308,7 +373,7 @@ export function ResultGrid({
                       numeric={isNumeric(column.type)}
                       width={width}
                       inRange={within(bounds, item.index, i)}
-                      focused={current?.focus.row === item.index && current.focus.column === i}
+                      focused={focus?.row === item.index && focus.column === i}
                       edited={isDirty(item.index, i)}
                     />
                   )
@@ -348,25 +413,44 @@ function edgePush(position: number, start: number, end: number): number {
   return 0
 }
 
-function within(bounds: CellBounds | null, row: number, column: number): boolean {
-  return (
-    bounds !== null &&
-    row >= bounds.rowStart &&
-    row <= bounds.rowEnd &&
-    column >= bounds.columnStart &&
-    column <= bounds.columnEnd
+/** A cell is selected when any one rectangle covers it; likewise a banded row or header. */
+function within(bounds: CellBounds[], row: number, column: number): boolean {
+  return bounds.some(
+    (one) =>
+      row >= one.rowStart &&
+      row <= one.rowEnd &&
+      column >= one.columnStart &&
+      column <= one.columnEnd,
   )
+}
+
+function rowTouched(bounds: CellBounds[], row: number): boolean {
+  return bounds.some((one) => row >= one.rowStart && row <= one.rowEnd)
+}
+
+function columnTouched(bounds: CellBounds[], column: number): boolean {
+  return bounds.some((one) => column >= one.columnStart && column <= one.columnEnd)
 }
 
 interface HeaderRowProps {
   columns: GridData['columns']
   widths: number[]
-  bounds: CellBounds | null
+  bounds: CellBounds[]
   onResize: (name: string, width: number) => void
   onFit: (index: number) => void
+  onSelectColumn: (index: number) => void
+  menuFor: (index: number) => MenuItem[]
 }
 
-function HeaderRow({ columns, widths, bounds, onResize, onFit }: HeaderRowProps) {
+function HeaderRow({
+  columns,
+  widths,
+  bounds,
+  onResize,
+  onFit,
+  onSelectColumn,
+  menuFor,
+}: HeaderRowProps) {
   return (
     <div className="sticky top-0 z-2 flex border-b border-line-strong bg-panel">
       <div
@@ -375,29 +459,33 @@ function HeaderRow({ columns, widths, bounds, onResize, onFit }: HeaderRowProps)
       />
 
       {columns.map((column, i) => {
-        const active = bounds !== null && i >= bounds.columnStart && i <= bounds.columnEnd
+        const active = columnTouched(bounds, i)
 
         return (
-          <div
-            key={i}
-            className={cn(
-              'relative flex shrink-0 flex-col justify-center border-r border-line px-2',
-              active ? 'bg-grid-cell-selected' : 'bg-panel',
-            )}
-            style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: HEADER_HEIGHT }}
-          >
-            <span className="truncate font-mono text-sm font-semibold text-fg">{column.name}</span>
-            <span className="flex items-center gap-1 text-2xs text-muted">
-              <ColumnTypeIcon type={column.type} />
-              <span className="truncate font-mono">{typeLabel(column)}</span>
-            </span>
+          <ContextMenu key={i} items={menuFor(i)}>
+            <div
+              onContextMenu={() => onSelectColumn(i)}
+              className={cn(
+                'relative flex shrink-0 flex-col justify-center border-r border-line px-2',
+                active ? 'bg-grid-cell-selected' : 'bg-panel',
+              )}
+              style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: HEADER_HEIGHT }}
+            >
+              <span className="truncate font-mono text-sm font-semibold text-fg">
+                {column.name}
+              </span>
+              <span className="flex items-center gap-1 text-2xs text-muted">
+                <ColumnTypeIcon type={column.type} />
+                <span className="truncate font-mono">{typeLabel(column)}</span>
+              </span>
 
-            <ResizeHandle
-              width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
-              onResize={(width) => onResize(column.name, width)}
-              onFit={() => onFit(i)}
-            />
-          </div>
+              <ResizeHandle
+                width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
+                onResize={(width) => onResize(column.name, width)}
+                onFit={() => onFit(i)}
+              />
+            </div>
+          </ContextMenu>
         )
       })}
     </div>

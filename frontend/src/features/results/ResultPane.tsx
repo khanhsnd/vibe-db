@@ -11,7 +11,7 @@ import type { QueryRun } from '@/stores/queries'
 import { GridFooter } from './GridFooter'
 import { GridPager } from './GridPager'
 import { ResultGrid } from './ResultGrid'
-import type { CellRange } from './resultSet'
+import { selectedRows, type Selection } from './resultSet'
 import { useGridEdits, type EditSource } from './useGridEdits'
 import { usePageWindow } from './usePageWindow'
 
@@ -30,7 +30,7 @@ interface ResultPaneProps {
 }
 
 export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: ResultPaneProps) {
-  const [selection, setSelection] = useState<CellRange | null>(null)
+  const [selection, setSelection] = useState<Selection | null>(null)
   const { running, result, error } = run
 
   const grid = result !== null && result.columns.length > 0 ? result : null
@@ -81,13 +81,7 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
     paged.goToPage(paged.pageCount)
   }
 
-  const deleteRows = () => {
-    if (selection === null) return
-    edits.deleteRows({
-      anchor: { ...selection.anchor, row: absolute(selection.anchor.row) },
-      focus: { ...selection.focus, row: absolute(selection.focus.row) },
-    })
-  }
+  const deleteRows = () => edits.deleteRows(selectedRows(selection).map(absolute))
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { tables, type Cell, type RowValue, type TableColumn } from '@/bridge/tables'
 
-import { boundsOf, cellKey, primaryKeyOf, type CellRange, type CellRef } from './resultSet'
+import { cellKey, primaryKeyOf, type CellRef } from './resultSet'
 
 const NO_ROWS: Cell[][] = []
 const NO_DRAFTS: Cell[][] = []
@@ -96,17 +96,17 @@ export function useGridEdits(
     setDrafts((current) => [...current, Array.from({ length: width }, () => null)])
 
   /**
-   * Marks the selected stored rows for deletion, and drops outright a row that was only ever
-   * a draft — there is nothing on the server to delete.
+   * Marks the given stored rows for deletion, and drops outright a row that was only ever a
+   * draft — there is nothing on the server to delete. Rows rather than a range, because a
+   * selection made with `Ctrl` is not one span.
    */
-  const deleteRows = (range: CellRange | null) => {
-    if (range === null) return
-    const { rowStart, rowEnd } = boundsOf(range)
+  const deleteRows = (rows: number[]) => {
+    if (rows.length === 0) return
 
     const marked = new Set(deleted)
     const dropped = new Set<number>()
 
-    for (let row = rowStart; row <= rowEnd; row++) {
+    for (const row of rows) {
       const draft = row - base.length
       if (draft >= 0) dropped.add(draft)
       else marked.add(row)

@@ -5,7 +5,7 @@ import type { TablePage } from '@/bridge/tables'
 import { GridFooter } from '@/features/results/GridFooter'
 import { GridPager } from '@/features/results/GridPager'
 import { ResultGrid } from '@/features/results/ResultGrid'
-import type { CellRange, CellRef } from '@/features/results/resultSet'
+import { focusOf, selectedRows, type CellRef, type Selection } from '@/features/results/resultSet'
 import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
 import { Empty } from '@/shared/ui/Empty'
 
@@ -32,7 +32,7 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
 
   const [panels, setPanels] = useState<ReadonlySet<PanelKind>>(new Set())
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
-  const [selection, setSelection] = useState<CellRange | null>(null)
+  const [selection, setSelection] = useState<Selection | null>(null)
 
   const columns = data?.columns ?? []
   const editable = columns.some((column) => column.primaryKey)
@@ -52,14 +52,15 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
   )
 
   const target = useMemo(() => {
-    if (!selection) return null
+    const focus = focusOf(selection)
+    if (!focus) return null
 
-    const entry = visible[selection.focus.column]
-    const row = edits.rows[selection.focus.row]
+    const entry = visible[focus.column]
+    const row = edits.rows[focus.row]
     if (!entry || !row) return null
 
     return {
-      ref: { row: selection.focus.row, column: entry.index },
+      ref: { row: focus.row, column: entry.index },
       column: entry.column,
       value: row[entry.index] ?? null,
     }
@@ -84,6 +85,11 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
       else next.add(name)
       return next
     })
+  }
+
+  const showAllColumns = () => {
+    setSelection(null)
+    setHidden(new Set())
   }
 
   const changePage = (next: number) => {
@@ -125,6 +131,19 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
               }
               isDirty={(row, column) => edits.isDirty(row, realColumn(column))}
               isDeleted={(row) => edits.deleted.has(row)}
+              columnMenuItems={(column) => [
+                {
+                  label: 'Hide column',
+                  separatorBefore: true,
+                  disabled: visible.length === 1,
+                  onSelect: () => toggleColumn(column.name),
+                },
+                {
+                  label: 'Show all columns',
+                  disabled: hidden.size === 0,
+                  onSelect: showAllColumns,
+                },
+              ]}
             />
           )}
         </div>
@@ -159,7 +178,7 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
         pending={edits.pending}
         busy={edits.saving || loading}
         onAddRow={edits.addRow}
-        onDeleteRow={() => edits.deleteRows(selection)}
+        onDeleteRow={() => edits.deleteRows(selectedRows(selection))}
         onApply={() => void edits.apply()}
         onDiscard={edits.discard}
         onRefresh={refresh}

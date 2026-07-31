@@ -66,7 +66,9 @@ different edges:
 - **`Column`** opens a checkbox list to the left of the grid that picks which columns show.
   Unchecking the last visible column is blocked, so the grid can never go blank. Selection is
   cleared on a change, because the cell coordinates the grid reports are positions among the
-  *visible* columns and the view maps them back to real column indexes.
+  *visible* columns and the view maps them back to real column indexes. **Right-clicking a column
+  header hides or restores columns too**, alongside the copy and paste items every grid's header menu
+  has — one hidden set, either way in. [grid.md](grid.md) specifies that menu.
 
 ## Query tabs
 
