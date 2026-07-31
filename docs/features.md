@@ -35,12 +35,22 @@ schemas, and whichever node owns the `Tables` folder loads its table list. Click
 owns tables — a MySQL database, a PostgreSQL schema — marks it the active namespace for that
 connection, which is what a new query tab inherits.
 
+**One click selects, two clicks open** — see [frontend.md](frontend.md). Applied to the tree:
+
+| Gesture | What happens |
+|---|---|
+| Click a row | Selects it, and names the active namespace if that row owns tables. Reads nothing. |
+| Click the caret | Selects the node **and** opens or closes it, loading that level on first open. |
+| Double-click a row | The same open, or a data tab for a table. |
+| Open a closed connection | Dials it, whichever gesture asked. A disconnected connection node still carries an empty child list, so expanding it would otherwise spin the caret over nothing. The store expands the node when the session lands, and a failed connect leaves the caret shut. |
+| Right-click a connection | `Connect` / `Disconnect`, `Edit Connection…`, `Delete Connection`. |
+
 The query toolbar mirrors the same shape: one `Database` picker on MySQL, and a `Schema` picker
 beside it on PostgreSQL. Changing the database clears the schema, since a schema of one database
 names nothing in another.
 
-Clicking a table opens a data tab: 100 rows per page by default, ordered by primary key so paging
-is stable. The pager's `Rows` control sizes the page and can lift the bound entirely — see
+**Double-clicking** a table opens a data tab; a single click only selects it, and reads nothing from
+the server. A tab loads 100 rows per page by default, ordered by primary key so paging is stable. The pager's `Rows` control sizes the page and can lift the bound entirely — see
 [the row limit](#the-row-limit). Above the grid sit two independent toggles, since they occupy
 different edges:
 
@@ -54,6 +64,10 @@ different edges:
   *visible* columns and the view maps them back to real column indexes.
 
 ## Query tabs
+
+**New Query** sits in the command bar beside **New Connection**, and as the `+` at the end of the tab
+strip; both open the same tab, which inherits the selected connection and namespace, falling back to
+whichever connection is open.
 
 A query tab carries its own toolbar, editor buffer, database and row limit, so several tabs can sit
 on the same connection without treading on each other. The toolbar picks the database, then

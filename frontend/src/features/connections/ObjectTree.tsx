@@ -83,10 +83,7 @@ export function ObjectTree({
                 aria-level={depth + 1}
                 aria-selected={selected}
                 aria-expanded={expandable ? isOpen : undefined}
-                onClick={() => {
-                  onSelect(node)
-                  if (!expandable) onActivate(node)
-                }}
+                onClick={() => onSelect(node)}
                 onContextMenu={() => onSelect(node)}
                 onDoubleClick={() => onActivate(node)}
                 className={cn(
@@ -106,8 +103,10 @@ export function ObjectTree({
                     aria-label={isOpen ? 'Collapse' : 'Expand'}
                     onClick={(e) => {
                       e.stopPropagation()
+                      onSelect(node)
                       onToggle(node)
                     }}
+                    onDoubleClick={(e) => e.stopPropagation()}
                     className="grid h-4 w-4 shrink-0 place-items-center text-muted hover:text-fg"
                   >
                     {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}

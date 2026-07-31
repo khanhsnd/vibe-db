@@ -1,4 +1,4 @@
-import { Moon, PanelLeft, Plus, Settings, Sun } from 'lucide-react'
+import { Moon, PanelLeft, Plus, Settings, Sun, Terminal } from 'lucide-react'
 
 import { IconButton } from '@/shared/ui/IconButton'
 import { Button } from '@/shared/ui/Button'
@@ -7,9 +7,10 @@ import { useUIStore } from '@/stores/ui'
 
 interface CommandBarProps {
   onNewConnection: () => void
+  onNewQuery: () => void
 }
 
-export function CommandBar({ onNewConnection }: CommandBarProps) {
+export function CommandBar({ onNewConnection, onNewQuery }: CommandBarProps) {
   const { theme, toggleTheme } = useTheme()
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
 
@@ -27,6 +28,10 @@ export function CommandBar({ onNewConnection }: CommandBarProps) {
 
       <Button variant="subtle" icon={<Plus size={14} />} onClick={onNewConnection}>
         New Connection
+      </Button>
+
+      <Button variant="subtle" icon={<Terminal size={14} />} onClick={onNewQuery}>
+        New Query
       </Button>
 
       <div className="flex-1" />

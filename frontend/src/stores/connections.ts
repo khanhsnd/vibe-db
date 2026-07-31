@@ -151,13 +151,10 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }
   },
 
+  // Names the active namespace and nothing else. Expanding is `toggleNode`'s alone, or the two
+  // fight: the tree's caret both selects and toggles, and an expand hidden in here would undo it.
   selectNamespace: (profileId, ns) =>
-    set((s) => ({
-      activeNamespace: { ...s.activeNamespace, [profileId]: ns },
-      expanded: new Set(s.expanded).add(
-        ns.schema === '' ? databaseNodeId(profileId, ns.database) : schemaNodeId(profileId, ns),
-      ),
-    })),
+    set((s) => ({ activeNamespace: { ...s.activeNamespace, [profileId]: ns } })),
 
   loadSchemas: async (profileId, database) => {
     const { sessions, schemas } = get()

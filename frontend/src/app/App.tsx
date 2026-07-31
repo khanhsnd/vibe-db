@@ -142,12 +142,21 @@ export function App() {
     [loadSchemas, loadTables],
   )
 
+  // Opening a closed connection means dialling it: a disconnected connection node still carries
+  // an (empty) child list, so a plain toggle only spins the caret over nothing. The store expands
+  // the node itself once the session lands.
   const toggleTreeNode = useCallback(
     (node: TreeNode) => {
+      if (node.kind === 'connection' && !sessions[node.profileId]) {
+        const profile = profiles.find((p) => p.id === node.profileId)
+        if (profile && statuses[node.profileId] !== 'connecting') startConnect(profile)
+        return
+      }
+
       toggleNode(node.id)
       revealNode(node)
     },
-    [toggleNode, revealNode],
+    [sessions, profiles, statuses, startConnect, toggleNode, revealNode],
   )
 
   const openTable = useCallback(
@@ -164,34 +173,25 @@ export function App() {
     [openTab],
   )
 
+  // Selecting reads nothing and opens nothing: expanding is the caret's job, and loading is
+  // `revealNode`'s, which only an expand calls.
   const selectNode = useCallback(
     (node: TreeNode) => {
       setSelected(node)
 
-      const ns = node.namespace
-      if (!ns) return
-
       // The node that owns tables is the one a query tab can run against. A PostgreSQL
-      // database is not that node — its schemas are — so clicking one only opens it.
-      if (ownsObjects(node)) selectNamespace(node.profileId, ns)
-      else if (isExpandable(node) && !expanded.has(node.id)) toggleNode(node.id)
-
-      revealNode(node)
+      // database is not that node — its schemas are — so selecting one names nothing.
+      if (node.namespace && ownsObjects(node)) selectNamespace(node.profileId, node.namespace)
     },
-    [expanded, selectNamespace, toggleNode, revealNode],
+    [selectNamespace],
   )
 
   const activateNode = useCallback(
     (node: TreeNode) => {
-      if (node.kind === 'connection') {
-        const profile = profiles.find((p) => p.id === node.profileId)
-        if (profile && !sessions[node.profileId]) startConnect(profile)
-        else toggleNode(node.id)
-        return
-      }
-      openTable(node)
+      if (isExpandable(node)) toggleTreeNode(node)
+      else openTable(node)
     },
-    [profiles, sessions, startConnect, toggleNode, openTable],
+    [toggleTreeNode, openTable],
   )
 
   // A new editor inherits the selected connection and namespace, falling back to
@@ -236,7 +236,7 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <CommandBar onNewConnection={openNewConnection} />
+      <CommandBar onNewConnection={openNewConnection} onNewQuery={newQuery} />
 
       <Split
         id="vibe-db.shell"
