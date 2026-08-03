@@ -16,16 +16,33 @@ type Dialect struct {
 	// than by the database itself, which is the one structural difference between the two
 	// engines' names for the same table.
 	NamespaceIsSchema bool
+	// BackslashEscapes says the engine reads `\` inside a string literal as an escape, which
+	// MySQL does unless told otherwise and PostgreSQL does not.
+	BackslashEscapes bool
+	// DollarQuotes says `$tag$ … $tag$` is a string, which is how a PostgreSQL function body
+	// carries semicolons without ending the statement that declares it.
+	DollarQuotes bool
 }
 
 var (
-	MySQL    = Dialect{IdentQuote: '`', HashComments: true}
-	Postgres = Dialect{IdentQuote: '"', NamespaceIsSchema: true}
+	MySQL    = Dialect{IdentQuote: '`', HashComments: true, BackslashEscapes: true}
+	Postgres = Dialect{IdentQuote: '"', NamespaceIsSchema: true, DollarQuotes: true}
 )
 
 func (d Dialect) QuoteIdent(name string) string {
 	quote := string(d.IdentQuote)
 	return quote + strings.ReplaceAll(name, quote, quote+quote) + quote
+}
+
+// QuoteString writes a value as a string literal, which is what a DDL clause that takes an
+// encoding, a locale or a comment needs: DDL binds no arguments, so the text goes in verbatim
+// and this is the only thing standing between it and the statement.
+func (d Dialect) QuoteString(value string) string {
+	escaped := value
+	if d.BackslashEscapes {
+		escaped = strings.ReplaceAll(escaped, `\`, `\\`)
+	}
+	return "'" + strings.ReplaceAll(escaped, "'", "''") + "'"
 }
 
 func (d Dialect) QuoteAll(names []string) []string {

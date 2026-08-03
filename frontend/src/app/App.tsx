@@ -4,7 +4,13 @@ import { NO_NAMESPACE, toProfileInput, type Profile, type ProfileInput } from '@
 import { DEFAULT_QUERY_ROWS } from '@/bridge/rows'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
 import { PasswordPrompt } from '@/features/connections/PasswordPrompt'
-import { isExpandable, ownsObjects, type TreeNode } from '@/features/connections/tree'
+import {
+  hasRows,
+  isExpandable,
+  isObjectFolder,
+  ownsObjects,
+  type TreeNode,
+} from '@/features/connections/tree'
 import { useTreeMenu } from '@/features/connections/useTreeMenu'
 import { SchemaDialogs } from '@/features/schema/SchemaDialogs'
 import type { DesignTarget } from '@/features/connections/useTreeMenu'
@@ -32,7 +38,7 @@ export function App() {
   const statuses = useConnectionsStore((s) => s.statuses)
   const databases = useConnectionsStore((s) => s.databases)
   const schemas = useConnectionsStore((s) => s.schemas)
-  const tables = useConnectionsStore((s) => s.tables)
+  const objects = useConnectionsStore((s) => s.objects)
   const structures = useConnectionsStore((s) => s.structures)
   const activeNamespace = useConnectionsStore((s) => s.activeNamespace)
   const expanded = useConnectionsStore((s) => s.expanded)
@@ -41,7 +47,7 @@ export function App() {
   const connect = useConnectionsStore((s) => s.connect)
   const selectNamespace = useConnectionsStore((s) => s.selectNamespace)
   const loadSchemas = useConnectionsStore((s) => s.loadSchemas)
-  const loadTables = useConnectionsStore((s) => s.loadTables)
+  const loadObjects = useConnectionsStore((s) => s.loadObjects)
   const loadStructure = useConnectionsStore((s) => s.loadStructure)
   const toggleNode = useConnectionsStore((s) => s.toggleNode)
 
@@ -52,11 +58,11 @@ export function App() {
         statuses,
         databases,
         schemas,
-        tables,
+        objects,
         structures,
         activeNamespace,
       }),
-    [profiles, statuses, databases, schemas, tables, structures, activeNamespace],
+    [profiles, statuses, databases, schemas, objects, structures, activeNamespace],
   )
 
   const [selected, setSelected] = useState<TreeNode | null>(null)
@@ -101,8 +107,9 @@ export function App() {
     [connect],
   )
 
-  // Each level loads what the level below it will need: a PostgreSQL database its schemas, the
-  // Tables folder its table list, and any of a table's three folders that table's shape.
+  // Each level loads what the level below it will need: a PostgreSQL database its schemas, any
+  // of a namespace's three folders that namespace's objects, and any of a table's three folders
+  // that table's shape. One read fills all three folders either way.
   const revealNode = useCallback(
     (node: TreeNode) => {
       const ns = node.namespace
@@ -111,10 +118,10 @@ export function App() {
       if (node.kind === 'database' && !ownsObjects(node)) {
         void loadSchemas(node.profileId, ns.database)
       }
-      if (node.kind === 'folder') void loadTables(node.profileId, ns)
+      if (isObjectFolder(node)) void loadObjects(node.profileId, ns)
       if (node.table !== undefined) void loadStructure(node.profileId, ns, node.table)
     },
-    [loadSchemas, loadTables, loadStructure],
+    [loadSchemas, loadObjects, loadStructure],
   )
 
   // Opening a closed connection means dialling it: a disconnected connection node still carries
@@ -134,9 +141,11 @@ export function App() {
     [sessions, profiles, statuses, startConnect, toggleNode, revealNode],
   )
 
-  const openTable = useCallback(
+  // A view's rows are read exactly as a table's are, so they open the same tab — and land in it
+  // read-only, since no column of a view is a primary key and no single stored row is named.
+  const openRows = useCallback(
     (node: TreeNode) => {
-      if (node.kind !== 'table' || !node.namespace) return
+      if (!hasRows(node) || !node.namespace) return
       openTab({
         kind: 'table',
         title: node.label,
@@ -165,7 +174,7 @@ export function App() {
   const menuItemsFor = useTreeMenu({
     onConnect: startConnect,
     onEditConnection: openEditConnection,
-    onOpenTable: openTable,
+    onOpenRows: openRows,
     onDesign: openDesign,
   })
 
@@ -186,10 +195,10 @@ export function App() {
   // caret is what expands, and a double-click on a table has always meant "show me the rows".
   const activateNode = useCallback(
     (node: TreeNode) => {
-      if (node.kind === 'table') openTable(node)
+      if (hasRows(node)) openRows(node)
       else if (isExpandable(node)) toggleTreeNode(node)
     },
-    [toggleTreeNode, openTable],
+    [toggleTreeNode, openRows],
   )
 
   // A new editor inherits the selected connection and namespace, falling back to

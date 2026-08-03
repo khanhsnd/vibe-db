@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import type { Namespace } from '@/bridge/connections'
+import { rowExport, type ExportFormat } from '@/bridge/export'
 import type { TablePage } from '@/bridge/tables'
 import { GridFooter } from '@/features/results/GridFooter'
 import { GridPager } from '@/features/results/GridPager'
@@ -119,6 +120,18 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
     changeSort(next)
   }
 
+  /**
+   * The page in front, with the columns that are showing — a table's rows are paged by the
+   * server, so what the grid holds *is* the page, and a hidden column is one nobody asked for.
+   */
+  const exportRows = (format: ExportFormat) =>
+    void rowExport.run(sessionId, format, {
+      namespace,
+      table,
+      columns: grid.columns.map((column) => column.name),
+      rows: grid.rows,
+    })
+
   const failure = edits.error ?? (data ? error : null)
 
   return (
@@ -150,6 +163,7 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
               isDeleted={(row) => edits.deleted.has(row)}
               sort={sort}
               onSortChange={changeOrder}
+              onExport={data !== null ? exportRows : undefined}
               columnMenuItems={(column) => [
                 {
                   label: 'Hide column',

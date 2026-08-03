@@ -39,6 +39,9 @@
   drawn with, so a delete looks the same in the tree as in a grid header — and a menu built in a
   `.ts` file can name one without becoming a component. A menu whose items carry no icon keeps its
   old width; one icon in the list gives every item the gutter, so the labels stay aligned.
+- **One menu, two ways in.** `ContextMenu` is raised by a right-click and `MenuButton` by a control,
+  and they share the `MenuItem` type and their look (`MENU_CONTENT`, `menuItemClass`, `MenuGlyph`,
+  all exported from `ContextMenu.tsx`). An action offered both ways is one object drawn one way.
 - **An engine is a chip, not a line icon**: `features/connections/EngineIcon.tsx` draws the engine's
   own mark in white on `--engine-<name>`, because MySQL and PostgreSQL are both databases and a
   `Database` glyph twice over says nothing. The dolphin and the elephant are what a reader already
@@ -46,7 +49,10 @@
   path strings in `engineGlyphs.ts` (Devicon, MIT) rather than an icon-set dependency; the
   elephant's eyes and tusks are subpaths filled `evenodd`, so they are holes onto the chip.
 - Control styling is shared through `shared/ui/Field.tsx`: `CONTROL` for a form control in a dialog,
-  the exported `TOOLBAR_CONTROL` for the shorter ones in a toolbar strip.
+  the exported `TOOLBAR_CONTROL` for the shorter ones in a toolbar strip. Height is kept out of the
+  shared `CONTROL_BASE`, because `cn` only joins class names — two height utilities on one element
+  would be settled by the stylesheet's order rather than by that file's. `Field` takes an `inline`
+  prop for a settings form, which puts the label beside the control rather than over it.
 
 ## Zustand selectors
 

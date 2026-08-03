@@ -32,6 +32,66 @@ func (a *ConnectionAPI) LoadTableStructure(
 	return toTableStructureDTO(structure), nil
 }
 
+// LoadDatabaseOptions reads the lists the New Database dialog offers — roles, templates,
+// encodings, tablespaces, extensions — for whichever of them this engine has.
+func (a *ConnectionAPI) LoadDatabaseOptions(sessionID string) (DatabaseOptions, error) {
+	schema, err := a.sessions.Schema(sessionID)
+	if err != nil {
+		return DatabaseOptions{}, wrapError(err)
+	}
+
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	options, err := schema.DatabaseOptions(ctx)
+	if err != nil {
+		return DatabaseOptions{}, wrapError(err)
+	}
+	return toDatabaseOptionsDTO(options), nil
+}
+
+// PreviewCreateDatabase is what CreateDatabase would run, so the dialog's SQL Preview shows
+// the statement rather than a guess at it. A database with no name yet previews nothing.
+func (a *ConnectionAPI) PreviewCreateDatabase(
+	sessionID string,
+	spec DatabaseSpecInput,
+) ([]string, error) {
+	schema, err := a.sessions.Schema(sessionID)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	if domain.RequireName("database", spec.Name) != nil {
+		return []string{}, nil
+	}
+
+	planned := schema.CreateDatabaseSQL(spec.toDriver())
+	statements := make([]string, 0, len(planned))
+	for _, statement := range planned {
+		statements = append(statements, statement.SQL)
+	}
+	return statements, nil
+}
+
+func (a *ConnectionAPI) CreateDatabase(sessionID string, spec DatabaseSpecInput) error {
+	if err := domain.RequireName("database", spec.Name); err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.CreateDatabase(ctx, spec.toDriver())
+	})
+}
+
+func (a *ConnectionAPI) DropDatabase(sessionID, name string) error {
+	if err := domain.RequireName("database", name); err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.DropDatabase(ctx, name)
+	})
+}
+
 func (a *ConnectionAPI) CreateTable(sessionID string, spec TableSpecInput) error {
 	if err := domain.RequireName("table", spec.Table); err != nil {
 		return wrapError(err)
@@ -176,6 +236,78 @@ func (a *ConnectionAPI) SetPrimaryKey(
 	})
 }
 
+func (a *ConnectionAPI) DropView(sessionID string, ns Namespace, view string) error {
+	if err := domain.RequireName("view", view); err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.DropView(ctx, ns.toDriver(), view)
+	})
+}
+
+func (a *ConnectionAPI) DropRoutine(sessionID string, ns Namespace, routine RoutineInfo) error {
+	if err := domain.RequireName("routine", routine.Name); err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.DropRoutine(ctx, ns.toDriver(), routine.toDriver())
+	})
+}
+
+func (a *ConnectionAPI) CreateIndex(
+	sessionID string,
+	ns Namespace,
+	table string,
+	spec IndexInput,
+) error {
+	if err := domain.RequireNames("table", table, "index", spec.Name); err != nil {
+		return wrapError(err)
+	}
+	if err := requireColumns("index column", spec.Columns); err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.CreateIndex(ctx, ns.toDriver(), table, spec.toDriver())
+	})
+}
+
+func (a *ConnectionAPI) CreateForeignKey(
+	sessionID string,
+	ns Namespace,
+	table string,
+	spec ForeignKeyInput,
+) error {
+	err := domain.RequireNames(
+		"table", table,
+		"foreign key", spec.Name,
+		"referenced table", spec.ReferencedTable,
+	)
+	if err != nil {
+		return wrapError(err)
+	}
+	if err := requireColumns("foreign key column", spec.Columns); err != nil {
+		return wrapError(err)
+	}
+	if err := requireColumns("referenced column", spec.ReferencedColumns); err != nil {
+		return wrapError(err)
+	}
+	// A key pairs its columns with the ones it points at, so a list of a different length
+	// names no pairing at all.
+	if len(spec.Columns) != len(spec.ReferencedColumns) {
+		return wrapError(domain.ValidationError{
+			Field:   "referenced column",
+			Message: "must name one column for each column of the key",
+		})
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.CreateForeignKey(ctx, ns.toDriver(), table, spec.toDriver())
+	})
+}
+
 func (a *ConnectionAPI) DropIndex(sessionID string, ns Namespace, table, index string) error {
 	if err := domain.RequireNames("table", table, "index", index); err != nil {
 		return wrapError(err)
@@ -221,4 +353,18 @@ func (a *ConnectionAPI) changeSchema(
 // be missing, which is what a column with no default means.
 func requireColumn(column ColumnInput) error {
 	return domain.RequireNames("column", column.Name, "column type", column.Type)
+}
+
+// requireColumns refuses a list that named nothing, which is what an index or a key over no
+// column at all would be.
+func requireColumns(what string, columns []string) error {
+	if len(columns) == 0 {
+		return domain.NameError{What: what}
+	}
+	for _, column := range columns {
+		if err := domain.RequireName(what, column); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -1,10 +1,16 @@
-import type { Engine, Namespace } from '@/bridge/connections'
+import type { Engine, Namespace, Routine } from '@/bridge/connections'
 
+/**
+ * A folder is named after what it holds — `tables`, `views`, `routines` — the way a table's own
+ * folders are, so a right-click knows what it is over without a second field to say so.
+ */
 export type NodeKind =
   | 'connection'
   | 'database'
   | 'schema'
-  | 'folder'
+  | 'tables'
+  | 'views'
+  | 'routines'
   | 'table'
   | 'view'
   | 'procedure'
@@ -35,6 +41,8 @@ export interface TreeNode {
   badge?: string
   /** A field that is part of the primary key, which the tree marks with a key rather than an icon. */
   primaryKey?: boolean
+  /** The routine a `procedure` or `function` row stands for, which is what a drop is addressed to. */
+  routine?: Routine
 }
 
 export interface FlatNode {
@@ -54,7 +62,22 @@ export function isExpandable(node: TreeNode): boolean {
  * children are schemas and they hold the folders.
  */
 export function ownsObjects(node: TreeNode): boolean {
-  return node.children?.[0]?.kind === 'folder'
+  return node.children?.[0]?.kind === 'tables'
+}
+
+const OBJECT_FOLDERS: ReadonlySet<NodeKind> = new Set(['tables', 'views', 'routines'])
+
+/**
+ * Whether this node is one of a namespace's object folders. All three are filled by one read,
+ * so opening any of them asks for the same thing.
+ */
+export function isObjectFolder(node: TreeNode): boolean {
+  return OBJECT_FOLDERS.has(node.kind)
+}
+
+/** Whether this node's rows can be opened in a data tab: a table, or a view, which reads alike. */
+export function hasRows(node: TreeNode): boolean {
+  return node.kind === 'table' || node.kind === 'view'
 }
 
 export function flatten(roots: TreeNode[], expanded: ReadonlySet<string>): FlatNode[] {

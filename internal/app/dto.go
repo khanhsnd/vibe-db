@@ -99,6 +99,22 @@ type TableSchema struct {
 	Columns []string `json:"columns"`
 }
 
+// RoutineInfo is one stored function or procedure. It travels back into a drop unchanged,
+// because on PostgreSQL the name alone does not name one — two functions may share it.
+type RoutineInfo struct {
+	Name      string `json:"name"`
+	Procedure bool   `json:"procedure"`
+	Arguments string `json:"arguments"`
+}
+
+// Objects is everything the tree draws a folder for under a namespace, read in one call
+// because opening any one folder needs every folder's count.
+type Objects struct {
+	Tables   []string      `json:"tables"`
+	Views    []string      `json:"views"`
+	Routines []RoutineInfo `json:"routines"`
+}
+
 type IndexInfo struct {
 	Name    string   `json:"name"`
 	Columns []string `json:"columns"`
@@ -125,6 +141,28 @@ type TableStructure struct {
 	ForeignKeys []ForeignKeyInfo `json:"foreignKeys"`
 }
 
+// IndexInput is an index as the designer declares it. `method` reaches the statement verbatim,
+// the way a column's type does, and an empty one takes the engine's own default.
+type IndexInput struct {
+	Name    string   `json:"name"`
+	Columns []string `json:"columns"`
+	Unique  bool     `json:"unique"`
+	Method  string   `json:"method"`
+}
+
+// ForeignKeyInput is a referential constraint as the designer declares it. `referencedSchema`
+// is whichever part of a namespace the engine qualifies a table by, and is empty for a table in
+// the same namespace as the one holding the key.
+type ForeignKeyInput struct {
+	Name              string   `json:"name"`
+	Columns           []string `json:"columns"`
+	ReferencedSchema  string   `json:"referencedSchema"`
+	ReferencedTable   string   `json:"referencedTable"`
+	ReferencedColumns []string `json:"referencedColumns"`
+	OnUpdate          string   `json:"onUpdate"`
+	OnDelete          string   `json:"onDelete"`
+}
+
 // ColumnInput is a column as the dialog declares it. Type carries its length and scale —
 // `varchar(255)`, `numeric(10,2)` — and Default is an expression, since that is what a
 // server-side default is; both reach the statement verbatim, DDL having nothing to bind.
@@ -140,6 +178,35 @@ type TableSpecInput struct {
 	Namespace
 	Table   string        `json:"table"`
 	Columns []ColumnInput `json:"columns"`
+}
+
+// DatabaseSpecInput is a CREATE DATABASE as the dialog declares it. A field an engine has no
+// concept of arrives blank rather than being left out of the shape, since one dialog fills it
+// for both and the driver is what decides which parts it reads.
+type DatabaseSpecInput struct {
+	Name             string   `json:"name"`
+	Owner            string   `json:"owner"`
+	Template         string   `json:"template"`
+	Encoding         string   `json:"encoding"`
+	Collation        string   `json:"collation"`
+	CType            string   `json:"ctype"`
+	Tablespace       string   `json:"tablespace"`
+	ConnectionLimit  int      `json:"connectionLimit"`
+	AllowConnections bool     `json:"allowConnections"`
+	IsTemplate       bool     `json:"isTemplate"`
+	Comment          string   `json:"comment"`
+	Extensions       []string `json:"extensions"`
+}
+
+// DatabaseOptions is what the New Database dialog fills its lists from. An engine answers with
+// nothing for a list it has no such concept of, which is how the dialog knows not to draw it.
+type DatabaseOptions struct {
+	Owners      []string `json:"owners"`
+	Templates   []string `json:"templates"`
+	Encodings   []string `json:"encodings"`
+	Collations  []string `json:"collations"`
+	Tablespaces []string `json:"tablespaces"`
+	Extensions  []string `json:"extensions"`
 }
 
 type QueryInput struct {
@@ -162,6 +229,24 @@ type QueryResult struct {
 	Truncated    bool          `json:"truncated"`
 	ElapsedMs    int64         `json:"elapsedMs"`
 	Table        string        `json:"table"`
+}
+
+// StatementOutcome is what one statement of a script did. `error` is the server's own wording
+// and is empty for one that succeeded, so a script's messages read as the output panel does.
+type StatementOutcome struct {
+	SQL          string `json:"sql"`
+	Rows         int    `json:"rows"`
+	RowsAffected int64  `json:"rowsAffected"`
+	ElapsedMs    int64  `json:"elapsedMs"`
+	Error        string `json:"error"`
+	ErrorCode    string `json:"errorCode"`
+}
+
+// ScriptResult is one Execute: what each statement did, and the rows of the last one that
+// returned any — which is what the grid shows.
+type ScriptResult struct {
+	QueryResult
+	Statements []StatementOutcome `json:"statements"`
 }
 
 type CellEditInput struct {
@@ -312,6 +397,34 @@ func (in ColumnInput) toDriver() driver.ColumnSpec {
 	}
 }
 
+func (in DatabaseSpecInput) toDriver() driver.DatabaseSpec {
+	return driver.DatabaseSpec{
+		Name:             in.Name,
+		Owner:            in.Owner,
+		Template:         in.Template,
+		Encoding:         in.Encoding,
+		Collation:        in.Collation,
+		CType:            in.CType,
+		Tablespace:       in.Tablespace,
+		ConnectionLimit:  in.ConnectionLimit,
+		AllowConnections: in.AllowConnections,
+		IsTemplate:       in.IsTemplate,
+		Comment:          in.Comment,
+		Extensions:       in.Extensions,
+	}
+}
+
+func toDatabaseOptionsDTO(source driver.DatabaseOptions) DatabaseOptions {
+	return DatabaseOptions{
+		Owners:      source.Owners,
+		Templates:   source.Templates,
+		Encodings:   source.Encodings,
+		Collations:  source.Collations,
+		Tablespaces: source.Tablespaces,
+		Extensions:  source.Extensions,
+	}
+}
+
 func (in TableSpecInput) toDriver() driver.TableSpec {
 	columns := make([]driver.ColumnSpec, 0, len(in.Columns))
 	for _, column := range in.Columns {
@@ -355,6 +468,48 @@ func toTableStructureDTO(source driver.TableStructure) TableStructure {
 		Indexes:     indexes,
 		ForeignKeys: keys,
 	}
+}
+
+func (in IndexInput) toDriver() driver.IndexSpec {
+	return driver.IndexSpec{
+		Name:    in.Name,
+		Columns: in.Columns,
+		Unique:  in.Unique,
+		Method:  in.Method,
+	}
+}
+
+func (in ForeignKeyInput) toDriver() driver.ForeignKeySpec {
+	return driver.ForeignKeySpec{
+		Name:              in.Name,
+		Columns:           in.Columns,
+		ReferencedSchema:  in.ReferencedSchema,
+		ReferencedTable:   in.ReferencedTable,
+		ReferencedColumns: in.ReferencedColumns,
+		OnUpdate:          in.OnUpdate,
+		OnDelete:          in.OnDelete,
+	}
+}
+
+func (in RoutineInfo) toDriver() driver.Routine {
+	return driver.Routine{
+		Name:      in.Name,
+		Procedure: in.Procedure,
+		Arguments: in.Arguments,
+	}
+}
+
+func toObjectsDTO(source driver.Objects) Objects {
+	routines := make([]RoutineInfo, 0, len(source.Routines))
+	for _, routine := range source.Routines {
+		routines = append(routines, RoutineInfo{
+			Name:      routine.Name,
+			Procedure: routine.Procedure,
+			Arguments: routine.Arguments,
+		})
+	}
+
+	return Objects{Tables: source.Tables, Views: source.Views, Routines: routines}
 }
 
 func toTableSchemaDTOs(source []driver.TableSchema) []TableSchema {

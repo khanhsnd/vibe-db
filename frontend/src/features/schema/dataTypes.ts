@@ -72,6 +72,26 @@ const POSTGRES = [
   'varbit',
 ] as const
 
+// The access methods an index is usually built with. Like the type list these are suggestions:
+// the cell still takes anything typed into it, because a server may know methods of its own.
+const MYSQL_INDEX_METHODS = ['BTREE', 'HASH'] as const
+const POSTGRES_INDEX_METHODS = ['btree', 'hash', 'gin', 'gist', 'brin', 'spgist'] as const
+
+/** What a foreign key does to the rows it holds when the row it points at moves or goes. */
+export const REFERENTIAL_ACTIONS = [
+  'NO ACTION',
+  'RESTRICT',
+  'CASCADE',
+  'SET NULL',
+  'SET DEFAULT',
+] as const
+
+const isPostgres = (engine: string) => engineInfo(engine).value === 'postgres'
+
 export function dataTypes(engine: string): readonly string[] {
-  return engineInfo(engine).value === 'postgres' ? POSTGRES : MYSQL
+  return isPostgres(engine) ? POSTGRES : MYSQL
+}
+
+export function indexMethods(engine: string): readonly string[] {
+  return isPostgres(engine) ? POSTGRES_INDEX_METHODS : MYSQL_INDEX_METHODS
 }

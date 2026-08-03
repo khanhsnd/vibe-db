@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 
 import type { Namespace, Profile } from '@/bridge/connections'
+import { databases } from '@/bridge/databases'
 import { ICON } from '@/shared/ui/menuIcons'
 import { schema } from '@/bridge/schema'
 import type { TableColumn } from '@/bridge/tables'
@@ -14,7 +15,8 @@ import { ownsObjects, type TreeNode } from './tree'
 interface TreeMenuActions {
   onConnect: (profile: Profile) => void
   onEditConnection: (profile: Profile) => void
-  onOpenTable: (node: TreeNode) => void
+  /** Opens a data tab on whatever has rows: a table, or a view, which reads the same way. */
+  onOpenRows: (node: TreeNode) => void
   /** Opens the designer on a table, or on a new one when the table is empty. */
   onDesign: (target: DesignTarget) => void
 }
@@ -37,22 +39,30 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
   const structures = useConnectionsStore((s) => s.structures)
   const disconnect = useConnectionsStore((s) => s.disconnect)
   const deleteProfile = useConnectionsStore((s) => s.deleteProfile)
-  const refreshTables = useConnectionsStore((s) => s.refreshTables)
+  const refreshObjects = useConnectionsStore((s) => s.refreshObjects)
   const refreshSchemas = useConnectionsStore((s) => s.refreshSchemas)
   const refreshStructure = useConnectionsStore((s) => s.refreshStructure)
   const changeSchema = useConnectionsStore((s) => s.changeSchema)
+  const changeDatabases = useConnectionsStore((s) => s.changeDatabases)
   const ask = useSchemaStore((s) => s.ask)
   const askAddField = useSchemaStore((s) => s.askAddField)
 
-  const { onConnect, onEditConnection, onOpenTable, onDesign } = actions
+  const { onConnect, onEditConnection, onOpenRows, onDesign } = actions
 
   return useCallback(
     (node: TreeNode): MenuItem[] => {
       const profile = profiles.find((p) => p.id === node.profileId)
       if (!profile) return []
 
+      const newDatabase: MenuItem = {
+        label: 'New Database…',
+        icon: ICON.newDatabase,
+        onSelect: () => ask({ kind: 'database', profileId: node.profileId }),
+      }
+
       if (node.kind === 'connection') {
         return connectionItems(node, profile, Boolean(sessions[node.profileId]), {
+          newDatabase,
           onConnect,
           onEditConnection,
           disconnect,
@@ -76,28 +86,62 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
         onSelect: () => onDesign({ profileId: node.profileId, namespace: ns, table: '' }),
       }
 
-      const refreshTableList: MenuItem = {
+      // One read fills all three folders, so Refresh means the same thing wherever it is asked
+      // for under a namespace.
+      const refreshObjectList: MenuItem = {
         label: 'Refresh',
         icon: ICON.refresh,
         separatorBefore: true,
-        onSelect: () => void refreshTables(node.profileId, ns),
+        onSelect: () => void refreshObjects(node.profileId, ns),
       }
 
       switch (node.kind) {
         case 'database':
-        case 'schema':
-          return ownsObjects(node)
-            ? [newTable, refreshTableList]
+        case 'schema': {
+          const own = ownsObjects(node)
+            ? [newTable, refreshObjectList]
             : [
                 {
                   label: 'Refresh',
                   icon: ICON.refresh,
+                  separatorBefore: true,
                   onSelect: () => void refreshSchemas(node.profileId, ns.database),
                 },
               ]
 
-        case 'folder':
-          return [newTable, refreshTableList]
+          // Only the database level can make or drop a database; a schema sits inside one.
+          if (node.kind !== 'database') return own
+          return [
+            newDatabase,
+            {
+              label: 'Delete Database',
+              icon: ICON.delete,
+              danger: true,
+              onSelect: () =>
+                ask({
+                  kind: 'confirm',
+                  title: 'Delete Database',
+                  message:
+                    `Drop ${ns.database}? Every table in it, and every row of every table, ` +
+                    `goes with it.`,
+                  submitLabel: 'Delete',
+                  danger: true,
+                  onSubmit: () =>
+                    changeDatabases(node.profileId, (sessionId) =>
+                      databases.drop(sessionId, ns.database),
+                    ),
+                }),
+            },
+            ...own.map((item, at) => (at === 0 ? { ...item, separatorBefore: true } : item)),
+          ]
+        }
+
+        case 'tables':
+          return [newTable, refreshObjectList]
+
+        case 'views':
+        case 'routines':
+          return [{ ...refreshObjectList, separatorBefore: false }]
 
         case 'table':
           return tableItems(node, ns, {
@@ -105,9 +149,36 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
             change,
             ask,
             refreshStructure,
-            onOpenTable,
+            onOpenRows,
             onDesign,
           })
+
+        case 'view':
+          return [
+            { label: 'Open View', icon: ICON.open, onSelect: () => onOpenRows(node) },
+            {
+              label: 'Delete View',
+              icon: ICON.delete,
+              danger: true,
+              separatorBefore: true,
+              onSelect: () =>
+                ask({
+                  kind: 'confirm',
+                  title: 'Delete View',
+                  message:
+                    `Drop the view ${node.label}? The rows it read stay where they are; ` +
+                    `anything selecting from it stops working.`,
+                  submitLabel: 'Delete',
+                  danger: true,
+                  onSubmit: change((sessionId) => schema.dropView(sessionId, ns, node.label)),
+                }),
+            },
+            refreshObjectList,
+          ]
+
+        case 'procedure':
+        case 'function':
+          return routineItems(node, ns, { change, ask, refresh: refreshObjectList })
 
         case 'fields':
         case 'field': {
@@ -140,18 +211,56 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       structures,
       disconnect,
       deleteProfile,
-      refreshTables,
+      refreshObjects,
       refreshSchemas,
       refreshStructure,
       changeSchema,
+      changeDatabases,
       ask,
       askAddField,
       onConnect,
       onEditConnection,
-      onOpenTable,
+      onOpenRows,
       onDesign,
     ],
   )
+}
+
+/**
+ * A routine is dropped by the whole of what the tree holds for it, not by its name: on
+ * PostgreSQL two functions may share a name and be told apart only by what they take.
+ */
+function routineItems(
+  node: TreeNode,
+  ns: Namespace,
+  deps: {
+    change: (run: ChangeSchema, table?: string) => () => Promise<void>
+    ask: (request: SchemaRequest) => void
+    refresh: MenuItem
+  },
+): MenuItem[] {
+  const routine = node.routine
+  if (!routine) return [{ ...deps.refresh, separatorBefore: false }]
+
+  const kind = routine.procedure ? 'Procedure' : 'Function'
+
+  return [
+    {
+      label: `Delete ${kind}`,
+      icon: ICON.delete,
+      danger: true,
+      onSelect: () =>
+        deps.ask({
+          kind: 'confirm',
+          title: `Delete ${kind}`,
+          message: `Drop ${node.label}? Anything that calls it stops working.`,
+          submitLabel: 'Delete',
+          danger: true,
+          onSubmit: deps.change((sessionId) => schema.dropRoutine(sessionId, ns, routine)),
+        }),
+    },
+    deps.refresh,
+  ]
 }
 
 function connectionItems(
@@ -159,6 +268,7 @@ function connectionItems(
   profile: Profile,
   connected: boolean,
   on: {
+    newDatabase: MenuItem
     onConnect: (profile: Profile) => void
     onEditConnection: (profile: Profile) => void
     disconnect: (profileId: string) => Promise<void>
@@ -173,6 +283,9 @@ function connectionItems(
           onSelect: () => void on.disconnect(node.profileId),
         }
       : { label: 'Connect', icon: ICON.connect, onSelect: () => on.onConnect(profile) },
+    // A database is made on a server, so the item is only there once there is a session to make
+    // it on: offering it on a closed connection would be an error waiting to be raised.
+    ...(connected ? [{ ...on.newDatabase, separatorBefore: true }] : []),
     {
       label: 'Edit Connection…',
       icon: ICON.editConnection,
@@ -193,7 +306,7 @@ interface TableMenuDeps {
   change: (run: ChangeSchema, table?: string) => () => Promise<void>
   ask: (request: SchemaRequest) => void
   refreshStructure: (profileId: string, ns: Namespace, table: string) => Promise<void>
-  onOpenTable: (node: TreeNode) => void
+  onOpenRows: (node: TreeNode) => void
   onDesign: (target: DesignTarget) => void
 }
 
@@ -201,7 +314,7 @@ function tableItems(node: TreeNode, ns: Namespace, deps: TableMenuDeps): MenuIte
   const table = node.label
 
   return [
-    { label: 'Open Table', icon: ICON.open, onSelect: () => deps.onOpenTable(node) },
+    { label: 'Open Table', icon: ICON.open, onSelect: () => deps.onOpenRows(node) },
     {
       label: 'Design Table',
       icon: ICON.design,

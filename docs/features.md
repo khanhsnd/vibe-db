@@ -1,20 +1,21 @@
 # Features and UI behaviour
 
 Working: connection profiles (create / edit / delete) for **MySQL and PostgreSQL**, Test Connection
-with server version and latency, connect / disconnect, database listing, table listing per database,
-**a table's fields, indexes and foreign keys in the tree and in a designer tab**, **schema changes
-from the tree's context menu** — new / rename / empty / truncate / drop a table, add / edit / rename
-/ drop a field, drop an index or a foreign key — table data browsing with pagination, cell editing
-plus row insert and delete on any grid whose rows can be traced to one table, query tabs with
-completion, passwords in Windows Credential Manager, and the full layout shell with dark and light
-themes.
+with server version and latency, connect / disconnect, **creating and dropping a database**,
+**tables, views and routines listed per namespace**, **a table's fields, indexes and foreign keys in
+the tree and in a designer tab**, **schema changes from the tree's context menu** — new / rename /
+empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index or a
+foreign key, drop a view or a routine — table data browsing with pagination, cell editing plus row
+insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
+or SQL**, query tabs with completion that **run a whole script**, passwords in Windows Credential
+Manager, and the full layout shell with dark and light themes.
 
-Not there yet: schema browsing stops at tables — views, procedures and functions are not listed, and
-a *new* index or foreign key can only be made from a query (dropping one has a menu item; creating
-one does not). A column's **comment** is neither read nor written, so the designer has no column for
-one rather than a column that quietly drops what is typed into it. One Execute runs one statement; a
-pasted multi-statement script is rejected by the server, since `multiStatements` stays off and the
-client-side splitter is not written yet.
+Not there yet: a **materialised view** is not listed, because it is dropped by a statement of its
+own and a list that cannot be acted on is worse than one that does not claim it. A routine can be
+dropped but not read or written — there is no body editor. A column's **comment** is neither read
+nor written, so the designer has no column for one rather than a column that quietly drops what is
+typed into it. An export writes what the grid holds rather than replaying the statement for
+everything behind it.
 
 ## Picking an engine
 
@@ -43,16 +44,22 @@ read in. Reaching any other database dials it separately, which the adapter does
 The tree has as many levels as the engine does:
 
 ```
-MySQL         connection → database → Tables → table → Fields    → field
-PostgreSQL    connection → database → schema  → Tables → table → Indexes     → index
-                                                                → Foreign Keys → foreign key
+MySQL         connection → database →          Tables    → table → Fields       → field
+PostgreSQL    connection → database → schema →  Views     → view          Indexes      → index
+                                                Functions → function      Foreign Keys → foreign key
 ```
 
 Each level loads on first expand and is cached until disconnect: a PostgreSQL database loads its
-schemas, whichever node owns the `Tables` folder loads its table list, and a table loads its shape —
-fields, indexes and foreign keys in one read, since expanding any of the three folders needs all
-three counts. Clicking the node that owns tables — a MySQL database, a PostgreSQL schema — marks it
-the active namespace for that connection, which is what a new query tab inherits.
+schemas, whichever node owns the object folders loads **its tables, views and routines in one
+read**, and a table loads its shape — fields, indexes and foreign keys, also in one read. The reason
+is the same both times: expanding any one folder needs every folder's count, so one read answers all
+three. Clicking the node that owns tables — a MySQL database, a PostgreSQL schema — marks it the
+active namespace for that connection, which is what a new query tab inherits.
+
+A **view opens its rows in the same tab a table does**, and lands there read-only: no column of a
+view is a primary key, so no single stored row can be named. A **function or a procedure** carries
+its argument list as its badge, because on PostgreSQL two of them may share a name and be told apart
+only by what they take — which is also why dropping one sends the whole routine and not its name.
 
 A field carries its **bare** type as a badge and a key icon when it is part of the primary key; an
 index carries its columns, and a foreign key the table it points at. The badge is the bare type and
@@ -75,10 +82,13 @@ filled in before it runs. `useTreeMenu` is the single place the items are built,
 
 | Right-click | Items |
 |---|---|
-| A connection | `Connect` / `Disconnect`, `Edit Connection…`, `Delete Connection` |
-| A PostgreSQL database | `Refresh` — it holds schemas, not tables |
+| A connection | `Connect` / `Disconnect`, `New Database…` — only once there is a session to make one on — `Edit Connection…`, `Delete Connection` |
+| A database | `New Database…`, `Delete Database`, then what its level owns: `New Table` and `Refresh` on MySQL, `Refresh` alone on PostgreSQL, which holds schemas rather than tables |
 | The node owning tables, or its `Tables` folder | `New Table`, `Refresh` |
+| The `Views` or `Functions` folder | `Refresh` — one read fills all three folders, so it means the same wherever it is asked for |
 | A table | `Open Table`, `Design Table`, `New Table`, `Rename Table…`, `Empty Table`, `Truncate Table`, `Delete Table`, `Refresh` |
+| A view | `Open View`, `Delete View`, `Refresh` |
+| A function or procedure | `Delete Function` / `Delete Procedure`, `Refresh` |
 | The `Fields` folder | `Add Field`, `Refresh` |
 | A field | `Edit Field`, `Rename Field…`, `Add Field`, `Delete Field`, `Refresh` |
 | An index | `Delete Index`, `Refresh`. Disabled on the index behind a primary key: neither engine will drop the key as an index, so the item says so rather than failing at the server |
@@ -99,9 +109,32 @@ filled in before it runs. `useTreeMenu` is the single place the items are built,
 
 **Anything with more than one answer in it happens in a tab, not a dialog** — `New Table`,
 `Design Table`, `Add Field` and `Edit Field` all open (or reveal) the designer, which has the room
-to work in and leaves the tree beside it readable. Only the two requests that are a single answer
-stay modal: `Rename …`, which is one box, and a confirmation, which has to be answered before
-anything else happens.
+to work in and leaves the tree beside it readable. Three requests stay modal: `Rename …`, which is
+one box; a confirmation, which has to be answered before anything else happens; and `New Database…`,
+which has **no tab of its own to open** — a database is not a thing you sit and work in, and its
+answers are one fixed screen rather than a list.
+
+### New Database
+
+The dialog is a tab strip over a form, and how much of the form there is belongs to the engine.
+**PostgreSQL's database is an object in its own right**, so `General` asks for a Database Name, an
+Owner, a Template, an Encoding, a Collation Order, a Character Classification, a Tablespace and a
+Connection Limit, plus `Allow Connection` and `Is Template`; `Extensions` is a filterable list of
+what the server has to offer; and `Comment` is free text. **MySQL's database is a namespace with a
+character set**, so `General` asks for a name, a Character Set and a Collation — and the other two
+tabs are not drawn, because MySQL has neither.
+
+- **Every list is the server's own**, read in one call when the dialog opens: the roles, the
+  templates, the encodings, the tablespaces, the available extensions. A blank entry reads
+  `Server default` and leaves that clause out of the statement altogether, rather than this side
+  guessing at what the default is.
+- **MySQL's collations narrow to the chosen character set** without a second read, because a MySQL
+  collation is named after the set it belongs to — `utf8mb4_general_ci`.
+- **`SQL Preview` asks the driver what it would run.** It is the same list `Create` executes, so the
+  two cannot drift; a database with no name yet previews nothing. An extension is shown as its own
+  statement because it *is* one, run inside the database that has just been made.
+- `Connection Limit` keeps `-1`, which is PostgreSQL's own "no limit", for anything typed into it
+  that is not a number — a blank box meaning `0` would be a ban rather than an absence.
 
 `Add Field` from the tree opens the designer with a blank field already appended, which is the one
 thing a tab cannot say by being opened. It travels as a slot in the schema store rather than a field
@@ -109,17 +142,22 @@ of the tab, because the tab may already be open and a revealed tab has to hear t
 
 ### The designer
 
-`Design Table` opens a tab laid out the way a table designer is: a toolbar of `Save`, `Add Field`,
-`Delete Field`, `Primary Key` and `Refresh`, over a strip of `Fields`, `Indexes`, `Foreign Keys` and
+`Design Table` opens a tab laid out the way a table designer is: a toolbar of `Save`, `Add …`,
+`Delete …`, `Primary Key` and `Refresh`, over a strip of `Fields`, `Indexes`, `Foreign Keys` and
 `Changes`. **`Save` takes the accent the moment there is anything to save** and drops back to a
-plain toolbar button when there is not, and `Delete Field` carries the danger tone, so the two
+plain toolbar button when there is not, and `Delete …` carries the danger tone, so the two
 buttons that matter are readable before the labels are. `New Table` is the same tab with no table behind it yet and a name box in the toolbar;
 its `Save` creates the table, and the tab then goes on designing it rather than offering to create
-it twice.
+it twice — its indexes and foreign keys are made straight after, since `CREATE TABLE` carries the
+fields and the primary key and nothing else.
 
-- **Every list is a `ResultGrid`**, because they are rows and columns — see [grid.md](grid.md). The
-  Fields grid is **edited in place**: one click on a cell opens it, `Escape` closes it again, and
-  the arrows walk the fields a cell at a time.
+- **The toolbar acts on the pane in front.** `Add` and `Delete` read `Field`, `Index` or
+  `Foreign Key` depending on the tab, and `Primary Key` is live only over `Fields`. That is why the
+  tab strip's selection is held by the designer rather than inside the strip. Changing tab clears
+  the selection, because a cell reference is a position in the pane that reported it.
+- **Every list is a `ResultGrid`**, because they are rows and columns — see [grid.md](grid.md), and
+  **all three are edited in place**: one click on a cell opens it, `Escape` closes it again, and
+  the arrows walk the rows a cell at a time.
 - Its columns are the parts a field is *declared* from, not the string the server reports back:
   `Name`, `Type`, `Length`, `Decimal`, `Not null`, `Key`, `Default`. Length and decimals are parts
   of the type and travel as one string — `varchar(255)`, `numeric(10,2)` — and read as `0` when the
@@ -136,10 +174,21 @@ it twice.
 - `Primary Key` moves the key onto the selected fields, or off them if they all already hold it.
   Both engines are made to replace a key rather than add a second one, and dropping the key of a
   table that has none is not an error.
-- **Nothing is sent until `Save`.** A pending cell carries the grid's warning ring, and a field the
-  server has not seen is ringed whole. `Changes` lists what `Save` will do, in the order it will do
-  it: drops, then adds, then a rename before the alter that follows it — so renaming and retyping a
-  field in one sitting is one trip and the alter can still name the column. It reads as plain
+- **The Indexes grid** is `Name`, `Fields`, `Unique` and `Method`, and **the Foreign Keys grid** is
+  `Name`, `Fields`, `Referenced Schema`, `Referenced Table`, `Referenced Fields`, `On Update` and
+  `On Delete`. A list of columns is typed as one cell, comma separated, because that is how it
+  reads. `Method` offers the engine's access methods and the two action cells offer the five
+  referential actions — suggestions, like the type list, since the cell still takes what is typed.
+  A blank `Referenced Schema` means the same namespace the table is in.
+- **An index behind the primary key is not in the Indexes grid.** It is the key, and the Fields grid
+  is what moves a key.
+- **Nothing is sent until `Save`.** A pending cell carries the grid's warning ring; a field the
+  server has not seen is ringed whole, and so is *any* pending index or foreign key — neither engine
+  can alter which columns one covers, so an edited one is dropped and made again rather than changed
+  a cell at a time. `Changes` lists what `Save` will do, in the order it will do it: **what is going
+  goes first** — keys, then indexes — so nothing stands in the way of the field changes that follow;
+  then the fields, a rename before the alter so the alter can still name the column; then **what is
+  arriving**, so an index can name a column the same `Save` has just added. It reads as plain
   changes and not as SQL, because how a statement is spelled belongs to the driver and this side
   has never seen one.
 - `Refresh` re-reads the table and drops whatever was staged. Nothing in the Indexes or Foreign Keys
@@ -188,6 +237,29 @@ on the same connection without treading on each other. The toolbar picks the dat
 - A statement that returns rows fills the grid; one that does not reports its affected-row count.
   Which path a statement takes is decided by its leading keyword, read past any leading comments,
   plus a `RETURNING` clause on PostgreSQL, where that is what makes a write answer with rows.
+
+### One Execute runs the whole script
+
+**Execute runs whatever the editor holds**, whether that is one statement or twenty. The text is cut
+into the statements it carries and they run in order on the same connection, stopping at the first
+the server rejects.
+
+- **Where a statement ends is the engine's**, so the splitter is the driver's: `sqlkit.Split` reads
+  the semicolons that are *not* inside a string, a quoted identifier, a line or block comment, or —
+  on PostgreSQL — a `$tag$ … $tag$` body, which is how a function carries semicolons of its own. A
+  backslash escapes a quote on MySQL and does not on PostgreSQL, so `'C:\'` is one string there and
+  a runaway one here. A chunk with no statement in it — trailing whitespace, the comment a script
+  ends on — is dropped rather than sent.
+- **The grid shows the last result set the script produced**, so a script ending in a `SELECT` shows
+  it and one ending in an `UPDATE` keeps the last set it did return.
+- **A `Messages` pane appears beside `Result` for a script**, listing every statement with its row
+  count, its affected count, its time and either `OK` or the server's own wording. It is a
+  `ResultGrid`, because it is rows and columns.
+- **A rejection is a message, not a failure — for a script.** One statement on its own still fails
+  as a failure, so the output panel shows the server's wording where the reader is looking; but the
+  statements above a rejected one *did run*, and throwing would hide how far the script got. A
+  script that stops opens the `Messages` pane by itself, and the status strip says which statement
+  of how many it stopped at.
 - **Rows are paged under the grid by the same pager the table view has.** What a read returned is a
   *prefix* of the result, and the pager cuts pages out of it in memory — turning to a page it
   already holds reads nothing. A total shown as `1,000+` says the prefix stopped at the toolbar's
@@ -236,9 +308,10 @@ Two consequences of that convention are worth knowing:
 
 ## The output panel
 
-The panel under the editor is a tab strip whose only pane so far is **`Result`**; a further pane —
-messages, a query plan, history — is one more entry in the list `QueryOutput` hands `ResultTabs`.
-The run status strip stays below the strip, because it describes the run rather than any one pane.
+The panel under the editor is a tab strip of **`Result`** and, for a script, **`Messages`**; a
+further pane — a query plan, history — is one more entry in the list `QueryOutput` hands
+`ResultTabs`. The run status strip stays below the strip, because it describes the run rather than
+any one pane.
 
 Under the pane sits the same `GridFooter` the table view has, with the source of the rows named on
 its right — the qualified table, or why the result is read-only:
@@ -252,6 +325,25 @@ its right — the qualified table, or why the result is read-only:
   the table view uses, then inserts, then deletions — and reloads. ↻ reloads alone.
 - **`Refresh` and `Apply` replay the statement that produced the rows**, not whatever the editor
   holds now, so editing the SQL after a run cannot make Apply execute something else.
+
+## Exporting a grid
+
+A download button sits **over every grid, against its right edge**, and opens **CSV**, **JSON** and
+**SQL**; each writes to a file picked in the system's own save dialog — so the file lands where the
+reader put it, named after the table, and nothing is written if the dialog is dismissed. It is above
+the rows rather than in the footer below them because it acts on the table as a whole, where the
+footer acts on a row.
+
+**What is written is what the grid holds, in the order it draws it.** A query result exports its
+whole result rather than the page in front, since a reader who paged still means the result; a table
+tab exports the page, because a table's rows are paged by the *server* and the page is all the grid
+has. A hidden column is not exported: it is one nobody asked for.
+
+| Format | What it does with a `NULL` |
+|---|---|
+| CSV | An empty field, which is the only thing a CSV has to say "nothing" with |
+| JSON | `null`, which is why a reader who needs to tell it from an empty string wants this one |
+| SQL | The `NULL` keyword. Every other value is written as a literal, which both engines read back into a column of any type. The statements are asked of the driver, so the quoting is the engine's; a result no single table can be traced to is named `exported_rows`, which the reader has to correct — the honest outcome, rather than a file that looks right |
 
 ### When a result is writable
 

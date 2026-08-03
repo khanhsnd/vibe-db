@@ -97,6 +97,30 @@ func (s *session) SetPrimaryKey(
 	return s.run(ctx, ns.Database, statement)
 }
 
+// CreateIndex puts the access method between the name and the table, which is where MySQL's
+// grammar takes it — PostgreSQL takes it after the table instead.
+func (s *session) CreateIndex(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+	spec driver.IndexSpec,
+) error {
+	statement := "CREATE "
+	if spec.Unique {
+		statement += "UNIQUE "
+	}
+	statement += "INDEX " + dialect.QuoteIdent(spec.Name)
+
+	if method := strings.TrimSpace(spec.Method); method != "" {
+		statement += " USING " + method
+	}
+
+	statement += " ON " + dialect.Table(ns, table) +
+		" (" + strings.Join(dialect.QuoteAll(spec.Columns), ", ") + ")"
+
+	return s.run(ctx, ns.Database, statement)
+}
+
 func (s *session) DropIndex(ctx context.Context, ns driver.Namespace, table, index string) error {
 	statement := "ALTER TABLE " + dialect.Table(ns, table) +
 		" DROP INDEX " + dialect.QuoteIdent(index)

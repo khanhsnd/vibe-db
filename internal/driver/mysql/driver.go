@@ -85,25 +85,7 @@ func (s *session) Databases(ctx context.Context) ([]string, error) {
 		FROM information_schema.schemata
 		ORDER BY schema_name`
 
-	rows, err := s.db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, translateError(err)
-	}
-	defer rows.Close()
-
-	var names []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, translateError(err)
-		}
-		names = append(names, name)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, translateError(err)
-	}
-
-	return names, nil
+	return s.names(ctx, query)
 }
 
 // Schemas has nothing to answer with: MySQL's schema *is* its database, so the tree stops
@@ -112,14 +94,64 @@ func (*session) Schemas(context.Context, string) ([]string, error) {
 	return nil, nil
 }
 
-func (s *session) Tables(ctx context.Context, ns driver.Namespace) ([]string, error) {
-	const query = `
+// Objects reads the three folders of a namespace in one trip, since the tree needs every count
+// the moment any one of them is opened.
+func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Objects, error) {
+	const tables = `
 		SELECT table_name
 		FROM information_schema.tables
 		WHERE table_schema = ? AND table_type = 'BASE TABLE'
 		ORDER BY table_name`
 
-	rows, err := s.db.QueryContext(ctx, query, ns.Database)
+	const views = `
+		SELECT table_name
+		FROM information_schema.views
+		WHERE table_schema = ?
+		ORDER BY table_name`
+
+	const routines = `
+		SELECT routine_name, routine_type = 'PROCEDURE'
+		FROM information_schema.routines
+		WHERE routine_schema = ?
+		ORDER BY routine_name`
+
+	found, err := s.names(ctx, tables, ns.Database)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	seen, err := s.names(ctx, views, ns.Database)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, routines, ns.Database)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+	defer rows.Close()
+
+	// A MySQL routine name is unique within its database, so nothing has to carry an argument
+	// list for the drop to find it again.
+	stored := []driver.Routine{}
+	for rows.Next() {
+		var routine driver.Routine
+		if err := rows.Scan(&routine.Name, &routine.Procedure); err != nil {
+			return driver.Objects{}, translateError(err)
+		}
+		stored = append(stored, routine)
+	}
+	if err := rows.Err(); err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	return driver.Objects{Tables: found, Views: seen, Routines: stored}, nil
+}
+
+// names runs a one-column catalogue read, which is what every list this adapter answers with
+// comes down to.
+func (s *session) names(ctx context.Context, query string, args ...any) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, translateError(err)
 	}
@@ -138,6 +170,10 @@ func (s *session) Tables(ctx context.Context, ns driver.Namespace) ([]string, er
 	}
 
 	return names, nil
+}
+
+func (*session) Split(script string) []string {
+	return sqlkit.Split(script, dialect)
 }
 
 func (s *session) Close() error {

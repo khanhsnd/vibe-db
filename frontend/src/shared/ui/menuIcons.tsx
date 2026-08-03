@@ -4,6 +4,7 @@ import {
   ArrowUpNarrowWide,
   ClipboardPaste,
   Copy,
+  Database,
   Eraser,
   Eye,
   EyeOff,
@@ -32,6 +33,8 @@ export const ICON = {
   connect: <Plug size={SIZE} />,
   disconnect: <Unplug size={SIZE} />,
   editConnection: <Settings2 size={SIZE} />,
+
+  newDatabase: <Database size={SIZE} />,
 
   open: <Table2 size={SIZE} />,
   design: <TableProperties size={SIZE} />,

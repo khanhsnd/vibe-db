@@ -3,18 +3,11 @@ import { KeyRound, Plus, RefreshCw, Save, Table2, Trash2 } from 'lucide-react'
 
 import type { Namespace } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
-import { schema, type TableStructure } from '@/bridge/schema'
+import { schema } from '@/bridge/schema'
 import type { Cell } from '@/bridge/tables'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import { ResultTabs } from '@/features/results/ResultTabs'
-import {
-  CHECK_ON,
-  selectedRows,
-  type CellRef,
-  type ColumnEditor,
-  type GridData,
-  type Selection,
-} from '@/features/results/resultSet'
+import { selectedRows, type CellRef, type GridData, type Selection } from '@/features/results/resultSet'
 import { Banner } from '@/shared/ui/Banner'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
@@ -24,9 +17,31 @@ import { tableKey, useConnectionsStore } from '@/stores/connections'
 import { useSchemaStore } from '@/stores/schema'
 import { useTabsStore } from '@/stores/tabs'
 
-import { dataTypes } from './dataTypes'
-import { draftOf, newField, newTableDraft, pendingChanges, type DraftField } from './draft'
-import { formatFieldType, parseFieldType } from './fieldType'
+import { dataTypes, indexMethods } from './dataTypes'
+import {
+  draftOf,
+  emptyDraft,
+  newField,
+  newIndex,
+  newKey,
+  newTableConstraints,
+  newTableDraft,
+  pendingChanges,
+  sameIndex,
+  sameKey,
+  type DraftField,
+  type TableDraft,
+} from './draft'
+import {
+  changeRows,
+  fieldEdited,
+  fieldRows,
+  indexRows,
+  keyRows,
+  writeField,
+  writeIndex,
+  writeKey,
+} from './designerRows'
 
 interface TableDesignerProps {
   /** The tab this designer fills, which its own Save may re-point at a table it created. */
@@ -37,29 +52,32 @@ interface TableDesignerProps {
   table: string
 }
 
-/** The editable columns of the Fields grid, in the order they are drawn. */
-const NAME = 0
-const TYPE = 1
-const LENGTH = 2
-const DECIMAL = 3
-const NOT_NULL = 4
-const KEY = 5
+/** Which list the toolbar's Add and Delete act on, named the way its button reads. */
+type PaneId = 'fields' | 'indexes' | 'keys' | 'changes'
+
+const NOUN: Record<PaneId, string> = {
+  fields: 'Field',
+  indexes: 'Index',
+  keys: 'Foreign Key',
+  changes: '',
+}
 
 /**
  * A table's shape, staged. Every edit is local until **Save**, which works out what has to happen
- * for the server's fields to become the ones on screen and runs those in order — so a rename and a
+ * for the server's table to become the one on screen and runs those in order — so a rename and a
  * retype in one sitting are one trip, and nothing is half-applied because a later box was wrong.
  *
  * The three lists are `ResultGrid`s: they are rows and columns, and that is the one component for
- * those. Editing happens in the grid's own cell editor, which is why the columns are the parts a
- * field is declared from rather than the string the server reports.
+ * those. **The toolbar acts on whichever is in front**, so `Add` means a field, an index or a
+ * foreign key depending on the tab — which is why the tab strip's selection is held here rather
+ * than inside it.
  */
 export function TableDesigner({ tabId, profileId, namespace, table }: TableDesignerProps) {
   const creating = table === ''
   const structure = useConnectionsStore((s) =>
     creating ? undefined : s.structures[tableKey(profileId, namespace, table)],
   )
-  // The engine decides which types the Type cell offers, and is the profile's own.
+  // The engine decides which types and index methods the cells offer, and is the profile's own.
   const engine = useConnectionsStore(
     (s) => s.profiles.find((profile) => profile.id === profileId)?.engine ?? '',
   )
@@ -71,7 +89,8 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
   const addedField = useSchemaStore((s) => s.addedField)
 
   const [name, setName] = useState(table)
-  const [draft, setDraft] = useState<DraftField[]>(creating ? newTableDraft : [])
+  const [draft, setDraft] = useState<TableDraft>(creating ? newTableDraft : emptyDraft)
+  const [pane, setPane] = useState<PaneId>('fields')
   const [selection, setSelection] = useState<Selection | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<AppError | null>(null)
@@ -81,7 +100,7 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
   }, [creating, loadStructure, profileId, namespace, table])
 
   // The draft follows a fresh read — the one after a Save, or after Refresh — and is otherwise the
-  // reader's alone. `stored` is what makes that safe: a field the server has not seen survives it.
+  // reader's alone. `stored` is what makes that safe: anything the server has not seen survives it.
   const stored = useMemo(() => draftOf(structure), [structure])
   useEffect(() => {
     if (!creating) setDraft(stored)
@@ -92,33 +111,48 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
   const key = tableKey(profileId, namespace, table)
   useEffect(() => {
     if (addFieldTo !== key || (!creating && !structure)) return
-    setDraft((prev) => [...prev, newField()])
+    setDraft((prev) => ({ ...prev, fields: [...prev.fields, newField()] }))
+    setPane('fields')
     addedField()
   }, [addFieldTo, key, creating, structure, addedField])
 
   const changes = useMemo(
-    () => (creating ? [] : pendingChanges(draft, stored)),
+    () => (creating ? newTableConstraints(draft) : pendingChanges(draft, stored)),
     [creating, draft, stored],
   )
   const dirty = creating || changes.length > 0
-
   const rows = useMemo(() => selectedRows(selection), [selection])
 
-  const editCell = useCallback((ref: CellRef, value: Cell) => {
-    const text = (value ?? '').trim()
-    setDraft((prev) =>
-      prev.map((field, at) => (at === ref.row ? withCell(field, ref.column, text) : field)),
-    )
-  }, [])
+  // A cell is written back onto the list it came from, which is the one the pane in front draws.
+  const editCell = useCallback(
+    (ref: CellRef, value: Cell) => {
+      const text = (value ?? '').trim()
+      setDraft((prev) => {
+        switch (pane) {
+          case 'fields':
+            return { ...prev, fields: mapAt(prev.fields, ref.row, (f) => writeField(f, ref.column, text)) }
+          case 'indexes':
+            return { ...prev, indexes: mapAt(prev.indexes, ref.row, (i) => writeIndex(i, ref.column, text)) }
+          case 'keys':
+            return { ...prev, keys: mapAt(prev.keys, ref.row, (k) => writeKey(k, ref.column, text)) }
+          default:
+            return prev
+        }
+      })
+    },
+    [pane],
+  )
 
   const save = async () => {
     setSaving(true)
     setError(null)
     try {
       if (creating) {
-        await changeSchema(profileId, { namespace, table: name }, (sessionId) =>
-          schema.createTable(sessionId, namespace, name, draft),
-        )
+        await changeSchema(profileId, { namespace, table: name }, async (sessionId) => {
+          await schema.createTable(sessionId, namespace, name, draft.fields)
+          // CREATE TABLE carries the fields and the key; anything else staged is made after.
+          for (const change of changes) await change.run(sessionId, namespace, name)
+        })
         designed(tabId, name)
       } else {
         await changeSchema(profileId, { namespace, table }, async (sessionId) => {
@@ -137,11 +171,13 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
     return <Empty title="Reading the table's shape…" hint={qualified(namespace, table)} />
   }
 
+  const editable = pane !== 'changes'
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line bg-bar px-2">
         {/* Save is the weight of the toolbar the moment there is anything to save, and the one
-            button that destroys a field carries the danger tone. */}
+            button that destroys carries the danger tone. */}
         <Button
           variant={dirty ? 'primary' : 'subtle'}
           icon={<Save size={13} />}
@@ -153,28 +189,35 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
         <Button
           variant="subtle"
           icon={<Plus size={13} />}
-          onClick={() => setDraft((prev) => [...prev, newField()])}
+          disabled={!editable}
+          onClick={() => setDraft((prev) => appendTo(prev, pane))}
         >
-          Add Field
+          Add {NOUN[pane] || 'Field'}
         </Button>
         <Button
           variant="danger"
           icon={<Trash2 size={13} />}
-          disabled={rows.length === 0}
-          onClick={() => setDraft((prev) => prev.filter((_, at) => !rows.includes(at)))}
+          disabled={!editable || rows.length === 0}
+          onClick={() => {
+            setDraft((prev) => removeFrom(prev, pane, rows))
+            setSelection(null)
+          }}
         >
-          Delete Field
+          Delete {NOUN[pane] || 'Field'}
         </Button>
         <Button
           variant="subtle"
           icon={<KeyRound size={13} />}
-          disabled={rows.length === 0}
+          disabled={pane !== 'fields' || rows.length === 0}
           onClick={() =>
             setDraft((prev) => {
-              const adding = prev.some((field, at) => rows.includes(at) && !field.primaryKey)
-              return prev.map((field, at) =>
-                rows.includes(at) ? { ...field, primaryKey: adding } : field,
-              )
+              const adding = prev.fields.some((field, at) => rows.includes(at) && !field.primaryKey)
+              return {
+                ...prev,
+                fields: prev.fields.map((field, at) =>
+                  rows.includes(at) ? { ...field, primaryKey: adding } : field,
+                ),
+              }
             })
           }
         >
@@ -214,34 +257,57 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
 
       <div className="min-h-0 flex-1">
         <ResultTabs
+          selectedId={pane}
+          onSelect={(id) => {
+            setPane(id as PaneId)
+            // A cell reference is a position in the pane that reported it, so a selection can
+            // never survive the pane changing under it.
+            setSelection(null)
+          }}
           panes={[
             {
               id: 'fields',
-              label: `Fields (${draft.length})`,
+              label: `Fields (${draft.fields.length})`,
               content: (
                 <ResultGrid
-                  result={fieldRows(draft, dataTypes(engine))}
+                  result={fieldRows(draft.fields, dataTypes(engine))}
                   selection={selection}
                   onSelectionChange={setSelection}
                   onEditCell={editCell}
-                  isDirty={(row, column) => isEdited(draft[row], stored, column)}
+                  isDirty={(row, at) => isFieldEdited(draft.fields[row], stored.fields, at)}
                 />
               ),
             },
             {
               id: 'indexes',
-              label: `Indexes (${structure?.indexes.length ?? 0})`,
-              content: <ResultGrid result={indexRows(structure)} />,
+              label: `Indexes (${draft.indexes.length})`,
+              content: (
+                <ResultGrid
+                  result={indexRows(draft.indexes, indexMethods(engine))}
+                  selection={selection}
+                  onSelectionChange={setSelection}
+                  onEditCell={editCell}
+                  isDirty={(row) => isStagedEdited(draft.indexes[row], stored.indexes, sameIndex)}
+                />
+              ),
             },
             {
               id: 'keys',
-              label: `Foreign Keys (${structure?.foreignKeys.length ?? 0})`,
-              content: <ResultGrid result={keyRows(structure)} />,
+              label: `Foreign Keys (${draft.keys.length})`,
+              content: (
+                <ResultGrid
+                  result={keyRows(draft.keys)}
+                  selection={selection}
+                  onSelectionChange={setSelection}
+                  onEditCell={editCell}
+                  isDirty={(row) => isStagedEdited(draft.keys[row], stored.keys, sameKey)}
+                />
+              ),
             },
             {
               id: 'changes',
-              label: `Changes (${creating ? 1 : changes.length})`,
-              content: <ResultGrid result={changeRows(creating, name, changes)} />,
+              label: `Changes (${creating ? changes.length + 1 : changes.length})`,
+              content: <ResultGrid result={plannedRows(creating, name, changes)} />,
             },
           ]}
         />
@@ -254,160 +320,64 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
     setSelection(null)
     return refreshStructure(profileId, namespace, table)
   }
-
-  // A whole row is marked pending for a field the server has not seen; an existing one is marked
-  // only where it differs, so what Save will touch is readable from the grid.
-  function isEdited(field: DraftField | undefined, held: DraftField[], column: number): boolean {
-    if (!field) return false
-    if (field.stored === null) return true
-
-    const source = held.find((f) => f.stored === field.stored)
-    if (!source) return true
-
-    const type = parseFieldType(field.type)
-    const was = parseFieldType(source.type)
-
-    switch (column) {
-      case NAME:
-        return field.name !== source.name
-      case TYPE:
-        return type.base !== was.base
-      case LENGTH:
-        return type.length !== was.length
-      case DECIMAL:
-        return type.scale !== was.scale
-      case NOT_NULL:
-        return field.nullable !== source.nullable
-      case KEY:
-        return field.primaryKey !== source.primaryKey
-      default:
-        return false
-    }
-  }
 }
 
-// withCell writes one edited cell back onto the field it came from. Length and decimals are parts
-// of the type rather than facts of their own, which is what they are on the wire.
-function withCell(field: DraftField, column: number, text: string): DraftField {
-  const type = parseFieldType(field.type)
-  const digits = text.replace(/\D/g, '')
-  const count = digits === '' ? null : Number(digits)
+// A whole row is marked pending for a field the server has not seen; an existing one is marked
+// only where it differs, so what Save will touch is readable from the grid.
+function isFieldEdited(field: DraftField | undefined, held: DraftField[], at: number): boolean {
+  if (!field) return false
+  if (field.stored === null) return true
 
-  switch (column) {
-    case NAME:
-      return { ...field, name: text }
-    case TYPE:
-      return { ...field, type: formatFieldType({ ...type, base: text }) }
-    case LENGTH:
-      return { ...field, type: formatFieldType({ ...type, length: count }) }
-    case DECIMAL:
-      return { ...field, type: formatFieldType({ ...type, scale: count }) }
-    case NOT_NULL:
-      return { ...field, nullable: !truthy(text) }
-    case KEY:
-      return { ...field, primaryKey: truthy(text) }
+  const source = held.find((one) => one.stored === field.stored)
+  return source ? fieldEdited(field, source, at) : true
+}
+
+// An index and a key are dropped and made again rather than altered, so there is no such thing
+// as one changed cell of them: the row is pending or it is not.
+function isStagedEdited<T extends { stored: string | null }>(
+  staged: T | undefined,
+  held: T[],
+  same: (staged: T, held: T) => boolean,
+): boolean {
+  if (!staged) return false
+  if (staged.stored === null) return true
+
+  const source = held.find((one) => one.stored === staged.stored)
+  return !source || !same(staged, source)
+}
+
+function appendTo(draft: TableDraft, pane: PaneId): TableDraft {
+  switch (pane) {
+    case 'indexes':
+      return { ...draft, indexes: [...draft.indexes, newIndex()] }
+    case 'keys':
+      return { ...draft, keys: [...draft.keys, newKey()] }
     default:
-      return { ...field, default: text === '' ? null : text }
+      return { ...draft, fields: [...draft.fields, newField()] }
   }
 }
 
-// What a yes/no cell means. A checkbox and a key cell write `CHECK_ON`, and a key cell reads back
-// its position in the key, so anything held at all is yes — bar a word that says otherwise, which
-// is all a paste can bring. A cleared cell is no.
-function truthy(text: string): boolean {
-  const said = text.trim().toLowerCase()
-  return said !== '' && said !== 'no' && said !== 'n' && said !== 'false' && said !== '0'
-}
+function removeFrom(draft: TableDraft, pane: PaneId, rows: number[]): TableDraft {
+  const without = <T,>(list: T[]) => list.filter((_, at) => !rows.includes(at))
 
-// Length and decimals read as 0 rather than blank when the type declares none, so a column of
-// numbers stays a column of numbers.
-function fieldRows(draft: DraftField[], types: readonly string[]): GridData {
-  const keys = keyPositions(draft)
-
-  return {
-    columns: [
-      column('Name'),
-      column('Type', 'text', { kind: 'choice', options: types }),
-      column('Length', 'int'),
-      column('Decimal', 'int'),
-      column('Not null', 'text', { kind: 'check' }),
-      column('Key', 'text', { kind: 'key' }),
-      column('Default'),
-    ],
-    rows: draft.map((field, at): Cell[] => {
-      const type = parseFieldType(field.type)
-      return [
-        field.name,
-        type.base,
-        String(type.length ?? 0),
-        String(type.scale ?? 0),
-        field.nullable && !field.primaryKey ? '' : CHECK_ON,
-        keys[at] ?? '',
-        field.default ?? '',
-      ]
-    }),
+  switch (pane) {
+    case 'indexes':
+      return { ...draft, indexes: without(draft.indexes) }
+    case 'keys':
+      return { ...draft, keys: without(draft.keys) }
+    default:
+      return { ...draft, fields: without(draft.fields) }
   }
 }
 
-// Which column of the key each field is, counted down the rows: the number beside its lock. A
-// field outside the key holds nothing, which is what leaves its cell empty.
-function keyPositions(draft: DraftField[]): string[] {
-  let taken = 0
-  return draft.map((field) => (field.primaryKey ? String(++taken) : ''))
+function mapAt<T>(list: T[], at: number, change: (one: T) => T): T[] {
+  return list.map((one, index) => (index === at ? change(one) : one))
 }
 
-function indexRows(structure: TableStructure | undefined): GridData {
-  return {
-    columns: [column('Name'), column('Fields'), column('Unique'), column('Method')],
-    rows: (structure?.indexes ?? []).map((index): Cell[] => [
-      index.name,
-      index.columns.join(', '),
-      index.unique ? 'YES' : '',
-      index.method,
-    ]),
-  }
+function plannedRows(creating: boolean, name: string, changes: { describe: string }[]): GridData {
+  const described = changes.map((change) => change.describe)
+  return changeRows(creating ? [`Create table ${name || '…'}`, ...described] : described)
 }
-
-function keyRows(structure: TableStructure | undefined): GridData {
-  return {
-    columns: [
-      column('Name'),
-      column('Fields'),
-      column('References'),
-      column('On Update'),
-      column('On Delete'),
-    ],
-    rows: (structure?.foreignKeys ?? []).map((key): Cell[] => [
-      key.name,
-      key.columns.join(', '),
-      `${key.referencedSchema}.${key.referencedTable} (${key.referencedColumns.join(', ')})`,
-      key.onUpdate,
-      key.onDelete,
-    ]),
-  }
-}
-
-// What Save will do, in the order it will do it. Not the SQL: how a statement is spelled is the
-// driver's business, and this side has never seen one.
-function changeRows(
-  creating: boolean,
-  name: string,
-  changes: { describe: string }[],
-): GridData {
-  const described = creating ? [`Create table ${name || '…'}`] : changes.map((c) => c.describe)
-
-  return {
-    columns: [column('#', 'int'), column('Change')],
-    rows: described.map((describe, index): Cell[] => [String(index + 1), describe]),
-  }
-}
-
-const column = (name: string, type = 'text', editor?: ColumnEditor) => ({
-  name,
-  type,
-  fullType: type,
-  editor,
-})
 
 const qualified = (ns: Namespace, table: string) =>
   `${ns.schema === '' ? ns.database : `${ns.database}.${ns.schema}`}.${table}`

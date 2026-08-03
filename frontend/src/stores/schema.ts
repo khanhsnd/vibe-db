@@ -6,10 +6,11 @@ import { create } from 'zustand'
  * tree menu that raised the request stays the one place a statement is decided.
  *
  * Anything with a *form* in it is not here: a field's shape is edited in the designer tab, which
- * has the room for it. Only a rename, which is one box, and a confirmation, which has to be
- * answered before anything else happens, are modal.
+ * has the room for it. Only a rename, which is one box, a confirmation, which has to be answered
+ * before anything else happens, and a new database, whose answers are one fixed screen and which
+ * has no tab of its own to open, are modal.
  */
-export type SchemaRequest = PromptRequest | ConfirmRequest
+export type SchemaRequest = PromptRequest | ConfirmRequest | DatabaseRequest
 
 export interface PromptRequest {
   kind: 'prompt'
@@ -27,6 +28,16 @@ export interface ConfirmRequest {
   submitLabel: string
   danger: boolean
   onSubmit: () => Promise<void>
+}
+
+/**
+ * A new database on this connection. It carries only the connection, because everything the
+ * dialog offers — the roles, the templates, the encodings — is read from that connection's own
+ * server and belongs to no namespace.
+ */
+export interface DatabaseRequest {
+  kind: 'database'
+  profileId: string
 }
 
 interface SchemaState {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, CircleSlash, Terminal } from 'lucide-react'
 
 import type { AppError } from '@/bridge/errors'
+import { rowExport, type ExportFormat } from '@/bridge/export'
 import type { QueryResult } from '@/bridge/query'
 import { ALL_ROWS } from '@/bridge/rows'
 import { cn } from '@/lib/cn'
@@ -123,6 +124,22 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
 
   const deleteRows = () => edits.deleteRows(selectedRows(selection).map(absolute))
 
+  /**
+   * Every row the grid holds, in the order it draws them — the whole result rather than the page
+   * in front, since a reader who paged means the result. What is on screen is what is written,
+   * staged edits included, because the grid is the thing being exported.
+   */
+  const exportRows = (format: ExportFormat) => {
+    if (grid === null || sessionId === null) return
+
+    void rowExport.run(sessionId, format, {
+      namespace: { database: grid.database, schema: grid.schema },
+      table: grid.table,
+      columns: grid.columns.map((column) => column.name),
+      rows: ordered,
+    })
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
       <div className="min-h-0 flex-1">
@@ -142,6 +159,7 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
             isDeleted={(row) => edits.deleted.has(absolute(row))}
             sort={sort}
             onSortChange={changeSort}
+            onExport={sessionId !== null ? exportRows : undefined}
           />
         ) : result !== null ? (
           <SuccessPanel rowsAffected={result.rowsAffected} />

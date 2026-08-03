@@ -55,6 +55,24 @@ type TableSchema struct {
 	Columns []string
 }
 
+// Routine is one stored function or procedure. Arguments is the identity argument list, which
+// is what PostgreSQL needs to tell two overloads of one name apart and what MySQL, whose
+// routine names are unique, leaves empty.
+type Routine struct {
+	Name      string
+	Procedure bool
+	Arguments string
+}
+
+// Objects is everything a namespace holds that the tree draws a folder for. They are read
+// together for the reason a table's shape is: expanding any one folder needs every folder's
+// count, so one read answers all three.
+type Objects struct {
+	Tables   []string
+	Views    []string
+	Routines []Routine
+}
+
 // Index is one index of a table, the one behind the primary key included, because that is
 // what the catalogue reports and what the tree lists.
 type Index struct {
@@ -103,6 +121,65 @@ type TableSpec struct {
 	Namespace
 	Table   string
 	Columns []ColumnSpec
+}
+
+// IndexSpec is an index as the designer declares it. Method is the access method and reaches
+// the statement verbatim, the way a column's type does; an empty one takes the engine's default.
+type IndexSpec struct {
+	Name    string
+	Columns []string
+	Unique  bool
+	Method  string
+}
+
+// ForeignKeySpec is a referential constraint as the designer declares it. ReferencedSchema is
+// whichever part of a namespace this engine qualifies a table by — a schema on PostgreSQL, a
+// database on MySQL — and is empty for a table in the same namespace as the one holding the key.
+type ForeignKeySpec struct {
+	Name              string
+	Columns           []string
+	ReferencedSchema  string
+	ReferencedTable   string
+	ReferencedColumns []string
+	OnUpdate          string
+	OnDelete          string
+}
+
+// DatabaseSpec is a CREATE DATABASE as the dialog declares it. How much of it an engine reads
+// is the engine's own business: MySQL knows only Encoding and Collation, and PostgreSQL knows
+// the rest.
+type DatabaseSpec struct {
+	Name             string
+	Owner            string
+	Template         string
+	Encoding         string
+	Collation        string
+	CType            string
+	Tablespace       string
+	ConnectionLimit  int
+	AllowConnections bool
+	IsTemplate       bool
+	Comment          string
+	Extensions       []string
+}
+
+// DatabaseStatement is one statement of a create and the database it has to run in. An empty
+// In runs it wherever the session already is, which is the only place CREATE DATABASE can go —
+// the database it makes cannot be connected to until it exists.
+type DatabaseStatement struct {
+	In  string
+	SQL string
+}
+
+// DatabaseOptions is what the New Database dialog fills its lists from. An engine leaves empty
+// whatever it has no such concept of.
+type DatabaseOptions struct {
+	Owners      []string
+	Templates   []string
+	Encodings   []string
+	Collations  []string
+	Tablespaces []string
+	Extensions  []string
 }
 
 type TableRows struct {
@@ -162,6 +239,16 @@ type Driver interface {
 // supply the statements the two engines spell identically.
 type Schema interface {
 	TableStructure(ctx context.Context, ns Namespace, table string) (TableStructure, error)
+	// CreateDatabaseSQL is exactly what CreateDatabase will run, in order, and is also what the
+	// dialog previews: one method spells the statement, so what is shown and what runs cannot
+	// drift apart.
+	CreateDatabaseSQL(spec DatabaseSpec) []DatabaseStatement
+	CreateDatabase(ctx context.Context, spec DatabaseSpec) error
+	DropDatabase(ctx context.Context, name string) error
+	// DatabaseOptions reads the lists a new database is declared from — roles, templates,
+	// encodings. It sits with the DDL rather than with the catalogue reads because it exists
+	// for CreateDatabase alone.
+	DatabaseOptions(ctx context.Context) (DatabaseOptions, error)
 	CreateTable(ctx context.Context, spec TableSpec) error
 	RenameTable(ctx context.Context, ns Namespace, table, name string) error
 	DropTable(ctx context.Context, ns Namespace, table string) error
@@ -177,8 +264,20 @@ type Schema interface {
 	// list. What the old key was called is the adapter's to find out, since only PostgreSQL
 	// needs the name to drop it.
 	SetPrimaryKey(ctx context.Context, ns Namespace, table string, columns []string) error
+	// CreateIndex is the one statement of the four an engine spells its own way; the drop and
+	// both halves of a foreign key are alike enough to be shared.
+	CreateIndex(ctx context.Context, ns Namespace, table string, spec IndexSpec) error
 	DropIndex(ctx context.Context, ns Namespace, table, index string) error
+	CreateForeignKey(ctx context.Context, ns Namespace, table string, spec ForeignKeySpec) error
 	DropForeignKey(ctx context.Context, ns Namespace, table, constraint string) error
+	// InsertStatements spells rows as the statements that would put them back, which is what a
+	// SQL export is. It is the driver's for the reason every other statement is: only it knows
+	// how this engine quotes a name and a string.
+	InsertStatements(ns Namespace, table string, columns []string, rows [][]*string) []string
+	DropView(ctx context.Context, ns Namespace, view string) error
+	// DropRoutine takes the whole routine rather than its name, because on PostgreSQL the
+	// name alone does not identify one: two functions may share it and differ in arguments.
+	DropRoutine(ctx context.Context, ns Namespace, routine Routine) error
 }
 
 type Session interface {
@@ -191,13 +290,16 @@ type Session interface {
 	// none. It is read lazily, one database at a time, because PostgreSQL can only see the
 	// schemas of a database something is connected to.
 	Schemas(ctx context.Context, database string) ([]string, error)
-	Tables(ctx context.Context, ns Namespace) ([]string, error)
+	Objects(ctx context.Context, ns Namespace) (Objects, error)
 	TableSchemas(ctx context.Context, ns Namespace) ([]TableSchema, error)
 	TableRows(ctx context.Context, page TablePage) (TableRows, error)
 	UpdateCell(ctx context.Context, edit CellEdit) error
 	InsertRow(ctx context.Context, insert RowInsert) error
 	DeleteRow(ctx context.Context, removal RowDelete) error
 	Query(ctx context.Context, query Query) (QueryResult, error)
+	// Split cuts a script into the statements it holds. Where one ends is lexical and so the
+	// engine's: a semicolon inside a string, a comment or a quoted body ends nothing.
+	Split(script string) []string
 	Close() error
 }
 

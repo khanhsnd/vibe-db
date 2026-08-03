@@ -23,6 +23,22 @@ func (x DDL) CreateTable(ctx context.Context, spec driver.TableSpec) error {
 	return x.Run(ctx, spec.Database, x.Dialect.CreateTable(spec))
 }
 
+// RunAll executes statements in order, each in the database it names — which is what creating
+// a database amounts to once its extensions and its comment are counted, since those can only
+// be run from inside the database that has just been made.
+func (x DDL) RunAll(ctx context.Context, statements []driver.DatabaseStatement) error {
+	for _, statement := range statements {
+		if err := x.Run(ctx, statement.In, statement.SQL); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (x DDL) DropDatabase(ctx context.Context, name string) error {
+	return x.Run(ctx, "", "DROP DATABASE "+x.Dialect.QuoteIdent(name))
+}
+
 func (x DDL) DropTable(ctx context.Context, ns driver.Namespace, table string) error {
 	return x.Run(ctx, ns.Database, "DROP TABLE "+x.Dialect.Table(ns, table))
 }
@@ -57,6 +73,94 @@ func (x DDL) RenameColumn(
 
 func (x DDL) DropColumn(ctx context.Context, ns driver.Namespace, table, column string) error {
 	statement := x.alter(ns, table) + " DROP COLUMN " + x.Dialect.QuoteIdent(column)
+	return x.Run(ctx, ns.Database, statement)
+}
+
+// CreateForeignKey is spelled the same by both engines once the quoting is the dialect's, and
+// the referential actions reach the statement verbatim the way a column's type does.
+func (x DDL) CreateForeignKey(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+	spec driver.ForeignKeySpec,
+) error {
+	statement := x.alter(ns, table) +
+		" ADD CONSTRAINT " + x.Dialect.QuoteIdent(spec.Name) +
+		" FOREIGN KEY (" + strings.Join(x.Dialect.QuoteAll(spec.Columns), ", ") + ")" +
+		" REFERENCES " + x.Dialect.Referenced(ns, spec) +
+		" (" + strings.Join(x.Dialect.QuoteAll(spec.ReferencedColumns), ", ") + ")"
+
+	if action := strings.TrimSpace(spec.OnUpdate); action != "" {
+		statement += " ON UPDATE " + action
+	}
+	if action := strings.TrimSpace(spec.OnDelete); action != "" {
+		statement += " ON DELETE " + action
+	}
+
+	return x.Run(ctx, ns.Database, statement)
+}
+
+// Referenced names the table a key points at, which may sit outside the namespace holding the
+// key: whichever part of a namespace this engine qualifies by is the part the spec filled in.
+func (d Dialect) Referenced(ns driver.Namespace, spec driver.ForeignKeySpec) string {
+	target := ns
+	if spec.ReferencedSchema != "" {
+		if d.NamespaceIsSchema {
+			target.Schema = spec.ReferencedSchema
+		} else {
+			target.Database = spec.ReferencedSchema
+		}
+	}
+	return d.Table(target, spec.ReferencedTable)
+}
+
+// InsertStatements spells rows as the statements that would put them back. A NULL travels as
+// the keyword rather than as an empty string, so what is written out means what was read; every
+// other value is quoted as a literal, which both engines read back into a column of any type.
+func (x DDL) InsertStatements(
+	ns driver.Namespace,
+	table string,
+	columns []string,
+	rows [][]*string,
+) []string {
+	target := x.Dialect.Table(ns, table)
+	names := strings.Join(x.Dialect.QuoteAll(columns), ", ")
+
+	statements := make([]string, 0, len(rows))
+	for _, row := range rows {
+		values := make([]string, len(row))
+		for at, value := range row {
+			if value == nil {
+				values[at] = "NULL"
+				continue
+			}
+			values[at] = x.Dialect.QuoteString(*value)
+		}
+
+		statements = append(statements,
+			"INSERT INTO "+target+" ("+names+") VALUES ("+strings.Join(values, ", ")+")")
+	}
+
+	return statements
+}
+
+func (x DDL) DropView(ctx context.Context, ns driver.Namespace, view string) error {
+	return x.Run(ctx, ns.Database, "DROP VIEW "+x.Dialect.Table(ns, view))
+}
+
+// DropRoutine names the arguments only where the engine needs them to tell two routines of one
+// name apart, which is PostgreSQL and not MySQL — and both spell the drop the same way once
+// that difference travels in the routine itself.
+func (x DDL) DropRoutine(ctx context.Context, ns driver.Namespace, routine driver.Routine) error {
+	kind := "FUNCTION"
+	if routine.Procedure {
+		kind = "PROCEDURE"
+	}
+
+	statement := "DROP " + kind + " " + x.Dialect.Table(ns, routine.Name)
+	if routine.Arguments != "" {
+		statement += "(" + routine.Arguments + ")"
+	}
 	return x.Run(ctx, ns.Database, statement)
 }
 

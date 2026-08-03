@@ -174,15 +174,17 @@ func (a *ConnectionAPI) ListSchemas(sessionID, database string) ([]string, error
 	return names, nil
 }
 
-func (a *ConnectionAPI) ListTables(sessionID string, ns Namespace) ([]string, error) {
+// LoadObjects answers with everything the tree draws a folder for under a namespace, in one
+// call, because opening any one of those folders needs every folder's count.
+func (a *ConnectionAPI) LoadObjects(sessionID string, ns Namespace) (Objects, error) {
 	ctx, cancel := a.withTimeout(queryTimeout)
 	defer cancel()
 
-	names, err := a.sessions.Tables(ctx, sessionID, ns.toDriver())
+	objects, err := a.sessions.Objects(ctx, sessionID, ns.toDriver())
 	if err != nil {
-		return nil, wrapError(err)
+		return Objects{}, wrapError(err)
 	}
-	return names, nil
+	return toObjectsDTO(objects), nil
 }
 
 func (a *ConnectionAPI) LoadTableSchemas(sessionID string, ns Namespace) ([]TableSchema, error) {

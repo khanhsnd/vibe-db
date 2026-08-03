@@ -16,7 +16,8 @@ keys and its pending changes, and every one of those is a grid — the Fields on
 
 | Part | Rule |
 |---|---|
-| Header | Two lines, 40 px: the column **name** in bold mono on top, its **type** below in muted 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx`. Never uppercased — the server's own casing stands. On the right of every header sits the **`⋮` options button**, and beside the name of the sorted column an arrow saying which way. |
+| Head strip | 28 px above the header, on the header's own surface, holding what acts on the grid *whole* rather than row by row — today the **Export** button alone, against the right edge. It sits outside the scroller, so it stays put while the columns scroll under it, and it appears only where the call site passed `onExport`. |
+| Header | Two lines, 40 px: the column **name** on top in the **UI font**, semibold 12 px — the one place the grid is not mono, so a name reads as a label and not as the data beneath it — and its **type** below in muted mono 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx`. Never uppercased — the server's own casing stands. On the right of every header sits the **`⋮` options button**, and beside the name of the sorted column an arrow saying which way. |
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. Mono 13 px. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
@@ -95,10 +96,17 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   is. A sort always sends the reader back to page one, and always drops the selection.
 - **Columns resize** by dragging the right edge of the header, and **double-clicking that edge fits
   the column** to the widest of its name, its type line and its cells, capped at 520 px and measured
-  on a canvas against the `--font-mono` / `--text-sm` tokens. Widths are keyed by column *name*, so
-  hiding a column does not reset them.
+  on a canvas against the tokens each is drawn with — `--font-ui` / `--text-xs` for the name,
+  `--font-mono` / `--text-sm` for the rest. Widths are keyed by column *name*, so hiding a column
+  does not reset them.
 - **The grid keeps its own selection when uncontrolled.** Pass `selection` +
   `onSelectionChange` only when something outside needs the focused cell.
+- **Export is the grid's, not the footer's**, because it acts on the whole grid rather than on a
+  row: the head strip's one button opens a `MenuButton` of CSV, JSON and SQL, each writing what the
+  grid holds to a file picked in the system's own save dialog. It is on the right because that is
+  where a reader looks for what to *do with* the table, the left of the footer being where a row is
+  changed. What each format does with a `NULL`, and which rows a surface counts as "what the grid
+  holds", are in [features.md](features.md#exporting-a-grid).
 
 ## The bar under it
 
@@ -115,6 +123,7 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
   only where there is something to cancel, which today is a running statement.
 - **The four editing icons are hidden outright when the rows cannot be written back**, rather than
   shown disabled: a result that no `UPDATE` can name has no use for them. `Refresh` always shows.
+  Export is not here at all — it belongs to the grid's head strip, above.
 - Delete is the only one that needs a selection; Apply and Discard need something pending.
 - The right-hand side is the caller's, and both surfaces hand it the same `GridPager`: arrows, the
   offset window, the page count and the `Rows` size. Only where the rows come from differs — the
@@ -156,12 +165,18 @@ surrounds the grid:
   Asking for a page past the rows it holds replays the statement for as many as that page needs
   (`reach`), so `All` really does load all; the page number therefore survives a read of the same
   statement, and only a different one sends the reader back to page one.
-- `TableDesigner` neither pages nor hides, so it maps nothing — its rows are the fields on screen.
+- `TableDesigner` neither pages nor hides, so it maps nothing — its rows are whatever the pane in
+  front holds. It is the one site that draws **three** editable grids and switches between them, so
+  it holds the tab strip's selection itself and clears the selection on every change: a cell
+  reference is a position in the pane that reported it.
   What differs is that its cells are a *declaration* rather than stored data, so an edit is parsed
-  back into the field it describes (`Length` is part of the type) and `isDirty` answers by comparing
-  the staged field with the stored one, rather than from a set of pending keys. It is also the one
-  site that names column editors: `Type` is a `choice` over the engine's own types, `Not null` a
-  `check`, and `Key` a `key` whose numbers it counts down the draft.
+  back into the thing it describes (`Length` is part of the type; `Fields` is a comma-separated list)
+  and `isDirty` answers by comparing what is staged with what is stored, rather than from a set of
+  pending keys. A field is ringed cell by cell; an index or a foreign key is ringed **whole**,
+  because neither engine can alter one and it is dropped and remade rather than changed in parts. It
+  is also the one site that names column editors: `Type` and `Method` are a `choice` over the
+  engine's own lists, `On Update` and `On Delete` a `choice` over the referential actions,
+  `Not null` and `Unique` a `check`, and `Key` a `key` whose numbers it counts down the draft.
 - `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
   index back to the real one on the way in. **It sorts on the server too** — the sort travels in
   `TablePageRequest` and becomes the read's `ORDER BY`, because ordering the hundred rows in hand

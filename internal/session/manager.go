@@ -127,16 +127,16 @@ func (m *Manager) Schemas(ctx context.Context, id, database string) ([]string, e
 	return s.driverSession.Schemas(ctx, database)
 }
 
-func (m *Manager) Tables(
+func (m *Manager) Objects(
 	ctx context.Context,
 	id string,
 	ns driver.Namespace,
-) ([]string, error) {
+) (driver.Objects, error) {
 	s, err := m.Get(id)
 	if err != nil {
-		return nil, err
+		return driver.Objects{}, err
 	}
-	return s.driverSession.Tables(ctx, ns)
+	return s.driverSession.Objects(ctx, ns)
 }
 
 func (m *Manager) TableSchemas(
@@ -183,6 +183,14 @@ func (m *Manager) Query(
 		return driver.QueryResult{}, err
 	}
 	return s.driverSession.Query(ctx, query)
+}
+
+func (m *Manager) Split(id, script string) ([]string, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return s.driverSession.Split(script), nil
 }
 
 func (m *Manager) UpdateCell(ctx context.Context, id string, edit driver.CellEdit) error {

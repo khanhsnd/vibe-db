@@ -11,6 +11,7 @@ import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
   ChevronDown,
+  Download,
   EllipsisVertical,
   KeyRound,
   Square,
@@ -19,15 +20,17 @@ import {
 } from 'lucide-react'
 
 import { copyText, readText } from '@/bridge/clipboard'
+import { EXPORT_FORMATS, type ExportFormat } from '@/bridge/export'
 import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 import { IconButton } from '@/shared/ui/IconButton'
+import { MenuButton } from '@/shared/ui/MenuButton'
 import { ICON } from '@/shared/ui/menuIcons'
 
 import { CellChoice } from './CellChoice'
 import { ColumnTypeIcon, isNumeric } from './columnType'
-import { gridFont, widestText } from './measureText'
+import { gridFont, headerFont, widestText } from './measureText'
 import {
   boundsOf,
   cellText,
@@ -124,6 +127,11 @@ interface ResultGridProps {
    * column is its own state, not the grid's.
    */
   columnMenuItems?: (column: ResultColumn) => MenuItem[]
+  /**
+   * Writes every row the grid holds to a file, in the order it draws them. A grid with nothing
+   * to write leaves this out, which is what keeps the button off an empty result.
+   */
+  onExport?: ((format: ExportFormat) => void) | undefined
 }
 
 export function ResultGrid({
@@ -136,6 +144,7 @@ export function ResultGrid({
   sort = null,
   onSortChange,
   columnMenuItems,
+  onExport,
 }: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -205,7 +214,7 @@ export function ResultGrid({
     const cells = result.rows.map((row) => cellText(row[index] ?? null))
     const content = Math.max(
       widestText(cells, font),
-      widestText([column.name], font) + MENU_WIDTH,
+      widestText([column.name], headerFont()) + MENU_WIDTH,
       widestText([typeLabel(column)], font) + TYPE_ICON_WIDTH + MENU_WIDTH,
     )
 
@@ -471,122 +480,148 @@ export function ResultGrid({
   }
 
   return (
-    <div
-      ref={scrollRef}
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-      className="scroll-thin h-full overflow-auto bg-canvas"
-    >
-      <div className="w-full" style={{ minWidth: totalWidth }}>
-        <HeaderRow
-          columns={result.columns}
-          widths={widths}
-          bounds={bounds}
-          sort={sort}
-          onResize={setWidth}
-          onFit={fitColumn}
-          onSelectColumn={selectColumn}
-          menuFor={columnMenu}
-        />
+    <div className="flex h-full min-h-0 flex-col">
+      {onExport ? <ExportButton onExport={onExport} /> : null}
 
-        <div
-          ref={bodyRef}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onLostPointerCapture={endDrag}
-          onClick={onClick}
-          className="relative"
-          style={{ height: virtualizer.getTotalSize() }}
-        >
-          {virtualizer.getVirtualItems().map((item) => {
-            const row = result.rows[item.index]
-            if (!row) return null
+      <div
+        ref={scrollRef}
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        className="scroll-thin min-h-0 flex-1 overflow-auto bg-canvas"
+      >
+        <div className="w-full" style={{ minWidth: totalWidth }}>
+          <HeaderRow
+            columns={result.columns}
+            widths={widths}
+            bounds={bounds}
+            sort={sort}
+            onResize={setWidth}
+            onFit={fitColumn}
+            onSelectColumn={selectColumn}
+            menuFor={columnMenu}
+          />
 
-            // A row is banded across its width only when the selection covers the whole of it;
-            // a column selection touches every row and must not paint the grid over.
-            const banded = rowCovered(bounds, item.index, lastColumn)
-            const touched = rowTouched(bounds, item.index)
-            // A row on its way out reads as struck through whatever the selection says,
-            // because the strike is inherited by every cell below it.
-            const removed = isDeleted(item.index)
+          <div
+            ref={bodyRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onLostPointerCapture={endDrag}
+            onClick={onClick}
+            className="relative"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualizer.getVirtualItems().map((item) => {
+              const row = result.rows[item.index]
+              if (!row) return null
 
-            return (
-              <div
-                key={item.key}
-                className={cn(
-                  'absolute top-0 left-0 flex w-full border-b border-line/60',
-                  removed
-                    ? 'bg-grid-row-deleted line-through'
-                    : banded
-                      ? 'bg-grid-row-selected'
-                      : 'hover:bg-hover',
-                )}
-                style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
-              >
+              // A row is banded across its width only when the selection covers the whole of it;
+              // a column selection touches every row and must not paint the grid over.
+              const banded = rowCovered(bounds, item.index, lastColumn)
+              const touched = rowTouched(bounds, item.index)
+              // A row on its way out reads as struck through whatever the selection says,
+              // because the strike is inherited by every cell below it.
+              const removed = isDeleted(item.index)
+
+              return (
                 <div
-                  data-gutter=""
+                  key={item.key}
                   className={cn(
-                    'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
+                    'absolute top-0 left-0 flex w-full border-b border-line/60',
                     removed
-                      ? 'bg-grid-row-deleted text-danger'
-                      : touched
-                        ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
-                        : 'bg-panel text-faint',
+                      ? 'bg-grid-row-deleted line-through'
+                      : banded
+                        ? 'bg-grid-row-selected'
+                        : 'hover:bg-hover',
                   )}
-                  style={{ width: GUTTER_WIDTH }}
+                  style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
                 >
-                  {item.index + 1}
-                </div>
+                  <div
+                    data-gutter=""
+                    className={cn(
+                      'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
+                      removed
+                        ? 'bg-grid-row-deleted text-danger'
+                        : touched
+                          ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
+                          : 'bg-panel text-faint',
+                    )}
+                    style={{ width: GUTTER_WIDTH }}
+                  >
+                    {item.index + 1}
+                  </div>
 
-                {result.columns.map((column, i) => {
-                  const width = widths[i] ?? DEFAULT_COLUMN_WIDTH
+                  {result.columns.map((column, i) => {
+                    const width = widths[i] ?? DEFAULT_COLUMN_WIDTH
 
-                  if (onEditCell && editing?.row === item.index && editing.column === i) {
-                    const commit = (value: Cell) => {
-                      onEditCell({ row: item.index, column: i }, value)
-                      setEditing(null)
+                    if (onEditCell && editing?.row === item.index && editing.column === i) {
+                      const commit = (value: Cell) => {
+                        onEditCell({ row: item.index, column: i }, value)
+                        setEditing(null)
+                      }
+                      const cancel = () => setEditing(null)
+
+                      return column.editor?.kind === 'choice' ? (
+                        <CellChoice
+                          key={i}
+                          value={row[i] ?? null}
+                          options={column.editor.options}
+                          width={width}
+                          onCommit={commit}
+                          onCancel={cancel}
+                        />
+                      ) : (
+                        <CellInput
+                          key={i}
+                          value={row[i] ?? null}
+                          width={width}
+                          onCommit={commit}
+                          onCancel={cancel}
+                        />
+                      )
                     }
-                    const cancel = () => setEditing(null)
 
-                    return column.editor?.kind === 'choice' ? (
-                      <CellChoice
+                    return (
+                      <CellView
                         key={i}
                         value={row[i] ?? null}
-                        options={column.editor.options}
+                        editor={column.editor}
+                        numeric={isNumeric(column.type)}
                         width={width}
-                        onCommit={commit}
-                        onCancel={cancel}
-                      />
-                    ) : (
-                      <CellInput
-                        key={i}
-                        value={row[i] ?? null}
-                        width={width}
-                        onCommit={commit}
-                        onCancel={cancel}
+                        inRange={within(bounds, item.index, i)}
+                        focused={focus?.row === item.index && focus.column === i}
+                        edited={isDirty(item.index, i)}
                       />
                     )
-                  }
-
-                  return (
-                    <CellView
-                      key={i}
-                      value={row[i] ?? null}
-                      editor={column.editor}
-                      numeric={isNumeric(column.type)}
-                      width={width}
-                      inRange={within(bounds, item.index, i)}
-                      focused={focus?.row === item.index && focus.column === i}
-                      edited={isDirty(item.index, i)}
-                    />
-                  )
-                })}
-              </div>
-            )
-          })}
+                  })}
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The strip over the header, where the grid is acted on whole rather than row by row. It sits
+ * outside the scroller, so it stays where it is while the columns scroll under it, and it carries
+ * the header's own surface: it is the top of the table, not another bar of controls.
+ */
+function ExportButton({ onExport }: { onExport: (format: ExportFormat) => void }) {
+  return (
+    <div className="flex h-7 shrink-0 items-center justify-end border-b border-line bg-panel px-1">
+      <MenuButton
+        align="end"
+        items={EXPORT_FORMATS.map((format) => ({
+          label: format.label,
+          icon: <Download size={13} />,
+          onSelect: () => onExport(format.value),
+        }))}
+      >
+        <IconButton label="Export rows" icon={<Download size={14} />} />
+      </MenuButton>
     </div>
   )
 }
@@ -694,7 +729,9 @@ function HeaderRow({
               style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: HEADER_HEIGHT }}
             >
               <span className="flex items-center gap-1">
-                <span className="min-w-0 truncate font-mono text-sm font-semibold text-fg">
+                {/* The UI font, where a cell is mono: a name read as a label cannot be mistaken
+                    for the data under it. */}
+                <span className="min-w-0 truncate text-xs font-semibold tracking-wide text-fg">
                   {column.name}
                 </span>
                 {sorted ? <SortMark descending={sorted.descending} /> : null}

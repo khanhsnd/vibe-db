@@ -7,6 +7,7 @@ import {
   namespaceOf,
   NO_NAMESPACE,
   type Namespace,
+  type Objects,
   type Profile,
   type ProfileInput,
   type Session,
@@ -19,8 +20,8 @@ export const connectionNodeId = (profileId: string) => `conn:${profileId}`
 export const databaseNodeId = (profileId: string, database: string) => `db:${profileId}:${database}`
 export const schemaNodeId = (profileId: string, ns: Namespace) =>
   `schema:${namespaceKey(profileId, ns)}`
-export const tablesNodeId = (profileId: string, ns: Namespace) =>
-  `tables:${namespaceKey(profileId, ns)}`
+export const folderNodeId = (kind: NodeKind, profileId: string, ns: Namespace) =>
+  `${kind}:${namespaceKey(profileId, ns)}`
 export const tableNodeId = (profileId: string, ns: Namespace, table: string) =>
   `table:${namespaceKey(profileId, ns)}:${table}`
 
@@ -38,7 +39,7 @@ interface ConnectionsState {
   /** Keyed by connection and database: the level below a database, empty for MySQL. */
   schemas: Record<string, string[]>
   /** Both keyed by connection and namespace, since a table name only means something there. */
-  tables: Record<string, string[]>
+  objects: Record<string, Objects>
   tableSchemas: Record<string, TableSchema[]>
   /** Keyed by connection, namespace and table: the fields, indexes and keys of one table. */
   structures: Record<string, TableStructure>
@@ -54,18 +55,25 @@ interface ConnectionsState {
   disconnect: (profileId: string) => Promise<void>
   selectNamespace: (profileId: string, ns: Namespace) => void
   loadSchemas: (profileId: string, database: string) => Promise<void>
-  loadTables: (profileId: string, ns: Namespace) => Promise<void>
+  loadObjects: (profileId: string, ns: Namespace) => Promise<void>
   loadTableSchemas: (profileId: string, ns: Namespace) => Promise<void>
   loadStructure: (profileId: string, ns: Namespace, table: string) => Promise<void>
   /** Re-reads a table's shape whether or not it is already cached, which Refresh needs. */
   refreshStructure: (profileId: string, ns: Namespace, table: string) => Promise<void>
-  refreshTables: (profileId: string, ns: Namespace) => Promise<void>
+  refreshObjects: (profileId: string, ns: Namespace) => Promise<void>
   refreshSchemas: (profileId: string, database: string) => Promise<void>
+  /** Re-reads the database list and forgets everything under a database it no longer carries. */
+  refreshDatabases: (profileId: string) => Promise<void>
   /**
    * Runs one schema change and re-reads whatever it invalidated. The change itself is the
    * caller's — a bridge call bound to a session — so the store owns the caches and nothing else.
    */
   changeSchema: (profileId: string, target: SchemaTarget, change: ChangeSchema) => Promise<void>
+  /**
+   * The same for a change to the database list itself, which invalidates a level higher up than
+   * any namespace: creating or dropping a database.
+   */
+  changeDatabases: (profileId: string, change: ChangeSchema) => Promise<void>
   toggleNode: (nodeId: string) => void
   clearError: () => void
 }
@@ -89,7 +97,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   statuses: {},
   databases: {},
   schemas: {},
-  tables: {},
+  objects: {},
   tableSchemas: {},
   structures: {},
   activeNamespace: {},
@@ -172,7 +180,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
           activeNamespace,
           expanded,
           schemas: drop(s.schemas),
-          tables: drop(s.tables),
+          objects: drop(s.objects),
           tableSchemas: drop(s.tableSchemas),
           structures: drop(s.structures),
           statuses: { ...s.statuses, [profileId]: 'idle' },
@@ -200,18 +208,9 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }
   },
 
-  loadTables: async (profileId, ns) => {
-    const { sessions, tables } = get()
-    const session = sessions[profileId]
-    const key = namespaceKey(profileId, ns)
-    if (!session || tables[key]) return
-
-    try {
-      const names = await connections.listTables(session.id, ns)
-      set((s) => ({ tables: { ...s.tables, [key]: names } }))
-    } catch (thrown) {
-      set({ error: toAppError(thrown) })
-    }
+  loadObjects: async (profileId, ns) => {
+    if (get().objects[namespaceKey(profileId, ns)]) return
+    await get().refreshObjects(profileId, ns)
   },
 
   // Cached until disconnect, like tables: a schema read costs one catalogue scan, and the
@@ -251,14 +250,14 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }
   },
 
-  refreshTables: async (profileId, ns) => {
+  refreshObjects: async (profileId, ns) => {
     const session = get().sessions[profileId]
     if (!session) return
 
     try {
-      const names = await connections.listTables(session.id, ns)
+      const objects = await connections.loadObjects(session.id, ns)
       set((s) => ({
-        tables: { ...s.tables, [namespaceKey(profileId, ns)]: names },
+        objects: { ...s.objects, [namespaceKey(profileId, ns)]: objects },
         tableSchemas: without(s.tableSchemas, namespaceKey(profileId, ns)),
       }))
     } catch (thrown) {
@@ -278,6 +277,34 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }
   },
 
+  refreshDatabases: async (profileId) => {
+    const session = get().sessions[profileId]
+    if (!session) return
+
+    try {
+      const names = await connections.listDatabases(session.id)
+      set((s) => {
+        // Every cache below a database is keyed `profileId:database:…`, so a database the fresh
+        // list no longer carries takes its schemas, tables and shapes with it.
+        const listed = new Set(names.map((database) => databaseKey(profileId, database)))
+        const held = (key: string) =>
+          !key.startsWith(`${profileId}:`) || listed.has(key.split(':').slice(0, 2).join(':'))
+        const keep = <T,>(source: Record<string, T>) =>
+          Object.fromEntries(Object.entries(source).filter(([key]) => held(key)))
+
+        return {
+          databases: { ...s.databases, [profileId]: names },
+          schemas: keep(s.schemas),
+          objects: keep(s.objects),
+          tableSchemas: keep(s.tableSchemas),
+          structures: keep(s.structures),
+        }
+      })
+    } catch (thrown) {
+      set({ error: toAppError(thrown) })
+    }
+  },
+
   // The failure is re-thrown rather than parked in `error`, because a schema change is asked
   // for from a dialog and that dialog is where it has to be answered.
   changeSchema: async (profileId, target, change) => {
@@ -285,13 +312,13 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     if (!session) return
 
     await change(session.id)
-    await get().refreshTables(profileId, target.namespace)
+    await get().refreshObjects(profileId, target.namespace)
 
     // Whatever the change did to the table list decides which shapes are still worth holding,
     // so a dropped or renamed table needs no telling.
     set((s) => {
       const listed = new Set(
-        (s.tables[namespaceKey(profileId, target.namespace)] ?? []).map((table) =>
+        (s.objects[namespaceKey(profileId, target.namespace)]?.tables ?? []).map((table) =>
           tableKey(profileId, target.namespace, table),
         ),
       )
@@ -305,6 +332,14 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     })
 
     if (target.table) await get().refreshStructure(profileId, target.namespace, target.table)
+  },
+
+  changeDatabases: async (profileId, change) => {
+    const session = get().sessions[profileId]
+    if (!session) return
+
+    await change(session.id)
+    await get().refreshDatabases(profileId)
   },
 
   toggleNode: (nodeId) =>
@@ -327,7 +362,7 @@ interface TreeInput {
   statuses: Record<string, ConnectionStatus>
   databases: Record<string, string[]>
   schemas: Record<string, string[]>
-  tables: Record<string, string[]>
+  objects: Record<string, Objects>
   structures: Record<string, TableStructure>
   activeNamespace: Record<string, Namespace>
 }
@@ -370,7 +405,9 @@ function schemaParentNode(input: TreeInput, profileId: string, database: string)
   }
 }
 
-// The node that owns tables, whichever level of the tree that turns out to be.
+// The node that owns tables, whichever level of the tree that turns out to be. Its three folders
+// are drawn whether or not they have been read: they are what the caret is for, and one read
+// fills all three, so a folder with a badge is a folder whose namespace has been opened.
 function namespaceNode(
   input: TreeInput,
   profileId: string,
@@ -378,8 +415,27 @@ function namespaceNode(
   ns: Namespace,
   label: string,
 ): TreeNode {
-  const names = input.tables[namespaceKey(profileId, ns)]
+  const held = input.objects[namespaceKey(profileId, ns)]
   const active = input.activeNamespace[profileId] ?? NO_NAMESPACE
+
+  const folder = (folderKind: NodeKind, name: string, children: TreeNode[]): TreeNode => ({
+    id: folderNodeId(folderKind, profileId, ns),
+    kind: folderKind,
+    label: name,
+    profileId,
+    namespace: ns,
+    ...(held ? { badge: String(children.length) } : {}),
+    children,
+  })
+
+  const objectNode = (objectKind: NodeKind, name: string, extra: Partial<TreeNode> = {}) => ({
+    id: `${objectKind}:${namespaceKey(profileId, ns)}:${name}`,
+    kind: objectKind,
+    label: name,
+    profileId,
+    namespace: ns,
+    ...extra,
+  })
 
   return {
     id: kind === 'schema' ? schemaNodeId(profileId, ns) : databaseNodeId(profileId, ns.database),
@@ -389,15 +445,27 @@ function namespaceNode(
     namespace: ns,
     active: active.database === ns.database && active.schema === ns.schema,
     children: [
-      {
-        id: tablesNodeId(profileId, ns),
-        kind: 'folder',
-        label: 'Tables',
-        profileId,
-        namespace: ns,
-        ...(names ? { badge: String(names.length) } : {}),
-        children: (names ?? []).map((table) => tableNode(input, profileId, ns, table)),
-      },
+      folder(
+        'tables',
+        'Tables',
+        (held?.tables ?? []).map((table) => tableNode(input, profileId, ns, table)),
+      ),
+      folder(
+        'views',
+        'Views',
+        (held?.views ?? []).map((view) => objectNode('view', view)),
+      ),
+      folder(
+        'routines',
+        'Functions',
+        (held?.routines ?? []).map((routine) =>
+          objectNode(routine.procedure ? 'procedure' : 'function', routine.name, {
+            routine,
+            // Two functions of one name differ only in what they take, so the row says which.
+            ...(routine.arguments ? { badge: routine.arguments } : {}),
+          }),
+        ),
+      ),
     ],
   }
 }

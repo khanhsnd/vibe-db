@@ -8,6 +8,12 @@ export function AlterColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:stri
 
 export function Connect(arg1:string,arg2:string):Promise<app.Session>;
 
+export function CreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<void>;
+
+export function CreateForeignKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:app.ForeignKeyInput):Promise<void>;
+
+export function CreateIndex(arg1:string,arg2:app.Namespace,arg3:string,arg4:app.IndexInput):Promise<void>;
+
 export function CreateTable(arg1:string,arg2:app.TableSpecInput):Promise<void>;
 
 export function DeleteProfile(arg1:string):Promise<void>;
@@ -18,13 +24,21 @@ export function Disconnect(arg1:string):Promise<void>;
 
 export function DropColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
 
+export function DropDatabase(arg1:string,arg2:string):Promise<void>;
+
 export function DropForeignKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
 
 export function DropIndex(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
 
+export function DropRoutine(arg1:string,arg2:app.Namespace,arg3:app.RoutineInfo):Promise<void>;
+
 export function DropTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
 
+export function DropView(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
+
 export function EmptyTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
+
+export function ExportRows(arg1:string,arg2:app.ExportInput):Promise<string>;
 
 export function InsertRow(arg1:string,arg2:app.RowInsertInput):Promise<void>;
 
@@ -34,13 +48,17 @@ export function ListProfiles():Promise<Array<app.Profile>>;
 
 export function ListSchemas(arg1:string,arg2:string):Promise<Array<string>>;
 
-export function ListTables(arg1:string,arg2:app.Namespace):Promise<Array<string>>;
+export function LoadDatabaseOptions(arg1:string):Promise<app.DatabaseOptions>;
+
+export function LoadObjects(arg1:string,arg2:app.Namespace):Promise<app.Objects>;
 
 export function LoadTableRows(arg1:string,arg2:app.TablePageInput):Promise<app.TableRows>;
 
 export function LoadTableSchemas(arg1:string,arg2:app.Namespace):Promise<Array<app.TableSchema>>;
 
 export function LoadTableStructure(arg1:string,arg2:app.Namespace,arg3:string):Promise<app.TableStructure>;
+
+export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<Array<string>>;
 
 export function RenameColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:string):Promise<void>;
 

@@ -14,6 +14,18 @@ export function Connect(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['Connect'](arg1, arg2);
 }
 
+export function CreateDatabase(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['CreateDatabase'](arg1, arg2);
+}
+
+export function CreateForeignKey(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['ConnectionAPI']['CreateForeignKey'](arg1, arg2, arg3, arg4);
+}
+
+export function CreateIndex(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['ConnectionAPI']['CreateIndex'](arg1, arg2, arg3, arg4);
+}
+
 export function CreateTable(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['CreateTable'](arg1, arg2);
 }
@@ -34,6 +46,10 @@ export function DropColumn(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['DropColumn'](arg1, arg2, arg3, arg4);
 }
 
+export function DropDatabase(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['DropDatabase'](arg1, arg2);
+}
+
 export function DropForeignKey(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['DropForeignKey'](arg1, arg2, arg3, arg4);
 }
@@ -42,12 +58,24 @@ export function DropIndex(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['DropIndex'](arg1, arg2, arg3, arg4);
 }
 
+export function DropRoutine(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['DropRoutine'](arg1, arg2, arg3);
+}
+
 export function DropTable(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['DropTable'](arg1, arg2, arg3);
 }
 
+export function DropView(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['DropView'](arg1, arg2, arg3);
+}
+
 export function EmptyTable(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['EmptyTable'](arg1, arg2, arg3);
+}
+
+export function ExportRows(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['ExportRows'](arg1, arg2);
 }
 
 export function InsertRow(arg1, arg2) {
@@ -66,8 +94,12 @@ export function ListSchemas(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ListSchemas'](arg1, arg2);
 }
 
-export function ListTables(arg1, arg2) {
-  return window['go']['app']['ConnectionAPI']['ListTables'](arg1, arg2);
+export function LoadDatabaseOptions(arg1) {
+  return window['go']['app']['ConnectionAPI']['LoadDatabaseOptions'](arg1);
+}
+
+export function LoadObjects(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['LoadObjects'](arg1, arg2);
 }
 
 export function LoadTableRows(arg1, arg2) {
@@ -80,6 +112,10 @@ export function LoadTableSchemas(arg1, arg2) {
 
 export function LoadTableStructure(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['LoadTableStructure'](arg1, arg2, arg3);
+}
+
+export function PreviewCreateDatabase(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['PreviewCreateDatabase'](arg1, arg2);
 }
 
 export function RenameColumn(arg1, arg2, arg3, arg4, arg5) {

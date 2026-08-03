@@ -4,4 +4,4 @@ import {app} from '../models';
 
 export function Cancel(arg1:string):Promise<void>;
 
-export function Run(arg1:string,arg2:app.QueryInput):Promise<app.QueryResult>;
+export function Run(arg1:string,arg2:app.QueryInput):Promise<app.ScriptResult>;

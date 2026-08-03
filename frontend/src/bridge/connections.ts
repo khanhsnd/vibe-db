@@ -9,6 +9,12 @@ export type Session = app.Session
 export type TestResult = app.TestResult
 export type TableSchema = app.TableSchema
 
+/** One stored function or procedure. It travels back into a drop unchanged — see `schema.dropRoutine`. */
+export type Routine = app.RoutineInfo
+
+/** Everything the tree draws a folder for under a namespace, read in one call. */
+export type Objects = app.Objects
+
 /**
  * Where a table lives. `schema` is empty on MySQL, whose database is its schema, and on a
  * PostgreSQL database node, which names no schema yet and so addresses no tables.
@@ -48,6 +54,11 @@ export interface EngineInfo {
   // Whether a table is qualified with a schema inside its database. MySQL's database *is*
   // its schema, so its tree has one level fewer.
   hasSchemas: boolean
+  // Whether a database of this engine is an object in its own right — with an owner, a
+  // template, a locale, a tablespace and a connection limit — rather than a namespace with a
+  // character set. It is what decides how much of the New Database dialog there is to fill in,
+  // and whether that database can carry extensions and a comment.
+  databaseHasOwner: boolean
 }
 
 // The order here is the order of the dialog's Engine list, and the first entry is what an
@@ -60,6 +71,7 @@ export const ENGINES = [
     user: 'root',
     needsDatabase: false,
     hasSchemas: false,
+    databaseHasOwner: false,
   },
   {
     value: 'postgres',
@@ -68,6 +80,7 @@ export const ENGINES = [
     user: 'postgres',
     needsDatabase: true,
     hasSchemas: true,
+    databaseHasOwner: true,
   },
 ] as const satisfies readonly EngineInfo[]
 
@@ -131,7 +144,7 @@ export const connections = {
   listDatabases: (sessionId: string) => call(() => api.ListDatabases(sessionId)),
   listSchemas: (sessionId: string, database: string) =>
     call(() => api.ListSchemas(sessionId, database)),
-  listTables: (sessionId: string, ns: Namespace) => call(() => api.ListTables(sessionId, ns)),
+  loadObjects: (sessionId: string, ns: Namespace) => call(() => api.LoadObjects(sessionId, ns)),
   loadTableSchemas: (sessionId: string, ns: Namespace) =>
     call(() => api.LoadTableSchemas(sessionId, ns)),
 }

@@ -1,7 +1,7 @@
 import * as api from '@wailsjs/go/app/ConnectionAPI'
 import type { app } from '@wailsjs/go/models'
 
-import type { Namespace } from './connections'
+import type { Namespace, Routine } from './connections'
 import { call } from './errors'
 import type { TableColumn } from './tables'
 
@@ -41,6 +41,28 @@ export interface FieldSpec {
   nullable: boolean
   default: string | null
   primaryKey: boolean
+}
+
+/** An index as the designer declares it; `method` empty takes the engine's own default. */
+export interface IndexSpec {
+  name: string
+  columns: string[]
+  unique: boolean
+  method: string
+}
+
+/**
+ * A referential constraint as the designer declares it. `referencedSchema` is whichever part of
+ * a namespace the engine qualifies a table by, and is empty for a table in the same namespace.
+ */
+export interface ForeignKeySpec {
+  name: string
+  columns: string[]
+  referencedSchema: string
+  referencedTable: string
+  referencedColumns: string[]
+  onUpdate: string
+  onDelete: string
 }
 
 export function emptyFieldSpec(): FieldSpec {
@@ -99,11 +121,24 @@ export const schema = {
   setPrimaryKey: (sessionId: string, ns: Namespace, table: string, columns: string[]) =>
     call(() => api.SetPrimaryKey(sessionId, ns, table, columns)),
 
+  createIndex: (sessionId: string, ns: Namespace, table: string, spec: IndexSpec) =>
+    call(() => api.CreateIndex(sessionId, ns, table, spec as unknown as app.IndexInput)),
+
   dropIndex: (sessionId: string, ns: Namespace, table: string, index: string) =>
     call(() => api.DropIndex(sessionId, ns, table, index)),
 
+  createForeignKey: (sessionId: string, ns: Namespace, table: string, spec: ForeignKeySpec) =>
+    call(() => api.CreateForeignKey(sessionId, ns, table, spec as unknown as app.ForeignKeyInput)),
+
   dropForeignKey: (sessionId: string, ns: Namespace, table: string, constraint: string) =>
     call(() => api.DropForeignKey(sessionId, ns, table, constraint)),
+
+  dropView: (sessionId: string, ns: Namespace, view: string) =>
+    call(() => api.DropView(sessionId, ns, view)),
+
+  /** The whole routine, not its name: on PostgreSQL two functions may share one name. */
+  dropRoutine: (sessionId: string, ns: Namespace, routine: Routine) =>
+    call(() => api.DropRoutine(sessionId, ns, routine)),
 }
 
 // A field with no default leaves the key out rather than sending null, so Go reads a nil

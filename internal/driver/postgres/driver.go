@@ -115,6 +115,10 @@ func (s *session) Close() error {
 	return first
 }
 
+func (*session) Split(script string) []string {
+	return sqlkit.Split(script, dialect)
+}
+
 func (s *session) Ping(ctx context.Context) error {
 	db, err := s.pool("")
 	if err != nil {
@@ -167,15 +171,70 @@ func (s *session) Schemas(ctx context.Context, database string) ([]string, error
 	return s.names(ctx, database, query)
 }
 
-func (s *session) Tables(ctx context.Context, ns driver.Namespace) ([]string, error) {
-	const query = `
+// Objects reads the three folders of a namespace in one trip, since the tree needs every count
+// the moment any one of them is opened. Materialised views are left out of the view list: they
+// are dropped by a statement of their own, and a list that cannot be acted on is worse than one
+// that does not claim them.
+func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Objects, error) {
+	const tables = `
 		SELECT c.relname
 		FROM pg_catalog.pg_class c
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = $1 AND c.relkind IN ('r', 'p')
 		ORDER BY c.relname`
 
-	return s.names(ctx, ns.Database, query, ns.Schema)
+	const views = `
+		SELECT c.relname
+		FROM pg_catalog.pg_class c
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1 AND c.relkind = 'v'
+		ORDER BY c.relname`
+
+	// The identity arguments, not the full ones: a drop names the types alone, and defaults
+	// would make the statement it is pasted into invalid.
+	const routines = `
+		SELECT p.proname,
+		       p.prokind = 'p',
+		       pg_catalog.pg_get_function_identity_arguments(p.oid)
+		FROM pg_catalog.pg_proc p
+		JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = $1 AND p.prokind IN ('f', 'p')
+		ORDER BY p.proname`
+
+	found, err := s.names(ctx, ns.Database, tables, ns.Schema)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	seen, err := s.names(ctx, ns.Database, views, ns.Schema)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	db, err := s.pool(ns.Database)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	rows, err := db.QueryContext(ctx, routines, ns.Schema)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+	defer rows.Close()
+
+	stored := []driver.Routine{}
+	for rows.Next() {
+		var routine driver.Routine
+		if err := rows.Scan(&routine.Name, &routine.Procedure, &routine.Arguments); err != nil {
+			return driver.Objects{}, translateError(err)
+		}
+		stored = append(stored, routine)
+	}
+	if err := rows.Err(); err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	return driver.Objects{Tables: found, Views: seen, Routines: stored}, nil
 }
 
 func (s *session) names(

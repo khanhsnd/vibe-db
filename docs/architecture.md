@@ -25,9 +25,9 @@ native errors to `domain` sentinels, add the engine to `domain.Engine` and to `E
 those two ends should need to change — if it does, an abstraction leaked.
 
 Reach for `internal/driver/sqlkit` before writing anything: row scanning, result-column
-reflection, statement classification, source parsing, identifier quoting, the transport
-errors and **the seven DDL statements both engines spell the same way** are all there already, and
-an engine differs from another only in
+reflection, statement classification, **script splitting**, source parsing, identifier and string
+quoting, the transport errors and **the DDL statements both engines spell the same way** are all
+there already, and an engine differs from another only in
 
 | Part | MySQL | PostgreSQL |
 |---|---|---|
@@ -35,15 +35,23 @@ an engine differs from another only in
 | `errors.go` | errno → sentinel | SQLSTATE → sentinel |
 | catalogue reads | `information_schema` | `pg_catalog`, for `format_type` |
 | placeholders | `?` | `$1` |
-| `sqlkit.Dialect` | backtick quoting, `#` comments | double-quote quoting |
+| `sqlkit.Dialect` | backtick quoting, `#` comments, `\` escapes a string | double-quote quoting, `$tag$` bodies |
 | levels above a table | one pool, `USE <database>` | a pool per database, `SET search_path` |
-| `ddl.go` | `MODIFY COLUMN` restates a column whole; a qualified rename target; `DROP INDEX` on the table; every primary key is called `PRIMARY` | one `ALTER COLUMN` action per fact; an unqualified rename target; an index is an object of the schema; a key's constraint name has to be read before it can be dropped |
+| `ddl.go` | `MODIFY COLUMN` restates a column whole; a qualified rename target; `DROP INDEX` on the table; every primary key is called `PRIMARY`; `USING` comes before the table | one `ALTER COLUMN` action per fact; an unqualified rename target; an index is an object of the schema; a key's constraint name has to be read before it can be dropped; `USING` comes after the table |
+| `database.go` | a database is a namespace with a character set | a database is an object with an owner, a template, a locale, a tablespace and a connection limit, and can carry extensions and a comment |
 
 `driver.Schema` is the DDL half of a session, and `sqlkit.DDL` supplies the part of it that does not
-vary: an adapter embeds it, hands it one `Run(ctx, database, statement)`, and writes only the four
-statements above plus its two catalogue reads. `Run` is also where the adapter's pool choice and its
+vary: an adapter embeds it, hands it one `Run(ctx, database, statement)`, and writes only the
+statements above plus its catalogue reads. `Run` is also where the adapter's pool choice and its
 error map live, so nothing in `sqlkit` has to know about either. DDL takes no arguments to bind — a
-type and a default reach the statement verbatim, and only identifiers are quoted.
+type, a default, an access method and a referential action reach the statement verbatim, and only
+identifiers are quoted and only free text (`Dialect.QuoteString`) is written as a literal.
+
+**A statement the UI shows is asked for rather than spelled twice.** The New Database dialog's SQL
+Preview calls `CreateDatabaseSQL`, which is exactly the list `CreateDatabase` runs, so what is shown
+and what runs cannot drift; a SQL export calls `InsertStatements` for the same reason. Each returns
+`[]driver.DatabaseStatement` or `[]string` rather than one string, because a create is several
+statements and some of them — an extension — can only be run inside the database just made.
 
 A table is addressed by a `driver.Namespace` — `(database, schema)` — and how many of its parts an
 engine fills is the one structural difference between the two adapters. MySQL fills `Database`
