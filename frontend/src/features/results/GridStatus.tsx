@@ -14,6 +14,14 @@ const COPIED_MS = 1200
 /** The age is read in whole seconds at finest, so a second is as often as it can change. */
 const AGE_TICK_MS = 1000
 
+/**
+ * How many words of the tail are held back from the ellipsis. A read's bounds are the last thing in
+ * the statement and the only part of it a page turn moves, so they are exactly what must not be
+ * clipped — and `LIMIT 100 OFFSET 0` is four words on both engines. Clipping the column list
+ * instead costs nothing, it being the same list on every page.
+ */
+const PINNED_WORDS = 4
+
 interface GridStatusProps {
   /** The statement that produced the rows, exactly as it ran. */
   statement: string
@@ -44,13 +52,22 @@ export function GridStatus({
   loadedAt,
 }: GridStatusProps) {
   const age = useAge(loadedAt)
+  const { head, tail } = splitStatement(statement)
 
   return (
     <div className="flex h-6 shrink-0 items-stretch border-t border-line bg-panel text-2xs text-muted">
       <div className="flex min-w-0 flex-1 items-center gap-1 px-2">
-        <span className="truncate font-mono text-accent" title={statement}>
-          {statement}
-        </span>
+        {statement === '' ? (
+          // A read this side never learned the statement of — one that was stopped — says so,
+          // rather than leaving the last statement standing beside rows it did not produce.
+          <span className="text-faint">No statement</span>
+        ) : (
+          // Two spans, so the ellipsis lands where it costs least — see PINNED_WORDS.
+          <span className="flex min-w-0 overflow-hidden font-mono text-accent" title={statement}>
+            <span className="min-w-0 truncate">{head}</span>
+            {tail === '' ? null : <span className="ml-1 shrink-0">{tail}</span>}
+          </span>
+        )}
         <CopyStatement statement={statement} />
       </div>
 
@@ -70,6 +87,15 @@ export function GridStatus({
       </span>
     </div>
   )
+}
+
+/** The statement as a head the bar may ellipsize and a tail it may not. */
+function splitStatement(statement: string) {
+  const words = statement.split(' ')
+  if (words.length <= PINNED_WORDS) return { head: statement, tail: '' }
+
+  const at = words.length - PINNED_WORDS
+  return { head: words.slice(0, at).join(' '), tail: words.slice(at).join(' ') }
 }
 
 /** Copying is confirmed on the icon itself, there being no room here for a message. */

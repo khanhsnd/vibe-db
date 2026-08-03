@@ -191,6 +191,15 @@ SELECT * FROM `shop`.`users` ORDER BY `id` LIMIT 100 OFFSET 0  ⧉ │ Record 19
   the statement the reader typed. Either way the **copy** beside it writes exactly that to the
   clipboard, and confirms on the icon itself — a tick for a moment — there being no room here for a
   message.
+- **The tail of the statement is pinned, and the ellipsis eats the column list instead**
+  (`PINNED_WORDS`). A statement is nearly always wider than the bar, and everything that *moves* —
+  `LIMIT 100 OFFSET 300`, or its absence — is the last four words of it, so truncating from the
+  right hid the only part worth watching: turning a page or clearing `Limit records` looked like
+  nothing had happened. The column list is what gets clipped, being the same list on every page.
+- **A read whose statement this side never learned says `No statement`.** Only the answer carries
+  the statement, so a **stopped** read has none: what was on the bar belongs to the *previous* page,
+  and leaving it there would put `LIMIT 100 OFFSET 0` beside thirty thousand rows. The copy is
+  disabled for the same reason — there is nothing true to copy.
 - **`Record` is where the reader is**, which is the focused row: the page's own offset plus that
   row's place in the page. With nothing focused it is the page's first row. A total shown as
   `1,000+` is a floor, from the same `partial` the pager reads.

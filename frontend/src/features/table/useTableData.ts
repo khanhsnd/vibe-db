@@ -80,13 +80,19 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
         // Stopping is a choice rather than a failure, so the rows that did arrive are kept and
         // the total becomes what is actually held. The columns are the ones already on screen: a
         // read stopped before it answered named none, so a first read stopped shows nothing.
+        //
+        // The statement goes, though, rather than staying behind: only the answer carries it, so
+        // what is left is the *previous* page's — `LIMIT 100 OFFSET 0` beside thirty thousand rows.
+        // A read whose statement this side never learned says so instead of naming the wrong one.
         const failure = toAppError(thrown)
         if (failure.code !== 'QUERY_CANCELLED') {
           setError(failure)
           return
         }
         setData((current) =>
-          current === null ? null : { ...current, rows: streaming, total: streaming.length },
+          current === null
+            ? null
+            : { ...current, rows: streaming, total: streaming.length, statement: '' },
         )
         setLoadedAt(Date.now())
       })

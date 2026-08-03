@@ -28,7 +28,7 @@ import { usePageWindow } from './usePageWindow'
 const numbers = new Intl.NumberFormat('en-US')
 
 /** Stopping a query is a choice, not a failure, so it is reported without alarm. */
-export const isCancel = (error: AppError) => error.code === 'QUERY_CANCELLED'
+const isCancel = (error: AppError) => error.code === 'QUERY_CANCELLED'
 
 interface ResultPaneProps {
   run: QueryRun

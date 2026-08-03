@@ -1,15 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
 
 import { failedStatement } from '@/bridge/query'
-import { isCancel, ResultPane } from '@/features/results/ResultPane'
+import { ResultPane } from '@/features/results/ResultPane'
 import { ResultTabs, type ResultPaneDef } from '@/features/results/ResultTabs'
-import { cn } from '@/lib/cn'
 import type { QueryRun } from '@/stores/queries'
 
 import { ScriptMessages } from './ScriptMessages'
-
-const numbers = new Intl.NumberFormat('en-US')
 
 interface QueryOutputProps {
   run: QueryRun
@@ -19,10 +15,14 @@ interface QueryOutputProps {
   onStop: () => void
 }
 
+/**
+ * The output half of a query tab: the `Result` pane, and a `Messages` pane beside it once there
+ * is a script to account for. What the run *did* — its rows, its time, how far it got — is said by
+ * the pane itself, on the status line under its grid, rather than by a strip out here that would
+ * only repeat the count already under the reader's eyes.
+ */
 export function QueryOutput({ run, sessionId, onRefresh, onFetch, onStop }: QueryOutputProps) {
   const statements = run.result?.statements ?? []
-  // One statement says everything it has to say in the Result pane, so the strip stays a strip
-  // until there is a script to account for.
   const script = statements.length > 1
   const failed = failedStatement(run.result)
 
@@ -57,57 +57,8 @@ export function QueryOutput({ run, sessionId, onRefresh, onFetch, onStop }: Quer
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-canvas">
-      <div className="min-h-0 flex-1">
-        <ResultTabs panes={panes} selectedId={script ? pane : 'result'} onSelect={setPane} />
-      </div>
-
-      <StatusStrip run={run} />
-    </div>
-  )
-}
-
-function StatusStrip({ run }: { run: QueryRun }) {
-  const { running, result, error } = run
-  const failed = failedStatement(result)
-  const statements = result?.statements.length ?? 0
-
-  return (
-    <div className="flex h-8 shrink-0 items-center gap-2 border-t border-line bg-panel px-2 text-xs text-muted">
-      {running ? (
-        <>
-          <Loader2 size={12} className="shrink-0 animate-spin text-accent" />
-          <span className="shrink-0">Running…</span>
-        </>
-      ) : error !== null ? (
-        <span className={cn('shrink-0', isCancel(error) ? 'text-muted' : 'text-danger')}>
-          {isCancel(error) ? 'Cancelled' : 'Failed'}
-        </span>
-      ) : result !== null ? (
-        <>
-          {/* A script says how far it got before it says what the last statement returned. */}
-          {statements > 1 ? (
-            <>
-              <span className={cn('shrink-0', failed && 'text-danger')}>
-                {failed
-                  ? `Stopped at statement ${result.statements.indexOf(failed) + 1} of ${statements}`
-                  : `${statements} statements`}
-              </span>
-              <span className="text-faint">·</span>
-            </>
-          ) : null}
-
-          <span className="shrink-0 font-mono">
-            {result.columns.length > 0
-              ? `${numbers.format(result.rows.length)} rows`
-              : `${numbers.format(result.rowsAffected)} affected`}
-          </span>
-          <span className="text-faint">·</span>
-          <span className="shrink-0 font-mono">{numbers.format(result.elapsedMs)} ms</span>
-        </>
-      ) : (
-        <span className="shrink-0 text-faint">Idle</span>
-      )}
+    <div className="h-full min-h-0 bg-canvas">
+      <ResultTabs panes={panes} selectedId={script ? pane : 'result'} onSelect={setPane} />
     </div>
   )
 }

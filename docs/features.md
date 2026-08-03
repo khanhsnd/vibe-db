@@ -299,8 +299,8 @@ the server rejects.
 - **A rejection is a message, not a failure — for a script.** One statement on its own still fails
   as a failure, so the output panel shows the server's wording where the reader is looking; but the
   statements above a rejected one *did run*, and throwing would hide how far the script got. A
-  script that stops opens the `Messages` pane by itself, and the status strip says which statement
-  of how many it stopped at.
+  script that stops opens the `Messages` pane by itself, and its `Messages (n)` tab says how many
+  statements there were to account for.
 - **Rows are paged under the grid by the same pager the table view has.** What a read returned is a
   *prefix* of the result, and the pager cuts pages out of it in memory — turning to a page it
   already holds reads nothing. A total shown as `1,000+` on the status line says the prefix stopped
@@ -316,8 +316,12 @@ the server rejects.
 - **Errors surface in the output panel below the editor**, with the code, the server's own wording
   and the engine's error code, never as a dialog. A cancel is reported as `QUERY_CANCELLED`, not as
   a failure.
-- Progress shows in two places: a spinner beside the toolbar buttons and a `Running…` status strip
-  under the output panel. Previous rows stay on screen until the new ones land.
+- Progress shows in two places: `Running…` beside the toolbar buttons, and a spinner on the pager
+  under the grid. Previous rows stay on screen until the new ones land.
+- **How many rows came back, and how long it took, are on the grid's own status line** — not on a
+  strip of their own under the panel. There was one, and it said `325 rows · 5,077 ms` directly
+  beneath a line already reading `Record 1 of 325`: two accounts of one read, a row apart. The
+  elapsed time went with it, `ElapsedMs` still crossing the wire for whatever wants it next.
 
 ## The row limit
 
@@ -407,8 +411,8 @@ answer rather than a stream.
 
 The panel under the editor is a tab strip of **`Result`** and, for a script, **`Messages`**; a
 further pane — a query plan, history — is one more entry in the list `QueryOutput` hands
-`ResultTabs`. The run status strip stays below the strip, because it describes the run rather than
-any one pane.
+`ResultTabs`. Nothing sits below that strip: what the run did is the pane's own to report, on the
+status line under its grid, so `QueryOutput` is the tabs and nothing else.
 
 Under the pane sits the same `GridFooter` the table view has, with the source of the rows named on
 its right — the qualified table, or why the result is read-only:
