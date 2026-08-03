@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
 
-import { ALL_ROWS, DEFAULT_PAGE_SIZE } from '@/bridge/rows'
+import { DEFAULT_PAGE_SIZE } from '@/bridge/rows'
 
+import { pageStep } from './paging'
 import type { Cell } from './resultSet'
 
 /**
@@ -16,7 +17,7 @@ export function usePageWindow(rows: Cell[][]) {
   const [page, setPage] = useState(0)
   const [size, setSize] = useState<number>(DEFAULT_PAGE_SIZE)
 
-  const spanOf = (count: number) => (size === ALL_ROWS ? Math.max(count, 1) : size)
+  const spanOf = (count: number) => pageStep(size, count)
 
   const step = spanOf(rows.length)
   const pageCount = Math.max(1, Math.ceil(rows.length / step))

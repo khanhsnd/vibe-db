@@ -626,6 +626,7 @@ export namespace app {
 	    total: number;
 	    limit: number;
 	    offset: number;
+	    statement: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TableRows(source);
@@ -638,6 +639,7 @@ export namespace app {
 	        this.total = source["total"];
 	        this.limit = source["limit"];
 	        this.offset = source["offset"];
+	        this.statement = source["statement"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

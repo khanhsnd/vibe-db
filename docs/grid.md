@@ -150,11 +150,21 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
   optional for the same reason the icons are: a grid that names itself read-only passes none rather
   than four callbacks that can never run.
 - Delete is the only one that needs a selection; Apply and Discard need something pending.
-- The right-hand side is the caller's, and both surfaces hand it the same `GridPager`: arrows, the
-  offset window, the page count and the `Rows` size. Only where the rows come from differs — the
-  table view walks the server, and a query result is paged inside `usePageWindow` out of the rows
-  it already holds. A `+` on the pager's total says those rows are a *prefix* of the result, and
-  `partial` is also what keeps `Next` alive on the last page: the caller can go and fetch the rest.
+- The right-hand side is the caller's, and both surfaces hand it the same `GridPager`: **first,
+  back, the page in force, forward, last**, and one gear. Nothing on it counts rows — that belongs
+  to the status line below — so the walk stays a walk. The page in force is an **input** rather
+  than a label: a page is typed into it and committed with `Enter` or by leaving the box, and
+  `Escape` puts the box back to the page the grid is showing. Only where the rows come from differs
+  — the table view walks the server, and a query result is paged inside `usePageWindow` out of the
+  rows it already holds — and `paging.ts` is the arithmetic all four of them share, so the arrows
+  and the words under them cannot disagree on where a page begins. `partial` is what keeps `Next`
+  alive on the last page: the total is a floor rather than a count, so the caller can go and fetch
+  the rest, and a *typed* page past that floor is allowed for the same reason.
+- **The gear is the whole page-size control**, a popover holding `Limit records` and a count.
+  Unchecking it asks for **every** row, which is a different kind of read rather than a bigger one —
+  streamed and watched on a table tab, a replay of the statement on a query result — and that is
+  why it is a checkbox and not one more entry in a list of sizes. The typed count survives the
+  bound being lifted, so turning it back on restores what it was.
 - The bar carries `--surface-bar` rather than `--surface-panel`, so it reads as controls and not
   as the status line that may sit directly below it. Every strip of controls uses that surface, the
   toolbars and the head strip above a grid included; a surface's own toolbar and that head strip are
@@ -166,6 +176,29 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
 edits, appended draft rows, and rows marked for deletion, all keyed by row number and therefore all
 dropped when a fresh read lands. An insert carries **only the cells that were filled in**, so a
 column left alone takes the server's own default rather than an explicit NULL.
+
+## The line under that
+
+Under the footer sits one `GridStatus`, which is where a read is *read about* rather than acted on:
+
+```
+SELECT * FROM `shop`.`users` ORDER BY `id` LIMIT 100 OFFSET 0  ⧉ │ Record 19 of 1,000 in page 1 of 10 │ Last Refresh: 3m
+```
+
+- **The statement is the one that ran**, never one this side spelled again. A table read is built by
+  the driver with its bounds written into it rather than bound (`buildSelect`), so one string is
+  both what ran and what is shown; it travels back as `TableRows.statement`. A query result shows
+  the statement the reader typed. Either way the **copy** beside it writes exactly that to the
+  clipboard, and confirms on the icon itself — a tick for a moment — there being no room here for a
+  message.
+- **`Record` is where the reader is**, which is the focused row: the page's own offset plus that
+  row's place in the page. With nothing focused it is the page's first row. A total shown as
+  `1,000+` is a floor, from the same `partial` the pager reads.
+- **`Last Refresh` runs on the status line's own clock**, so counting the seconds costs the grid
+  nothing: a grid holding a million rows is not re-rendered once a second to move one word.
+- It carries `--surface-panel` rather than the footer's `--surface-bar`, because it is a status line
+  and not a strip of controls — the shade alone says which is which — and it holds exactly one
+  control, the copy.
 
 ## When you add to it
 

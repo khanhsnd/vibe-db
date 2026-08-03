@@ -18,14 +18,11 @@ func TestBuildSelectOrdersByPrimaryKey(t *testing.T) {
 		Offset:    200,
 	}
 
-	got, args := buildSelect(page, columns)
-	want := "SELECT `id`, `email` FROM `shop`.`users` ORDER BY `id` LIMIT ? OFFSET ?"
+	got := buildSelect(page, columns)
+	want := "SELECT `id`, `email` FROM `shop`.`users` ORDER BY `id` LIMIT 100 OFFSET 200"
 
 	if got != want {
 		t.Errorf("buildSelect =\n%s\nwant\n%s", got, want)
-	}
-	if len(args) != 2 || args[0] != 100 || args[1] != 200 {
-		t.Errorf("args = %v, want [100 200]", args)
 	}
 }
 
@@ -37,8 +34,8 @@ func TestBuildSelectWithoutPrimaryKeyHasNoOrderBy(t *testing.T) {
 		Limit:     100,
 	}
 
-	got, _ := buildSelect(page, columns)
-	want := "SELECT `email` FROM `shop`.`log` LIMIT ? OFFSET ?"
+	got := buildSelect(page, columns)
+	want := "SELECT `email` FROM `shop`.`log` LIMIT 100 OFFSET 0"
 
 	if got != want {
 		t.Errorf("buildSelect =\n%s\nwant\n%s", got, want)
@@ -53,14 +50,11 @@ func TestBuildSelectWithoutLimitReadsEveryRow(t *testing.T) {
 		Offset:    200,
 	}
 
-	got, args := buildSelect(page, columns)
+	got := buildSelect(page, columns)
 	want := "SELECT `id` FROM `shop`.`users` ORDER BY `id`"
 
 	if got != want {
 		t.Errorf("buildSelect =\n%s\nwant\n%s", got, want)
-	}
-	if args != nil {
-		t.Errorf("args = %v, want none: an offset without a limit binds nothing", args)
 	}
 }
 

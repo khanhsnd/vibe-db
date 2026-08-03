@@ -90,12 +90,15 @@ type TableColumn struct {
 	Default    *string `json:"default"`
 }
 
+// TableRows is one page of a table. `statement` is the read that produced it, exactly as it ran,
+// so the status line under the grid can show it and a reader can copy it into an editor.
 type TableRows struct {
-	Columns []TableColumn `json:"columns"`
-	Rows    [][]*string   `json:"rows"`
-	Total   int64         `json:"total"`
-	Limit   int           `json:"limit"`
-	Offset  int           `json:"offset"`
+	Columns   []TableColumn `json:"columns"`
+	Rows      [][]*string   `json:"rows"`
+	Total     int64         `json:"total"`
+	Limit     int           `json:"limit"`
+	Offset    int           `json:"offset"`
+	Statement string        `json:"statement"`
 }
 
 // TableList is one row per table of a namespace: its name in the first column, then whatever
@@ -379,11 +382,12 @@ func (in RowDeleteInput) toDriver() driver.RowDelete {
 
 func toTableRowsDTO(rows driver.TableRows, page driver.TablePage) TableRows {
 	return TableRows{
-		Columns: toColumnDTOs(rows.Columns),
-		Rows:    rows.Rows,
-		Total:   rows.Total,
-		Limit:   page.Limit,
-		Offset:  page.Offset,
+		Columns:   toColumnDTOs(rows.Columns),
+		Rows:      rows.Rows,
+		Total:     rows.Total,
+		Limit:     page.Limit,
+		Offset:    page.Offset,
+		Statement: rows.Statement,
 	}
 }
 

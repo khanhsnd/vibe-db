@@ -32,6 +32,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
   const [sort, setSort] = useState<SortKey | null>(null)
   const [nonce, setNonce] = useState(0)
   const [data, setData] = useState<TablePage | null>(null)
+  const [loadedAt, setLoadedAt] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetch, setFetch] = useState<RowFetch | null>(null)
   const [error, setError] = useState<AppError | null>(null)
@@ -70,6 +71,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
       .then((next) => {
         if (!active) return
         setData(streamed ? { ...next, rows: streaming } : next)
+        setLoadedAt(Date.now())
         setError(null)
       })
       .catch((thrown: unknown) => {
@@ -86,6 +88,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
         setData((current) =>
           current === null ? null : { ...current, rows: streaming, total: streaming.length },
         )
+        setLoadedAt(Date.now())
       })
       .finally(() => {
         if (!active) return
@@ -123,6 +126,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
 
   return {
     data,
+    loadedAt,
     loading,
     fetch,
     error,

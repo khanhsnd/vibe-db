@@ -5,6 +5,8 @@ import { rowExport, type ExportFormat } from '@/bridge/export'
 import type { TablePage } from '@/bridge/tables'
 import { GridFooter } from '@/features/results/GridFooter'
 import { GridPager } from '@/features/results/GridPager'
+import { GridStatus } from '@/features/results/GridStatus'
+import { pageCount } from '@/features/results/paging'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import {
   focusOf,
@@ -38,6 +40,7 @@ interface TableDataViewProps {
 export function TableDataView({ sessionId, namespace, table }: TableDataViewProps) {
   const {
     data,
+    loadedAt,
     loading,
     fetch,
     error,
@@ -89,6 +92,13 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
 
   /** The grid reports positions among the visible columns, which map back to real indexes. */
   const realColumn = (column: number) => visible[column]?.index ?? -1
+
+  /**
+   * Where the reader is in the whole table. The rows are paged on the server, so the grid's first
+   * row is this page's first row and the read's own offset is what puts it in the table — and with
+   * nothing focused, the page's first row is where the reader is.
+   */
+  const record = data === null ? 0 : data.offset + (focusOf(selection)?.row ?? 0) + 1
 
   const togglePanel = (kind: PanelKind) =>
     setPanels((current) => {
@@ -256,6 +266,15 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
           onSizeChange={changePageSize}
         />
       </GridFooter>
+
+      <GridStatus
+        statement={data?.statement ?? ''}
+        record={record}
+        total={data?.total ?? 0}
+        page={page + 1}
+        pageCount={pageCount(limit, data?.total ?? 0)}
+        loadedAt={loadedAt}
+      />
     </div>
   )
 }

@@ -11,8 +11,10 @@ import type { QueryRun } from '@/stores/queries'
 
 import { GridFooter } from './GridFooter'
 import { GridPager } from './GridPager'
+import { GridStatus } from './GridStatus'
 import { ResultGrid } from './ResultGrid'
 import {
+  focusOf,
   oneRange,
   rowRange,
   selectedRows,
@@ -203,6 +205,20 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
           />
         ) : null}
       </GridFooter>
+
+      {grid !== null ? (
+        <GridStatus
+          statement={statement}
+          // The rows are paged and sorted in memory, so where the reader is means where they are
+          // in the grid — the page's offset plus the focused row, not the order they were read in.
+          record={paged.offset + (focusOf(selection)?.row ?? 0) + 1}
+          total={paged.total}
+          partial={grid.truncated}
+          page={paged.page + 1}
+          pageCount={paged.pageCount}
+          loadedAt={run.loadedAt}
+        />
+      ) : null}
     </div>
   )
 }

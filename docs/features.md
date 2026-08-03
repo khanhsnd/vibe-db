@@ -232,10 +232,13 @@ leaves them there and the pager alone says it is working, which is what keeps a 
 blinking. A tab loads 100 rows per page by default, ordered by primary key so paging is stable —
 until a header's `⋮` menu sorts it by a column of its own, which travels into the read's `ORDER BY`
 and therefore orders the whole table rather than the page on screen.
-**Paging lives on the right of the bar under the grid**, beside the `Rows` control that sizes it and
-can lift the bound entirely — see [the row limit](#the-row-limit). The left of that bar is where rows
-are added, deleted, applied and discarded: it is the same `GridFooter` every grid has, and
-[grid.md](grid.md) specifies it. Above the grid is one toolbar: **Export** against its right edge,
+**Paging lives on the right of the bar under the grid** — first, back, the page typed into a box,
+forward, last — with a **gear** beside it that opens `Limit records` and the count that sizes a page,
+and can lift the bound entirely; see [the row limit](#the-row-limit). **Under that bar is the status
+line**: the read that produced the rows with a copy beside it, where the reader is in what it
+returned, and how long ago it landed. The left of the control bar is where rows are added, deleted,
+applied and discarded: it is the same `GridFooter` every grid has, and
+[grid.md](grid.md) specifies both it and the line under it. Above the grid is one toolbar: **Export** against its right edge,
 and on its left two independent toggles, since they occupy different edges:
 
 - **`Cell Editor`** opens a panel under the grid for the selected cell. Discard reverts the draft and
@@ -300,10 +303,11 @@ the server rejects.
   of how many it stopped at.
 - **Rows are paged under the grid by the same pager the table view has.** What a read returned is a
   *prefix* of the result, and the pager cuts pages out of it in memory — turning to a page it
-  already holds reads nothing. A total shown as `1,000+` says the prefix stopped at the toolbar's
-  `Limit`, and that is also what keeps `Next` alive on the last page: asking for a page past the
-  prefix, or picking `Rows` `All`, **replays the statement for as many rows as that needs**. So `All`
-  loads all, and paging is never stuck at the limit. Two things follow from the replay: a statement
+  already holds reads nothing. A total shown as `1,000+` on the status line says the prefix stopped
+  at the toolbar's `Limit`, and that is also what keeps `Next` alive on the last page: asking for a
+  page past the prefix, or clearing the gear's `Limit records`, **replays the statement for as many
+  rows as that needs**. So lifting the bound really does load all, and paging is never stuck at the
+  limit. Two things follow from the replay: a statement
   with no `ORDER BY` may reshuffle what lands on a page, and the reader keeps their page number
   across a read of the same statement — only a different statement sends them back to page one.
 - **A header's `⋮` menu sorts the result in memory**, since there is no statement to re-order: it
@@ -317,20 +321,27 @@ the server rejects.
 
 ## The row limit
 
-Both row-count controls are the same component, `shared/ui/RowLimit`: a dropdown of presets plus
-`All` and `Custom…`, where `Custom…` reveals a number input beside it for any count. Picking
-`Custom…` seeds that input with the count already in force and applies it at once, so the number on
-screen is always the one that will run; typing commits per keystroke, and clearing the box keeps the
-last valid count rather than fighting the typist.
+There are two row-count controls, and they are shaped by what they size rather than by each other.
+The **query toolbar's** is `shared/ui/RowLimit`: a dropdown of presets plus `All` and `Custom…`,
+where `Custom…` reveals a number input beside it for any count. Picking `Custom…` seeds that input
+with the count already in force and applies it at once, so the number on screen is always the one
+that will run; typing commits per keystroke, and clearing the box keeps the last valid count rather
+than fighting the typist.
 
-| Control | Presets | Default | What it sizes |
+The **grid pager's** is the gear at the end of the pager, and it is a *checkbox* plus a count —
+`Limit records`, then how many `records per page`. Lifting the bound is a different kind of read
+rather than a bigger one, and a checkbox says that where one more entry in a list of sizes would
+have hidden it. The count survives the bound being lifted, so turning it back on restores what it
+was; it commits per keystroke for the same reason the dropdown's does.
+
+| Control | Sizes | Default | What it sizes |
 |---|---|---|---|
-| Query toolbar `Limit` | 100, 1 000, 10 000 | 1 000 | The rows one **Execute** may return — the first prefix, not a ceiling, since the pager can replay for more. Hitting it is reported as a `+` on the pager's total rather than passed off as the whole answer. It sizes the *next* Execute, so a pager that grew past it leaves it alone. |
-| Grid pager `Rows` | 100, 500, 1 000 | 100 | One page of the grid. `All` collapses the walk to a single page, so the pager sizes itself by the row total and the arrows go dead — and on a query result it first fetches every row, because otherwise `All` would only mean all of the prefix. On a **table** tab `All` is streamed and watched, below. |
+| Query toolbar `Limit` | 100, 1 000, 10 000, or typed | 1 000 | The rows one **Execute** may return — the first prefix, not a ceiling, since the pager can replay for more. Hitting it is reported as a `+` on the status line's total rather than passed off as the whole answer. It sizes the *next* Execute, so a pager that grew past it leaves it alone. |
+| Grid pager gear | any typed count | 100 | One page of the grid. Clearing `Limit records` collapses the walk to a single page, so the pager sizes itself by the row total and the arrows go dead — and on a query result it first fetches every row, because otherwise it would only mean all of the prefix. On a **table** tab that read is streamed and watched, below. |
 
-`All` is deliberately the *only* way to fetch unbounded, so the bounded defaults of
+Lifting the bound is deliberately the *only* way to fetch unbounded, so the bounded defaults of
 [decisions.md](decisions.md) cannot be lost by accident. It travels the wire as the sentinel
-`app.AllRows` (`-1`) for both controls, and `driverRows` translates it into the driver's own
+`app.AllRows` (`-1`) from both controls, and `driverRows` translates it into the driver's own
 convention of a non-positive limit meaning "read everything". A missing, zero or otherwise
 nonsensical count still falls back to `app.DefaultQueryRows` / `app.DefaultPageSize` — the Go zero
 value can never mean unbounded.
@@ -338,21 +349,25 @@ value can never mean unbounded.
 Two consequences of that convention are worth knowing:
 
 - `buildSelect` in either adapter **drops the `LIMIT … OFFSET …` clause** for an unbounded page,
-  and therefore returns its arguments alongside the statement — an offset with no limit binds
-  nothing. `MaxRows` needs no equivalent, since `sqlkit.ScanRows` already reads to the end on a
-  non-positive cap.
-- There is no ceiling on a typed count in either control. One would be theatre next to an `All`
-  option, and silently answering a different question than the one asked is worse than a slow grid.
+  which makes its offset moot. `MaxRows` needs no equivalent, since `sqlkit.ScanRows` already reads
+  to the end on a non-positive cap. It **binds nothing at all**: a limit and an offset are numbers
+  this side counts rather than anything a reader typed, so they are written into the statement, and
+  one string is then both what runs and what the status line shows — the only arrangement in which
+  the two cannot drift apart.
+- There is no ceiling on a typed count in either control. One would be theatre next to an unbounded
+  read, and silently answering a different question than the one asked is worse than a slow grid.
 
-### `All` on a table tab is streamed, watched and stoppable
+### An unbounded read on a table tab is streamed, watched and stoppable
 
-A table of a million and a half rows broke both halves of the old `All`: the read outran the 15-second
-deadline every other read is given, and the answer would have had to cross the bridge as one
-JavaScript string, a bound method's result being delivered to the WebView as exactly that. So a table
-read that asked for every row and minted a **run id** behaves differently from every other read:
+A table of a million and a half rows broke both halves of the first attempt at this: the read outran
+the 15-second deadline every other read is given, and the answer would have had to cross the bridge
+as one JavaScript string, a bound method's result being delivered to the WebView as exactly that. So
+a table read that asked for every row and minted a **run id** behaves differently from every other
+read:
 
 - **It has no deadline.** How long every row of a table takes is not knowable ahead of time, and a
-  clock that cuts it off is the very failure `All` exists to avoid. `StopTableRows` bounds it instead.
+  clock that cuts it off is the very failure an unbounded read exists to avoid. `StopTableRows`
+  bounds it instead.
 - **Its rows arrive in batches.** `LoadTableRows` answers with the columns and the total alone and
   emits the rows as `app.EventRows` — `rows:batch`, `sqlkit.BatchRows` (5 000) rows at a time.
   `useTableData` stitches them back together and shows the grid once the call resolves. It is still

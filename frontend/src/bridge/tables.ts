@@ -43,6 +43,8 @@ export interface TablePage {
   total: number
   limit: number
   offset: number
+  /** The read that produced these rows, exactly as it ran, for the status line to show and copy. */
+  statement: string
 }
 
 /** What a streamed read pushes as it goes — see `onRowsStreamed` for why they are two things. */

@@ -9,10 +9,18 @@ export interface QueryRun {
   error: AppError | null
   /** What produced this run, so Refresh replays it instead of whatever the editor now holds. */
   request: RunRequest | null
+  /** When the rows on screen landed, so the status line can say how stale they are. */
+  loadedAt: number | null
 }
 
 /** A stable snapshot for tabs that have not run anything, so selectors stay referentially equal. */
-export const IDLE_RUN: QueryRun = { running: false, result: null, error: null, request: null }
+export const IDLE_RUN: QueryRun = {
+  running: false,
+  result: null,
+  error: null,
+  request: null,
+  loadedAt: null,
+}
 
 type RunRequest = Omit<QueryRequest, 'runId'>
 
@@ -42,8 +50,14 @@ export const useQueriesStore = create<QueriesState>((set, get) => ({
     set((s) => ({
       runs: {
         ...s.runs,
-        // The previous rows stay on screen until the new ones land.
-        [tabId]: { running: true, result: s.runs[tabId]?.result ?? null, error: null, request },
+        // The previous rows stay on screen until the new ones land, and so does their age.
+        [tabId]: {
+          running: true,
+          result: s.runs[tabId]?.result ?? null,
+          error: null,
+          request,
+          loadedAt: s.runs[tabId]?.loadedAt ?? null,
+        },
       },
       pending: { ...s.pending, [tabId]: runId },
     }))
@@ -51,13 +65,22 @@ export const useQueriesStore = create<QueriesState>((set, get) => ({
     try {
       const result = await queries.run(sessionId, { ...request, runId })
       set((s) => ({
-        runs: { ...s.runs, [tabId]: { running: false, result, error: null, request } },
+        runs: {
+          ...s.runs,
+          [tabId]: { running: false, result, error: null, request, loadedAt: Date.now() },
+        },
       }))
     } catch (thrown) {
       set((s) => ({
         runs: {
           ...s.runs,
-          [tabId]: { running: false, result: null, error: toAppError(thrown), request },
+          [tabId]: {
+            running: false,
+            result: null,
+            error: toAppError(thrown),
+            request,
+            loadedAt: null,
+          },
         },
       }))
     } finally {

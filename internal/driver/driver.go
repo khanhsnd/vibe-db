@@ -211,10 +211,13 @@ type DatabaseOptions struct {
 	Extensions  []string
 }
 
+// TableRows is one window onto a table's rows. Statement is the read that produced them,
+// spelled with its own bounds inline, so the reader can be shown exactly what ran.
 type TableRows struct {
-	Columns []Column
-	Rows    [][]*string
-	Total   int64
+	Columns   []Column
+	Rows      [][]*string
+	Total     int64
+	Statement string
 }
 
 type Query struct {

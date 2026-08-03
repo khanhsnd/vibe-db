@@ -27,17 +27,22 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 		return driver.TableRows{}, err
 	}
 
-	query, args := buildSelect(page, columns)
+	query := buildSelect(page, columns)
 
 	// The statement itself bounds the read — either through its LIMIT clause or because the
 	// caller asked for every row — so no cap is applied here. A page carrying a stream takes its
 	// rows as they arrive and the result then carries none.
-	result, err := sqlkit.Read(ctx, db, query, 0, page.Stream, args...)
+	result, err := sqlkit.Read(ctx, db, query, 0, page.Stream)
 	if err != nil {
 		return driver.TableRows{}, translateError(err)
 	}
 
-	return driver.TableRows{Columns: columns, Rows: result.Rows, Total: total}, nil
+	return driver.TableRows{
+		Columns:   columns,
+		Rows:      result.Rows,
+		Total:     total,
+		Statement: query,
+	}, nil
 }
 
 func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
@@ -188,9 +193,11 @@ func (s *session) countRows(
 	return total, nil
 }
 
-// buildSelect returns the statement and its arguments together, because a page that asks for
-// every row carries no LIMIT clause and therefore no arguments to bind.
-func buildSelect(page driver.TablePage, columns []driver.Column) (string, []any) {
+// buildSelect spells the whole read, its bounds written in rather than bound: a limit and an
+// offset are numbers this side counts, never anything a reader typed, so one string is both what
+// runs and what the reader is shown — the only arrangement in which the two cannot drift apart.
+// A page that asks for every row carries no LIMIT clause at all, which makes its offset moot.
+func buildSelect(page driver.TablePage, columns []driver.Column) string {
 	names := make([]string, len(columns))
 	for i, column := range columns {
 		names[i] = dialect.QuoteIdent(column.Name)
@@ -201,9 +208,9 @@ func buildSelect(page driver.TablePage, columns []driver.Column) (string, []any)
 		dialect.OrderBy(page.Sort, columns)
 
 	if page.Limit <= 0 {
-		return query, nil
+		return query
 	}
-	return query + " LIMIT $1 OFFSET $2", []any{page.Limit, page.Offset}
+	return query + " LIMIT " + strconv.Itoa(page.Limit) + " OFFSET " + strconv.Itoa(page.Offset)
 }
 
 // buildUpdate needs no row limit of its own: PostgreSQL has no LIMIT on UPDATE, and the
