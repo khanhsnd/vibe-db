@@ -206,8 +206,8 @@ and therefore orders the whole table rather than the page on screen.
 **Paging lives on the right of the bar under the grid**, beside the `Rows` control that sizes it and
 can lift the bound entirely — see [the row limit](#the-row-limit). The left of that bar is where rows
 are added, deleted, applied and discarded: it is the same `GridFooter` every grid has, and
-[grid.md](grid.md) specifies it. Above the grid sit two independent toggles, since they occupy
-different edges:
+[grid.md](grid.md) specifies it. Above the grid is one toolbar: **Export** against its right edge,
+and on its left two independent toggles, since they occupy different edges:
 
 - **`Cell Editor`** opens a panel under the grid for the selected cell. Discard reverts the draft and
   Apply stages the value on the cell, exactly as opening it in the grid does — the footer's
@@ -328,7 +328,9 @@ its right — the qualified table, or why the result is read-only:
 
 ## Exporting a grid
 
-An **Export** button sits **over every grid, against its right edge**, and opens **CSV**, **JSON**
+An **Export** button sits **in the strip over every grid, against its right edge** — its own head
+strip on a query result, and the table view's toolbar beside `Cell Editor` and `Column`, one strip
+over a table rather than two — and opens **CSV**, **JSON**
 and **SQL**; each writes to a file picked in the system's own save dialog — so the file lands where the
 reader put it, named after the table, and nothing is written if the dialog is dismissed. It is above
 the rows rather than in the footer below them because it acts on the table as a whole, where the

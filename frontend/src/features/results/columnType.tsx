@@ -45,6 +45,25 @@ export function isNumeric(type: string): boolean {
   return typeKind(type) === 'numeric'
 }
 
+/** The control a temporal column opens, named as the `<input type>` that draws it. */
+export type TemporalPicker = 'date' | 'time' | 'datetime-local'
+
+/** Read in order, so `TIMESTAMP` is a date and a time before `TIME` can claim it. */
+const PICKERS: ReadonlyArray<[TemporalPicker, RegExp]> = [
+  ['datetime-local', /^(DATETIME|TIMESTAMP)/i],
+  ['date', /^DATE/i],
+  ['time', /^TIME/i],
+]
+
+/**
+ * Which picker a column's cells open, or nothing where the type has no point in time to draw —
+ * an `INTERVAL` is temporal but is a length of time rather than a moment.
+ */
+export function temporalPicker(type: string): TemporalPicker | null {
+  if (typeKind(type) !== 'temporal') return null
+  return PICKERS.find(([, pattern]) => pattern.test(type))?.[0] ?? null
+}
+
 export function ColumnTypeIcon({ type }: { type: string }) {
   const Icon = ICONS[typeKind(type)]
   return <Icon size={12} className="shrink-0" />

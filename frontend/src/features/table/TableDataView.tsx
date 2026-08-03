@@ -136,7 +136,11 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
-      <TableToolbar active={panels} onToggle={togglePanel} />
+      <TableToolbar
+        active={panels}
+        onToggle={togglePanel}
+        onExport={data !== null ? exportRows : undefined}
+      />
 
       <div className="flex min-h-0 flex-1">
         {panels.has('column') ? (
@@ -163,7 +167,6 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
               isDeleted={(row) => edits.deleted.has(row)}
               sort={sort}
               onSortChange={changeOrder}
-              onExport={data !== null ? exportRows : undefined}
               columnMenuItems={(column) => [
                 {
                   label: 'Hide column',

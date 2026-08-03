@@ -11,7 +11,6 @@ import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
   ChevronDown,
-  Download,
   EllipsisVertical,
   KeyRound,
   Square,
@@ -20,17 +19,17 @@ import {
 } from 'lucide-react'
 
 import { copyText, readText } from '@/bridge/clipboard'
-import { EXPORT_FORMATS, type ExportFormat } from '@/bridge/export'
+import type { ExportFormat } from '@/bridge/export'
 import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
-import { Button } from '@/shared/ui/Button'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 import { IconButton } from '@/shared/ui/IconButton'
-import { MenuButton } from '@/shared/ui/MenuButton'
 import { ICON } from '@/shared/ui/menuIcons'
 
 import { CellChoice } from './CellChoice'
-import { ColumnTypeIcon, isNumeric } from './columnType'
+import { CellPicker } from './CellPicker'
+import { ExportMenu } from './ExportMenu'
+import { ColumnTypeIcon, isNumeric, temporalPicker, type TemporalPicker } from './columnType'
 import { gridFont, headerFont, widestText } from './measureText'
 import {
   boundsOf,
@@ -482,7 +481,7 @@ export function ResultGrid({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {onExport ? <ExportButton onExport={onExport} /> : null}
+      {onExport ? <ExportStrip onExport={onExport} /> : null}
 
       <div
         ref={scrollRef}
@@ -575,6 +574,7 @@ export function ResultGrid({
                         <CellInput
                           key={i}
                           value={row[i] ?? null}
+                          picker={temporalPicker(column.type)}
                           width={width}
                           onCommit={commit}
                           onCancel={cancel}
@@ -608,23 +608,16 @@ export function ResultGrid({
 /**
  * The strip over the header, where the grid is acted on whole rather than row by row. It sits
  * outside the scroller, so it stays where it is while the columns scroll under it, and it carries
- * the header's own surface, the two together reading as the top of the table.
+ * the header's own surface, the two together reading as the top of the table. A surface with a
+ * toolbar of its own carries Export there instead, and the grid then draws no strip at all.
  */
-function ExportButton({ onExport }: { onExport: (format: ExportFormat) => void }) {
+function ExportStrip({ onExport }: { onExport: (format: ExportFormat) => void }) {
   return (
-    <div className="flex h-8 shrink-0 items-center justify-end border-b border-line bg-bar px-1.5">
-      <MenuButton
-        align="end"
-        items={EXPORT_FORMATS.map((format) => ({
-          label: format.label,
-          icon: <Download size={13} />,
-          onSelect: () => onExport(format.value),
-        }))}
-      >
-        <Button variant="subtle" icon={<Download size={14} className="text-accent" />}>
-          Export
-        </Button>
-      </MenuButton>
+    <div
+      role="toolbar"
+      className="flex h-8 shrink-0 items-center justify-end border-b border-line bg-bar px-1.5"
+    >
+      <ExportMenu onExport={onExport} />
     </div>
   )
 }
@@ -908,33 +901,79 @@ function KeyMark({ position, tone }: { position: Cell; tone: string }) {
 
 interface CellInputProps {
   value: Cell
+  /** The picker this column's type takes, where it takes one: the `⋮` beside the box opens it. */
+  picker: TemporalPicker | null
   width: number
   onCommit: (value: Cell) => void
   onCancel: () => void
 }
 
 /** Leaving a NULL cell empty commits NULL again, so opening the editor never rewrites it. */
-function CellInput({ value, width, onCommit, onCancel }: CellInputProps) {
+function CellInput({ value, picker, width, onCommit, onCancel }: CellInputProps) {
+  const box = useRef<HTMLDivElement>(null)
+  const text = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState(value ?? '')
+  const [picking, setPicking] = useState(false)
+
   const commit = () => onCommit(draft === '' && value === null ? null : draft)
 
-  return (
-    <input
-      autoFocus
-      value={draft}
-      spellCheck={false}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') commit()
-        else if (event.key === 'Escape') onCancel()
-        else return
+  const closePicker = () => {
+    setPicking(false)
+    text.current?.focus()
+  }
 
-        event.preventDefault()
-        event.stopPropagation()
-      }}
+  return (
+    <div
+      ref={box}
+      // The editor is not a cell: a press inside it must not start a selection under it.
+      onPointerDown={(event) => event.stopPropagation()}
       style={{ width }}
-      className="shrink-0 border-r border-line/60 bg-canvas px-2 font-mono text-sm text-fg shadow-[inset_0_0_0_1px_var(--accent)] outline-none"
-    />
+      className="relative flex shrink-0 items-center border-r border-line/60 bg-canvas shadow-[inset_0_0_0_1px_var(--accent)]"
+    >
+      <input
+        ref={text}
+        autoFocus
+        value={draft}
+        spellCheck={false}
+        onChange={(event) => setDraft(event.target.value)}
+        // The picker is part of the editor, so the blur that opening it costs is not a commit.
+        onBlur={() => {
+          if (!picking) commit()
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') commit()
+          else if (event.key === 'Escape') onCancel()
+          else return
+
+          event.preventDefault()
+          event.stopPropagation()
+        }}
+        className="h-full min-w-0 flex-1 bg-transparent px-2 font-mono text-sm text-fg outline-none"
+      />
+
+      {picker ? (
+        <IconButton
+          label="Pick a value"
+          icon={<EllipsisVertical size={14} />}
+          // Opening the picker must not blur the box, or the commit that blur runs would beat it.
+          onMouseDown={(event) => event.preventDefault()}
+          // Closing from the button hands the keyboard back to the box, as `Escape` does.
+          onClick={() => (picking ? closePicker() : setPicking(true))}
+          // Its own border and surface, or it reads as part of the value rather than a control.
+          className={cn('mr-0.5 border border-line-strong', picking ? 'bg-hover' : 'bg-panel')}
+        />
+      ) : null}
+
+      {picker && picking ? (
+        <CellPicker
+          picker={picker}
+          value={draft}
+          anchor={box}
+          onChange={setDraft}
+          onCommit={commit}
+          onCancel={closePicker}
+        />
+      ) : null}
+    </div>
   )
 }

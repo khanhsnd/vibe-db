@@ -1,4 +1,8 @@
 :root {
+  /** What the platform draws in the app's own theme: the calendar a temporal cell opens, and
+      every scrollbar the browser owns rather than the stylesheet. */
+  color-scheme: dark;
+
   --surface-canvas: #0f1115;
   --surface-panel: #15181e;
   /** Every strip of controls — a toolbar over a grid, the action bar under one — a shade off
@@ -49,6 +53,8 @@
 }
 
 :root[data-theme='light'] {
+  color-scheme: light;
+
   --surface-canvas: #ffffff;
   --surface-panel: #f7f8fa;
   --surface-bar: #eceef2;

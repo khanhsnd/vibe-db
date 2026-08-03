@@ -1,8 +1,9 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 
 import { cn } from '@/lib/cn'
 
+import { overlayStyle, useCellAnchor } from './cellAnchor'
 import type { Cell } from './resultSet'
 
 const LIST_HEIGHT = 220
@@ -22,29 +23,15 @@ interface CellChoiceProps {
  * matched commits what was typed — a column's options are what it is usually given, not all a
  * server will take.
  *
- * The list is portalled and fixed, because the grid scrolls and would otherwise clip it; for the
- * same reason a scroll dismisses it, the box it was measured against having moved.
+ * The list is portalled and fixed, because the grid scrolls and would otherwise clip it, so it
+ * follows its own cell through `useCellAnchor`.
  */
 export function CellChoice({ value, options, width, onCommit, onCancel }: CellChoiceProps) {
   const box = useRef<HTMLInputElement>(null)
   const [draft, setDraft] = useState(value ?? '')
   const [typed, setTyped] = useState(false)
   const [active, setActive] = useState(-1)
-  const [anchor, setAnchor] = useState<DOMRect | null>(null)
-
-  // The list is fixed, so it has to be told where its cell is — and told again whenever the grid
-  // scrolls under it, which is what keeps the two together instead of dismissing one of them.
-  useLayoutEffect(() => {
-    const place = () => setAnchor(box.current?.getBoundingClientRect() ?? null)
-
-    place()
-    window.addEventListener('scroll', place, true)
-    window.addEventListener('resize', place)
-    return () => {
-      window.removeEventListener('scroll', place, true)
-      window.removeEventListener('resize', place)
-    }
-  }, [])
+  const anchor = useCellAnchor(box)
 
   const needle = draft.trim().toLowerCase()
   const matches = typed ? options.filter((one) => one.toLowerCase().includes(needle)) : options
@@ -88,14 +75,7 @@ export function CellChoice({ value, options, width, onCommit, onCancel }: CellCh
               // The list belongs to the box below it: a press inside must not blur the box, or
               // the commit that blur runs would beat the option that was clicked.
               onMouseDown={(event) => event.preventDefault()}
-              style={{
-                left: anchor.left,
-                minWidth: Math.max(anchor.width, LIST_MIN_WIDTH),
-                maxHeight: LIST_HEIGHT,
-                ...(anchor.bottom + LIST_HEIGHT > window.innerHeight && anchor.top > LIST_HEIGHT
-                  ? { bottom: window.innerHeight - anchor.top }
-                  : { top: anchor.bottom }),
-              }}
+              style={overlayStyle(anchor, LIST_HEIGHT, LIST_MIN_WIDTH)}
               className="scroll-thin fixed z-50 overflow-auto overscroll-contain rounded-md border border-line-strong bg-elevated py-1 shadow-[var(--shadow-overlay)]"
             >
               {matches.map((option, at) => (

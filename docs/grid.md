@@ -16,7 +16,7 @@ keys and its pending changes, and every one of those is a grid — the Fields on
 
 | Part | Rule |
 |---|---|
-| Head strip | 32 px above the header, on the header's own surface — the two read as one head — holding what acts on the grid *whole* rather than row by row — today one **Export** button alone, against the right edge: a labelled `Button` with an accent-coloured glyph, not a bare icon, because it is the only thing up there and has room to say what it is. It sits outside the scroller, so it stays put while the columns scroll under it, and it appears only where the call site passed `onExport`. |
+| Head strip | 32 px above the header, on the header's own surface — the two read as one head — holding what acts on the grid *whole* rather than row by row, today the **Export** button alone against the right edge: a labelled `Button` with an accent-coloured glyph, not a bare icon, because it has the room to say what it is. It sits outside the scroller, so it stays put while the columns scroll under it, and the grid draws it **only where the call site passed `onExport`** — a surface with a toolbar of its own puts the same `ExportMenu` in that toolbar instead and passes nothing, because one table must never carry two strips. |
 | Header | Two lines, 40 px on `--surface-bar`, so the shade alone says where the data starts. The column **name** on top in the **UI font**, bold 14 px — the one place the grid is not mono, a size above its cells and three weights clear of their regular, so a name reads as a label and not as the data beneath it — and its **type** below in muted mono 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx`. Never uppercased — the server's own casing stands. On the right of every header sits the **`⋮` options button**, and beside the name of the sorted column an arrow saying which way. |
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. Mono 13 px. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
@@ -65,6 +65,19 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   is highlighted, because a column's options are what it is usually given and not all a server will
   take. The list is portalled and fixed — the grid scrolls, and would otherwise clip it — so it is
   told where its cell is again on every scroll, rather than dismissed under a wheel.
+- **A temporal cell's box carries a `⋮`, and it opens the platform's own picker.** Which picker is
+  read off the column's *type* rather than named by the call site, exactly as alignment is: a
+  calendar for a `DATE`, a clock for a `TIME`, both for a `DATETIME` or a `TIMESTAMP`, and none at
+  all for an `INTERVAL`, which is a length of time and not a moment. What is picked goes back into
+  the box as text with SQL's own separator, so it can still be typed over and the footer still
+  commits it, and a value the picker cannot read — an expression, a NULL — opens it empty and leaves
+  the text alone until something is picked. A picker reaches seconds and no further, so picking over
+  a value that carried a fraction of a second or a time zone writes it back without one — the box is
+  there to type either back in. The panel carries **Now** — this moment in the reader's own zone, to
+  the granularity the column keeps — and **Done**, though leaving the panel commits just as Done
+  does, the value being in the box already. `Escape` closes the picker and leaves the box open,
+  which is one step back rather than two. The panel is anchored like the `choice` list and by the
+  same `useCellAnchor`.
 - **A `check` or `key` column is flipped by that same single click, never opened.** A yes/no has
   nothing to type into it, so `Enter` toggles it too. Turning one on writes `CHECK_ON`, turning it
   off writes an empty cell; **what a `key` cell then shows is the call site's**, which is how a key
@@ -101,12 +114,15 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   does not reset them.
 - **The grid keeps its own selection when uncontrolled.** Pass `selection` +
   `onSelectionChange` only when something outside needs the focused cell.
-- **Export is the grid's, not the footer's**, because it acts on the whole grid rather than on a
-  row: the head strip's one button opens a `MenuButton` of CSV, JSON and SQL, each writing what the
-  grid holds to a file picked in the system's own save dialog. It is on the right because that is
-  where a reader looks for what to *do with* the table, the left of the footer being where a row is
-  changed. What each format does with a `NULL`, and which rows a surface counts as "what the grid
-  holds", are in [features.md](features.md#exporting-a-grid).
+- **Export belongs over the grid, never in the footer**, because it acts on the whole grid rather
+  than on a row: `ExportMenu` opens CSV, JSON and SQL, each writing what the grid holds to a file
+  picked in the system's own save dialog. It is one component in two places — the head strip the
+  grid draws for itself, or the surface's own toolbar, where `TableDataView` sets it beside the
+  **Cell Editor** and **Column** toggles and passes the grid no `onExport`, so a table carries one
+  row of controls rather than two stacked. It is on the right because that is where a reader looks
+  for what to *do with* the table, the left of the footer being where a row is changed. What each
+  format does with a `NULL`, and which rows a surface counts as "what the grid holds", are in
+  [features.md](features.md#exporting-a-grid).
 
 ## The bar under it
 
