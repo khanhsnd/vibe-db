@@ -18,8 +18,12 @@
   `vite.config.ts` and `tsconfig.app.json`; changing one requires changing the other.
 - **Three surfaces, in order of depth.** `--surface-canvas` is content, `--surface-panel` is the
   app's own chrome — command bar, tab strip, sidebar — and `--surface-bar` is a strip of controls:
-  a toolbar over a grid, the action bar under one, a dialog's header and footer. Two bars never
-  meet edge to edge, which is the whole reason the third shade exists.
+  a toolbar over a grid, the action bar under one, a dialog's header and footer. The grid's column
+  header takes it too, because rows are content and the names over them are not: read against
+  canvas rows, that shade is what says where the data starts. A bar never meets the *canvas* on
+  both sides of another bar, which is the whole reason the third shade exists — the one place two
+  do meet is a surface's own toolbar over the grid's head strip, and they are meant to read as the
+  single strip they look like.
 - **Colour and type live only in `shared/theme/tokens.css`.** Raw values sit on `:root`, are
   overridden under `:root[data-theme='light']`, and are mapped into Tailwind utilities via
   `@theme inline` — the `var()` indirection is what makes runtime theme switching work without a

@@ -328,8 +328,8 @@ its right — the qualified table, or why the result is read-only:
 
 ## Exporting a grid
 
-A download button sits **over every grid, against its right edge**, and opens **CSV**, **JSON** and
-**SQL**; each writes to a file picked in the system's own save dialog — so the file lands where the
+An **Export** button sits **over every grid, against its right edge**, and opens **CSV**, **JSON**
+and **SQL**; each writes to a file picked in the system's own save dialog — so the file lands where the
 reader put it, named after the table, and nothing is written if the dialog is dismissed. It is above
 the rows rather than in the footer below them because it acts on the table as a whole, where the
 footer acts on a row.

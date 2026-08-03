@@ -23,6 +23,7 @@ import { copyText, readText } from '@/bridge/clipboard'
 import { EXPORT_FORMATS, type ExportFormat } from '@/bridge/export'
 import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
+import { Button } from '@/shared/ui/Button'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 import { IconButton } from '@/shared/ui/IconButton'
 import { MenuButton } from '@/shared/ui/MenuButton'
@@ -607,11 +608,11 @@ export function ResultGrid({
 /**
  * The strip over the header, where the grid is acted on whole rather than row by row. It sits
  * outside the scroller, so it stays where it is while the columns scroll under it, and it carries
- * the header's own surface: it is the top of the table, not another bar of controls.
+ * the header's own surface, the two together reading as the top of the table.
  */
 function ExportButton({ onExport }: { onExport: (format: ExportFormat) => void }) {
   return (
-    <div className="flex h-7 shrink-0 items-center justify-end border-b border-line bg-panel px-1">
+    <div className="flex h-8 shrink-0 items-center justify-end border-b border-line bg-bar px-1.5">
       <MenuButton
         align="end"
         items={EXPORT_FORMATS.map((format) => ({
@@ -620,7 +621,9 @@ function ExportButton({ onExport }: { onExport: (format: ExportFormat) => void }
           onSelect: () => onExport(format.value),
         }))}
       >
-        <IconButton label="Export rows" icon={<Download size={14} />} />
+        <Button variant="subtle" icon={<Download size={14} className="text-accent" />}>
+          Export
+        </Button>
       </MenuButton>
     </div>
   )
@@ -708,9 +711,9 @@ function HeaderRow({
   menuFor,
 }: HeaderRowProps) {
   return (
-    <div className="sticky top-0 z-2 flex border-b border-line-strong bg-panel">
+    <div className="sticky top-0 z-2 flex border-b border-line-strong bg-bar">
       <div
-        className="sticky left-0 z-1 shrink-0 border-r border-line bg-panel"
+        className="sticky left-0 z-1 shrink-0 border-r border-line bg-bar"
         style={{ width: GUTTER_WIDTH, height: HEADER_HEIGHT }}
       />
 
@@ -724,14 +727,14 @@ function HeaderRow({
               onContextMenu={() => onSelectColumn(i)}
               className={cn(
                 'relative flex shrink-0 flex-col justify-center border-r border-line pr-7 pl-2',
-                active ? 'bg-grid-cell-selected' : 'bg-panel',
+                active ? 'bg-grid-cell-selected' : 'bg-bar',
               )}
               style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: HEADER_HEIGHT }}
             >
               <span className="flex items-center gap-1">
                 {/* The UI font, where a cell is mono: a name read as a label cannot be mistaken
                     for the data under it. */}
-                <span className="min-w-0 truncate text-xs font-semibold tracking-wide text-fg">
+                <span className="min-w-0 truncate text-base font-bold tracking-wide text-fg">
                   {column.name}
                 </span>
                 {sorted ? <SortMark descending={sorted.descending} /> : null}

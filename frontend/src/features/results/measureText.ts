@@ -15,9 +15,9 @@ export function gridFont(): string {
 /** The header's own font, since a column name is drawn as a label rather than as a cell. */
 export function headerFont(): string {
   const style = getComputedStyle(document.documentElement)
-  const size = style.getPropertyValue('--text-xs').trim()
+  const size = style.getPropertyValue('--text-base').trim()
   const family = style.getPropertyValue('--font-ui').trim()
-  return `600 ${size} ${family}`
+  return `700 ${size} ${family}`
 }
 
 export function widestText(texts: string[], font: string): number {

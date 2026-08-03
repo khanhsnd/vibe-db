@@ -16,8 +16,8 @@ keys and its pending changes, and every one of those is a grid — the Fields on
 
 | Part | Rule |
 |---|---|
-| Head strip | 28 px above the header, on the header's own surface, holding what acts on the grid *whole* rather than row by row — today the **Export** button alone, against the right edge. It sits outside the scroller, so it stays put while the columns scroll under it, and it appears only where the call site passed `onExport`. |
-| Header | Two lines, 40 px: the column **name** on top in the **UI font**, semibold 12 px — the one place the grid is not mono, so a name reads as a label and not as the data beneath it — and its **type** below in muted mono 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx`. Never uppercased — the server's own casing stands. On the right of every header sits the **`⋮` options button**, and beside the name of the sorted column an arrow saying which way. |
+| Head strip | 32 px above the header, on the header's own surface — the two read as one head — holding what acts on the grid *whole* rather than row by row — today one **Export** button alone, against the right edge: a labelled `Button` with an accent-coloured glyph, not a bare icon, because it is the only thing up there and has room to say what it is. It sits outside the scroller, so it stays put while the columns scroll under it, and it appears only where the call site passed `onExport`. |
+| Header | Two lines, 40 px on `--surface-bar`, so the shade alone says where the data starts. The column **name** on top in the **UI font**, bold 14 px — the one place the grid is not mono, a size above its cells and three weights clear of their regular, so a name reads as a label and not as the data beneath it — and its **type** below in muted mono 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx`. Never uppercased — the server's own casing stands. On the right of every header sits the **`⋮` options button**, and beside the name of the sorted column an arrow saying which way. |
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. Mono 13 px. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
@@ -96,7 +96,7 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   is. A sort always sends the reader back to page one, and always drops the selection.
 - **Columns resize** by dragging the right edge of the header, and **double-clicking that edge fits
   the column** to the widest of its name, its type line and its cells, capped at 520 px and measured
-  on a canvas against the tokens each is drawn with — `--font-ui` / `--text-xs` for the name,
+  on a canvas against the tokens each is drawn with — `--font-ui` / `--text-base` for the name,
   `--font-mono` / `--text-sm` for the rest. Widths are keyed by column *name*, so hiding a column
   does not reset them.
 - **The grid keeps its own selection when uncontrolled.** Pass `selection` +
@@ -131,8 +131,9 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
   it already holds. A `+` on the pager's total says those rows are a *prefix* of the result, and
   `partial` is also what keeps `Next` alive on the last page: the caller can go and fetch the rest.
 - The bar carries `--surface-bar` rather than `--surface-panel`, so it reads as controls and not
-  as the status line that may sit directly below it. Every strip of controls uses that surface —
-  the toolbars above a grid included — and two of them never meet edge to edge.
+  as the status line that may sit directly below it. Every strip of controls uses that surface, the
+  toolbars and the head strip above a grid included; a surface's own toolbar and that head strip are
+  the one pair meant to meet edge to edge, being controls over the same table.
 - **Its buttons refuse focus** (`mousedown` is prevented), so pressing one leaves the keyboard on the
   grid. Add-then-paste is one gesture, and the keystroke would otherwise land on the button.
 
