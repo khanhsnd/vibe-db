@@ -1,5 +1,6 @@
 export type ErrorCode =
   | 'INVALID_PROFILE'
+  | 'INVALID_NAME'
   | 'PROFILE_NOT_FOUND'
   | 'SESSION_NOT_FOUND'
   | 'BAD_CREDENTIALS'

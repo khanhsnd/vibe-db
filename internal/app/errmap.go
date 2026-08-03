@@ -12,6 +12,7 @@ type ErrorCode string
 
 const (
 	CodeInvalidProfile   ErrorCode = "INVALID_PROFILE"
+	CodeInvalidName      ErrorCode = "INVALID_NAME"
 	CodeProfileNotFound  ErrorCode = "PROFILE_NOT_FOUND"
 	CodeSessionNotFound  ErrorCode = "SESSION_NOT_FOUND"
 	CodeBadCredentials   ErrorCode = "BAD_CREDENTIALS"
@@ -77,6 +78,17 @@ func wrapError(err error) error {
 			Code:    CodeInvalidProfile,
 			Message: fmt.Sprintf("The %s field %s.", validationErr.Field, validationErr.Message),
 			Field:   validationErr.Field,
+		}
+	}
+
+	// A blank identifier is named by what it was for, so the dialog can say which box is
+	// empty without reading the message.
+	var nameErr domain.NameError
+	if errors.As(err, &nameErr) {
+		return wireError{
+			Code:    CodeInvalidName,
+			Message: "A " + nameErr.What + " name is required.",
+			Field:   nameErr.What,
 		}
 	}
 

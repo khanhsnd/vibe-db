@@ -8,7 +8,9 @@ a table feature; a call site that styles its own rows is a bug, because the two 
 after they are written.
 
 The only tabular things that are *not* this grid are the object tree and the column checkbox list,
-which are single-column lists of names, not data.
+which are single-column lists of names, not data. `TableDesigner` shows a table's fields, indexes,
+keys and its pending changes, and every one of those is a grid — the Fields one editable, through
+`onEditCell` like any other.
 
 ## What it looks like
 
@@ -109,8 +111,8 @@ column left alone takes the server's own default rather than an explicit NULL.
    and an `@theme inline` mapping — never a hex or a raw `var()` in the component.
 2. Geometry constants stay at the top of `ResultGrid.tsx`; row height alone is shared, via
    `density.ts`, because the object tree virtualizes on the same number.
-3. New behaviour is added once, in the grid, and this file is updated in the same change. Both call
-   sites — `ResultPane` and `TableDataView` — then have it, which is the whole point.
+3. New behaviour is added once, in the grid, and this file is updated in the same change. Every call
+   site — `ResultPane`, `TableDataView` and `TableDesigner` — then has it, which is the whole point.
 
 ## Where the two call sites legitimately differ
 
@@ -127,6 +129,10 @@ surrounds the grid:
   Asking for a page past the rows it holds replays the statement for as many as that page needs
   (`reach`), so `All` really does load all; the page number therefore survives a read of the same
   statement, and only a different one sends the reader back to page one.
+- `TableDesigner` neither pages nor hides, so it maps nothing — its rows are the fields on screen.
+  What differs is that its cells are a *declaration* rather than stored data, so an edit is parsed
+  back into the field it describes (`Length` is part of the type) and `isDirty` answers by comparing
+  the staged field with the stored one, rather than from a set of pending keys.
 - `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
   index back to the real one on the way in. **It sorts on the server too** — the sort travels in
   `TablePageRequest` and becomes the read's `ORDER BY`, because ordering the hundred rows in hand

@@ -11,6 +11,7 @@ import {
   type ProfileInput,
 } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
+import { Banner } from '@/shared/ui/Banner'
 import { Button } from '@/shared/ui/Button'
 import { Checkbox, Field, SelectInput, TextInput } from '@/shared/ui/Field'
 import { Dialog } from '@/shared/ui/Dialog'
@@ -259,30 +260,4 @@ function ProbeResult({ probe, engine }: { probe: Probe; engine: string }) {
   }
 
   return <Banner tone="danger" icon={<XCircle size={13} />} text={probe.error.message} />
-}
-
-const TONES = {
-  success: 'border-success/40 bg-success/10 text-success',
-  danger: 'border-danger/40 bg-danger-subtle text-danger',
-  muted: 'border-line bg-panel text-muted',
-} as const
-
-function Banner({
-  tone,
-  icon,
-  text,
-}: {
-  tone: keyof typeof TONES
-  icon?: React.ReactNode
-  text: string
-}) {
-  return (
-    <div
-      role="status"
-      className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${TONES[tone]}`}
-    >
-      {icon ? <span className="mt-px shrink-0">{icon}</span> : null}
-      <span className="selectable min-w-0">{text}</span>
-    </div>
-  )
 }

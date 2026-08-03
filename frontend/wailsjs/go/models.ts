@@ -22,6 +22,70 @@ export namespace app {
 	        this.key = source["key"];
 	    }
 	}
+	export class ColumnInput {
+	    name: string;
+	    type: string;
+	    nullable: boolean;
+	    default?: string;
+	    primaryKey: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ColumnInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.nullable = source["nullable"];
+	        this.default = source["default"];
+	        this.primaryKey = source["primaryKey"];
+	    }
+	}
+	export class ForeignKeyInfo {
+	    name: string;
+	    columns: string[];
+	    referencedSchema: string;
+	    referencedTable: string;
+	    referencedColumns: string[];
+	    onUpdate: string;
+	    onDelete: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ForeignKeyInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.columns = source["columns"];
+	        this.referencedSchema = source["referencedSchema"];
+	        this.referencedTable = source["referencedTable"];
+	        this.referencedColumns = source["referencedColumns"];
+	        this.onUpdate = source["onUpdate"];
+	        this.onDelete = source["onDelete"];
+	    }
+	}
+	export class IndexInfo {
+	    name: string;
+	    columns: string[];
+	    unique: boolean;
+	    primary: boolean;
+	    method: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new IndexInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.columns = source["columns"];
+	        this.unique = source["unique"];
+	        this.primary = source["primary"];
+	        this.method = source["method"];
+	    }
+	}
 	export class Namespace {
 	    database: string;
 	    schema: string;
@@ -379,6 +443,76 @@ export namespace app {
 	    }
 	}
 	
+	export class TableSpecInput {
+	    database: string;
+	    schema: string;
+	    table: string;
+	    columns: ColumnInput[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TableSpecInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.table = source["table"];
+	        this.columns = this.convertValues(source["columns"], ColumnInput);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TableStructure {
+	    columns: TableColumn[];
+	    indexes: IndexInfo[];
+	    foreignKeys: ForeignKeyInfo[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TableStructure(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = this.convertValues(source["columns"], TableColumn);
+	        this.indexes = this.convertValues(source["indexes"], IndexInfo);
+	        this.foreignKeys = this.convertValues(source["foreignKeys"], ForeignKeyInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class TestResult {
 	    serverVersion: string;
 	    latencyMs: number;

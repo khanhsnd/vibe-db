@@ -1,13 +1,17 @@
 import { useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  ArrowDownAZ,
   Boxes,
   ChevronDown,
   ChevronRight,
   CircleCheck,
+  Columns3,
   Database,
   Eye,
   Folder,
+  KeyRound,
+  Link,
   Server,
   Sigma,
   Table2,
@@ -30,6 +34,12 @@ const ICONS: Record<NodeKind, typeof Table2> = {
   view: Eye,
   procedure: Terminal,
   function: Sigma,
+  fields: Columns3,
+  field: Columns3,
+  indexes: ArrowDownAZ,
+  index: ArrowDownAZ,
+  foreignKeys: Link,
+  foreignKey: Link,
 }
 
 const INDENT_PER_DEPTH = 16
@@ -72,7 +82,9 @@ export function ObjectTree({
           if (!row) return null
 
           const { node, depth, expanded: isOpen, expandable } = row
-          const Icon = ICONS[node.kind]
+          // A field of the primary key is drawn with a key rather than a column, which is the
+          // one place the icon says something the label does not.
+          const Icon = node.primaryKey === true ? KeyRound : ICONS[node.kind]
           const selected = node.id === selectedId
           const active = node.active === true
 
@@ -86,6 +98,9 @@ export function ObjectTree({
                 onClick={() => onSelect(node)}
                 onContextMenu={() => onSelect(node)}
                 onDoubleClick={() => onActivate(node)}
+                // Indenting six levels leaves a field's name little room, so what a row could
+                // not draw is still readable by hovering it.
+                title={node.badge ? `${node.label} — ${node.badge}` : node.label}
                 className={cn(
                   'absolute top-0 left-0 flex w-full items-center gap-1.5 pr-2',
                   'cursor-default text-sm whitespace-nowrap',
@@ -118,7 +133,17 @@ export function ObjectTree({
                 {node.kind === 'connection' && node.status ? (
                   <StatusDot status={node.status} />
                 ) : (
-                  <Icon size={14} className={cn('shrink-0', active ? 'text-success' : 'text-muted')} />
+                  <Icon
+                    size={14}
+                    className={cn(
+                      'shrink-0',
+                      node.primaryKey === true
+                        ? 'text-warn'
+                        : active
+                          ? 'text-success'
+                          : 'text-muted',
+                    )}
+                  />
                 )}
 
                 <span className={cn('truncate', active && 'font-medium text-success')}>
@@ -128,7 +153,9 @@ export function ObjectTree({
                 {active ? <CircleCheck size={13} className="shrink-0 text-success" /> : null}
 
                 {node.badge ? (
-                  <span className="ml-auto font-mono text-2xs text-faint">{node.badge}</span>
+                  <span className="ml-auto max-w-[45%] shrink-0 truncate pl-2 font-mono text-2xs text-faint">
+                    {node.badge}
+                  </span>
                 ) : null}
               </div>
             </ContextMenu>

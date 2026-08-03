@@ -7,15 +7,20 @@ package sqlkit
 import "strings"
 
 // Dialect is the lexical difference between engines: the character that quotes an
-// identifier, and whether `#` starts a line comment.
+// identifier, whether `#` starts a line comment, and which part of a Namespace qualifies a
+// table name.
 type Dialect struct {
 	IdentQuote   byte
 	HashComments bool
+	// NamespaceIsSchema says a table is qualified by the schema inside its database rather
+	// than by the database itself, which is the one structural difference between the two
+	// engines' names for the same table.
+	NamespaceIsSchema bool
 }
 
 var (
 	MySQL    = Dialect{IdentQuote: '`', HashComments: true}
-	Postgres = Dialect{IdentQuote: '"'}
+	Postgres = Dialect{IdentQuote: '"', NamespaceIsSchema: true}
 )
 
 func (d Dialect) QuoteIdent(name string) string {

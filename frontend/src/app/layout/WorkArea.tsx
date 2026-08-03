@@ -1,6 +1,7 @@
 import { Terminal } from 'lucide-react'
 
 import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
+import { TableDesigner } from '@/features/schema/TableDesigner'
 import { TableDataView } from '@/features/table/TableDataView'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
@@ -51,6 +52,18 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             <TableDataView
               key={activeTab.id}
               sessionId={sessionId}
+              namespace={activeTab.namespace}
+              table={activeTab.table}
+            />
+          )
+        ) : activeTab.kind === 'design' ? (
+          sessionId === null ? (
+            <Empty title="Not connected" hint="Reconnect this connection to read the table." />
+          ) : (
+            <TableDesigner
+              key={activeTab.id}
+              tabId={activeTab.id}
+              profileId={activeTab.profileId}
               namespace={activeTab.namespace}
               table={activeTab.table}
             />

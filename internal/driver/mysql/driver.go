@@ -53,10 +53,16 @@ func (*Driver) Open(
 		return nil, translateError(err)
 	}
 
-	return &session{db: db}, nil
+	s := &session{db: db}
+	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
+	return s, nil
 }
 
 type session struct {
+	// The schema changes the two engines spell alike come from here; `ddl.go` overrides the
+	// four that do not.
+	sqlkit.DDL
+
 	db *sql.DB
 }
 

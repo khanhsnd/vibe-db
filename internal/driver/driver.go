@@ -55,6 +55,56 @@ type TableSchema struct {
 	Columns []string
 }
 
+// Index is one index of a table, the one behind the primary key included, because that is
+// what the catalogue reports and what the tree lists.
+type Index struct {
+	Name    string
+	Columns []string
+	Unique  bool
+	Primary bool
+	Method  string
+}
+
+// ForeignKey is one referential constraint. The referenced table carries its own namespace
+// part, since a key may point across a schema.
+type ForeignKey struct {
+	Name              string
+	Columns           []string
+	ReferencedSchema  string
+	ReferencedTable   string
+	ReferencedColumns []string
+	OnUpdate          string
+	OnDelete          string
+}
+
+// TableStructure is a table's shape rather than its rows: what the tree draws underneath it
+// and what the designer shows.
+type TableStructure struct {
+	Columns     []Column
+	Indexes     []Index
+	ForeignKeys []ForeignKey
+}
+
+// ColumnSpec is a column as the user declares it, which is not what Column reports back.
+// Type is the text the engine will parse — `varchar(255)`, `numeric(10,2)` — and Default is
+// an expression rather than a value, so both travel into the statement verbatim: neither can
+// be bound as an argument, because DDL takes no parameters.
+type ColumnSpec struct {
+	Name       string
+	Type       string
+	Nullable   bool
+	Default    *string
+	PrimaryKey bool
+}
+
+// TableSpec is a CREATE TABLE: a name and its columns, its primary key taken from whichever
+// of them claim one.
+type TableSpec struct {
+	Namespace
+	Table   string
+	Columns []ColumnSpec
+}
+
 type TableRows struct {
 	Columns []Column
 	Rows    [][]*string
@@ -107,7 +157,33 @@ type Driver interface {
 	Open(ctx context.Context, profile domain.ConnectionProfile, creds Credentials) (Session, error)
 }
 
+// Schema is the DDL half of a session: reading a table's shape and changing it. It is its own
+// interface so an adapter can keep its schema work in its own file, and so `sqlkit.DDL` can
+// supply the statements the two engines spell identically.
+type Schema interface {
+	TableStructure(ctx context.Context, ns Namespace, table string) (TableStructure, error)
+	CreateTable(ctx context.Context, spec TableSpec) error
+	RenameTable(ctx context.Context, ns Namespace, table, name string) error
+	DropTable(ctx context.Context, ns Namespace, table string) error
+	// TruncateTable drops every row at once; EmptyTable deletes them, which is the only one
+	// of the two a table under a foreign key will accept.
+	TruncateTable(ctx context.Context, ns Namespace, table string) error
+	EmptyTable(ctx context.Context, ns Namespace, table string) error
+	AddColumn(ctx context.Context, ns Namespace, table string, spec ColumnSpec) error
+	AlterColumn(ctx context.Context, ns Namespace, table, column string, spec ColumnSpec) error
+	RenameColumn(ctx context.Context, ns Namespace, table, column, name string) error
+	DropColumn(ctx context.Context, ns Namespace, table, column string) error
+	// SetPrimaryKey replaces whatever key the table has, and drops it outright for an empty
+	// list. What the old key was called is the adapter's to find out, since only PostgreSQL
+	// needs the name to drop it.
+	SetPrimaryKey(ctx context.Context, ns Namespace, table string, columns []string) error
+	DropIndex(ctx context.Context, ns Namespace, table, index string) error
+	DropForeignKey(ctx context.Context, ns Namespace, table, constraint string) error
+}
+
 type Session interface {
+	Schema
+
 	Ping(ctx context.Context) error
 	ServerInfo(ctx context.Context) (ServerInfo, error)
 	Databases(ctx context.Context) ([]string, error)

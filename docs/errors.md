@@ -14,6 +14,7 @@ frontend depends on.
 | Code | MySQL | PostgreSQL |
 |---|---|---|
 | `INVALID_PROFILE` | Validation failed; `field` names the offending input | as MySQL, plus a missing `database` |
+| `INVALID_NAME` | A schema change arrived with a blank identifier; `field` says which — `table`, `column`, `column type`, `new column`, `index`. Every identifier is quoted on its way into a statement, so having one is the only rule left to enforce above the server | as MySQL |
 | `BAD_CREDENTIALS` | errno 1045 / 1698 | SQLSTATE 28P01 / 28000 |
 | `UNKNOWN_DATABASE` | errno 1049 | SQLSTATE 3D000 |
 | `UNKNOWN_SCHEMA` | — (a MySQL database *is* its schema) | SQLSTATE 3F000, which PostgreSQL raises for DDL against a missing schema; a *read* through one is 42P01 below |

@@ -9,6 +9,12 @@ export type NodeKind =
   | 'view'
   | 'procedure'
   | 'function'
+  | 'fields'
+  | 'field'
+  | 'indexes'
+  | 'index'
+  | 'foreignKeys'
+  | 'foreignKey'
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
@@ -19,10 +25,14 @@ export interface TreeNode {
   profileId: string
   /** Where this node's tables live. Absent on a connection, which has no namespace yet. */
   namespace?: Namespace
+  /** The table this node belongs to, on a table node and everything the tree draws under one. */
+  table?: string
   children?: TreeNode[]
   status?: ConnectionStatus
   active?: boolean
   badge?: string
+  /** A field that is part of the primary key, which the tree marks with a key rather than an icon. */
+  primaryKey?: boolean
 }
 
 export interface FlatNode {

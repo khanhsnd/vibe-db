@@ -99,6 +99,49 @@ type TableSchema struct {
 	Columns []string `json:"columns"`
 }
 
+type IndexInfo struct {
+	Name    string   `json:"name"`
+	Columns []string `json:"columns"`
+	Unique  bool     `json:"unique"`
+	Primary bool     `json:"primary"`
+	Method  string   `json:"method"`
+}
+
+type ForeignKeyInfo struct {
+	Name              string   `json:"name"`
+	Columns           []string `json:"columns"`
+	ReferencedSchema  string   `json:"referencedSchema"`
+	ReferencedTable   string   `json:"referencedTable"`
+	ReferencedColumns []string `json:"referencedColumns"`
+	OnUpdate          string   `json:"onUpdate"`
+	OnDelete          string   `json:"onDelete"`
+}
+
+// TableStructure is a table's shape rather than its rows: what the tree draws under a table
+// and what the designer shows.
+type TableStructure struct {
+	Columns     []TableColumn    `json:"columns"`
+	Indexes     []IndexInfo      `json:"indexes"`
+	ForeignKeys []ForeignKeyInfo `json:"foreignKeys"`
+}
+
+// ColumnInput is a column as the dialog declares it. Type carries its length and scale —
+// `varchar(255)`, `numeric(10,2)` — and Default is an expression, since that is what a
+// server-side default is; both reach the statement verbatim, DDL having nothing to bind.
+type ColumnInput struct {
+	Name       string  `json:"name"`
+	Type       string  `json:"type"`
+	Nullable   bool    `json:"nullable"`
+	Default    *string `json:"default"`
+	PrimaryKey bool    `json:"primaryKey"`
+}
+
+type TableSpecInput struct {
+	Namespace
+	Table   string        `json:"table"`
+	Columns []ColumnInput `json:"columns"`
+}
+
 type QueryInput struct {
 	Namespace
 	RunID   string `json:"runId"`
@@ -256,6 +299,61 @@ func toQueryResultDTO(result driver.QueryResult, elapsed time.Duration) QueryRes
 		Truncated:    result.Truncated,
 		ElapsedMs:    elapsed.Milliseconds(),
 		Table:        result.Table,
+	}
+}
+
+func (in ColumnInput) toDriver() driver.ColumnSpec {
+	return driver.ColumnSpec{
+		Name:       in.Name,
+		Type:       in.Type,
+		Nullable:   in.Nullable,
+		Default:    in.Default,
+		PrimaryKey: in.PrimaryKey,
+	}
+}
+
+func (in TableSpecInput) toDriver() driver.TableSpec {
+	columns := make([]driver.ColumnSpec, 0, len(in.Columns))
+	for _, column := range in.Columns {
+		columns = append(columns, column.toDriver())
+	}
+
+	return driver.TableSpec{
+		Namespace: in.Namespace.toDriver(),
+		Table:     in.Table,
+		Columns:   columns,
+	}
+}
+
+func toTableStructureDTO(source driver.TableStructure) TableStructure {
+	indexes := make([]IndexInfo, 0, len(source.Indexes))
+	for _, index := range source.Indexes {
+		indexes = append(indexes, IndexInfo{
+			Name:    index.Name,
+			Columns: index.Columns,
+			Unique:  index.Unique,
+			Primary: index.Primary,
+			Method:  index.Method,
+		})
+	}
+
+	keys := make([]ForeignKeyInfo, 0, len(source.ForeignKeys))
+	for _, key := range source.ForeignKeys {
+		keys = append(keys, ForeignKeyInfo{
+			Name:              key.Name,
+			Columns:           key.Columns,
+			ReferencedSchema:  key.ReferencedSchema,
+			ReferencedTable:   key.ReferencedTable,
+			ReferencedColumns: key.ReferencedColumns,
+			OnUpdate:          key.OnUpdate,
+			OnDelete:          key.OnDelete,
+		})
+	}
+
+	return TableStructure{
+		Columns:     toColumnDTOs(source.Columns),
+		Indexes:     indexes,
+		ForeignKeys: keys,
 	}
 }
 

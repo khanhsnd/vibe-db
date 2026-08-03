@@ -36,6 +36,7 @@ func (*Driver) Open(
 	creds driver.Credentials,
 ) (driver.Session, error) {
 	s := &session{profile: profile, creds: creds, pools: map[string]*sql.DB{}}
+	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
 
 	// The profile's own database is what the session is judged on: reaching it proves the
 	// host, the credentials and the TLS mode, and it is where the database list is read.
@@ -55,6 +56,10 @@ func (*Driver) Open(
 // bound to the database it was opened with and cannot cross to another, so browsing a second
 // database means dialling it — lazily, on first use, and closed with the session.
 type session struct {
+	// The schema changes the two engines spell alike come from here; this file overrides the
+	// four that do not.
+	sqlkit.DDL
+
 	profile domain.ConnectionProfile
 	creds   driver.Credentials
 

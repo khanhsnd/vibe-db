@@ -151,6 +151,16 @@ func (m *Manager) TableSchemas(
 	return s.driverSession.TableSchemas(ctx, ns)
 }
 
+// Schema hands out the DDL half of a session, so a schema change is one lookup here and
+// then the driver's own method rather than a pass-through per statement.
+func (m *Manager) Schema(id string) (driver.Schema, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return s.driverSession, nil
+}
+
 func (m *Manager) TableRows(
 	ctx context.Context,
 	id string,
