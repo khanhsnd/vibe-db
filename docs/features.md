@@ -18,10 +18,16 @@ client-side splitter is not written yet.
 
 ## Picking an engine
 
-The connection dialog leads with `Engine`, and everything that follows takes its defaults from it:
-port 3306 and user `root` for MySQL, 5432 and `postgres` for PostgreSQL. Switching engine rewrites
-only the fields that still hold the old engine's default, so a typed port survives the switch. The
-editor loads that engine's SQL dialect for highlighting and completion.
+**A new connection picks its type before it is filled in.** The dialog opens on a grid of engine
+tiles — each engine's own mark at a size that reads by shape — and `Next` moves on to the form; a
+double-click on a tile does both. `Back` in the form returns to the grid, which is also how an
+existing connection changes engine: editing one opens straight on the form, since it already has a
+type.
+
+Everything the form defaults to comes from that choice: port 3306 and user `root` for MySQL, 5432
+and `postgres` for PostgreSQL. Going back and choosing another engine rewrites only the fields that
+still hold the old engine's default, so a typed port survives the switch. The editor loads that
+engine's SQL dialect for highlighting and completion.
 
 **Every connection wears its engine's chip** — `M` on teal for MySQL, `P` on blue for PostgreSQL —
 in the tree, in the dialog's header and in the status bar. It replaces the engine badge the tree

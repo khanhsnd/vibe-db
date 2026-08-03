@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Loader2, PlugZap, Save, XCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, PlugZap, Save, XCircle } from 'lucide-react'
 
 import {
-  ENGINES,
   TLS_MODES,
   emptyProfileInput,
   engineInfo,
   connections,
   withEngine,
+  type Engine,
   type ProfileInput,
 } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
@@ -18,6 +18,7 @@ import { Dialog } from '@/shared/ui/Dialog'
 import { useConnectionsStore } from '@/stores/connections'
 
 import { EngineIcon } from './EngineIcon'
+import { EnginePicker } from './EnginePicker'
 
 type Probe =
   | { state: 'idle' }
@@ -35,6 +36,8 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
   const saveProfile = useConnectionsStore((s) => s.saveProfile)
 
   const [form, setForm] = useState<ProfileInput>(emptyProfileInput)
+  // A new connection names its type first; an existing one already has one, so it opens on the form.
+  const [picking, setPicking] = useState(true)
   const [probe, setProbe] = useState<Probe>({ state: 'idle' })
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<AppError | null>(null)
@@ -42,6 +45,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
   useEffect(() => {
     if (!open) return
     setForm(initial ?? emptyProfileInput())
+    setPicking(!initial?.id)
     setProbe({ state: 'idle' })
     setSaveError(null)
   }, [open, initial])
@@ -53,7 +57,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
     setProbe({ state: 'idle' })
   }
 
-  const changeEngine = (value: string) => {
+  const changeEngine = (value: Engine) => {
     setForm((prev) => withEngine(prev, value))
     setProbe({ state: 'idle' })
   }
@@ -86,17 +90,54 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
     }
   }
 
+  const shell = {
+    open,
+    onOpenChange,
+    title: initial?.id ? 'Edit Connection' : 'New Connection',
+    icon: <EngineIcon engine={engine.value} className="h-6 w-6 rounded-md p-0.5" />,
+    tone: 'plain',
+    width: 480,
+  } as const
+
+  if (picking) {
+    return (
+      <Dialog
+        {...shell}
+        description="Select a connection type"
+        footer={
+          <>
+            <div className="flex-1" />
+            <Button variant="default" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              icon={<ArrowRight size={13} />}
+              onClick={() => setPicking(false)}
+            >
+              Next
+            </Button>
+          </>
+        }
+      >
+        <EnginePicker
+          value={engine.value}
+          onChange={changeEngine}
+          onConfirm={() => setPicking(false)}
+        />
+      </Dialog>
+    )
+  }
+
   return (
     <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={initial?.id ? 'Edit Connection' : 'New Connection'}
+      {...shell}
       description={engine.label}
-      icon={<EngineIcon engine={engine.value} className="h-6 w-6 rounded-md p-0.5" />}
-      tone="plain"
-      width={480}
       footer={
         <>
+          <Button variant="subtle" icon={<ArrowLeft size={13} />} onClick={() => setPicking(true)}>
+            Back
+          </Button>
           <Button
             variant="subtle"
             icon={<PlugZap size={13} />}
@@ -116,36 +157,17 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
       }
     >
       <div className="flex flex-col gap-3">
-        <div className="grid grid-cols-[150px_1fr] gap-2">
-          <Field label="Engine" error={fieldError('engine')}>
-            {(id, invalid) => (
-              <SelectInput
-                id={id}
-                invalid={invalid}
-                value={engine.value}
-                onChange={(e) => changeEngine(e.target.value)}
-              >
-                {ENGINES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </SelectInput>
-            )}
-          </Field>
-
-          <Field label="Name" error={fieldError('name')}>
-            {(id, invalid) => (
-              <TextInput
-                id={id}
-                invalid={invalid}
-                value={form.name}
-                placeholder="localhost"
-                onChange={(e) => update('name', e.target.value)}
-              />
-            )}
-          </Field>
-        </div>
+        <Field label="Name" error={fieldError('name')}>
+          {(id, invalid) => (
+            <TextInput
+              id={id}
+              invalid={invalid}
+              value={form.name}
+              placeholder="localhost"
+              onChange={(e) => update('name', e.target.value)}
+            />
+          )}
+        </Field>
 
         <div className="grid grid-cols-[1fr_110px] gap-2">
           <Field label="Host" error={fieldError('host')}>
