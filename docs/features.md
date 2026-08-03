@@ -369,11 +369,18 @@ read that asked for every row and minted a **run id** behaves differently from e
   going, how many rows have arrived, and `Stop`. It sits *over* the rows rather than replacing them,
   because whatever the grid already held is still true; `Loading` stays out of its way. The clock is
   the panel's own, so counting seconds costs the grid nothing.
-- **Stopping keeps what arrived.** A stop is a choice and not a failure: the rows already in hand
-  become the grid's, and the total becomes the number actually held. The columns are the ones already
-  on screen, so a *first* read stopped before it answered shows nothing — it had named no columns yet.
+- **Stopping keeps every row the read counted** — not only the batches that happened to fill.
+  `ScanRows` hands the part-filled batch over on its way out of *any* ending, a stopped read
+  included, because the alternative is a count of 60 031 against a grid of 60 000: the read visibly
+  losing 31 rows it had already claimed. A stop is a choice and not a failure, so those rows become
+  the grid's and the total becomes the number actually held. The columns are the ones already on
+  screen, so a *first* read stopped before it answered shows nothing — it had named no columns yet.
   Leaving the tab or changing the limit stops the read too, rather than leaving a scan of a million
   rows emitting batches at a listener that has gone.
+- **The count where a stop lands is ahead of the last one shown**, and honestly so: `Stop` has to
+  reach the server and the scan only notices between rows, so a read pulling 300 000 rows a second
+  gets tens of thousands further in that time. What the grid shows is what was truly read, not what
+  the panel last had room to say.
 
 Two limits are worth knowing before pointing this at a very large table. The rows are held **twice**
 while they arrive — once as the batches queue for the WebView, once as JavaScript — so memory is the

@@ -104,6 +104,11 @@ func ResultColumns(rows *sql.Rows) ([]driver.Column, error) {
 // result then carries no rows at all: that is how a read of a million rows is delivered while it
 // runs rather than in one piece at the end, and putting them back together is the caller's
 // business.
+//
+// However the read ends — finished, capped, failed, or stopped — the part-filled batch and the
+// exact count go over before it returns. **What was handed over is therefore always every row it
+// counted**, so a read stopped at 60 031 rows delivers 60 031 and not the 60 000 its last full
+// batch happened to end on.
 func ScanRows(
 	rows *sql.Rows,
 	width, maxRows int,
@@ -145,6 +150,8 @@ func ScanRows(
 		}
 
 		if err := rows.Scan(targets...); err != nil {
+			hand()
+			count()
 			return nil, false, err
 		}
 
@@ -162,12 +169,14 @@ func ScanRows(
 			count()
 		}
 	}
+	// This is where a stopped read comes out, and it has produced every row it counted.
 	if err := rows.Err(); err != nil {
+		hand()
+		count()
 		return nil, false, err
 	}
 
 	hand()
-	// The last count is the exact one, whatever the clock had reported a moment before.
 	count()
 	return out, false, nil
 }
