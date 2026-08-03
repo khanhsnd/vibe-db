@@ -38,10 +38,21 @@ type TableSort struct {
 	Descending bool
 }
 
-// RowBatch receives rows as a read produces them, along with how many that read has produced
-// in all — which is what a reader watching it counts. It is called from the goroutine doing the
-// scan, so whatever it does is time the read spends waiting.
-type RowBatch func(rows [][]*string, fetched int)
+// RowStream is how a read of every row is delivered while it runs, and watched while it is
+// delivered. The two halves travel at different rates on purpose:
+//
+//   - Rows takes each batch as it fills, which is how a table too large to answer in one piece
+//     is handed over — and how the read stays one batch of memory rather than a whole table.
+//   - Counted says how far the read has got, on a clock rather than per batch. A batch fills on a
+//     round number, so a count that moved only with one would step in thousands instead of
+//     climbing, which is what a reader watching a long read is actually looking at.
+//
+// Both are called from the goroutine doing the scan, so whatever they do is time the read spends
+// waiting. A read given no stream answers with its rows instead.
+type RowStream struct {
+	Rows    func(batch [][]*string)
+	Counted func(fetched int)
+}
 
 // TablePage is one window onto a table's rows. A Limit of zero or less reads every row and
 // makes Offset meaningless, the same convention as Query.MaxRows.
@@ -51,10 +62,9 @@ type TablePage struct {
 	Limit  int
 	Offset int
 	Sort   TableSort
-	// Batch, when set, is handed the rows as they are read and the read then answers with none
-	// of them: a table of a million rows cannot be delivered in one piece, and a reader waiting
-	// on it wants to see it arrive. A page that leaves it nil is answered whole.
-	Batch RowBatch
+	// Stream, when set, takes the rows as they are read and the read then answers with none of
+	// them. A page that leaves it nil is answered whole, which is what every bounded read is.
+	Stream *RowStream
 }
 
 // TableSchema is the completion-sized view of a table: names only, no types, because

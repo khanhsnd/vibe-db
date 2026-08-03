@@ -45,14 +45,25 @@ export interface TablePage {
   offset: number
 }
 
-/** One batch of a streamed read: the rows that just arrived, and how many the read has produced. */
-export interface RowBatch {
+/** What a streamed read pushes as it goes — see `onRowsStreamed` for why they are two things. */
+interface RowsBatch {
   runId: string
-  fetched: number
   rows: Cell[][]
 }
 
+interface RowsCounted {
+  runId: string
+  fetched: number
+}
+
 const ROWS_EVENT = 'rows:batch'
+const COUNTED_EVENT = 'rows:counted'
+
+/** How a caller follows one streamed read: its rows as they arrive, and how far it has got. */
+export interface RowsStream {
+  rows: (batch: Cell[][]) => void
+  counted: (fetched: number) => void
+}
 
 /**
  * One row per table of a namespace: its name in the first column, then whatever else the
@@ -94,15 +105,28 @@ export interface RowDelete {
 }
 
 /**
- * Listens for the batches of one streamed read, and answers with how to stop listening. Every
- * row of a large table cannot cross the bridge in one piece — a call's result arrives as a
- * single JavaScript string — so a read of `ALL_ROWS` answers with its columns alone and its rows
- * arrive here, batch by batch, until the call itself resolves. See `app.EventRows`.
+ * Follows one streamed read, and answers with how to stop following it. Every row of a large table
+ * cannot cross the bridge in one piece — a call's result arrives as a single JavaScript string — so
+ * a read of `ALL_ROWS` answers with its columns alone and pushes the rest here until the call
+ * itself resolves.
+ *
+ * The rows and the count arrive **separately**, and that is the point: rows come in batches, which
+ * land on round counts, while the count comes on a clock of its own. A reader watching the number
+ * therefore sees what the read has truly reached, climbing, rather than a figure stepping in
+ * thousands. See `app.EventRows` and `app.EventRowsCounted`.
  */
-export function onRowBatch(runId: string, receive: (batch: RowBatch) => void): () => void {
-  return EventsOn(ROWS_EVENT, (batch: RowBatch) => {
-    if (batch.runId === runId) receive(batch)
+export function onRowsStreamed(runId: string, follow: RowsStream): () => void {
+  const offRows = EventsOn(ROWS_EVENT, (batch: RowsBatch) => {
+    if (batch.runId === runId) follow.rows(batch.rows)
   })
+  const offCounted = EventsOn(COUNTED_EVENT, (count: RowsCounted) => {
+    if (count.runId === runId) follow.counted(count.fetched)
+  })
+
+  return () => {
+    offRows()
+    offCounted()
+  }
 }
 
 export const tables = {

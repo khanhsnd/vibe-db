@@ -231,7 +231,7 @@ func (a *ConnectionAPI) LoadTableRows(sessionID string, page TablePageInput) (Ta
 
 	streamed := target.Limit <= 0 && page.RunID != ""
 	if streamed {
-		target.Batch = a.emitRows(page.RunID)
+		target.Stream = a.streamRows(page.RunID)
 	}
 
 	ctx, release := a.runs.begin(a.ctx, page.RunID, rowsTimeout(streamed))
@@ -260,16 +260,20 @@ func rowsTimeout(streamed bool) time.Duration {
 	return queryTimeout
 }
 
-// emitRows hands each batch of a streamed read to the frontend as it arrives. Emitting is all it
-// does: it runs on the goroutine doing the scan, so anything slower here is time the read spends
-// waiting.
-func (a *ConnectionAPI) emitRows(runID string) driver.RowBatch {
-	return func(rows [][]*string, fetched int) {
-		wailsruntime.EventsEmit(a.ctx, EventRows, RowsBatch{
-			RunID:   runID,
-			Fetched: fetched,
-			Rows:    rows,
-		})
+// streamRows pushes a read to the frontend as it goes: its rows batch by batch, and its count on
+// its own clock. Emitting is all either half does — both run on the goroutine doing the scan, so
+// anything slower here is time the read spends waiting.
+func (a *ConnectionAPI) streamRows(runID string) *driver.RowStream {
+	return &driver.RowStream{
+		Rows: func(batch [][]*string) {
+			wailsruntime.EventsEmit(a.ctx, EventRows, RowsBatch{RunID: runID, Rows: batch})
+		},
+		Counted: func(fetched int) {
+			wailsruntime.EventsEmit(a.ctx, EventRowsCounted, RowsCounted{
+				RunID:   runID,
+				Fetched: fetched,
+			})
+		},
 	}
 }
 

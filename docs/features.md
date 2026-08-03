@@ -354,11 +354,17 @@ read that asked for every row and minted a **run id** behaves differently from e
 - **It has no deadline.** How long every row of a table takes is not knowable ahead of time, and a
   clock that cuts it off is the very failure `All` exists to avoid. `StopTableRows` bounds it instead.
 - **Its rows arrive in batches.** `LoadTableRows` answers with the columns and the total alone and
-  emits the rows as `app.EventRows` — `rows:batch`, `sqlkit.BatchRows` (5 000) rows at a time, each
-  batch carrying how many rows the read has produced in all. `useTableData` stitches them back
-  together and shows the grid once the call resolves. It is still **one statement and one scan**: the
-  batches are how the answer is delivered, not a walk of `LIMIT … OFFSET …` pages, so nothing is
-  counted twice and no row is skipped by a write landing mid-read.
+  emits the rows as `app.EventRows` — `rows:batch`, `sqlkit.BatchRows` (5 000) rows at a time.
+  `useTableData` stitches them back together and shows the grid once the call resolves. It is still
+  **one statement and one scan**: the batches are how the answer is delivered, not a walk of
+  `LIMIT … OFFSET …` pages, so nothing is counted twice and no row is skipped by a write landing
+  mid-read.
+- **Its count arrives separately, on a clock.** `app.EventRowsCounted` — `rows:counted`, every
+  `sqlkit.CountEvery` (50 ms) — and that separation is the whole reason there are two events. A batch
+  fills on a round number, so a count handed over with one would step in thousands however fast the
+  read ran; on its own clock it is whatever the read has *truly* reached, so it climbs the way the
+  number in any other client does. The last count sent is the exact one, whatever the clock had said
+  a moment before.
 - **A panel over the grid reports it while it runs** — `shared/ui/FetchProgress`: how long it has been
   going, how many rows have arrived, and `Stop`. It sits *over* the rows rather than replacing them,
   because whatever the grid already held is still true; `Loading` stays out of its way. The clock is

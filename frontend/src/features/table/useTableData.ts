@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { ALL_ROWS, DEFAULT_PAGE_SIZE } from '@/bridge/rows'
-import { onRowBatch, tables, type Cell, type TablePage } from '@/bridge/tables'
+import { onRowsStreamed, tables, type Cell, type TablePage } from '@/bridge/tables'
 import type { SortKey } from '@/features/results/resultSet'
 
 const NO_SORT = { column: '', descending: false }
@@ -45,9 +45,13 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
     const streaming: Cell[][] = []
 
     const stopListening = streamed
-      ? onRowBatch(runId, (batch) => {
-          for (const row of batch.rows) streaming.push(row)
-          if (active) setFetch({ runId, fetched: batch.fetched })
+      ? onRowsStreamed(runId, {
+          rows: (batch) => {
+            for (const row of batch) streaming.push(row)
+          },
+          counted: (fetched) => {
+            if (active) setFetch({ runId, fetched })
+          },
         })
       : null
 

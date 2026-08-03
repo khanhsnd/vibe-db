@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
@@ -31,18 +32,26 @@ func Exec(ctx context.Context, q Queryer, statement string, args ...any) (driver
 	return driver.QueryResult{Rows: [][]*string{}, RowsAffected: affected}, nil
 }
 
-// BatchRows is how many rows a streamed read hands over at a time: small enough that one batch
-// crosses a bridge comfortably, large enough that a million rows is a few hundred batches.
-const BatchRows = 5000
+const (
+	// BatchRows is how many rows a streamed read hands over at a time: small enough that one
+	// batch crosses a bridge comfortably, large enough that a million rows is a few hundred
+	// batches.
+	BatchRows = 5000
+
+	// CountEvery is how often a streamed read says how far it has got. Twenty times a second is
+	// faster than an eye reads a number, and it is a clock rather than a batch so the count is
+	// whatever the read has truly reached — not the round number a batch last filled on.
+	CountEvery = 50 * time.Millisecond
+)
 
 // Read runs a row-returning statement. A maxRows of zero or less reads every row, and a non-nil
-// batch takes the rows as they arrive instead of the result carrying them — see ScanRows.
+// stream takes the rows as they arrive instead of the result carrying them — see ScanRows.
 func Read(
 	ctx context.Context,
 	q Queryer,
 	statement string,
 	maxRows int,
-	batch driver.RowBatch,
+	stream *driver.RowStream,
 	args ...any,
 ) (driver.QueryResult, error) {
 	rows, err := q.QueryContext(ctx, statement, args...)
@@ -56,7 +65,7 @@ func Read(
 		return driver.QueryResult{}, err
 	}
 
-	values, truncated, err := ScanRows(rows, len(columns), maxRows, batch)
+	values, truncated, err := ScanRows(rows, len(columns), maxRows, stream)
 	if err != nil {
 		return driver.QueryResult{}, err
 	}
@@ -91,13 +100,14 @@ func ResultColumns(rows *sql.Rows) ([]driver.Column, error) {
 // zero or less reads to the end; otherwise it stops at the cap and reports that
 // the server had more to give.
 //
-// A non-nil batch is handed every BatchRows rows and the result then carries none of them: that
-// is how a read of a million rows is delivered while it runs rather than in one piece at the
-// end, and putting them back together is the caller's business.
+// A non-nil stream is handed the rows every BatchRows and the count every CountEvery, and the
+// result then carries no rows at all: that is how a read of a million rows is delivered while it
+// runs rather than in one piece at the end, and putting them back together is the caller's
+// business.
 func ScanRows(
 	rows *sql.Rows,
 	width, maxRows int,
-	batch driver.RowBatch,
+	stream *driver.RowStream,
 ) ([][]*string, bool, error) {
 	holders := make([]sql.NullString, width)
 	targets := make([]any, width)
@@ -107,19 +117,30 @@ func ScanRows(
 
 	out := [][]*string{}
 	fetched := 0
+	counted := time.Now()
 
 	// A streamed read keeps none of what it hands over, so it costs one batch of memory here
 	// rather than the whole table.
 	hand := func() {
-		if batch != nil && len(out) > 0 {
-			batch(out, fetched)
+		if stream != nil && len(out) > 0 {
+			stream.Rows(out)
 			out = [][]*string{}
+		}
+	}
+
+	// The count is its own errand, on its own clock, for the reason RowStream gives: handing it
+	// over with a batch would step it in thousands instead of climbing it.
+	count := func() {
+		if stream != nil {
+			stream.Counted(fetched)
+			counted = time.Now()
 		}
 	}
 
 	for rows.Next() {
 		if maxRows > 0 && fetched == maxRows {
 			hand()
+			count()
 			return out, true, nil
 		}
 
@@ -137,12 +158,17 @@ func ScanRows(
 		if len(out) == BatchRows {
 			hand()
 		}
+		if stream != nil && time.Since(counted) >= CountEvery {
+			count()
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, false, err
 	}
 
 	hand()
+	// The last count is the exact one, whatever the clock had reported a moment before.
+	count()
 	return out, false, nil
 }
 

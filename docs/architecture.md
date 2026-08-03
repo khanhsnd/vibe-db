@@ -69,10 +69,10 @@ cannot leave the database it was opened with. See [decisions.md](decisions.md).
    including the generated `.js` makes `tsc` fail on it.
 3. **A bound method's result reaches the WebView as one JavaScript string**, which puts a practical
    ceiling on how much one call may answer with. Anything larger is pushed as events instead: a read
-   of every row of a table streams its rows as `app.EventRows` batches and answers with the columns
-   alone (`app/events.go`, `driver.RowBatch`, `sqlkit.ScanRows`). Events are the only place the app
-   layer speaks to the frontend without being asked, and `bridge/` is still the one side that knows
-   the event's name.
+   of every row of a table streams its rows as `app.EventRows` batches, its count as
+   `app.EventRowsCounted`, and answers with the columns alone (`app/events.go`, `driver.RowStream`,
+   `sqlkit.ScanRows`). Events are the only place the app layer speaks to the frontend without being
+   asked, and `bridge/` is still the one side that knows an event's name.
 
 Wails v2 is intentional over v3, which is still alpha. See [decisions.md](decisions.md) for the
 rest of the choices that should not be "fixed".

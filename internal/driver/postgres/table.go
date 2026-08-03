@@ -30,9 +30,9 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 	query, args := buildSelect(page, columns)
 
 	// The statement itself bounds the read — either through its LIMIT clause or because the
-	// caller asked for every row — so no cap is applied here. A page carrying a batch takes its
+	// caller asked for every row — so no cap is applied here. A page carrying a stream takes its
 	// rows as they arrive and the result then carries none.
-	result, err := sqlkit.Read(ctx, db, query, 0, page.Batch, args...)
+	result, err := sqlkit.Read(ctx, db, query, 0, page.Stream, args...)
 	if err != nil {
 		return driver.TableRows{}, translateError(err)
 	}
