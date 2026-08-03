@@ -8,8 +8,10 @@ import type { Cell } from '@/bridge/tables'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import { ResultTabs } from '@/features/results/ResultTabs'
 import {
+  CHECK_ON,
   selectedRows,
   type CellRef,
+  type ColumnEditor,
   type GridData,
   type Selection,
 } from '@/features/results/resultSet'
@@ -22,6 +24,7 @@ import { tableKey, useConnectionsStore } from '@/stores/connections'
 import { useSchemaStore } from '@/stores/schema'
 import { useTabsStore } from '@/stores/tabs'
 
+import { dataTypes } from './dataTypes'
 import { draftOf, newField, newTableDraft, pendingChanges, type DraftField } from './draft'
 import { formatFieldType, parseFieldType } from './fieldType'
 
@@ -55,6 +58,10 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
   const creating = table === ''
   const structure = useConnectionsStore((s) =>
     creating ? undefined : s.structures[tableKey(profileId, namespace, table)],
+  )
+  // The engine decides which types the Type cell offers, and is the profile's own.
+  const engine = useConnectionsStore(
+    (s) => s.profiles.find((profile) => profile.id === profileId)?.engine ?? '',
   )
   const loadStructure = useConnectionsStore((s) => s.loadStructure)
   const refreshStructure = useConnectionsStore((s) => s.refreshStructure)
@@ -213,7 +220,7 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
               label: `Fields (${draft.length})`,
               content: (
                 <ResultGrid
-                  result={fieldRows(draft)}
+                  result={fieldRows(draft, dataTypes(engine))}
                   selection={selection}
                   onSelectionChange={setSelection}
                   onEditCell={editCell}
@@ -304,38 +311,49 @@ function withCell(field: DraftField, column: number, text: string): DraftField {
   }
 }
 
-// What a person types into a yes/no cell. Anything else — including a cleared cell — is no.
+// What a yes/no cell means. A checkbox and a key cell write `CHECK_ON`, and a key cell reads back
+// its position in the key, so anything held at all is yes — bar a word that says otherwise, which
+// is all a paste can bring. A cleared cell is no.
 function truthy(text: string): boolean {
   const said = text.trim().toLowerCase()
-  return said === 'yes' || said === 'y' || said === 'true' || said === '1'
+  return said !== '' && said !== 'no' && said !== 'n' && said !== 'false' && said !== '0'
 }
 
 // Length and decimals read as 0 rather than blank when the type declares none, so a column of
 // numbers stays a column of numbers.
-function fieldRows(draft: DraftField[]): GridData {
+function fieldRows(draft: DraftField[], types: readonly string[]): GridData {
+  const keys = keyPositions(draft)
+
   return {
     columns: [
       column('Name'),
-      column('Type'),
+      column('Type', 'text', { kind: 'choice', options: types }),
       column('Length', 'int'),
       column('Decimal', 'int'),
-      column('Not null'),
-      column('Key'),
+      column('Not null', 'text', { kind: 'check' }),
+      column('Key', 'text', { kind: 'key' }),
       column('Default'),
     ],
-    rows: draft.map((field): Cell[] => {
+    rows: draft.map((field, at): Cell[] => {
       const type = parseFieldType(field.type)
       return [
         field.name,
         type.base,
         String(type.length ?? 0),
         String(type.scale ?? 0),
-        field.nullable && !field.primaryKey ? '' : 'YES',
-        field.primaryKey ? 'YES' : '',
+        field.nullable && !field.primaryKey ? '' : CHECK_ON,
+        keys[at] ?? '',
         field.default ?? '',
       ]
     }),
   }
+}
+
+// Which column of the key each field is, counted down the rows: the number beside its lock. A
+// field outside the key holds nothing, which is what leaves its cell empty.
+function keyPositions(draft: DraftField[]): string[] {
+  let taken = 0
+  return draft.map((field) => (field.primaryKey ? String(++taken) : ''))
 }
 
 function indexRows(structure: TableStructure | undefined): GridData {
@@ -384,7 +402,12 @@ function changeRows(
   }
 }
 
-const column = (name: string, type = 'text') => ({ name, type, fullType: type })
+const column = (name: string, type = 'text', editor?: ColumnEditor) => ({
+  name,
+  type,
+  fullType: type,
+  editor,
+})
 
 const qualified = (ns: Namespace, table: string) =>
   `${ns.schema === '' ? ns.database : `${ns.database}.${ns.schema}`}.${table}`

@@ -58,8 +58,8 @@ export function useGridEdits(
   // A pending change names a row number, which means nothing in the next read.
   useEffect(discard, [discard, base])
 
-  // The identity of this array closes the grid's open cell editor, so it may only change
-  // when the rows themselves do.
+  // One array per set of rows, not per render: the grid draws every row from it, and a new
+  // identity on every render would redraw the whole viewport under the reader.
   const rows = useMemo(() => [...overlay(base, edits), ...drafts], [base, edits, drafts])
 
   const dirtyKeys = useMemo(() => new Set(Object.keys(edits)), [edits])

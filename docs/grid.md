@@ -22,6 +22,7 @@ keys and its pending changes, and every one of those is a grid — the Fields on
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
 | Selection | Three depths: cells inside any rectangle get a fill (`--grid-cell-selected`), the **focus** cell — the pointer's last landing, which is the live rectangle's focus — is solid `--accent` with `--fg-on-accent` text, and a row the selection holds *end to end* is banded across its width (`--grid-row-selected`). A row the selection merely touches gets the band and the accent bar **on its gutter alone**, because a selected column touches every row and must not paint the whole grid. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
 | Hover | A row highlight, applied *only* to rows outside the selection. Both are background colours, so a selected row must not also carry `hover:bg-hover` or the tint flickers away under the pointer. |
+| Column editors | A column may say how its cells are drawn and changed, through `ResultColumn.editor`. A **`choice`** cell keeps its text and gains a muted chevron; a **`check`** cell is a centred box — filled `--accent` when on, an outline in `--fg-faint` when off — and never the word it holds; a **`key`** cell is a `--grid-key` lock followed by the cell's own value, which is the field's place in the key, and is empty when it holds nothing. A toggle cell shows **nothing** rather than `(Null)`, a no being a no. |
 | Pending edit | A warning-coloured inset ring plus warning text, from `isDirty`. It is a predicate rather than a set of keys so a call site that hides columns can answer in its own coordinates. Every cell of a row that is not on the server yet is pending, so a new row is ringed whole. |
 | Row for deletion | A row that `isDeleted` answers for is banded in `--grid-row-deleted` and struck through — set on the row, so every cell inherits it — and its gutter number turns `text-danger`. Deletion wins over the selection band, because it is the more consequential fact. It is a predicate for the same reason `isDirty` is one: a call site that pages answers in its own coordinates. |
 
@@ -50,9 +51,33 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   its origin.
 - Anything acting on rows asks `selectedRows`, which answers each touched row once and in order —
   that, not a range, is what `deleteRows` takes.
-- **Double-click a cell, or press `Enter`, to edit it** — but only where the call site passed
-  `onEditCell`; without it the grid is read-only. The cell under a double-click is taken from the
-  press that preceded it, because pointer capture retargets the click that follows.
+- **One click opens the cell**, and `Enter` does the same to the focused one — but only where the
+  call site passed `onEditCell`; without it the grid is read-only. Nothing is sent by opening an
+  editor, so a second click to reach a value the reader is already pointing at buys nothing. A
+  click that was reaching for a *range* never opens anything: not one in the row gutter, not one
+  held with `Shift`, `Ctrl` or `Cmd`, and not the end of a drag.
+- **`Escape` closes the editor and hands the keyboard back to the grid**, which is how a reader
+  gets from editing to a plain selection — the cell stays focused and the arrows move again. It is
+  the only way back, one click being the way in.
+- **A `choice` column opens a searchable list instead of a plain box.** Typing filters the options
+  and the arrows walk them; `Enter` takes the highlighted one, or **what was typed** where nothing
+  is highlighted, because a column's options are what it is usually given and not all a server will
+  take. The list is portalled and fixed — the grid scrolls, and would otherwise clip it — so it is
+  told where its cell is again on every scroll, rather than dismissed under a wheel.
+- **A `check` or `key` column is flipped by that same single click, never opened.** A yes/no has
+  nothing to type into it, so `Enter` toggles it too. Turning one on writes `CHECK_ON`, turning it
+  off writes an empty cell; **what a `key` cell then shows is the call site's**, which is how a key
+  column numbers its fields — the grid only says which cell was flipped.
+- **The arrow keys walk the focus a cell at a time**, and never scroll the grid on their own: the
+  focused cell moves, the selection becomes that one cell, and the view follows only far enough to
+  keep it clear of the sticky header and the row gutter. **`Shift`+arrow** stretches the live
+  rectangle to it instead, which is the keyboard's version of a drag. An open editor owns the
+  keyboard, so its own arrows walk its text or its list.
+- **Everything a click does is read off the press it belongs to** (`Hit`), never measured again
+  when the click arrives: the press also focuses the grid, focusing can scroll it, and a second
+  measurement would then name a different cell — which once cost the *first* click on a fresh grid
+  entirely. A drag is not a click on the cell it began on, so the hit carries a `moved` flag that
+  `extend` sets the moment the drag leaves that cell.
 - **Right-clicking a header selects the whole column and opens the grid's own menu**, never the
   WebView's. **The `⋮` button on the header opens that same menu** from a left click, by dispatching
   the `contextmenu` event Radix already listens for — one menu with two ways in, rather than a second
@@ -134,7 +159,9 @@ surrounds the grid:
 - `TableDesigner` neither pages nor hides, so it maps nothing — its rows are the fields on screen.
   What differs is that its cells are a *declaration* rather than stored data, so an edit is parsed
   back into the field it describes (`Length` is part of the type) and `isDirty` answers by comparing
-  the staged field with the stored one, rather than from a set of pending keys.
+  the staged field with the stored one, rather than from a set of pending keys. It is also the one
+  site that names column editors: `Type` is a `choice` over the engine's own types, `Not null` a
+  `check`, and `Key` a `key` whose numbers it counts down the draft.
 - `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
   index back to the real one on the way in. **It sorts on the server too** — the sort travels in
   `TablePageRequest` and becomes the read's `ORDER BY`, because ordering the hundred rows in hand

@@ -10,7 +10,11 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
+  ChevronDown,
   EllipsisVertical,
+  KeyRound,
+  Square,
+  SquareCheck,
   UnfoldHorizontal,
 } from 'lucide-react'
 
@@ -21,13 +25,17 @@ import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 import { IconButton } from '@/shared/ui/IconButton'
 import { ICON } from '@/shared/ui/menuIcons'
 
+import { CellChoice } from './CellChoice'
 import { ColumnTypeIcon, isNumeric } from './columnType'
 import { gridFont, widestText } from './measureText'
 import {
   boundsOf,
   cellText,
+  checked,
+  CHECK_ON,
   columnRange,
   focusOf,
+  isToggle,
   oneRange,
   originOf,
   parseCell,
@@ -36,6 +44,7 @@ import {
   type CellBounds,
   type CellRange,
   type CellRef,
+  type ColumnEditor,
   type GridData,
   type ResultColumn,
   type Selection,
@@ -54,6 +63,14 @@ const MENU_WIDTH = 20
 /** Pixels scrolled per frame while a drag is held past an edge of the viewport. */
 const EDGE_STEP = 14
 
+/** Where each arrow key takes the focus, in cells. */
+const ARROWS: Record<string, CellRef> = {
+  ArrowUp: { row: -1, column: 0 },
+  ArrowDown: { row: 1, column: 0 },
+  ArrowLeft: { row: 0, column: -1 },
+  ArrowRight: { row: 0, column: 1 },
+}
+
 const NOTHING_DIRTY = () => false
 const NOTHING_DELETED = () => false
 
@@ -67,9 +84,18 @@ interface Drag {
   kept: CellRange[]
 }
 
+/**
+ * The press a click belongs to. Everything a click needs is read here, at the press, because
+ * focusing the grid can scroll it and a measurement taken again on the click would then name a
+ * different cell — which is why one click on a fresh grid used to do nothing at all.
+ */
 interface Hit {
   ref: CellRef
   wholeRow: boolean
+  /** A press that was reaching for a range rather than for the cell under it. */
+  extending: boolean
+  /** Set once the drag leaves the cell it began on: a drag is not a click on that cell. */
+  moved: boolean
 }
 
 interface ResultGridProps {
@@ -140,9 +166,29 @@ export function ResultGrid({
 
   useEffect(() => () => cancelAnimationFrame(frame.current), [])
 
-  // Rows shift under the open input whenever a new result lands, so the editor closes with
-  // it. The dependency is the row array, not the wrapper, which callers rebuild per render.
-  useEffect(() => setEditing(null), [result.rows])
+  // Rows shift under the open input whenever a row is added or dropped, so the editor closes with
+  // them. The dependency is the *count* and not the row array: a call site rebuilds that array on
+  // every render of its own, and closing the editor there would drop what was being typed.
+  useEffect(() => setEditing(null), [result.rows.length])
+
+  // Closing an editor hands the keyboard back to the grid, so `Escape` lands the reader on the
+  // cell they were editing with the arrows live again. Only ever after one was open, and only
+  // where the keyboard is still the grid's: an editor closed by a click on something else — a
+  // toolbar box, the SQL editor — must leave the focus where that click put it.
+  const wasEditing = useRef(false)
+  useEffect(() => {
+    if (editing !== null) {
+      wasEditing.current = true
+      return
+    }
+    if (!wasEditing.current) return
+    wasEditing.current = false
+
+    const active = document.activeElement
+    if (active === null || active === document.body || scrollRef.current?.contains(active)) {
+      scrollRef.current?.focus()
+    }
+  }, [editing])
 
   const totalWidth = GUTTER_WIDTH + widths.reduce((sum, w) => sum + w, 0)
   const bounds = current?.ranges.map(boundsOf) ?? []
@@ -252,6 +298,51 @@ export function ResultGrid({
     return { row, column }
   }
 
+  /**
+   * Brings a cell inside the viewport, clear of the sticky header and the row gutter, and leaves
+   * the scroll where it is when the cell is already there.
+   */
+  const reveal = (ref: CellRef) => {
+    const scroller = scrollRef.current
+    if (!scroller) return
+
+    const top = ref.row * ROW_HEIGHT
+    const left = GUTTER_WIDTH + widths.slice(0, ref.column).reduce((sum, w) => sum + w, 0)
+
+    scroller.scrollTo({
+      top: keepWithin(
+        scroller.scrollTop,
+        top + ROW_HEIGHT - scroller.clientHeight,
+        top - HEADER_HEIGHT,
+      ),
+      left: keepWithin(
+        scroller.scrollLeft,
+        left + (widths[ref.column] ?? 0) - scroller.clientWidth,
+        left - GUTTER_WIDTH,
+      ),
+    })
+  }
+
+  /** Walks the focus one cell, or stretches the live rectangle to it while `Shift` is held. */
+  const move = (step: CellRef, extending: boolean) => {
+    if (result.rows.length === 0) return
+
+    const next = focus
+      ? {
+          row: clamp(focus.row + step.row, result.rows.length - 1),
+          column: clamp(focus.column + step.column, lastColumn),
+        }
+      : { row: 0, column: 0 }
+    const live = current?.ranges.at(-1)
+
+    select(
+      extending && live
+        ? { ranges: [...(current?.ranges ?? []).slice(0, -1), { anchor: live.anchor, focus: next }] }
+        : oneRange({ anchor: next, focus: next }),
+    )
+    reveal(next)
+  }
+
   const extend = (clientX: number, clientY: number) => {
     const state = drag.current
     if (!state) return
@@ -260,6 +351,7 @@ export function ResultGrid({
     if (next.row === state.focus.row && next.column === state.focus.column) return
 
     state.focus = next
+    if (lastHit.current) lastHit.current.moved = true
     select({ ranges: [...state.kept, { anchor: state.anchor, focus: next }] })
   }
 
@@ -298,7 +390,12 @@ export function ResultGrid({
       event.shiftKey && live ? live.anchor : wholeRow ? { row: hit.row, column: 0 } : hit
 
     drag.current = { anchor, focus: hit, wholeRow, kept }
-    lastHit.current = { ref: hit, wholeRow }
+    lastHit.current = {
+      ref: hit,
+      wholeRow,
+      extending: event.shiftKey || event.ctrlKey || event.metaKey,
+      moved: false,
+    }
     pointer.current = { x: event.clientX, y: event.clientY }
     select({ ranges: [...kept, { anchor, focus: hit }] })
 
@@ -318,20 +415,45 @@ export function ResultGrid({
     cancelAnimationFrame(frame.current)
   }
 
-  // Pointer capture retargets the click that follows it, so the cell comes from the press
-  // that opened the double-click rather than from the event's own target.
-  const onDoubleClick = () => {
+  /**
+   * Flips a `check` or a `key` cell, and says whether the cell was one — a toggle is written
+   * rather than opened, so nothing that opens an editor may also run on it.
+   */
+  const toggle = (ref: CellRef): boolean => {
+    const editor = result.columns[ref.column]?.editor
+    if (!onEditCell || !isToggle(editor)) return false
+
+    onEditCell(ref, checked(result.rows[ref.row]?.[ref.column] ?? null) ? '' : CHECK_ON)
+    return true
+  }
+
+  /**
+   * **One click opens the cell it lands on**, which is the whole of what a click does beyond
+   * selecting: a toggle is flipped, anything else opens its editor. Read off the press — pointer
+   * capture retargets the click that follows one — and never from a drag, a row gutter, or a
+   * press that was reaching for a range.
+   */
+  const onClick = () => {
     const hit = lastHit.current
-    if (!onEditCell || !hit || hit.wholeRow) return
-    setEditing(hit.ref)
+    if (!onEditCell || !hit || hit.wholeRow || hit.moved || hit.extending) return
+    if (!toggle(hit.ref)) setEditing(hit.ref)
   }
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    // An open editor owns the keyboard: its own arrows walk its text, or its list.
+    if (editing) return
+
+    const step = ARROWS[event.key]
+    if (step) {
+      event.preventDefault()
+      move(step, event.shiftKey)
+      return
+    }
     if (!current) return
 
     if (event.key === 'Enter' && onEditCell && focus) {
       event.preventDefault()
-      setEditing(focus)
+      if (!toggle(focus)) setEditing(focus)
       return
     }
     if (!(event.ctrlKey || event.metaKey)) return
@@ -373,7 +495,7 @@ export function ResultGrid({
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}
           onLostPointerCapture={endDrag}
-          onDoubleClick={onDoubleClick}
+          onClick={onClick}
           className="relative"
           style={{ height: virtualizer.getTotalSize() }}
         >
@@ -421,16 +543,28 @@ export function ResultGrid({
                   const width = widths[i] ?? DEFAULT_COLUMN_WIDTH
 
                   if (onEditCell && editing?.row === item.index && editing.column === i) {
-                    return (
+                    const commit = (value: Cell) => {
+                      onEditCell({ row: item.index, column: i }, value)
+                      setEditing(null)
+                    }
+                    const cancel = () => setEditing(null)
+
+                    return column.editor?.kind === 'choice' ? (
+                      <CellChoice
+                        key={i}
+                        value={row[i] ?? null}
+                        options={column.editor.options}
+                        width={width}
+                        onCommit={commit}
+                        onCancel={cancel}
+                      />
+                    ) : (
                       <CellInput
                         key={i}
                         value={row[i] ?? null}
                         width={width}
-                        onCommit={(value) => {
-                          onEditCell({ row: item.index, column: i }, value)
-                          setEditing(null)
-                        }}
-                        onCancel={() => setEditing(null)}
+                        onCommit={commit}
+                        onCancel={cancel}
                       />
                     )
                   }
@@ -439,6 +573,7 @@ export function ResultGrid({
                     <CellView
                       key={i}
                       value={row[i] ?? null}
+                      editor={column.editor}
                       numeric={isNumeric(column.type)}
                       width={width}
                       inRange={within(bounds, item.index, i)}
@@ -462,6 +597,10 @@ const inGutter = (target: EventTarget) =>
   target instanceof Element && target.closest('[data-gutter]') !== null
 
 const clamp = (value: number, highest: number) => Math.min(Math.max(value, 0), Math.max(highest, 0))
+
+/** Moves a scroll offset the least it can to satisfy both edges, and not at all where it already does. */
+const keepWithin = (value: number, lowest: number, highest: number) =>
+  Math.min(Math.max(value, lowest), highest)
 
 function columnAt(widths: number[], x: number): number {
   let edge = 0
@@ -655,6 +794,7 @@ function ResizeHandle({ width, onResize, onFit }: ResizeHandleProps) {
 
 interface CellViewProps {
   value: Cell
+  editor: ColumnEditor | undefined
   numeric: boolean
   width: number
   inRange: boolean
@@ -662,33 +802,67 @@ interface CellViewProps {
   edited: boolean
 }
 
-function CellView({ value, numeric, width, inRange, focused, edited }: CellViewProps) {
+function CellView({ value, editor, numeric, width, inRange, focused, edited }: CellViewProps) {
+  const tone = focused
+    ? 'text-on-accent'
+    : value === null
+      ? 'text-null'
+      : edited
+        ? 'text-warn'
+        : 'text-fg'
+
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center overflow-hidden border-r border-line/60 px-2',
+        'flex shrink-0 items-center gap-1 overflow-hidden border-r border-line/60 px-2',
         'font-mono text-sm whitespace-nowrap',
         numeric && 'justify-end',
+        isToggle(editor) && 'justify-center',
         focused ? 'bg-accent' : inRange && 'bg-grid-cell-selected',
         edited && 'shadow-[inset_0_0_0_1px_var(--warn)]',
       )}
       style={{ width }}
     >
-      <span
-        className={cn(
-          'truncate',
-          focused
-            ? 'text-on-accent'
-            : value === null
-              ? 'text-null'
-              : edited
-                ? 'text-warn'
-                : 'text-fg',
-        )}
-      >
-        {cellText(value)}
-      </span>
+      {editor?.kind === 'check' ? (
+        <CheckMark on={checked(value)} focused={focused} />
+      ) : editor?.kind === 'key' ? (
+        <KeyMark position={value} tone={tone} />
+      ) : (
+        <>
+          <span className={cn('min-w-0 truncate', tone)}>{cellText(value)}</span>
+          {editor?.kind === 'choice' ? (
+            <ChevronDown
+              size={12}
+              className={cn('ml-auto shrink-0', focused ? 'text-on-accent' : 'text-faint')}
+            />
+          ) : null}
+        </>
+      )}
     </div>
+  )
+}
+
+/** A yes/no, drawn as the box it is clicked like. Empty rather than `(Null)`: a no is a no. */
+function CheckMark({ on, focused }: { on: boolean; focused: boolean }) {
+  const Glyph = on ? SquareCheck : Square
+
+  return (
+    <Glyph
+      size={14}
+      className={cn('shrink-0', focused ? 'text-on-accent' : on ? 'text-accent' : 'text-faint')}
+    />
+  )
+}
+
+/** A field's place in the primary key: the lock, then which of its columns this one is. */
+function KeyMark({ position, tone }: { position: Cell; tone: string }) {
+  if (!checked(position)) return null
+
+  return (
+    <>
+      <KeyRound size={13} className="shrink-0 text-grid-key" />
+      <span className={cn('text-2xs', tone)}>{position}</span>
+    </>
   )
 }
 

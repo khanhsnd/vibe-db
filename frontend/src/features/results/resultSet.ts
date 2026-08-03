@@ -6,11 +6,37 @@ export type { Cell }
 
 export const NULL_TEXT = '(Null)'
 
+/** What a toggled cell holds, so what the grid writes and what a copy reads cannot disagree. */
+export const CHECK_ON = 'YES'
+
+/**
+ * How a column's cells are drawn and changed, where the grid is writable. Text unless a call site
+ * names one: a `choice` opens a searchable list of the values the column accepts, while `check`
+ * and `key` are flipped by a single click, a yes/no having nothing to type into it. A `key` cell
+ * shows its own value beside the lock, which is the field's place in the key and the call site's
+ * to count.
+ */
+export type ColumnEditor =
+  | { kind: 'choice'; options: readonly string[] }
+  | { kind: 'check' }
+  | { kind: 'key' }
+
 export interface ResultColumn {
   name: string
   /** The bare type, which classifies the column. `fullType` carries its length and modifiers. */
   type: string
   fullType: string
+  editor?: ColumnEditor | undefined
+}
+
+/** A toggle cell is on when it holds anything at all, a key cell holding its position instead. */
+export function checked(value: Cell): boolean {
+  return value !== null && value !== ''
+}
+
+/** Whether the column is flipped rather than opened, which is what a click on one does. */
+export function isToggle(editor: ColumnEditor | undefined): boolean {
+  return editor?.kind === 'check' || editor?.kind === 'key'
 }
 
 /**

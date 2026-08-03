@@ -17,6 +17,8 @@
   --grid-row-selected: #1a2740;
   --grid-cell-selected: #274468;
   --grid-row-deleted: #3a1d1c;
+  /** The lock on a key field. Gold rather than the warning colour, which means unsaved. */
+  --grid-key: #e3b341;
 
   --fg: #e8ebf0;
   --fg-muted: #9ba5b4;
@@ -63,6 +65,7 @@
   --grid-row-selected: #dbe9fc;
   --grid-cell-selected: #bfd8f8;
   --grid-row-deleted: #ffe3e1;
+  --grid-key: #b08800;
 
   --fg: #16191f;
   --fg-muted: #545c67;
@@ -106,6 +109,7 @@
   --color-grid-row-selected: var(--grid-row-selected);
   --color-grid-cell-selected: var(--grid-cell-selected);
   --color-grid-row-deleted: var(--grid-row-deleted);
+  --color-grid-key: var(--grid-key);
   --color-null: var(--syn-null);
 
   --color-fg: var(--fg);

@@ -1,19 +1,21 @@
 import { engineInfo, type Engine } from '@/bridge/connections'
 import { cn } from '@/lib/cn'
 
+import { ENGINE_GLYPHS, GLYPH_BOX } from './engineGlyphs'
+
 /**
- * Which engine a connection speaks, as a chip. It is a letter on a colour rather than a line icon
- * because the two engines are both databases: a `Database` glyph twice over says nothing, and the
- * letter still reads where the colour cannot — a grey-scale screen, a colour-blind reader.
+ * Which engine a connection speaks, as a chip: the engine's own mark in white on its own colour.
+ * A `Database` glyph twice over would say nothing — the dolphin and the elephant are what a reader
+ * already knows the two by, and the shape still reads where the colour cannot.
  */
-const CHIPS: Record<Engine, { letter: string; className: string }> = {
-  mysql: { letter: 'M', className: 'bg-engine-mysql' },
-  postgres: { letter: 'P', className: 'bg-engine-postgres' },
+const CHIPS: Record<Engine, string> = {
+  mysql: 'bg-engine-mysql',
+  postgres: 'bg-engine-postgres',
 }
 
 export function EngineIcon({ engine, className }: { engine: string; className?: string }) {
   const { value, label } = engineInfo(engine)
-  const chip = CHIPS[value]
+  const glyph = ENGINE_GLYPHS[value]
 
   return (
     <span
@@ -21,13 +23,18 @@ export function EngineIcon({ engine, className }: { engine: string; className?: 
       aria-label={label}
       title={label}
       className={cn(
-        'grid h-4 w-4 shrink-0 place-items-center rounded-sm',
-        'text-2xs leading-none font-bold text-on-accent',
-        chip.className,
+        'grid h-4 w-4 shrink-0 place-items-center rounded-sm p-px text-on-accent',
+        CHIPS[value],
         className,
       )}
     >
-      {chip.letter}
+      <svg viewBox={`0 0 ${GLYPH_BOX} ${GLYPH_BOX}`} className="h-full w-full">
+        <path
+          d={glyph.path}
+          fill="currentColor"
+          fillRule={glyph.evenOdd ? 'evenodd' : 'nonzero'}
+        />
+      </svg>
     </span>
   )
 }

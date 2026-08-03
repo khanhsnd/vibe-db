@@ -92,7 +92,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
       onOpenChange={onOpenChange}
       title={initial?.id ? 'Edit Connection' : 'New Connection'}
       description={engine.label}
-      icon={<EngineIcon engine={engine.value} className="h-6 w-6 rounded-md text-sm" />}
+      icon={<EngineIcon engine={engine.value} className="h-6 w-6 rounded-md p-0.5" />}
       tone="plain"
       width={480}
       footer={

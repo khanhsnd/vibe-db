@@ -1,10 +1,14 @@
 # Frontend conventions
 
-- **One click selects, two clicks open.** A single click never loads anything, never opens a tab and
-  never dials a server — it moves the selection, and that is all, so a stray click is free. Opening
-  is a double-click (or a context-menu item, or `Enter`). This holds for every list, tree and grid;
-  `ObjectTree` and `ResultGrid` are the two that implement it. The **disclosure caret** is the one
-  control that does both: it selects its node *and* expands it, because that is what a caret is for.
+- **One click selects, two clicks open — outside the grid.** A single click never loads anything,
+  never opens a tab and never dials a server, so a stray click in the tree is free: it moves the
+  selection, and opening is a double-click (or a context-menu item, or `Enter`). `ObjectTree` is
+  what implements it. The **disclosure caret** is the one control that does both: it selects its
+  node *and* expands it, because that is what a caret is for.
+- **In a writable grid, one click opens the cell.** Nothing there loads or dials anything — an
+  editor is staged, not sent — so making the reader click twice to change a value they are already
+  pointing at buys nothing. `Escape` closes the editor and hands the keyboard back to the grid, which
+  is how a reader gets to a plain selection; see [grid.md](grid.md).
 - **Selecting must not expand, and expanding must not select** anywhere but that caret. Two actions
   hidden in one setter cancel each other out: `selectNamespace` used to expand the node it named, so
   the caret's select-then-toggle collapsed what it had just opened. Expansion lives in `toggleNode`
@@ -35,9 +39,12 @@
   drawn with, so a delete looks the same in the tree as in a grid header — and a menu built in a
   `.ts` file can name one without becoming a component. A menu whose items carry no icon keeps its
   old width; one icon in the list gives every item the gutter, so the labels stay aligned.
-- **An engine is a chip, not a line icon**: `features/connections/EngineIcon.tsx` draws a letter on
-  `--engine-<name>`, because MySQL and PostgreSQL are both databases and a `Database` glyph twice
-  over says nothing. The letter is what still reads without the colour.
+- **An engine is a chip, not a line icon**: `features/connections/EngineIcon.tsx` draws the engine's
+  own mark in white on `--engine-<name>`, because MySQL and PostgreSQL are both databases and a
+  `Database` glyph twice over says nothing. The dolphin and the elephant are what a reader already
+  knows the two by, and the shape still reads where the colour cannot. The marks are two vendored
+  path strings in `engineGlyphs.ts` (Devicon, MIT) rather than an icon-set dependency; the
+  elephant's eyes and tusks are subpaths filled `evenodd`, so they are holes onto the chip.
 - Control styling is shared through `shared/ui/Field.tsx`: `CONTROL` for a form control in a dialog,
   the exported `TOOLBAR_CONTROL` for the shorter ones in a toolbar strip.
 

@@ -112,13 +112,21 @@ its `Save` creates the table, and the tab then goes on designing it rather than 
 it twice.
 
 - **Every list is a `ResultGrid`**, because they are rows and columns — see [grid.md](grid.md). The
-  Fields grid is **edited in place**: double-click a cell, or press `Enter` on it.
+  Fields grid is **edited in place**: one click on a cell opens it, `Escape` closes it again, and
+  the arrows walk the fields a cell at a time.
 - Its columns are the parts a field is *declared* from, not the string the server reports back:
   `Name`, `Type`, `Length`, `Decimal`, `Not null`, `Key`, `Default`. Length and decimals are parts
   of the type and travel as one string — `varchar(255)`, `numeric(10,2)` — and read as `0` when the
-  type declares none. `Not null` and `Key` take `YES` (or `y`, `true`, `1`); anything else, a
-  cleared cell included, is no. A `Default` is an **expression**, which is what a server-side
-  default is: `now()`, `'IN_PROGRESS'`, `0`.
+  type declares none. A `Default` is an **expression**, which is what a server-side default is:
+  `now()`, `'IN_PROGRESS'`, `0`.
+- **`Type` is a list, and the list is the engine's.** Clicking the cell offers MySQL's types or
+  PostgreSQL's — `dataTypes.ts`, read off the connection's own profile — and typing filters them.
+  It still takes **anything typed into it**, because a server also has domains, enums and types
+  that list has never heard of; the options are what a column is usually given.
+- **`Not null` is a checkbox and `Key` is the lock**, both flipped by one click. A key field shows
+  a gold lock and **which column of the key it is** — the first is `1`, a second field clicked is
+  `2` — counted down the fields, so a composite key reads in order. `Primary Key` in the toolbar is
+  the same fact for a whole selection at once.
 - `Primary Key` moves the key onto the selected fields, or off them if they all already hold it.
   Both engines are made to replace a key rather than add a second one, and dropping the key of a
   table that has none is not an error.
@@ -147,7 +155,7 @@ are added, deleted, applied and discarded: it is the same `GridFooter` every gri
 different edges:
 
 - **`Cell Editor`** opens a panel under the grid for the selected cell. Discard reverts the draft and
-  Apply stages the value on the cell, exactly as double-clicking it in the grid does — the footer's
+  Apply stages the value on the cell, exactly as opening it in the grid does — the footer's
   ✓ is what writes `UPDATE … WHERE <primary key>` and reloads. A table with no primary key is
   read-only, because no single row can be identified. MySQL adds a `LIMIT 1` belt to the braces;
   PostgreSQL has no such clause and does not need one, since the key already names one row.
@@ -231,8 +239,9 @@ its right — the qualified table, or why the result is read-only:
 
 - **The editing icons show only for a writable result.** For one that no `UPDATE` can name they are
   not there at all; `Refresh` and `Stop` remain.
-- **Double-click a cell to edit it** (or press `Enter` on the selected cell). `Esc` abandons the
-  input. Edits are held locally and marked in the grid, so a mistyped value costs nothing.
+- **One click on a cell opens it** (or `Enter` on the focused one). `Esc` abandons the input and
+  gives the keyboard back to the grid. Edits are held locally and marked in the grid, so a mistyped
+  value costs nothing.
 - ✗ drops every pending change, ✓ writes them — edits with the same `UPDATE … WHERE <primary key>`
   the table view uses, then inserts, then deletions — and reloads. ↻ reloads alone.
 - **`Refresh` and `Apply` replay the statement that produced the rows**, not whatever the editor
