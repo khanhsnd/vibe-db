@@ -217,6 +217,7 @@ export function App() {
       return {
         status: error ? 'error' : 'idle',
         target: error ? error.message : null,
+        engine: null,
         serverVersion: null,
         rowCount: null,
         elapsedMs: null,
@@ -226,11 +227,12 @@ export function App() {
     return {
       status: 'connected',
       target: session.target,
+      engine: profiles.find((p) => p.id === activeProfileId)?.engine ?? null,
       serverVersion: session.serverVersion,
       rowCount: null,
       elapsedMs: null,
     }
-  }, [sessions, error])
+  }, [sessions, profiles, error])
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

@@ -16,6 +16,7 @@ import {
 } from '@/features/results/resultSet'
 import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
 import { Empty } from '@/shared/ui/Empty'
+import { ICON } from '@/shared/ui/menuIcons'
 
 import { CellEditor } from './CellEditor'
 import { ColumnPicker } from './ColumnPicker'
@@ -152,12 +153,14 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
               columnMenuItems={(column) => [
                 {
                   label: 'Hide column',
+                  icon: ICON.hide,
                   separatorBefore: true,
                   disabled: visible.length === 1,
                   onSelect: () => toggleColumn(column.name),
                 },
                 {
                   label: 'Show all columns',
+                  icon: ICON.show,
                   disabled: hidden.size === 0,
                   onSelect: showAllColumns,
                 },

@@ -19,6 +19,7 @@ import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 import { IconButton } from '@/shared/ui/IconButton'
+import { ICON } from '@/shared/ui/menuIcons'
 
 import { ColumnTypeIcon, isNumeric } from './columnType'
 import { gridFont, widestText } from './measureText'
@@ -198,14 +199,17 @@ export function ResultGrid({
       ? [
           {
             label: 'Sort Ascending',
+            icon: ICON.sortAscending,
             onSelect: () => onSortChange({ column: column.name, descending: false }),
           },
           {
             label: 'Sort Descending',
+            icon: ICON.sortDescending,
             onSelect: () => onSortChange({ column: column.name, descending: true }),
           },
           {
             label: 'Remove All Sorts',
+            icon: ICON.sortNone,
             disabled: sort === null,
             onSelect: () => onSortChange(null),
           },
@@ -216,16 +220,18 @@ export function ResultGrid({
       ...sorting,
       {
         label: 'Copy column',
+        icon: ICON.copy,
         separatorBefore: sorting.length > 0,
         disabled: result.rows.length === 0,
         onSelect: () =>
           void copyText(toTSV(oneRange(columnRange(index, result.rows.length)), result)),
       },
-      { label: 'Copy field name', onSelect: () => void copyText(column.name) },
+      { label: 'Copy field name', icon: ICON.copy, onSelect: () => void copyText(column.name) },
       ...(onEditCell
         ? [
             {
               label: 'Paste',
+              icon: ICON.paste,
               disabled: result.rows.length === 0,
               onSelect: () => void paste({ row: 0, column: index }),
             },

@@ -1,8 +1,9 @@
 :root {
   --surface-canvas: #0f1115;
   --surface-panel: #15181e;
-  /** The action bar under a grid, a shade off panel so the two bars do not read as one. */
-  --surface-footer: #1b2028;
+  /** Every strip of controls — a toolbar over a grid, the action bar under one — a shade off
+      panel so two bars that meet do not read as one. */
+  --surface-bar: #1b2028;
   --surface-elevated: #1c2027;
   --surface-hover: #232830;
   --surface-active: #2a303a;
@@ -31,6 +32,10 @@
   --danger-subtle: #3a1d1c;
   --warn: #d29922;
 
+  /** One per engine, so a connection says which it is before it is read. */
+  --engine-mysql: #0e8fa8;
+  --engine-postgres: #4779b8;
+
   --syn-keyword: #ff7b72;
   --syn-string: #a5d6ff;
   --syn-number: #79c0ff;
@@ -44,7 +49,7 @@
 :root[data-theme='light'] {
   --surface-canvas: #ffffff;
   --surface-panel: #f7f8fa;
-  --surface-footer: #eceef2;
+  --surface-bar: #eceef2;
   --surface-elevated: #ffffff;
   --surface-hover: #eff1f5;
   --surface-active: #e4e7ec;
@@ -73,6 +78,9 @@
   --danger-subtle: #ffebe9;
   --warn: #9a6700;
 
+  --engine-mysql: #00758f;
+  --engine-postgres: #336791;
+
   --syn-keyword: #cf222e;
   --syn-string: #0a3069;
   --syn-number: #0550ae;
@@ -86,7 +94,7 @@
 @theme inline {
   --color-canvas: var(--surface-canvas);
   --color-panel: var(--surface-panel);
-  --color-footer: var(--surface-footer);
+  --color-bar: var(--surface-bar);
   --color-elevated: var(--surface-elevated);
   --color-hover: var(--surface-hover);
   --color-active: var(--surface-active);
@@ -113,6 +121,9 @@
   --color-danger: var(--danger);
   --color-danger-subtle: var(--danger-subtle);
   --color-warn: var(--warn);
+
+  --color-engine-mysql: var(--engine-mysql);
+  --color-engine-postgres: var(--engine-postgres);
 
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;

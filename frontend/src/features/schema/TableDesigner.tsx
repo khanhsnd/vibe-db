@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { KeyRound, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { KeyRound, Plus, RefreshCw, Save, Table2, Trash2 } from 'lucide-react'
 
 import type { Namespace } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
@@ -132,9 +132,11 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line bg-panel px-2">
+      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line bg-bar px-2">
+        {/* Save is the weight of the toolbar the moment there is anything to save, and the one
+            button that destroys a field carries the danger tone. */}
         <Button
-          variant="subtle"
+          variant={dirty ? 'primary' : 'subtle'}
           icon={<Save size={13} />}
           disabled={saving || !dirty}
           onClick={() => void save()}
@@ -149,7 +151,7 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
           Add Field
         </Button>
         <Button
-          variant="subtle"
+          variant="danger"
           icon={<Trash2 size={13} />}
           disabled={rows.length === 0}
           onClick={() => setDraft((prev) => prev.filter((_, at) => !rows.includes(at)))}
@@ -175,13 +177,16 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
         <div className="h-4 w-px bg-line" />
 
         {creating ? (
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Table name"
-            spellCheck={false}
-            className={cn(TOOLBAR_CONTROL, 'w-48')}
-          />
+          <div className="flex items-center gap-1.5">
+            <Table2 size={13} className="shrink-0 text-faint" />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Table name"
+              spellCheck={false}
+              className={cn(TOOLBAR_CONTROL, 'w-48')}
+            />
+          </div>
         ) : (
           <Button variant="subtle" icon={<RefreshCw size={13} />} onClick={() => void reload()}>
             Refresh
@@ -189,7 +194,7 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
         )}
 
         <div className="flex-1" />
-        <span className="truncate font-mono text-2xs text-faint">
+        <span className="truncate rounded-md border border-line bg-canvas px-1.5 py-0.5 font-mono text-2xs text-faint">
           {creating ? qualified(namespace, name || 'new table') : qualified(namespace, table)}
         </span>
       </div>

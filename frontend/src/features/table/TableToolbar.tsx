@@ -1,10 +1,13 @@
+import { Columns3, PanelBottom } from 'lucide-react'
+import type { ReactNode } from 'react'
+
 import { cn } from '@/lib/cn'
 
 export type PanelKind = 'cell' | 'column'
 
-const ITEMS: ReadonlyArray<{ kind: PanelKind; label: string }> = [
-  { kind: 'cell', label: 'Cell Editor' },
-  { kind: 'column', label: 'Column' },
+const ITEMS: ReadonlyArray<{ kind: PanelKind; label: string; icon: ReactNode }> = [
+  { kind: 'cell', label: 'Cell Editor', icon: <PanelBottom size={13} /> },
+  { kind: 'column', label: 'Column', icon: <Columns3 size={13} /> },
 ]
 
 interface TableToolbarProps {
@@ -16,7 +19,7 @@ export function TableToolbar({ active, onToggle }: TableToolbarProps) {
   return (
     <div
       role="toolbar"
-      className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-panel px-2"
+      className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-bar px-2"
     >
       {ITEMS.map((item) => (
         <button
@@ -25,12 +28,13 @@ export function TableToolbar({ active, onToggle }: TableToolbarProps) {
           aria-pressed={active.has(item.kind)}
           onClick={() => onToggle(item.kind)}
           className={cn(
-            'inline-flex h-6 items-center rounded-md px-2 text-xs font-medium transition-colors',
+            'inline-flex h-6 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors',
             active.has(item.kind)
               ? 'bg-selected text-fg'
               : 'text-muted hover:bg-hover hover:text-fg',
           )}
         >
+          {item.icon}
           {item.label}
         </button>
       ))}

@@ -22,6 +22,7 @@ import { cn } from '@/lib/cn'
 import { ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 
+import { EngineIcon } from './EngineIcon'
 import { StatusDot } from './StatusDot'
 import { flatten, type NodeKind, type TreeNode } from './tree'
 
@@ -130,8 +131,8 @@ export function ObjectTree({
                   <span className="w-4 shrink-0" />
                 )}
 
-                {node.kind === 'connection' && node.status ? (
-                  <StatusDot status={node.status} />
+                {node.engine ? (
+                  <EngineIcon engine={node.engine} />
                 ) : (
                   <Icon
                     size={14}
@@ -151,6 +152,8 @@ export function ObjectTree({
                 </span>
 
                 {active ? <CircleCheck size={13} className="shrink-0 text-success" /> : null}
+
+                {node.status ? <StatusDot status={node.status} className="ml-auto" /> : null}
 
                 {node.badge ? (
                   <span className="ml-auto max-w-[45%] shrink-0 truncate pl-2 font-mono text-2xs text-faint">

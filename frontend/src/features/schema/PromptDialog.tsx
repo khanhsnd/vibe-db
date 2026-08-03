@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { Pencil } from 'lucide-react'
 
 import { Banner } from '@/shared/ui/Banner'
 import { Button } from '@/shared/ui/Button'
 import { Dialog } from '@/shared/ui/Dialog'
 import { Field, TextInput } from '@/shared/ui/Field'
+import { ICON } from '@/shared/ui/menuIcons'
 import type { PromptRequest } from '@/stores/schema'
 
 import { useSchemaSubmit } from './useSchemaSubmit'
@@ -25,11 +27,12 @@ export function PromptDialog({
       open
       onOpenChange={onClose}
       title={request.title}
+      icon={<Pencil size={15} />}
       width={400}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={running} onClick={apply}>
+          <Button variant="primary" icon={ICON.rename} disabled={running} onClick={apply}>
             {running ? 'Applying…' : request.submitLabel}
           </Button>
         </>

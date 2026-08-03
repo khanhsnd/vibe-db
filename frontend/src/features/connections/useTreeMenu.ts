@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 
 import type { Namespace, Profile } from '@/bridge/connections'
+import { ICON } from '@/shared/ui/menuIcons'
 import { schema } from '@/bridge/schema'
 import type { TableColumn } from '@/bridge/tables'
 import { fieldActions, type FieldActions } from '@/features/schema/fieldActions'
@@ -71,11 +72,13 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       // is what creates it, so declaring one and altering one are the same surface.
       const newTable: MenuItem = {
         label: 'New Table',
+        icon: ICON.add,
         onSelect: () => onDesign({ profileId: node.profileId, namespace: ns, table: '' }),
       }
 
       const refreshTableList: MenuItem = {
         label: 'Refresh',
+        icon: ICON.refresh,
         separatorBefore: true,
         onSelect: () => void refreshTables(node.profileId, ns),
       }
@@ -88,6 +91,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
             : [
                 {
                   label: 'Refresh',
+                  icon: ICON.refresh,
                   onSelect: () => void refreshSchemas(node.profileId, ns.database),
                 },
               ]
@@ -163,11 +167,20 @@ function connectionItems(
 ): MenuItem[] {
   return [
     connected
-      ? { label: 'Disconnect', onSelect: () => void on.disconnect(node.profileId) }
-      : { label: 'Connect', onSelect: () => on.onConnect(profile) },
-    { label: 'Edit Connection…', onSelect: () => on.onEditConnection(profile) },
+      ? {
+          label: 'Disconnect',
+          icon: ICON.disconnect,
+          onSelect: () => void on.disconnect(node.profileId),
+        }
+      : { label: 'Connect', icon: ICON.connect, onSelect: () => on.onConnect(profile) },
+    {
+      label: 'Edit Connection…',
+      icon: ICON.editConnection,
+      onSelect: () => on.onEditConnection(profile),
+    },
     {
       label: 'Delete Connection',
+      icon: ICON.delete,
       danger: true,
       separatorBefore: true,
       onSelect: () => void on.deleteProfile(node.profileId),
@@ -188,14 +201,16 @@ function tableItems(node: TreeNode, ns: Namespace, deps: TableMenuDeps): MenuIte
   const table = node.label
 
   return [
-    { label: 'Open Table', onSelect: () => deps.onOpenTable(node) },
+    { label: 'Open Table', icon: ICON.open, onSelect: () => deps.onOpenTable(node) },
     {
       label: 'Design Table',
+      icon: ICON.design,
       onSelect: () => deps.onDesign({ profileId: node.profileId, namespace: ns, table }),
     },
     { ...deps.newTable, separatorBefore: true },
     {
       label: 'Rename Table…',
+      icon: ICON.rename,
       onSelect: () =>
         deps.ask({
           kind: 'prompt',
@@ -209,6 +224,7 @@ function tableItems(node: TreeNode, ns: Namespace, deps: TableMenuDeps): MenuIte
     },
     {
       label: 'Empty Table',
+      icon: ICON.empty,
       separatorBefore: true,
       onSelect: () =>
         deps.ask({
@@ -222,6 +238,7 @@ function tableItems(node: TreeNode, ns: Namespace, deps: TableMenuDeps): MenuIte
     },
     {
       label: 'Truncate Table',
+      icon: ICON.truncate,
       onSelect: () =>
         deps.ask({
           kind: 'confirm',
@@ -236,6 +253,7 @@ function tableItems(node: TreeNode, ns: Namespace, deps: TableMenuDeps): MenuIte
     },
     {
       label: 'Delete Table',
+      icon: ICON.delete,
       danger: true,
       onSelect: () =>
         deps.ask({
@@ -249,6 +267,7 @@ function tableItems(node: TreeNode, ns: Namespace, deps: TableMenuDeps): MenuIte
     },
     {
       label: 'Refresh',
+      icon: ICON.refresh,
       separatorBefore: true,
       onSelect: () => void deps.refreshStructure(node.profileId, ns, table),
     },
@@ -256,17 +275,23 @@ function tableItems(node: TreeNode, ns: Namespace, deps: TableMenuDeps): MenuIte
 }
 
 function fieldItems(node: TreeNode, stored: TableColumn | undefined, on: FieldActions): MenuItem[] {
-  const addField: MenuItem = { label: 'Add Field', onSelect: on.add }
-  const refresh: MenuItem = { label: 'Refresh', separatorBefore: true, onSelect: on.refresh }
+  const addField: MenuItem = { label: 'Add Field', icon: ICON.add, onSelect: on.add }
+  const refresh: MenuItem = {
+    label: 'Refresh',
+    icon: ICON.refresh,
+    separatorBefore: true,
+    onSelect: on.refresh,
+  }
 
   if (node.kind === 'fields' || !stored) return [addField, refresh]
 
   return [
-    { label: 'Edit Field', onSelect: on.edit },
-    { label: 'Rename Field…', onSelect: () => on.rename(stored) },
+    { label: 'Edit Field', icon: ICON.design, onSelect: on.edit },
+    { label: 'Rename Field…', icon: ICON.rename, onSelect: () => on.rename(stored) },
     addField,
     {
       label: 'Delete Field',
+      icon: ICON.delete,
       danger: true,
       separatorBefore: true,
       onSelect: () => on.remove(stored),
@@ -285,6 +310,7 @@ function constraintItems(node: TreeNode, ns: Namespace, deps: ConstraintMenuDeps
   const table = node.table ?? ''
   const refresh: MenuItem = {
     label: 'Refresh',
+    icon: ICON.refresh,
     onSelect: () => void deps.refreshStructure(node.profileId, ns, table),
   }
 
@@ -292,6 +318,7 @@ function constraintItems(node: TreeNode, ns: Namespace, deps: ConstraintMenuDeps
     return [
       {
         label: 'Delete Index',
+        icon: ICON.delete,
         danger: true,
         // The index behind a primary key is the key, and neither engine will drop it as an
         // index — so the item says why rather than failing at the server.
@@ -317,6 +344,7 @@ function constraintItems(node: TreeNode, ns: Namespace, deps: ConstraintMenuDeps
     return [
       {
         label: 'Delete Foreign Key',
+        icon: ICON.delete,
         danger: true,
         onSelect: () =>
           deps.ask({

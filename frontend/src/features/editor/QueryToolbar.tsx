@@ -41,7 +41,7 @@ export function QueryToolbar({
   return (
     <div
       role="toolbar"
-      className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line bg-panel px-2"
+      className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line bg-bar px-2"
     >
       <Database size={13} className="shrink-0 text-faint" />
       <NamespaceSelect

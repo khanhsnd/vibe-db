@@ -334,15 +334,15 @@ interface TreeInput {
 
 export function buildTree(input: TreeInput): TreeNode[] {
   return input.profiles.map((profile) => {
-    const { label, hasSchemas } = engineInfo(profile.engine)
+    const { value: engine, hasSchemas } = engineInfo(profile.engine)
 
     return {
       id: connectionNodeId(profile.id),
       kind: 'connection',
       label: profile.name,
       profileId: profile.id,
+      engine,
       status: input.statuses[profile.id] ?? 'idle',
-      badge: label,
       children: (input.databases[profile.id] ?? []).map((database) =>
         hasSchemas
           ? schemaParentNode(input, profile.id, database)

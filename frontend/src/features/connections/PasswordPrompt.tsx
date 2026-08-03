@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { KeyRound, Plug } from 'lucide-react'
 
 import { Button } from '@/shared/ui/Button'
 import { Dialog } from '@/shared/ui/Dialog'
@@ -29,13 +30,14 @@ export function PasswordPrompt({ open, target, onOpenChange, onSubmit }: Passwor
       onOpenChange={onOpenChange}
       title="Password required"
       description={target}
+      icon={<KeyRound size={15} />}
       width={360}
       footer={
         <>
           <Button variant="default" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit}>
+          <Button variant="primary" icon={<Plug size={13} />} onClick={submit}>
             Connect
           </Button>
         </>

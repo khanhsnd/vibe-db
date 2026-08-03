@@ -48,7 +48,7 @@ export function GridFooter({
   return (
     <div
       role="toolbar"
-      className="flex h-8 shrink-0 items-center gap-0.5 border-t border-line bg-footer px-1.5 text-xs text-muted"
+      className="flex h-8 shrink-0 items-center gap-0.5 border-t border-line bg-bar px-1.5 text-xs text-muted"
     >
       <div onMouseDown={(event) => event.preventDefault()} className="flex items-center gap-0.5">
         {editable ? (

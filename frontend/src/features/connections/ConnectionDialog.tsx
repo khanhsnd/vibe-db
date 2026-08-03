@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Loader2, XCircle } from 'lucide-react'
+import { CheckCircle2, Loader2, PlugZap, Save, XCircle } from 'lucide-react'
 
 import {
   ENGINES,
@@ -16,6 +16,8 @@ import { Button } from '@/shared/ui/Button'
 import { Checkbox, Field, SelectInput, TextInput } from '@/shared/ui/Field'
 import { Dialog } from '@/shared/ui/Dialog'
 import { useConnectionsStore } from '@/stores/connections'
+
+import { EngineIcon } from './EngineIcon'
 
 type Probe =
   | { state: 'idle' }
@@ -90,17 +92,24 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
       onOpenChange={onOpenChange}
       title={initial?.id ? 'Edit Connection' : 'New Connection'}
       description={engine.label}
+      icon={<EngineIcon engine={engine.value} className="h-6 w-6 rounded-md text-sm" />}
+      tone="plain"
       width={480}
       footer={
         <>
-          <Button variant="subtle" onClick={test} disabled={probe.state === 'testing'}>
+          <Button
+            variant="subtle"
+            icon={<PlugZap size={13} />}
+            onClick={test}
+            disabled={probe.state === 'testing'}
+          >
             {probe.state === 'testing' ? 'Testing…' : 'Test Connection'}
           </Button>
           <div className="flex-1" />
           <Button variant="default" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={save} disabled={saving}>
+          <Button variant="primary" icon={<Save size={13} />} onClick={save} disabled={saving}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
         </>

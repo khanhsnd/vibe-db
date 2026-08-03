@@ -1,4 +1,4 @@
-import type { Namespace } from '@/bridge/connections'
+import type { Engine, Namespace } from '@/bridge/connections'
 
 export type NodeKind =
   | 'connection'
@@ -28,6 +28,8 @@ export interface TreeNode {
   /** The table this node belongs to, on a table node and everything the tree draws under one. */
   table?: string
   children?: TreeNode[]
+  /** The engine this connection speaks, which is drawn as its chip. Only a connection has one. */
+  engine?: Engine
   status?: ConnectionStatus
   active?: boolean
   badge?: string

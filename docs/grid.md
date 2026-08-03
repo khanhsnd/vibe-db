@@ -62,7 +62,8 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   only where `onEditCell` was passed — **Paste**, which is the paste below with the column's first
   row as its origin. A call site appends its own items through `columnMenuItems`; today only
   `TableDataView` does, with **Hide column** and **Show all columns**, because hiding is its state
-  and not the grid's.
+  and not the grid's. Every item carries a glyph from `shared/ui/menuIcons.tsx`, which is where the
+  icon for an action lives so the same action wears the same one in every menu.
 - **The grid never reorders its own rows.** It reports the column and direction through
   `onSortChange` and marks the header from `sort`; who sorts is the call site, because only it knows
   where the rows come from. One column at a time — hence *Remove All Sorts* clearing the one there
@@ -95,8 +96,9 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
   table view walks the server, and a query result is paged inside `usePageWindow` out of the rows
   it already holds. A `+` on the pager's total says those rows are a *prefix* of the result, and
   `partial` is also what keeps `Next` alive on the last page: the caller can go and fetch the rest.
-- The bar carries `--surface-footer` rather than `--surface-panel`, so it reads as controls and not
-  as the status line that may sit directly below it.
+- The bar carries `--surface-bar` rather than `--surface-panel`, so it reads as controls and not
+  as the status line that may sit directly below it. Every strip of controls uses that surface —
+  the toolbars above a grid included — and two of them never meet edge to edge.
 - **Its buttons refuse focus** (`mousedown` is prevented), so pressing one leaves the keyboard on the
   grid. Add-then-paste is one gesture, and the keystroke would otherwise land on the button.
 

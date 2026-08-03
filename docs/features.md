@@ -21,8 +21,12 @@ client-side splitter is not written yet.
 The connection dialog leads with `Engine`, and everything that follows takes its defaults from it:
 port 3306 and user `root` for MySQL, 5432 and `postgres` for PostgreSQL. Switching engine rewrites
 only the fields that still hold the old engine's default, so a typed port survives the switch. The
-tree tags every connection with its engine, and the editor loads that engine's SQL dialect for
-highlighting and completion.
+editor loads that engine's SQL dialect for highlighting and completion.
+
+**Every connection wears its engine's chip** — `M` on teal for MySQL, `P` on blue for PostgreSQL —
+in the tree, in the dialog's header and in the status bar. It replaces the engine badge the tree
+used to carry on the right of a connection row, which is where the **connection status dot** now
+sits: what the connection *is* on the left, how it is *doing* on the right.
 
 One field differs rather than just defaulting: **PostgreSQL needs a database**. A session is bound to
 one for life, so that is the database the connection bootstraps from — the one its database list is
@@ -74,6 +78,9 @@ filled in before it runs. `useTreeMenu` is the single place the items are built,
 | An index | `Delete Index`, `Refresh`. Disabled on the index behind a primary key: neither engine will drop the key as an index, so the item says so rather than failing at the server |
 | A foreign key | `Delete Foreign Key`, `Refresh` |
 
+- **Every item carries a glyph**, from `shared/ui/menuIcons.tsx` — one action, one icon, wherever it
+  is offered: `Design Table` and `Edit Field` share theirs because both open the designer, and
+  anything that destroys carries the bin in the danger colour.
 - **`Empty Table` deletes every row; `Truncate Table` drops them all at once.** Truncate is the
   faster of the two and the one a table under a foreign key will refuse, which is why both are there.
 - **A change re-reads what it invalidated, and nothing else**: the namespace's table list, then the
@@ -98,7 +105,9 @@ of the tab, because the tab may already be open and a revealed tab has to hear t
 
 `Design Table` opens a tab laid out the way a table designer is: a toolbar of `Save`, `Add Field`,
 `Delete Field`, `Primary Key` and `Refresh`, over a strip of `Fields`, `Indexes`, `Foreign Keys` and
-`Changes`. `New Table` is the same tab with no table behind it yet and a name box in the toolbar;
+`Changes`. **`Save` takes the accent the moment there is anything to save** and drops back to a
+plain toolbar button when there is not, and `Delete Field` carries the danger tone, so the two
+buttons that matter are readable before the labels are. `New Table` is the same tab with no table behind it yet and a name box in the toolbar;
 its `Save` creates the table, and the tab then goes on designing it rather than offering to create
 it twice.
 
