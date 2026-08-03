@@ -71,7 +71,11 @@ type TableSortInput struct {
 
 type TablePageInput struct {
 	Namespace
-	Table  string         `json:"table"`
+	Table string `json:"table"`
+	// RunID is minted by the caller so that a read can be stopped before it answers, and so the
+	// batches of a streamed read can be told from another tab's. An empty one asks for an
+	// ordinary read, bounded by a deadline and answered whole — see LoadTableRows.
+	RunID  string         `json:"runId"`
 	Limit  int            `json:"limit"`
 	Offset int            `json:"offset"`
 	Sort   TableSortInput `json:"sort"`

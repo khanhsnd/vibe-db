@@ -262,7 +262,7 @@ func (s *session) TableList(
 		return driver.TableList{}, err
 	}
 
-	result, err := sqlkit.Read(ctx, db, query, 0, ns.Schema)
+	result, err := sqlkit.Read(ctx, db, query, 0, nil, ns.Schema)
 	if err != nil {
 		return driver.TableList{}, translateError(err)
 	}

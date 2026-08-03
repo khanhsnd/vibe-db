@@ -138,6 +138,10 @@ export function SetPrimaryKey(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['SetPrimaryKey'](arg1, arg2, arg3, arg4);
 }
 
+export function StopTableRows(arg1) {
+  return window['go']['app']['ConnectionAPI']['StopTableRows'](arg1);
+}
+
 export function TestConnection(arg1) {
   return window['go']['app']['ConnectionAPI']['TestConnection'](arg1);
 }

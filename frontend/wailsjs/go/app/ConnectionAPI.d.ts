@@ -70,6 +70,8 @@ export function SaveProfile(arg1:app.ProfileInput):Promise<app.Profile>;
 
 export function SetPrimaryKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<string>):Promise<void>;
 
+export function StopTableRows(arg1:string):Promise<void>;
+
 export function TestConnection(arg1:app.ProfileInput):Promise<app.TestResult>;
 
 export function TruncateTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;

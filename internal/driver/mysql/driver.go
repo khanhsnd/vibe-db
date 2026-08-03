@@ -166,7 +166,7 @@ func (s *session) TableList(
 		" WHERE table_schema = ? AND table_type = 'BASE TABLE'" +
 		" ORDER BY table_name"
 
-	result, err := sqlkit.Read(ctx, s.db, query, 0, ns.Database)
+	result, err := sqlkit.Read(ctx, s.db, query, 0, nil, ns.Database)
 	if err != nil {
 		return driver.TableList{}, translateError(err)
 	}

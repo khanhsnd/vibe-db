@@ -17,6 +17,7 @@ import {
 } from '@/features/results/resultSet'
 import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
 import { Empty } from '@/shared/ui/Empty'
+import { FetchProgress } from '@/shared/ui/FetchProgress'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
 
@@ -35,8 +36,20 @@ interface TableDataViewProps {
 }
 
 export function TableDataView({ sessionId, namespace, table }: TableDataViewProps) {
-  const { data, loading, error, page, limit, sort, goToPage, changeLimit, changeSort, refresh } =
-    useTableData(sessionId, namespace, table)
+  const {
+    data,
+    loading,
+    fetch,
+    error,
+    page,
+    limit,
+    sort,
+    goToPage,
+    changeLimit,
+    changeSort,
+    refresh,
+    stopFetch,
+  } = useTableData(sessionId, namespace, table)
 
   const [panels, setPanels] = useState<ReadonlySet<PanelKind>>(new Set())
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
@@ -150,16 +163,21 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
           </div>
         ) : null}
 
-        <div className="min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1">
+          {/* A read of every row arrives in batches and is watched rather than waited on, so its
+              count and its Stop sit over whatever the grid already holds. */}
+          {fetch !== null ? <FetchProgress fetched={fetch.fetched} onStop={stopFetch} /> : null}
+
           {/* Nothing has arrived yet: a grid with no columns is a blank pane, and the first page
               of a large table is exactly where the reader waits longest. Once rows are on screen
               a re-read leaves them there and the footer's pager says it is working. */}
           {data === null ? (
             error ? (
               <Empty title={error.message} hint={error.detail} />
-            ) : (
+            ) : fetch === null ? (
+              // A streamed read reports itself, and two spinners over one another say no more.
               <Loading label={`Loading ${table}…`} />
-            )
+            ) : null
           ) : (
             <ResultGrid
               result={grid}

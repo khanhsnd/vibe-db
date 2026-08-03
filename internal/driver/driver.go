@@ -38,6 +38,11 @@ type TableSort struct {
 	Descending bool
 }
 
+// RowBatch receives rows as a read produces them, along with how many that read has produced
+// in all — which is what a reader watching it counts. It is called from the goroutine doing the
+// scan, so whatever it does is time the read spends waiting.
+type RowBatch func(rows [][]*string, fetched int)
+
 // TablePage is one window onto a table's rows. A Limit of zero or less reads every row and
 // makes Offset meaningless, the same convention as Query.MaxRows.
 type TablePage struct {
@@ -46,6 +51,10 @@ type TablePage struct {
 	Limit  int
 	Offset int
 	Sort   TableSort
+	// Batch, when set, is handed the rows as they are read and the read then answers with none
+	// of them: a table of a million rows cannot be delivered in one piece, and a reader waiting
+	// on it wants to see it arrive. A page that leaves it nil is answered whole.
+	Batch RowBatch
 }
 
 // TableSchema is the completion-sized view of a table: names only, no types, because

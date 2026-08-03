@@ -1,5 +1,6 @@
 import * as api from '@wailsjs/go/app/ConnectionAPI'
 import type { app } from '@wailsjs/go/models'
+import { EventsOn } from '@wailsjs/runtime/runtime'
 
 import type { Namespace } from './connections'
 import { call } from './errors'
@@ -22,6 +23,11 @@ export interface TableSortRequest {
 }
 
 export interface TablePageRequest {
+  /**
+   * Minted per read, so it can be stopped before it answers and so the batches of a streamed
+   * read can be told from another tab's — see `onRowBatch`.
+   */
+  runId: string
   database: string
   schema: string
   table: string
@@ -30,6 +36,7 @@ export interface TablePageRequest {
   sort: TableSortRequest
 }
 
+/** A read that asked for `ALL_ROWS` answers with its columns and total, and no rows at all. */
 export interface TablePage {
   columns: TableColumn[]
   rows: Cell[][]
@@ -37,6 +44,15 @@ export interface TablePage {
   limit: number
   offset: number
 }
+
+/** One batch of a streamed read: the rows that just arrived, and how many the read has produced. */
+export interface RowBatch {
+  runId: string
+  fetched: number
+  rows: Cell[][]
+}
+
+const ROWS_EVENT = 'rows:batch'
 
 /**
  * One row per table of a namespace: its name in the first column, then whatever else the
@@ -77,11 +93,26 @@ export interface RowDelete {
   key: Record<string, string>
 }
 
+/**
+ * Listens for the batches of one streamed read, and answers with how to stop listening. Every
+ * row of a large table cannot cross the bridge in one piece — a call's result arrives as a
+ * single JavaScript string — so a read of `ALL_ROWS` answers with its columns alone and its rows
+ * arrive here, batch by batch, until the call itself resolves. See `app.EventRows`.
+ */
+export function onRowBatch(runId: string, receive: (batch: RowBatch) => void): () => void {
+  return EventsOn(ROWS_EVENT, (batch: RowBatch) => {
+    if (batch.runId === runId) receive(batch)
+  })
+}
+
 export const tables = {
   loadRows: (sessionId: string, page: TablePageRequest): Promise<TablePage> =>
     call(() =>
       api.LoadTableRows(sessionId, page as unknown as app.TablePageInput),
     ) as unknown as Promise<TablePage>,
+
+  /** Stops a read before it answers. An id the backend has forgotten is ignored. */
+  stopRows: (runId: string): Promise<void> => call(() => api.StopTableRows(runId)),
 
   loadList: (sessionId: string, ns: Namespace): Promise<TableList> =>
     call(() => api.LoadTableList(sessionId, ns)) as unknown as Promise<TableList>,

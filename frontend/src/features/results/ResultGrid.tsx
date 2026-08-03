@@ -65,6 +65,11 @@ const TYPE_ICON_WIDTH = 17
 const MENU_WIDTH = 20
 /** Pixels scrolled per frame while a drag is held past an edge of the viewport. */
 const EDGE_STEP = 14
+/**
+ * How many rows a fit measures. A grid may hold every row of a table — a million of them — and
+ * measuring each one costs seconds of frozen window for a width nobody can see anyway.
+ */
+const FIT_SAMPLE = 2000
 
 /** Where each arrow key takes the focus, in cells. */
 const ARROWS: Record<string, CellRef> = {
@@ -218,7 +223,7 @@ export function ResultGrid({
     if (!column) return
 
     const font = gridFont()
-    const cells = result.rows.map((row) => cellText(row[index] ?? null))
+    const cells = result.rows.slice(0, FIT_SAMPLE).map((row) => cellText(row[index] ?? null))
     const content = Math.max(
       widestText(cells, font),
       widestText([column.name], headerFont()) + MENU_WIDTH,

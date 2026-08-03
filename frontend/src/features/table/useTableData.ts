@@ -3,14 +3,26 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { ALL_ROWS, DEFAULT_PAGE_SIZE } from '@/bridge/rows'
-import { tables, type TablePage } from '@/bridge/tables'
+import { onRowBatch, tables, type Cell, type TablePage } from '@/bridge/tables'
 import type { SortKey } from '@/features/results/resultSet'
 
 const NO_SORT = { column: '', descending: false }
 
+/** A read of every row, while it runs: what to stop, and how many rows have arrived so far. */
+export interface RowFetch {
+  runId: string
+  fetched: number
+}
+
 /**
  * The rows are paged on the server, so the sort has to be too: ordering the page in hand
  * would only shuffle the hundred rows the reader can already see.
+ *
+ * `All` is the one read that cannot be answered in one piece — a million rows would have to cross
+ * the bridge as a single JavaScript string — so it is **streamed**: the rows arrive in batches
+ * under a run id, this hook stitches them together, and `fetch` reports the count as they land so
+ * the reader can watch it and stop it. Such a read has no deadline; stopping is what bounds it,
+ * and what did arrive before the stop is kept.
  */
 export function useTableData(sessionId: string, namespace: Namespace, table: string) {
   const { database, schema } = namespace
@@ -21,14 +33,29 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
   const [nonce, setNonce] = useState(0)
   const [data, setData] = useState<TablePage | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fetch, setFetch] = useState<RowFetch | null>(null)
   const [error, setError] = useState<AppError | null>(null)
 
   useEffect(() => {
     let active = true
     setLoading(true)
 
+    const runId = crypto.randomUUID()
+    const streamed = limit === ALL_ROWS
+    const streaming: Cell[][] = []
+
+    const stopListening = streamed
+      ? onRowBatch(runId, (batch) => {
+          for (const row of batch.rows) streaming.push(row)
+          if (active) setFetch({ runId, fetched: batch.fetched })
+        })
+      : null
+
+    if (streamed) setFetch({ runId, fetched: 0 })
+
     tables
       .loadRows(sessionId, {
+        runId,
         database,
         schema,
         table,
@@ -38,18 +65,36 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
       })
       .then((next) => {
         if (!active) return
-        setData(next)
+        setData(streamed ? { ...next, rows: streaming } : next)
         setError(null)
       })
       .catch((thrown: unknown) => {
-        if (active) setError(toAppError(thrown))
+        if (!active) return
+
+        // Stopping is a choice rather than a failure, so the rows that did arrive are kept and
+        // the total becomes what is actually held. The columns are the ones already on screen: a
+        // read stopped before it answered named none, so a first read stopped shows nothing.
+        const failure = toAppError(thrown)
+        if (failure.code !== 'QUERY_CANCELLED') {
+          setError(failure)
+          return
+        }
+        setData((current) =>
+          current === null ? null : { ...current, rows: streaming, total: streaming.length },
+        )
       })
       .finally(() => {
-        if (active) setLoading(false)
+        if (!active) return
+        setLoading(false)
+        setFetch(null)
       })
 
     return () => {
       active = false
+      stopListening?.()
+      // A read nobody is waiting for any more — the reader changed the limit, closed the tab —
+      // must not go on scanning a million rows and emitting them at a listener that has gone.
+      if (streamed) void tables.stopRows(runId)
     }
   }, [sessionId, database, schema, table, limit, page, sort, nonce])
 
@@ -68,5 +113,22 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
     setPage(0)
   }, [])
 
-  return { data, loading, error, page, limit, sort, goToPage, changeLimit, changeSort, refresh }
+  const stopFetch = useCallback(() => {
+    if (fetch !== null) void tables.stopRows(fetch.runId)
+  }, [fetch])
+
+  return {
+    data,
+    loading,
+    fetch,
+    error,
+    page,
+    limit,
+    sort,
+    goToPage,
+    changeLimit,
+    changeSort,
+    refresh,
+    stopFetch,
+  }
 }

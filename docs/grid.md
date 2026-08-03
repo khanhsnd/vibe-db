@@ -116,7 +116,9 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   the column** to the widest of its name, its type line and its cells, capped at 520 px and measured
   on a canvas against the tokens each is drawn with — `--font-ui` / `--text-base` for the name,
   `--font-mono` / `--text-sm` for the rest. Widths are keyed by column *name*, so hiding a column
-  does not reset them.
+  does not reset them. It measures the **first `FIT_SAMPLE` (2 000) rows and no more**: a grid may
+  hold every row of a table, and measuring a million cells is seconds of frozen window for a width
+  nobody can see anyway.
 - **The grid keeps its own selection when uncontrolled.** Pass `selection` +
   `onSelectionChange` only when something outside needs the focused cell.
 - **Export belongs over the grid, never in the footer**, because it acts on the whole grid rather

@@ -1,16 +1,27 @@
 import { List, Plus, Table2, Terminal, X } from 'lucide-react'
 
+import { namespaceLabel, type Profile } from '@/bridge/connections'
 import { cn } from '@/lib/cn'
 import { IconButton } from '@/shared/ui/IconButton'
-import { useTabsStore, type Tab } from '@/stores/tabs'
+import { useConnectionsStore } from '@/stores/connections'
+import { useTabsStore, type Tab, type TabKind } from '@/stores/tabs'
 
 const MIDDLE_BUTTON = 1
+
+/** What a tab is showing, said in full — its title is only ever the last part of this. */
+const KIND_LABEL: Record<TabKind, string> = {
+  query: 'Query',
+  table: 'Table',
+  design: 'Design',
+  objects: 'Tables',
+}
 
 export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
   const tabs = useTabsStore((s) => s.tabs)
   const activeId = useTabsStore((s) => s.activeId)
   const activate = useTabsStore((s) => s.activate)
   const close = useTabsStore((s) => s.close)
+  const profiles = useConnectionsStore((s) => s.profiles)
 
   return (
     <div
@@ -22,6 +33,10 @@ export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
           key={tab.id}
           tab={tab}
           active={tab.id === activeId}
+          tooltip={tabTooltip(
+            tab,
+            profiles.find((profile) => profile.id === tab.profileId),
+          )}
           onSelect={() => activate(tab.id)}
           onClose={() => close(tab.id)}
         />
@@ -34,20 +49,39 @@ export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
   )
 }
 
+/**
+ * Which table, which database, which server — a tab strip truncates to a name, and two tabs
+ * called `users` on two connections are otherwise the same tab. It reads as lines rather than a
+ * sentence because a reader is looking for one of the three facts, not reading prose.
+ */
+function tabTooltip(tab: Tab, profile: Profile | undefined): string {
+  const named = 'table' in tab && tab.table !== ''
+  const lines = [named ? `${KIND_LABEL[tab.kind]}: ${tab.table}` : KIND_LABEL[tab.kind]]
+
+  if (tab.namespace.database !== '') lines.push(`Database: ${namespaceLabel(tab.namespace)}`)
+  if (profile) {
+    lines.push(`Connection: ${profile.name}`)
+    lines.push(`Server: ${profile.user}@${profile.host}:${profile.port}`)
+  }
+  return lines.join('\n')
+}
+
 interface TabItemProps {
   tab: Tab
   active: boolean
+  tooltip: string
   onSelect: () => void
   onClose: () => void
 }
 
-function TabItem({ tab, active, onSelect, onClose }: TabItemProps) {
+function TabItem({ tab, active, tooltip, onSelect, onClose }: TabItemProps) {
   const Icon = tab.kind === 'query' ? Terminal : tab.kind === 'objects' ? List : Table2
 
   return (
     <div
       role="tab"
       aria-selected={active}
+      title={tooltip}
       onClick={onSelect}
       onAuxClick={(e) => {
         if (e.button === MIDDLE_BUTTON) onClose()

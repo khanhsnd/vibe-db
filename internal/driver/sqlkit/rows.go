@@ -31,12 +31,18 @@ func Exec(ctx context.Context, q Queryer, statement string, args ...any) (driver
 	return driver.QueryResult{Rows: [][]*string{}, RowsAffected: affected}, nil
 }
 
-// Read runs a row-returning statement. A maxRows of zero or less reads every row.
+// BatchRows is how many rows a streamed read hands over at a time: small enough that one batch
+// crosses a bridge comfortably, large enough that a million rows is a few hundred batches.
+const BatchRows = 5000
+
+// Read runs a row-returning statement. A maxRows of zero or less reads every row, and a non-nil
+// batch takes the rows as they arrive instead of the result carrying them — see ScanRows.
 func Read(
 	ctx context.Context,
 	q Queryer,
 	statement string,
 	maxRows int,
+	batch driver.RowBatch,
 	args ...any,
 ) (driver.QueryResult, error) {
 	rows, err := q.QueryContext(ctx, statement, args...)
@@ -50,7 +56,7 @@ func Read(
 		return driver.QueryResult{}, err
 	}
 
-	values, truncated, err := ScanRows(rows, len(columns), maxRows)
+	values, truncated, err := ScanRows(rows, len(columns), maxRows, batch)
 	if err != nil {
 		return driver.QueryResult{}, err
 	}
@@ -84,7 +90,15 @@ func ResultColumns(rows *sql.Rows) ([]driver.Column, error) {
 // ScanRows reads every column as text so one grid renders any type. A maxRows of
 // zero or less reads to the end; otherwise it stops at the cap and reports that
 // the server had more to give.
-func ScanRows(rows *sql.Rows, width, maxRows int) ([][]*string, bool, error) {
+//
+// A non-nil batch is handed every BatchRows rows and the result then carries none of them: that
+// is how a read of a million rows is delivered while it runs rather than in one piece at the
+// end, and putting them back together is the caller's business.
+func ScanRows(
+	rows *sql.Rows,
+	width, maxRows int,
+	batch driver.RowBatch,
+) ([][]*string, bool, error) {
 	holders := make([]sql.NullString, width)
 	targets := make([]any, width)
 	for i := range holders {
@@ -92,8 +106,20 @@ func ScanRows(rows *sql.Rows, width, maxRows int) ([][]*string, bool, error) {
 	}
 
 	out := [][]*string{}
+	fetched := 0
+
+	// A streamed read keeps none of what it hands over, so it costs one batch of memory here
+	// rather than the whole table.
+	hand := func() {
+		if batch != nil && len(out) > 0 {
+			batch(out, fetched)
+			out = [][]*string{}
+		}
+	}
+
 	for rows.Next() {
-		if maxRows > 0 && len(out) == maxRows {
+		if maxRows > 0 && fetched == maxRows {
+			hand()
 			return out, true, nil
 		}
 
@@ -106,11 +132,17 @@ func ScanRows(rows *sql.Rows, width, maxRows int) ([][]*string, bool, error) {
 			row[i] = TextOrNil(holder)
 		}
 		out = append(out, row)
+		fetched++
+
+		if len(out) == BatchRows {
+			hand()
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, false, err
 	}
 
+	hand()
 	return out, false, nil
 }
 

@@ -250,6 +250,15 @@ and on its left two independent toggles, since they occupy different edges:
   header hides or restores columns too**, alongside the copy and paste items every grid's header menu
   has — one hidden set, either way in. [grid.md](grid.md) specifies that menu.
 
+## Tabs
+
+**Every tab says in full what it is showing when the pointer rests on it**: what kind of thing and
+its name, then `Database:`, `Connection:` and `Server:` as `user@host:port`. The strip truncates to a
+name at 220 px, and two tabs called `users` on two connections are otherwise the same tab — the
+tooltip is where that is settled. It is lines rather than a sentence because a reader is looking for
+one of those facts, not reading prose, and it is the platform's own tooltip rather than a component,
+which is what makes it appear over a tab the pointer merely passes.
+
 ## Query tabs
 
 **New Query** sits in the command bar beside **New Connection**, and as the `+` at the end of the tab
@@ -317,7 +326,7 @@ last valid count rather than fighting the typist.
 | Control | Presets | Default | What it sizes |
 |---|---|---|---|
 | Query toolbar `Limit` | 100, 1 000, 10 000 | 1 000 | The rows one **Execute** may return — the first prefix, not a ceiling, since the pager can replay for more. Hitting it is reported as a `+` on the pager's total rather than passed off as the whole answer. It sizes the *next* Execute, so a pager that grew past it leaves it alone. |
-| Grid pager `Rows` | 100, 500, 1 000 | 100 | One page of the grid. `All` collapses the walk to a single page, so the pager sizes itself by the row total and the arrows go dead — and on a query result it first fetches every row, because otherwise `All` would only mean all of the prefix. |
+| Grid pager `Rows` | 100, 500, 1 000 | 100 | One page of the grid. `All` collapses the walk to a single page, so the pager sizes itself by the row total and the arrows go dead — and on a query result it first fetches every row, because otherwise `All` would only mean all of the prefix. On a **table** tab `All` is streamed and watched, below. |
 
 `All` is deliberately the *only* way to fetch unbounded, so the bounded defaults of
 [decisions.md](decisions.md) cannot be lost by accident. It travels the wire as the sentinel
@@ -334,6 +343,37 @@ Two consequences of that convention are worth knowing:
   non-positive cap.
 - There is no ceiling on a typed count in either control. One would be theatre next to an `All`
   option, and silently answering a different question than the one asked is worse than a slow grid.
+
+### `All` on a table tab is streamed, watched and stoppable
+
+A table of a million and a half rows broke both halves of the old `All`: the read outran the 15-second
+deadline every other read is given, and the answer would have had to cross the bridge as one
+JavaScript string, a bound method's result being delivered to the WebView as exactly that. So a table
+read that asked for every row and minted a **run id** behaves differently from every other read:
+
+- **It has no deadline.** How long every row of a table takes is not knowable ahead of time, and a
+  clock that cuts it off is the very failure `All` exists to avoid. `StopTableRows` bounds it instead.
+- **Its rows arrive in batches.** `LoadTableRows` answers with the columns and the total alone and
+  emits the rows as `app.EventRows` — `rows:batch`, `sqlkit.BatchRows` (5 000) rows at a time, each
+  batch carrying how many rows the read has produced in all. `useTableData` stitches them back
+  together and shows the grid once the call resolves. It is still **one statement and one scan**: the
+  batches are how the answer is delivered, not a walk of `LIMIT … OFFSET …` pages, so nothing is
+  counted twice and no row is skipped by a write landing mid-read.
+- **A panel over the grid reports it while it runs** — `shared/ui/FetchProgress`: how long it has been
+  going, how many rows have arrived, and `Stop`. It sits *over* the rows rather than replacing them,
+  because whatever the grid already held is still true; `Loading` stays out of its way. The clock is
+  the panel's own, so counting seconds costs the grid nothing.
+- **Stopping keeps what arrived.** A stop is a choice and not a failure: the rows already in hand
+  become the grid's, and the total becomes the number actually held. The columns are the ones already
+  on screen, so a *first* read stopped before it answered shows nothing — it had named no columns yet.
+  Leaving the tab or changing the limit stops the read too, rather than leaving a scan of a million
+  rows emitting batches at a listener that has gone.
+
+Two limits are worth knowing before pointing this at a very large table. The rows are held **twice**
+while they arrive — once as the batches queue for the WebView, once as JavaScript — so memory is the
+real bound, which is the trade `All` is asking for. And a **query** result's `All` is unchanged: it
+still replays the statement under the ordinary statement timeout, since a script's outcome is one
+answer rather than a stream.
 
 ## The output panel
 

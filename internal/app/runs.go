@@ -20,12 +20,16 @@ func newRunRegistry() *runRegistry {
 
 // begin derives a cancellable context for id. The returned release must run when
 // the query finishes, whatever the outcome.
+//
+// A timeout of zero or less gives the run no deadline at all, which is what a read of every row
+// needs: how long a million rows take is not knowable ahead of time, so stopping it is the only
+// honest bound.
 func (r *runRegistry) begin(
 	parent context.Context,
 	id string,
 	timeout time.Duration,
 ) (context.Context, func()) {
-	ctx, cancel := context.WithTimeout(parent, timeout)
+	ctx, cancel := bound(parent, timeout)
 	if id == "" {
 		return ctx, cancel
 	}
@@ -40,6 +44,14 @@ func (r *runRegistry) begin(
 		r.mu.Unlock()
 		cancel()
 	}
+}
+
+// bound is context.WithTimeout, except that a non-positive timeout means no deadline.
+func bound(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return context.WithCancel(parent)
+	}
+	return context.WithTimeout(parent, timeout)
 }
 
 // cancel stops the run if it is still going, and is a no-op otherwise.

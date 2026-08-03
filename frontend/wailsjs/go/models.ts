@@ -582,6 +582,7 @@ export namespace app {
 	    database: string;
 	    schema: string;
 	    table: string;
+	    runId: string;
 	    limit: number;
 	    offset: number;
 	    sort: TableSortInput;
@@ -595,6 +596,7 @@ export namespace app {
 	        this.database = source["database"];
 	        this.schema = source["schema"];
 	        this.table = source["table"];
+	        this.runId = source["runId"];
 	        this.limit = source["limit"];
 	        this.offset = source["offset"];
 	        this.sort = this.convertValues(source["sort"], TableSortInput);

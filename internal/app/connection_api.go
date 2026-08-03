@@ -11,11 +11,15 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/profile"
 	"github.com/khanhsnd/vibe-db/internal/secret"
 	"github.com/khanhsnd/vibe-db/internal/session"
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 const (
 	connectTimeout = 8 * time.Second
 	queryTimeout   = 15 * time.Second
+
+	// noDeadline leaves a read bounded by StopTableRows rather than by a clock — see rowsTimeout.
+	noDeadline = 0
 )
 
 type ConnectionAPI struct {
@@ -24,6 +28,7 @@ type ConnectionAPI struct {
 	profiles profile.Repository
 	secrets  secret.Store
 	sessions *session.Manager
+	runs     *runRegistry
 }
 
 func NewConnectionAPI(
@@ -36,6 +41,7 @@ func NewConnectionAPI(
 		profiles:   profiles,
 		secrets:    secrets,
 		sessions:   sessions,
+		runs:       newRunRegistry(),
 	}
 }
 
@@ -212,17 +218,59 @@ func (a *ConnectionAPI) LoadTableSchemas(sessionID string, ns Namespace) ([]Tabl
 	return toTableSchemaDTOs(tables), nil
 }
 
+// LoadTableRows reads one window onto a table's rows.
+//
+// A bounded page is answered whole. A page that asked for **every** row and minted a run id is
+// streamed instead: its rows are emitted as EventRows batches and the answer carries the columns
+// and the total alone, because a million rows cannot cross the bridge as one JavaScript string.
+// Such a read is given no deadline either — how long every row of a table takes is not knowable,
+// and a clock that cuts it off is the very failure All exists to avoid — so StopTableRows is what
+// bounds it, and the batches are what make stopping a real choice rather than a guess.
 func (a *ConnectionAPI) LoadTableRows(sessionID string, page TablePageInput) (TableRows, error) {
 	target := page.toDriver()
 
-	ctx, cancel := a.withTimeout(queryTimeout)
-	defer cancel()
+	streamed := target.Limit <= 0 && page.RunID != ""
+	if streamed {
+		target.Batch = a.emitRows(page.RunID)
+	}
+
+	ctx, release := a.runs.begin(a.ctx, page.RunID, rowsTimeout(streamed))
+	defer release()
 
 	rows, err := a.sessions.TableRows(ctx, sessionID, target)
 	if err != nil {
 		return TableRows{}, wrapError(err)
 	}
 	return toTableRowsDTO(rows, target), nil
+}
+
+// StopTableRows stops the read with this id. An unknown id is ignored: the read may have
+// finished between the click and this call, the same contract QueryAPI.Cancel has.
+func (a *ConnectionAPI) StopTableRows(runID string) {
+	a.runs.cancel(runID)
+}
+
+// rowsTimeout is the ordinary read deadline for a bounded page and none at all for a streamed
+// one. An unbounded read that did *not* ask to be streamed keeps the deadline, because nothing
+// on the other side could stop it.
+func rowsTimeout(streamed bool) time.Duration {
+	if streamed {
+		return noDeadline
+	}
+	return queryTimeout
+}
+
+// emitRows hands each batch of a streamed read to the frontend as it arrives. Emitting is all it
+// does: it runs on the goroutine doing the scan, so anything slower here is time the read spends
+// waiting.
+func (a *ConnectionAPI) emitRows(runID string) driver.RowBatch {
+	return func(rows [][]*string, fetched int) {
+		wailsruntime.EventsEmit(a.ctx, EventRows, RowsBatch{
+			RunID:   runID,
+			Fetched: fetched,
+			Rows:    rows,
+		})
+	}
 }
 
 func (a *ConnectionAPI) UpdateCell(sessionID string, edit CellEditInput) error {

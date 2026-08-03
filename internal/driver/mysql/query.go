@@ -49,7 +49,7 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 		return result, nil
 	}
 
-	result, err := sqlkit.Read(ctx, conn, statement, query.MaxRows)
+	result, err := sqlkit.Read(ctx, conn, statement, query.MaxRows, nil)
 	if err != nil {
 		return driver.QueryResult{}, translateError(err)
 	}
