@@ -1,10 +1,10 @@
 import { create } from 'zustand'
 
-import type { Namespace } from '@/bridge/connections'
+import { namespaceLabel, type Namespace } from '@/bridge/connections'
 
 import { useQueriesStore } from './queries'
 
-export type TabKind = 'query' | 'table' | 'design'
+export type TabKind = 'query' | 'table' | 'design' | 'objects'
 
 interface TabBase {
   id: string
@@ -33,8 +33,27 @@ export interface DesignTab extends TabBase {
   table: string
 }
 
-export type Tab = QueryTab | TableTab | DesignTab
-export type NewTab = Omit<QueryTab, 'id'> | Omit<TableTab, 'id'> | Omit<DesignTab, 'id'>
+/**
+ * Every table of a namespace with what the catalogue keeps about each — what the Tables folder
+ * opens. It names no table of its own: the namespace is the whole of what it lists.
+ */
+export interface ObjectsTab extends TabBase {
+  kind: 'objects'
+}
+
+export type Tab = QueryTab | TableTab | DesignTab | ObjectsTab
+export type NewTab =
+  | Omit<QueryTab, 'id'>
+  | Omit<TableTab, 'id'>
+  | Omit<DesignTab, 'id'>
+  | Omit<ObjectsTab, 'id'>
+
+/** What names a table wherever one is opened: which connection, which namespace, which table. */
+export interface TableTarget {
+  profileId: string
+  namespace: Namespace
+  table: string
+}
 
 type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'namespace' | 'rowLimit'>>
 
@@ -42,6 +61,12 @@ interface TabsState {
   tabs: Tab[]
   activeId: string | null
   open: (tab: NewTab) => string
+  /** The rows of a table, or of a view, which reads the same way. */
+  openTable: (target: TableTarget) => string
+  /** A table's shape. An empty `table` designs one that does not exist yet. */
+  openDesign: (target: TableTarget) => string
+  /** Every table of a namespace, with what the catalogue keeps about each. */
+  openTables: (profileId: string, namespace: Namespace) => string
   close: (id: string) => void
   activate: (id: string) => void
   editQuery: (id: string, edit: QueryEdit) => void
@@ -51,24 +76,29 @@ interface TabsState {
 let seq = 0
 const nextId = () => `tab-${++seq}`
 
-// One tab per table per kind: opening a table twice reveals the tab already showing it, and its
-// data tab and its designer are two different tabs of the same table.
-const sameTable = (tab: Tab, target: Omit<TableTab | DesignTab, 'id'>) =>
+const tableOf = (tab: Tab | NewTab) => ('table' in tab ? tab.table : '')
+
+// One tab per thing it shows: opening a table twice reveals the tab already showing it, and its
+// data tab, its designer and the list it sits in are different kinds of the same namespace.
+const sameTarget = (tab: Tab, target: NewTab) =>
   tab.kind === target.kind &&
   tab.profileId === target.profileId &&
   tab.namespace.database === target.namespace.database &&
   tab.namespace.schema === target.namespace.schema &&
-  'table' in tab &&
-  tab.table === target.table
+  tableOf(tab) === tableOf(target)
+
+// A query is never reused — two of them are two buffers — and neither is a table being designed
+// that has no name yet, because two of those are two tables.
+const reusable = (tab: NewTab) =>
+  tab.kind !== 'query' && !(tab.kind === 'design' && tab.table === '')
 
 export const useTabsStore = create<TabsState>((set, get) => ({
   tabs: [],
   activeId: null,
 
   open: (tab) => {
-    // A table being designed that has no name yet is never reused: two of them are two tables.
-    if (tab.kind === 'table' || (tab.kind === 'design' && tab.table !== '')) {
-      const existing = get().tabs.find((current) => sameTable(current, tab))
+    if (reusable(tab)) {
+      const existing = get().tabs.find((current) => sameTarget(current, tab))
       if (existing) {
         set({ activeId: existing.id })
         return existing.id
@@ -79,6 +109,26 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     set((s) => ({ tabs: [...s.tabs, { ...tab, id }], activeId: id }))
     return id
   },
+
+  openTable: ({ profileId, namespace, table }) =>
+    get().open({ kind: 'table', title: table, profileId, namespace, table }),
+
+  openDesign: ({ profileId, namespace, table }) =>
+    get().open({
+      kind: 'design',
+      title: table === '' ? 'New Table' : `${table} · Design`,
+      profileId,
+      namespace,
+      table,
+    }),
+
+  openTables: (profileId, namespace) =>
+    get().open({
+      kind: 'objects',
+      title: `${namespaceLabel(namespace)} · Tables`,
+      profileId,
+      namespace,
+    }),
 
   close: (id) => {
     useQueriesStore.getState().discard(id)

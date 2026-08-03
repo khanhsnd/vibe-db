@@ -1,10 +1,12 @@
 # Frontend conventions
 
-- **One click selects, two clicks open — outside the grid.** A single click never loads anything,
-  never opens a tab and never dials a server, so a stray click in the tree is free: it moves the
-  selection, and opening is a double-click (or a context-menu item, or `Enter`). `ObjectTree` is
-  what implements it. The **disclosure caret** is the one control that does both: it selects its
-  node *and* expands it, because that is what a caret is for.
+- **One click selects, two clicks open — outside the grid.** A single click never dials a server and
+  never opens a table, so a stray click in the tree is free: it moves the selection, and opening is
+  a double-click (or a context-menu item, or `Enter`). `ObjectTree` is what implements it. The
+  **disclosure caret** is the one control that does both: it selects its node *and* expands it,
+  because that is what a caret is for. The **`Tables` folder** is the one row whose selection also
+  opens a pane — its table list, which is what that folder means to a reader; it costs one
+  catalogue read and no more than reopening the tab it reveals.
 - **In a writable grid, one click opens the cell.** Nothing there loads or dials anything — an
   editor is staged, not sent — so making the reader click twice to change a value they are already
   pointing at buys nothing. `Escape` closes the editor and hands the keyboard back to the grid, which
@@ -52,6 +54,9 @@
   knows the two by, and the shape still reads where the colour cannot. The marks are two vendored
   path strings in `engineGlyphs.ts` (Devicon, MIT) rather than an icon-set dependency; the
   elephant's eyes and tusks are subpaths filled `evenodd`, so they are holes onto the chip.
+- **A read the reader waits on is `shared/ui/Loading`**, which fills its pane the way `Empty` does:
+  the two make the same claim about the same area — nothing to show, or nothing *yet*. A surface
+  draws it only while it has no rows at all; once rows are on screen a re-read leaves them there.
 - Control styling is shared through `shared/ui/Field.tsx`: `CONTROL` for a form control in a dialog,
   the exported `TOOLBAR_CONTROL` for the shorter ones in a toolbar strip. Height is kept out of the
   shared `CONTROL_BASE`, because `cn` only joins class names — two height utilities on one element

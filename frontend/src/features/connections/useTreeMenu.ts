@@ -6,9 +6,11 @@ import { ICON } from '@/shared/ui/menuIcons'
 import { schema } from '@/bridge/schema'
 import type { TableColumn } from '@/bridge/tables'
 import { fieldActions, type FieldActions } from '@/features/schema/fieldActions'
+import { tableActions, type TableActions } from '@/features/schema/tableActions'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { tableKey, useConnectionsStore, type ChangeSchema } from '@/stores/connections'
 import { useSchemaStore, type SchemaRequest } from '@/stores/schema'
+import type { TableTarget } from '@/stores/tabs'
 
 import { ownsObjects, type TreeNode } from './tree'
 
@@ -16,15 +18,9 @@ interface TreeMenuActions {
   onConnect: (profile: Profile) => void
   onEditConnection: (profile: Profile) => void
   /** Opens a data tab on whatever has rows: a table, or a view, which reads the same way. */
-  onOpenRows: (node: TreeNode) => void
+  onOpenRows: (target: TableTarget) => void
   /** Opens the designer on a table, or on a new one when the table is empty. */
-  onDesign: (target: DesignTarget) => void
-}
-
-export interface DesignTarget {
-  profileId: string
-  namespace: Namespace
-  table: string
+  onDesign: (target: TableTarget) => void
 }
 
 /**
@@ -78,13 +74,16 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       const change = (run: ChangeSchema, table?: string) => () =>
         changeSchema(node.profileId, { namespace: ns, ...(table ? { table } : {}) }, run)
 
+      // Every table action is the same object wherever it is offered, the toolbar over the table
+      // list included; only which of them a node is worth offering differs.
+      const on = tableActions(
+        { profileId: node.profileId, namespace: ns, table: node.label },
+        { ask, changeSchema, openRows: onOpenRows, design: onDesign },
+      )
+
       // A new table is designed in a tab like any other, with an empty name: the designer's Save
       // is what creates it, so declaring one and altering one are the same surface.
-      const newTable: MenuItem = {
-        label: 'New Table',
-        icon: ICON.add,
-        onSelect: () => onDesign({ profileId: node.profileId, namespace: ns, table: '' }),
-      }
+      const newTable: MenuItem = { label: 'New Table', icon: ICON.add, onSelect: on.create }
 
       // One read fills all three folders, so Refresh means the same thing wherever it is asked
       // for under a namespace.
@@ -144,18 +143,16 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
           return [{ ...refreshObjectList, separatorBefore: false }]
 
         case 'table':
-          return tableItems(node, ns, {
-            newTable,
-            change,
-            ask,
-            refreshStructure,
-            onOpenRows,
-            onDesign,
-          })
+          return tableItems(on, () => void refreshStructure(node.profileId, ns, node.label))
 
         case 'view':
           return [
-            { label: 'Open View', icon: ICON.open, onSelect: () => onOpenRows(node) },
+            {
+              label: 'Open View',
+              icon: ICON.open,
+              onSelect: () =>
+                onOpenRows({ profileId: node.profileId, namespace: ns, table: node.label }),
+            },
             {
               label: 'Delete View',
               icon: ICON.delete,
@@ -301,89 +298,17 @@ function connectionItems(
   ]
 }
 
-interface TableMenuDeps {
-  newTable: MenuItem
-  change: (run: ChangeSchema, table?: string) => () => Promise<void>
-  ask: (request: SchemaRequest) => void
-  refreshStructure: (profileId: string, ns: Namespace, table: string) => Promise<void>
-  onOpenRows: (node: TreeNode) => void
-  onDesign: (target: DesignTarget) => void
-}
-
-function tableItems(node: TreeNode, ns: Namespace, deps: TableMenuDeps): MenuItem[] {
-  const table = node.label
-
+/** The whole of what a table is offered, in the order the tree lists it. */
+export function tableItems(on: TableActions, refresh: () => void): MenuItem[] {
   return [
-    { label: 'Open Table', icon: ICON.open, onSelect: () => deps.onOpenRows(node) },
-    {
-      label: 'Design Table',
-      icon: ICON.design,
-      onSelect: () => deps.onDesign({ profileId: node.profileId, namespace: ns, table }),
-    },
-    { ...deps.newTable, separatorBefore: true },
-    {
-      label: 'Rename Table…',
-      icon: ICON.rename,
-      onSelect: () =>
-        deps.ask({
-          kind: 'prompt',
-          title: 'Rename Table',
-          label: 'New name',
-          value: table,
-          submitLabel: 'Rename',
-          onSubmit: (name) =>
-            deps.change((sessionId) => schema.renameTable(sessionId, ns, table, name), name)(),
-        }),
-    },
-    {
-      label: 'Empty Table',
-      icon: ICON.empty,
-      separatorBefore: true,
-      onSelect: () =>
-        deps.ask({
-          kind: 'confirm',
-          title: 'Empty Table',
-          message: `Delete every row of ${table}? The table and its shape stay; the rows do not.`,
-          submitLabel: 'Empty',
-          danger: true,
-          onSubmit: deps.change((sessionId) => schema.emptyTable(sessionId, ns, table), table),
-        }),
-    },
-    {
-      label: 'Truncate Table',
-      icon: ICON.truncate,
-      onSelect: () =>
-        deps.ask({
-          kind: 'confirm',
-          title: 'Truncate Table',
-          message:
-            `Truncate ${table}? Every row goes at once, which is faster than emptying it and ` +
-            `cannot be rolled back per row — and a table another table points at will refuse.`,
-          submitLabel: 'Truncate',
-          danger: true,
-          onSubmit: deps.change((sessionId) => schema.truncateTable(sessionId, ns, table), table),
-        }),
-    },
-    {
-      label: 'Delete Table',
-      icon: ICON.delete,
-      danger: true,
-      onSelect: () =>
-        deps.ask({
-          kind: 'confirm',
-          title: 'Delete Table',
-          message: `Drop ${table}? The table, its rows and everything indexing them go with it.`,
-          submitLabel: 'Delete',
-          danger: true,
-          onSubmit: deps.change((sessionId) => schema.dropTable(sessionId, ns, table)),
-        }),
-    },
-    {
-      label: 'Refresh',
-      icon: ICON.refresh,
-      separatorBefore: true,
-      onSelect: () => void deps.refreshStructure(node.profileId, ns, table),
-    },
+    { label: 'Open Table', icon: ICON.open, onSelect: on.open },
+    { label: 'Design Table', icon: ICON.design, onSelect: on.design },
+    { label: 'New Table', icon: ICON.add, separatorBefore: true, onSelect: on.create },
+    { label: 'Rename Table…', icon: ICON.rename, onSelect: on.rename },
+    { label: 'Empty Table', icon: ICON.empty, separatorBefore: true, onSelect: on.empty },
+    { label: 'Truncate Table', icon: ICON.truncate, onSelect: on.truncate },
+    { label: 'Delete Table', icon: ICON.delete, danger: true, onSelect: on.remove },
+    { label: 'Refresh', icon: ICON.refresh, separatorBefore: true, onSelect: refresh },
   ]
 }
 

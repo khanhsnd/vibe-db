@@ -94,6 +94,14 @@ type TableRows struct {
 	Offset  int           `json:"offset"`
 }
 
+// TableList is one row per table of a namespace: its name in the first column, then whatever
+// else the engine's catalogue keeps about it — see driver.TableList for why the columns are the
+// engine's own rather than a fixed set.
+type TableList struct {
+	Columns []TableColumn `json:"columns"`
+	Rows    [][]*string   `json:"rows"`
+}
+
 type TableSchema struct {
 	Name    string   `json:"name"`
 	Columns []string `json:"columns"`
@@ -510,6 +518,10 @@ func toObjectsDTO(source driver.Objects) Objects {
 	}
 
 	return Objects{Tables: source.Tables, Views: source.Views, Routines: routines}
+}
+
+func toTableListDTO(source driver.TableList) TableList {
+	return TableList{Columns: toColumnDTOs(source.Columns), Rows: source.Rows}
 }
 
 func toTableSchemaDTOs(source []driver.TableSchema) []TableSchema {

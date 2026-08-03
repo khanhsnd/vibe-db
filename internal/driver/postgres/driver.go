@@ -237,6 +237,38 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 	return driver.Objects{Tables: found, Views: seen, Routines: stored}, nil
 }
 
+// TableList reads what PostgreSQL keeps about the tables of a schema. There is no modified date
+// among them, because the server keeps none, and the row estimate is NULL until something has
+// analysed the table — `(Null)` there says the server has no number, which is the truth of it.
+func (s *session) TableList(
+	ctx context.Context,
+	ns driver.Namespace,
+) (driver.TableList, error) {
+	const query = `
+		SELECT c.relname AS "Name",
+		       pg_catalog.pg_get_userbyid(c.relowner) AS "Owner",
+		       am.amname AS "Access Method",
+		       pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS "Data Length",
+		       NULLIF(c.reltuples, -1)::bigint AS "Rows",
+		       pg_catalog.obj_description(c.oid, 'pg_class') AS "Comment"
+		FROM pg_catalog.pg_class c
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
+		WHERE n.nspname = $1 AND c.relkind IN ('r', 'p')
+		ORDER BY c.relname`
+
+	db, err := s.pool(ns.Database)
+	if err != nil {
+		return driver.TableList{}, err
+	}
+
+	result, err := sqlkit.Read(ctx, db, query, 0, ns.Schema)
+	if err != nil {
+		return driver.TableList{}, translateError(err)
+	}
+	return driver.TableList{Columns: result.Columns, Rows: result.Rows}, nil
+}
+
 func (s *session) names(
 	ctx context.Context,
 	database, query string,

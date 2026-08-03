@@ -2,7 +2,8 @@
 
 Working: connection profiles (create / edit / delete) for **MySQL and PostgreSQL**, Test Connection
 with server version and latency, connect / disconnect, **creating and dropping a database**,
-**tables, views and routines listed per namespace**, **a table's fields, indexes and foreign keys in
+**tables, views and routines listed per namespace**, **a table list of what the catalogue keeps about
+each table**, **a table's fields, indexes and foreign keys in
 the tree and in a designer tab**, **schema changes from the tree's context menu** — new / rename /
 empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index or a
 foreign key, drop a view or a routine — table data browsing with pagination, cell editing plus row
@@ -70,10 +71,34 @@ whole of it is in the row's tooltip, and in the designer.
 
 | Gesture | What happens |
 |---|---|
-| Click a row | Selects it, and names the active namespace if that row owns tables. Reads nothing. |
+| Click a row | Selects it, and names the active namespace if that row owns tables. Reads nothing — except on the **`Tables` folder**, which also opens [the table list](#the-table-list): what that folder *is* to a reader is the tables and their numbers, and the tree has room for the names alone. |
 | Click the caret | Selects the node **and** opens or closes it, loading that level on first open. |
 | Double-click a row | The same open — except on a **table**, which opens a data tab. A table has folders under it now, but double-clicking one has always meant "show me the rows", and the caret is what expands. |
 | Open a closed connection | Dials it, whichever gesture asked. A disconnected connection node still carries an empty child list, so expanding it would otherwise spin the caret over nothing. The store expands the node when the session lands, and a failed connect leaves the caret shut. |
+
+## The table list
+
+Clicking the `Tables` folder opens a tab of **every table of that namespace with what the
+catalogue keeps about it** — one row per table, in a `ResultGrid` like everything else that shows
+rows and columns. Over it sit `Open Table`, `Design Table`, `New Table` and `Delete Table`; under
+it the same `GridFooter` every grid has, with `Refresh` and the table count.
+
+- **The columns are the engine's own**, and only the first is promised: the table's name, which is
+  what the toolbar acts on. MySQL reports `Auto Increment`, `Modified Date`, `Data Length`,
+  `Engine`, `Rows` and `Comment`; PostgreSQL reports `Owner`, `Access Method`, `Data Length`,
+  `Rows` and `Comment` — and **no modified date, because the server keeps none**. Neither side of
+  the wire names or formats a value: a size arrives spelled the way that engine spells it
+  (`1,552 KB` from MySQL's own arithmetic, `1928 kB` from `pg_size_pretty`), because inventing a
+  column an engine cannot fill would say nothing. A row count is the catalogue's **estimate** on
+  both engines, and `(Null)` in PostgreSQL's says nothing has analysed the table yet.
+- **The toolbar acts on the selected row**, and its four items are the same objects the tree's
+  right-click builds from (`tableActions`), so a confirmation is worded once. `Delete Table` asks
+  first, and the change re-reads both the tree's names and this list's numbers.
+- **A double-click opens the row's table**, which is the tree's own gesture applied to a row: the
+  grid is read-only here, so a click has nothing else to mean. `ResultGrid` reports it through
+  `onActivateRow` — see [grid.md](grid.md).
+- The list is **read per tab rather than cached** like the tree's names are: a size and a row count
+  are what the reader opened it for, and a stale one is worse than a second query.
 
 ## Changing a schema
 
@@ -200,7 +225,11 @@ beside it on PostgreSQL. Changing the database clears the schema, since a schema
 names nothing in another.
 
 **Double-clicking** a table opens a data tab; a single click only selects it, and reads nothing from
-the server. A tab loads 100 rows per page by default, ordered by primary key so paging is stable —
+the server. **Until the first page lands the pane says so** — `Loading <table>…` under a spinner,
+from `shared/ui/Loading` — because a grid with no columns yet is a blank pane and a table of any
+size can take seconds to answer. Only the *first* read gets it: once rows are on screen a re-read
+leaves them there and the pager alone says it is working, which is what keeps a page turn from
+blinking. A tab loads 100 rows per page by default, ordered by primary key so paging is stable —
 until a header's `⋮` menu sorts it by a column of its own, which travels into the read's `ORDER BY`
 and therefore orders the whole table rather than the page on screen.
 **Paging lives on the right of the bar under the grid**, beside the `Rows` control that sizes it and

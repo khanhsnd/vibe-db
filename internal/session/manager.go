@@ -139,6 +139,18 @@ func (m *Manager) Objects(
 	return s.driverSession.Objects(ctx, ns)
 }
 
+func (m *Manager) TableList(
+	ctx context.Context,
+	id string,
+	ns driver.Namespace,
+) (driver.TableList, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return driver.TableList{}, err
+	}
+	return s.driverSession.TableList(ctx, ns)
+}
+
 func (m *Manager) TableSchemas(
 	ctx context.Context,
 	id string,

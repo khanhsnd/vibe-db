@@ -57,6 +57,11 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   editor, so a second click to reach a value the reader is already pointing at buys nothing. A
   click that was reaching for a *range* never opens anything: not one in the row gutter, not one
   held with `Shift`, `Ctrl` or `Cmd`, and not the end of a drag.
+- **A double-click opens the row**, where the call site passed `onActivateRow` — the table list's
+  rows stand for tables, and opening one is what two clicks mean everywhere outside a writable
+  grid. It is read off the same press a click is, and a drag is not a double-click. Only a
+  read-only grid is offered it: in a writable one the first click has already opened an editor and
+  the second would land inside it.
 - **`Escape` closes the editor and hands the keyboard back to the grid**, which is how a reader
   gets from editing to a plain selection — the cell stays focused and the arrows move again. It is
   the only way back, one click being the way in.
@@ -139,7 +144,9 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
   only where there is something to cancel, which today is a running statement.
 - **The four editing icons are hidden outright when the rows cannot be written back**, rather than
   shown disabled: a result that no `UPDATE` can name has no use for them. `Refresh` always shows.
-  Export is not here at all — it belongs to the grid's head strip, above.
+  Export is not here at all — it belongs to the grid's head strip, above. Their four handlers are
+  optional for the same reason the icons are: a grid that names itself read-only passes none rather
+  than four callbacks that can never run.
 - Delete is the only one that needs a selection; Apply and Discard need something pending.
 - The right-hand side is the caller's, and both surfaces hand it the same `GridPager`: arrows, the
   offset window, the page count and the `Rows` size. Only where the rows come from differs — the
@@ -165,7 +172,8 @@ column left alone takes the server's own default rather than an explicit NULL.
 2. Geometry constants stay at the top of `ResultGrid.tsx`; row height alone is shared, via
    `density.ts`, because the object tree virtualizes on the same number.
 3. New behaviour is added once, in the grid, and this file is updated in the same change. Every call
-   site — `ResultPane`, `TableDataView` and `TableDesigner` — then has it, which is the whole point.
+   site — `ResultPane`, `TableDataView`, `TableDesigner` and `ObjectListView` — then has it, which
+   is the whole point.
 
 ## Where the two call sites legitimately differ
 
@@ -194,6 +202,10 @@ surrounds the grid:
   is also the one site that names column editors: `Type` and `Method` are a `choice` over the
   engine's own lists, `On Update` and `On Delete` a `choice` over the referential actions,
   `Not null` and `Unique` a `check`, and `Key` a `key` whose numbers it counts down the draft.
+- `ObjectListView` neither pages, hides nor edits: its rows are one namespace's tables and it maps
+  nothing. It is the one site whose rows *stand for* something openable, so it is the one that
+  passes `onActivateRow`, and the only read-only site with a toolbar of its own — over the grid,
+  where a surface's controls go, acting on the table the selection names.
 - `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
   index back to the real one on the way in. **It sorts on the server too** — the sort travels in
   `TablePageRequest` and becomes the read's `ORDER BY`, because ordering the hundred rows in hand

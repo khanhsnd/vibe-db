@@ -148,6 +148,31 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 	return driver.Objects{Tables: found, Views: seen, Routines: stored}, nil
 }
 
+// TableList reads what MySQL keeps about the tables of a database. The aliases are what the
+// grid draws as its headers, and the size is spelled in KB here rather than in the reader:
+// MySQL has no pg_size_pretty, so the arithmetic goes where the number already is.
+func (s *session) TableList(
+	ctx context.Context,
+	ns driver.Namespace,
+) (driver.TableList, error) {
+	const query = "SELECT table_name AS `Name`," +
+		" auto_increment AS `Auto Increment`," +
+		" update_time AS `Modified Date`," +
+		" CONCAT(FORMAT(data_length / 1024, 0), ' KB') AS `Data Length`," +
+		" engine AS `Engine`," +
+		" table_rows AS `Rows`," +
+		" table_comment AS `Comment`" +
+		" FROM information_schema.tables" +
+		" WHERE table_schema = ? AND table_type = 'BASE TABLE'" +
+		" ORDER BY table_name"
+
+	result, err := sqlkit.Read(ctx, s.db, query, 0, ns.Database)
+	if err != nil {
+		return driver.TableList{}, translateError(err)
+	}
+	return driver.TableList{Columns: result.Columns, Rows: result.Rows}, nil
+}
+
 // names runs a one-column catalogue read, which is what every list this adapter answers with
 // comes down to.
 func (s *session) names(ctx context.Context, query string, args ...any) ([]string, error) {

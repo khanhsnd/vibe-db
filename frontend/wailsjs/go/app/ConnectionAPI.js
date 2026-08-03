@@ -102,6 +102,10 @@ export function LoadObjects(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadObjects'](arg1, arg2);
 }
 
+export function LoadTableList(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['LoadTableList'](arg1, arg2);
+}
+
 export function LoadTableRows(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadTableRows'](arg1, arg2);
 }

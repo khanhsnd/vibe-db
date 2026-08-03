@@ -1,4 +1,4 @@
-import { Plus, Table2, Terminal, X } from 'lucide-react'
+import { List, Plus, Table2, Terminal, X } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
 import { IconButton } from '@/shared/ui/IconButton'
@@ -42,7 +42,7 @@ interface TabItemProps {
 }
 
 function TabItem({ tab, active, onSelect, onClose }: TabItemProps) {
-  const Icon = tab.kind === 'query' ? Terminal : Table2
+  const Icon = tab.kind === 'query' ? Terminal : tab.kind === 'objects' ? List : Table2
 
   return (
     <div

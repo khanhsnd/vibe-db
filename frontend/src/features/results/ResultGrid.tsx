@@ -123,6 +123,12 @@ interface ResultGridProps {
   sort?: SortKey | null
   onSortChange?: (sort: SortKey | null) => void
   /**
+   * What a double-click on a row opens, where the rows stand for something that can be opened —
+   * a table of the table list. Only a read-only grid is offered it: in a writable one a click is
+   * already an editor, and the second one would land inside it.
+   */
+  onActivateRow?: ((row: number) => void) | undefined
+  /**
    * Items appended to a header's context menu, for what only the call site can do — hiding a
    * column is its own state, not the grid's.
    */
@@ -143,6 +149,7 @@ export function ResultGrid({
   isDeleted = NOTHING_DELETED,
   sort = null,
   onSortChange,
+  onActivateRow,
   columnMenuItems,
   onExport,
 }: ResultGridProps) {
@@ -448,6 +455,12 @@ export function ResultGrid({
     if (!toggle(hit.ref)) setEditing(hit.ref)
   }
 
+  /** Read off the press for the reason a click is: the row under the pointer moved with it. */
+  const onDoubleClick = () => {
+    const hit = lastHit.current
+    if (hit && !hit.moved) onActivateRow?.(hit.ref.row)
+  }
+
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     // An open editor owns the keyboard: its own arrows walk its text, or its list.
     if (editing) return
@@ -508,6 +521,7 @@ export function ResultGrid({
             onPointerUp={endDrag}
             onLostPointerCapture={endDrag}
             onClick={onClick}
+            onDoubleClick={onDoubleClick}
             className="relative"
             style={{ height: virtualizer.getTotalSize() }}
           >

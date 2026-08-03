@@ -187,6 +187,20 @@ func (a *ConnectionAPI) LoadObjects(sessionID string, ns Namespace) (Objects, er
 	return toObjectsDTO(objects), nil
 }
 
+// LoadTableList answers with what the engine's catalogue keeps about the tables of a namespace,
+// which is what the Tables folder opens. The columns are the engine's own, so this side neither
+// names them nor formats a single value of them.
+func (a *ConnectionAPI) LoadTableList(sessionID string, ns Namespace) (TableList, error) {
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	list, err := a.sessions.TableList(ctx, sessionID, ns.toDriver())
+	if err != nil {
+		return TableList{}, wrapError(err)
+	}
+	return toTableListDTO(list), nil
+}
+
 func (a *ConnectionAPI) LoadTableSchemas(sessionID string, ns Namespace) ([]TableSchema, error) {
 	ctx, cancel := a.withTimeout(queryTimeout)
 	defer cancel()

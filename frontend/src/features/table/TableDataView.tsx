@@ -17,6 +17,7 @@ import {
 } from '@/features/results/resultSet'
 import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
 import { Empty } from '@/shared/ui/Empty'
+import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
 
 import { CellEditor } from './CellEditor'
@@ -150,8 +151,15 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
         ) : null}
 
         <div className="min-w-0 flex-1">
-          {error && !data ? (
-            <Empty title={error.message} hint={error.detail} />
+          {/* Nothing has arrived yet: a grid with no columns is a blank pane, and the first page
+              of a large table is exactly where the reader waits longest. Once rows are on screen
+              a re-read leaves them there and the footer's pager says it is working. */}
+          {data === null ? (
+            error ? (
+              <Empty title={error.message} hint={error.detail} />
+            ) : (
+              <Loading label={`Loading ${table}…`} />
+            )
           ) : (
             <ResultGrid
               result={grid}

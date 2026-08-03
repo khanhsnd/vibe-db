@@ -73,6 +73,16 @@ type Objects struct {
 	Routines []Routine
 }
 
+// TableList is one row per table of a namespace: its name in the first column, then whatever
+// else this engine's catalogue keeps about it. The columns are the engine's own, for the reason
+// DatabaseOptions' lists are — no two engines keep the same facts about a table, and a column
+// neither could fill would say nothing — so a size or a date is already spelled the way the
+// server spells it. Only the first column is promised, being what the list is acted on by.
+type TableList struct {
+	Columns []Column
+	Rows    [][]*string
+}
+
 // Index is one index of a table, the one behind the primary key included, because that is
 // what the catalogue reports and what the tree lists.
 type Index struct {
@@ -291,6 +301,10 @@ type Session interface {
 	// schemas of a database something is connected to.
 	Schemas(ctx context.Context, database string) ([]string, error)
 	Objects(ctx context.Context, ns Namespace) (Objects, error)
+	// TableList is the same tables Objects names, with what the catalogue keeps about each of
+	// them. It is a read of its own rather than part of Objects because the tree needs the names
+	// the moment a folder opens, and the numbers behind them are worth a second query.
+	TableList(ctx context.Context, ns Namespace) (TableList, error)
 	TableSchemas(ctx context.Context, ns Namespace) ([]TableSchema, error)
 	TableRows(ctx context.Context, page TablePage) (TableRows, error)
 	UpdateCell(ctx context.Context, edit CellEdit) error

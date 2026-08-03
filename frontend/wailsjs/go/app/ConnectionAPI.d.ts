@@ -52,6 +52,8 @@ export function LoadDatabaseOptions(arg1:string):Promise<app.DatabaseOptions>;
 
 export function LoadObjects(arg1:string,arg2:app.Namespace):Promise<app.Objects>;
 
+export function LoadTableList(arg1:string,arg2:app.Namespace):Promise<app.TableList>;
+
 export function LoadTableRows(arg1:string,arg2:app.TablePageInput):Promise<app.TableRows>;
 
 export function LoadTableSchemas(arg1:string,arg2:app.Namespace):Promise<Array<app.TableSchema>>;

@@ -1,6 +1,7 @@
 import * as api from '@wailsjs/go/app/ConnectionAPI'
 import type { app } from '@wailsjs/go/models'
 
+import type { Namespace } from './connections'
 import { call } from './errors'
 
 export type Cell = string | null
@@ -37,6 +38,16 @@ export interface TablePage {
   offset: number
 }
 
+/**
+ * One row per table of a namespace: its name in the first column, then whatever else the
+ * engine's catalogue keeps about it. The columns are the engine's own — a size or a date arrives
+ * spelled the way the server spells it — so nothing here names or formats one.
+ */
+export interface TableList {
+  columns: TableColumn[]
+  rows: Cell[][]
+}
+
 export interface CellEdit {
   database: string
   schema: string
@@ -71,6 +82,9 @@ export const tables = {
     call(() =>
       api.LoadTableRows(sessionId, page as unknown as app.TablePageInput),
     ) as unknown as Promise<TablePage>,
+
+  loadList: (sessionId: string, ns: Namespace): Promise<TableList> =>
+    call(() => api.LoadTableList(sessionId, ns)) as unknown as Promise<TableList>,
 
   updateCell: (sessionId: string, edit: CellEdit): Promise<void> =>
     call(() => api.UpdateCell(sessionId, edit as unknown as app.CellEditInput)),

@@ -4,17 +4,20 @@ import { Check, Minus, Plus, RotateCw, Square, X } from 'lucide-react'
 import { IconButton } from '@/shared/ui/IconButton'
 
 interface GridFooterProps {
-  /** The four editing icons are hidden outright for rows that cannot be written back. */
+  /**
+   * The four editing icons are hidden outright for rows that cannot be written back — which is
+   * why the four handlers below belong to a writable grid alone, and a read-only one passes none.
+   */
   editable: boolean
   /** Delete needs a subject, which only a selection gives it. */
-  selected: boolean
+  selected?: boolean
   /** Whether anything at all is waiting to be written. */
-  pending: boolean
+  pending?: boolean
   busy: boolean
-  onAddRow: () => void
-  onDeleteRow: () => void
-  onApply: () => void
-  onDiscard: () => void
+  onAddRow?: (() => void) | undefined
+  onDeleteRow?: (() => void) | undefined
+  onApply?: (() => void) | undefined
+  onDiscard?: (() => void) | undefined
   onRefresh: () => void
   /** Only a running statement can be stopped; a grid without one leaves this out. */
   onStop?: (() => void) | undefined
@@ -33,8 +36,8 @@ interface GridFooterProps {
  */
 export function GridFooter({
   editable,
-  selected,
-  pending,
+  selected = false,
+  pending = false,
   busy,
   onAddRow,
   onDeleteRow,

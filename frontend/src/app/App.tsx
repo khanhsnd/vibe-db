@@ -13,7 +13,6 @@ import {
 } from '@/features/connections/tree'
 import { useTreeMenu } from '@/features/connections/useTreeMenu'
 import { SchemaDialogs } from '@/features/schema/SchemaDialogs'
-import type { DesignTarget } from '@/features/connections/useTreeMenu'
 import { Split, SplitHandle, SplitPanel, usePanelRef } from '@/shared/ui/Split'
 import { buildTree, useConnectionsStore } from '@/stores/connections'
 import { useTabsStore } from '@/stores/tabs'
@@ -32,6 +31,9 @@ export function App() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
   const sidebarRef = usePanelRef()
   const openTab = useTabsStore((s) => s.open)
+  const openTable = useTabsStore((s) => s.openTable)
+  const openDesign = useTabsStore((s) => s.openDesign)
+  const openTables = useTabsStore((s) => s.openTables)
 
   const profiles = useConnectionsStore((s) => s.profiles)
   const sessions = useConnectionsStore((s) => s.sessions)
@@ -143,43 +145,24 @@ export function App() {
 
   // A view's rows are read exactly as a table's are, so they open the same tab — and land in it
   // read-only, since no column of a view is a primary key and no single stored row is named.
-  const openRows = useCallback(
+  const openNodeRows = useCallback(
     (node: TreeNode) => {
       if (!hasRows(node) || !node.namespace) return
-      openTab({
-        kind: 'table',
-        title: node.label,
-        profileId: node.profileId,
-        namespace: node.namespace,
-        table: node.label,
-      })
+      openTable({ profileId: node.profileId, namespace: node.namespace, table: node.label })
     },
-    [openTab],
-  )
-
-  // A table with no name yet is a table being designed, and its tab says so.
-  const openDesign = useCallback(
-    ({ profileId, namespace, table }: DesignTarget) => {
-      openTab({
-        kind: 'design',
-        title: table === '' ? 'New Table' : `${table} · Design`,
-        profileId,
-        namespace,
-        table,
-      })
-    },
-    [openTab],
+    [openTable],
   )
 
   const menuItemsFor = useTreeMenu({
     onConnect: startConnect,
     onEditConnection: openEditConnection,
-    onOpenRows: openRows,
+    onOpenRows: openTable,
     onDesign: openDesign,
   })
 
-  // Selecting reads nothing and opens nothing: expanding is the caret's job, and loading is
-  // `revealNode`'s, which only an expand calls.
+  // Selecting reads nothing and dials nothing, and expanding stays the caret's job. The one
+  // thing it opens is the Tables folder's own list, which is what that folder *is* to a reader:
+  // the tree draws the names, and the list beside it draws what the catalogue keeps about them.
   const selectNode = useCallback(
     (node: TreeNode) => {
       setSelected(node)
@@ -187,18 +170,19 @@ export function App() {
       // The node that owns tables is the one a query tab can run against. A PostgreSQL
       // database is not that node — its schemas are — so selecting one names nothing.
       if (node.namespace && ownsObjects(node)) selectNamespace(node.profileId, node.namespace)
+      if (node.kind === 'tables' && node.namespace) openTables(node.profileId, node.namespace)
     },
-    [selectNamespace],
+    [selectNamespace, openTables],
   )
 
   // A table opens its data rather than its folders, even though it now has folders to open: the
   // caret is what expands, and a double-click on a table has always meant "show me the rows".
   const activateNode = useCallback(
     (node: TreeNode) => {
-      if (hasRows(node)) openRows(node)
+      if (hasRows(node)) openNodeRows(node)
       else if (isExpandable(node)) toggleTreeNode(node)
     },
-    [toggleTreeNode, openRows],
+    [toggleTreeNode, openNodeRows],
   )
 
   // A new editor inherits the selected connection and namespace, falling back to
