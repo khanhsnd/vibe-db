@@ -457,10 +457,22 @@ takes is its own business — none, one, two, or any number — and a condition 
 operator needs narrows nothing until it is filled in. `is empty` asks about the empty string and
 `is NULL` about the absence of a value; they are different questions.
 
-**A value is picked from the column's own values.** Clicking the value part opens a list of what the
-column actually holds — `LoadColumnValues`, a `SELECT DISTINCT … ORDER BY 1 LIMIT 200` — with a box
-beside it for a value the list has not got, and a search over the list. NULL is not offered there:
-`is NULL` is the way to it.
+**Each part opens a small panel under itself, never a dialog over the grid** — the table stays in
+sight while it is being narrowed. The **column** panel and the **value** panel are both searched
+rather than scrolled, since a table has as many columns as it likes and a column as many values as
+its rows.
+
+**A value is picked from the column's own values.** Clicking the value part lists what the column
+actually holds — `LoadColumnValues`, a `SELECT DISTINCT … ORDER BY 1 LIMIT 200` — with a box beside
+it for a value the list has not got. NULL is not offered there: `is NULL` is the way to it. There is
+no OK on the panel: what it changes is the draft, and **Apply Filter & Sort** is the one commit.
+
+**Ticking more than one value makes it `is in list`.** The rows are check boxes, and the operator
+changes as the second one is ticked — `Name = Java developer` becoming
+`Name is in list (Java developer, JavaScript)` — so what is on screen is always what will run;
+a negative operator becomes `is not in list`, and unticking back to one gives the old operator back
+while the panel is still open. The four comparisons that name a **bound** (`<`, `≤`, `>`, `≥`) are
+single-pick instead: `> a` and `> b` are one comparison, not both.
 
 **Where the filtering happens depends on where the rows come from**, exactly as with the sort. A
 **table** tab filters *on the server*: the tree travels in `TablePageRequest`, becomes the read's

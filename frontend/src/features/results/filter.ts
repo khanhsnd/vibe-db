@@ -99,8 +99,31 @@ export type Path = number[]
 /** The root of a tree that narrows nothing, and the state a surface that has never filtered holds. */
 export const NO_FILTER: Group = { kind: 'group', conjunction: 'and', children: [], enabled: true }
 
+/**
+ * Which list operator a single-valued one becomes when a second value is ticked: `= a` meaning
+ * `is in list (a, b)`, and a negative operator becoming the negative list. Nothing about it is
+ * silent — the operator part of the condition says `is in list` the moment it does.
+ *
+ * An operator naming a **bound** is left off, having no such form: `> a` and `> b` are one
+ * comparison and not both, so ticking a second value there replaces the first.
+ */
+const PROMOTIONS: Partial<Record<FilterOp, FilterOp>> = {
+  eq: 'inlist',
+  ne: 'notinlist',
+  contains: 'inlist',
+  notcontains: 'notinlist',
+  begins: 'inlist',
+  notbegins: 'notinlist',
+  ends: 'inlist',
+  notends: 'notinlist',
+}
+
 export const arityOf = (operator: FilterOp): Arity =>
   FILTER_OPS.find((one) => one.operator === operator)?.arity ?? 1
+
+/** The operator a condition takes on when its values grow past one, or null where they cannot. */
+export const promotionOf = (operator: FilterOp): FilterOp | null =>
+  PROMOTIONS[operator] ?? null
 
 export const symbolOf = (operator: FilterOp): string =>
   FILTER_OPS.find((one) => one.operator === operator)?.symbol ?? operator

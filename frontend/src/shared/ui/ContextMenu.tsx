@@ -17,11 +17,19 @@ export interface MenuItem {
 }
 
 /**
+ * The surface an overlay hung off a control sits on, without any padding of its own: a menu pads by
+ * the row, a panel by the edge. Kept apart from `MENU_CONTENT` so a panel can wear the same shade,
+ * border and shadow as the menu beside it without inheriting a menu's spacing — two padding
+ * utilities on one element would be settled by the stylesheet's order rather than by the call site.
+ */
+export const MENU_SURFACE =
+  'z-50 rounded-md border border-line-strong bg-elevated shadow-[var(--shadow-overlay)]'
+
+/**
  * The look of a menu, in one place, so a menu raised by a right-click and one raised by a button
  * are the same object — see `MenuButton`, which draws the other half.
  */
-export const MENU_CONTENT =
-  'z-50 min-w-[168px] rounded-md border border-line-strong bg-elevated py-1 shadow-[var(--shadow-overlay)]'
+export const MENU_CONTENT = `${MENU_SURFACE} min-w-[168px] py-1`
 
 export const menuItemClass = (danger: boolean | undefined) =>
   cn(

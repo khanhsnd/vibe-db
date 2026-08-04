@@ -175,10 +175,21 @@ narrowing a table is nearly always about to order it too, and two panels would b
   menu** is the exception and applies at once: its condition was picked whole.
 - **The draft follows what is in force.** A condition added from the cell menu, or a sort taken off a
   header's menu, appears in the panel rather than being overwritten by the draft beside it.
-- **A condition is three parts, and each opens the list of what it may be** — the column, the
-  operator, and the value. The column and the value are accent-coloured and the operator is not,
-  because the two ends are the reader's own and the middle is the comparison between them. A value
-  the operator has not been given yet reads `<?>`.
+- **A condition is three parts, and each opens what it may be** — the column, the operator, and the
+  value. The column and the value open a **small panel hung under the part itself** (`PickerPanel`,
+  a popover) rather than a dialog over the grid: what is being changed is three words on a row, and
+  a modal that hides the table to change one of them costs the reader the rows they are narrowing.
+  The operator opens a plain `MenuButton`, its twenty being a fixed list in a deliberate order that
+  a search box would only get in the way of. Both panels wear the menus' own surface
+  (`MENU_SURFACE`), so a part that opens a list and a part that opens a menu read as the same kind of
+  control. The column and the value are accent-coloured and the operator is not, because the two ends
+  are the reader's own and the middle is the comparison between them. A value the operator has not
+  been given yet reads `<?>`.
+- **Both panels are searched, not scrolled** (`SearchList`): a table has as many columns as it likes
+  and a column as many values as its rows, so neither is a list a reader should have to walk down to
+  reach a name they already know. The column panel puts the keyboard in its search box, because
+  finding the name *is* the panel; the value panel puts it in the value box, because typing a value
+  the column has never held is as ordinary as picking one it has.
 - **Twenty operators** (`FILTER_OPS`), and what each takes is its own business: `is NULL`,
   `is not NULL`, `is empty` and `is not empty` take **none**; `is between` and `is not between` take
   **two**; `is in list` and `is not in list` take **any number above none**; the rest take one. An
@@ -196,12 +207,29 @@ narrowing a table is nearly always about to order it too, and two panels would b
   group joins one way, so flipping it anywhere flips it for the group.
 - **Sort By is a list**, added to with its own `+`: a column and a direction per row, the first
   deciding and the rest breaking its ties.
-- **The value picker is `FilterValueDialog`**: the values the column actually holds, ticked rather
-  than typed, with a box beside them for one it does not hold and a search over the list. The values
-  come from the server — `LoadColumnValues`, a `SELECT DISTINCT … ORDER BY 1 LIMIT` capped by
-  `app.ColumnValueLimit` — so they are the column's own and not the page's. **NULL is not among
-  them**: `is NULL` is how a reader reaches it, and a list cannot say the difference. A surface that
-  cannot ask leaves `suggest` out and the picker is then the box alone.
+- **The value panel is `ValuePick`**: the values the column actually holds, ticked rather than typed,
+  with a box beside them for one it does not hold. The values come from the server —
+  `LoadColumnValues`, a `SELECT DISTINCT … ORDER BY 1 LIMIT` capped by `app.ColumnValueLimit` — so
+  they are the column's own and not the page's, and they are read **on every open**, the panel being
+  mounted with the popover: a value added since the last look is there. **NULL is not among them**:
+  `is NULL` is how a reader reaches it, and a list cannot say the difference. Nor is the **empty
+  string**, which an empty box already means. A surface that cannot ask leaves `suggest` out and the
+  panel is then the box alone.
+- **Ticking a second value turns the condition into `is in list`.** The rows of the value panel are
+  **check boxes** wherever the operator has a list form to grow into — the grid's own `SquareCheck` /
+  `Square` pair, so one glyph means one thing everywhere — and the operator part above the panel
+  changes to `is in list` the moment a second value is ticked, so the condition on screen is always
+  the condition that will run. `PROMOTIONS` in `filter.ts` is the pairing: `=` and the four text
+  matches become `is in list`, their negations `is not in list`. An operator naming a **bound** is
+  left out and its rows are a bare tick that *replaces*: `> a` and `> b` are one comparison, not
+  both. Unticking back to one value gives back the operator it grew out of, for as long as the panel
+  stays open.
+- **The panel's shape follows its values**, not the other way about: one value is a box, more than
+  one is a row of chips with an *add* box under them, and a range is **From** and **To**.
+- **There is no OK on the value panel.** What it changes is the draft, and the draft already has one
+  commit — `Apply Filter & Sort`; a second one inside it would be a button that looks like it applied
+  something and did not. A panel of check boxes never closes itself either, there being another tick
+  to make; only the single-pick kind closes on the pick, having nothing left to ask.
 - **Builder and Text.** `Text` is drawn and **disabled**: a typed condition is where the panel is
   going, and leaving the choice out would make it look as though there were only ever one way in.
 

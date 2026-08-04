@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Check, Parentheses, Plus, X } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
@@ -7,9 +7,11 @@ import { IconButton } from '@/shared/ui/IconButton'
 import { MenuButton } from '@/shared/ui/MenuButton'
 import { ICON } from '@/shared/ui/menuIcons'
 
-import { FilterValueDialog } from './FilterValueDialog'
+import { FieldPick, PART } from './FilterPicker'
+import { ValuePick } from './FilterValuePanel'
 import {
   appendTo,
+  arityOf,
   fitValues,
   FILTER_OPS,
   insertAfter,
@@ -17,7 +19,6 @@ import {
   newGroup,
   replaceAt,
   symbolOf,
-  valueLabel,
   type Condition,
   type Criterion,
   type GridFiltering,
@@ -30,8 +31,6 @@ import type { ResultColumn, SortKey } from './resultSet'
 const INDENT = 20
 /** The label column both sections share, so `Filter` and `Sort By` line their rows up. */
 const LABEL_WIDTH = 56
-/** Every one of the three parts of a condition, which is what a click on one opens a list from. */
-const PART = 'shrink-0 truncate rounded px-1 text-xs hover:bg-hover'
 
 interface FilterSortPanelProps {
   columns: ResultColumn[]
@@ -58,15 +57,14 @@ export function FilterSortPanel({
 }: FilterSortPanelProps) {
   const [criteria, setCriteria] = useState(filtering.criteria)
   const [keys, setKeys] = useState<readonly SortKey[]>(sort)
-  /** The condition whose value dialog is open, and where it sits — see `FilterValueDialog`. */
-  const [picking, setPicking] = useState<{ path: Path; condition: Condition } | null>(null)
 
   // The draft follows what is in force, so a condition added from the cell menu or a sort taken
   // off a header lands in the builder rather than being overwritten by the draft beside it.
   useEffect(() => setCriteria(filtering.criteria), [filtering.criteria])
   useEffect(() => setKeys(sort), [sort])
 
-  const firstColumn = columns[0]?.name ?? ''
+  const names = useMemo(() => columns.map((column) => column.name), [columns])
+  const firstColumn = names[0] ?? ''
   const edited = criteria !== filtering.criteria || keys !== sort
 
   /** Nothing is sent that has not changed: Apply on an untouched panel is not a re-read. */
@@ -76,7 +74,8 @@ export function FilterSortPanel({
   }
 
   const edit: Edit = {
-    columns,
+    names,
+    suggest: filtering.suggest,
     set: (path, node) => {
       // The root is the tree itself, so replacing it is not replacing something inside it.
       if (path.length === 0) {
@@ -87,7 +86,6 @@ export function FilterSortPanel({
     },
     addBeside: (path, node) => setCriteria(insertAfter(criteria, path, node)),
     addInside: (path, node) => setCriteria(appendTo(criteria, path, node)),
-    pick: (path, condition) => setPicking({ path, condition }),
   }
 
   return (
@@ -124,7 +122,7 @@ export function FilterSortPanel({
             {keys.map((key, index) => (
               <SortRow
                 key={index}
-                columns={columns}
+                names={names}
                 sortKey={key}
                 onChange={(next) => setKeys(keys.map((one, at) => (at === index ? next : one)))}
                 onRemove={() => setKeys(keys.filter((_, at) => at !== index))}
@@ -148,31 +146,19 @@ export function FilterSortPanel({
           onClick={() => filtering.onShownChange(false)}
         />
       </div>
-
-      {picking ? (
-        <FilterValueDialog
-          condition={picking.condition}
-          suggest={filtering.suggest}
-          onCommit={(values) => {
-            edit.set(picking.path, { ...picking.condition, values })
-            setPicking(null)
-          }}
-          onClose={() => setPicking(null)}
-        />
-      ) : null}
     </div>
   )
 }
 
 /** Everything a row of the builder acts through, so the tree renders itself down one prop. */
 interface Edit {
-  columns: ResultColumn[]
+  names: readonly string[]
+  suggest?: ((column: string) => Promise<string[]>) | undefined
   set: (path: Path, node: Criterion | null) => void
   /** Beside the node at `path`, inside the same parentheses — what `+` on a condition means. */
   addBeside: (path: Path, node: Criterion) => void
   /** Inside the group at `path` — what `+` on a group row, or on the Filter header, means. */
   addInside: (path: Path, node: Criterion) => void
-  pick: (path: Path, condition: Condition) => void
 }
 
 interface RowsProps {
@@ -188,7 +174,7 @@ interface RowsProps {
  * flipping it anywhere flips it for the whole group.
  */
 function Rows({ group, path, depth, edit }: RowsProps) {
-  const firstColumn = edit.columns[0]?.name ?? ''
+  const firstColumn = edit.names[0] ?? ''
 
   if (group.children.length === 0) {
     return (
@@ -269,9 +255,10 @@ function Rows({ group, path, depth, edit }: RowsProps) {
 }
 
 /**
- * The three parts of a condition, each a list of what it may be. The column and the value are
- * accent-coloured and the operator is not, because the two ends are the reader's own and the middle
- * is the comparison between them.
+ * The three parts of a condition, and each opens what it may be: the column and the value a small
+ * searchable panel, the operator a plain menu — its twenty are a fixed list in a deliberate order,
+ * which a search box would only get in the way of. The two ends are accent-coloured and the middle
+ * is not, because those ends are the reader's own and the middle is the comparison between them.
  */
 function ConditionParts({
   condition,
@@ -282,21 +269,13 @@ function ConditionParts({
   path: Path
   edit: Edit
 }) {
-  const value = valueLabel(condition)
-
   return (
     <>
-      <MenuButton
-        items={edit.columns.map((column) => ({
-          label: column.name,
-          icon: column.name === condition.column ? <Check size={13} /> : undefined,
-          onSelect: () => edit.set(path, { ...condition, column: column.name }),
-        }))}
-      >
-        <button type="button" className={cn(PART, 'max-w-40 text-accent')}>
-          {condition.column}
-        </button>
-      </MenuButton>
+      <FieldPick
+        names={edit.names}
+        value={condition.column}
+        onChange={(column) => edit.set(path, { ...condition, column })}
+      />
 
       <MenuButton
         items={FILTER_OPS.map((one) => ({
@@ -317,43 +296,37 @@ function ConditionParts({
         </button>
       </MenuButton>
 
-      {value === '' ? null : (
-        <button
-          type="button"
-          onClick={() => edit.pick(path, condition)}
-          className={cn(PART, 'max-w-72 text-accent')}
-        >
-          {value}
-        </button>
+      {arityOf(condition.operator) === 0 ? null : (
+        // The values arrive with the operator they ask for: ticking a second is what turns `= a`
+        // into `is in list (a, b)`, and the operator part above shows it the moment it happens.
+        <ValuePick
+          condition={condition}
+          suggest={edit.suggest}
+          onChange={(values, operator) => edit.set(path, { ...condition, values, operator })}
+        />
       )}
     </>
   )
 }
 
 function SortRow({
-  columns,
+  names,
   sortKey,
   onChange,
   onRemove,
 }: {
-  columns: ResultColumn[]
+  names: readonly string[]
   sortKey: SortKey
   onChange: (next: SortKey) => void
   onRemove: () => void
 }) {
   return (
     <div className="flex h-6 items-center gap-1.5">
-      <MenuButton
-        items={columns.map((column) => ({
-          label: column.name,
-          icon: column.name === sortKey.column ? <Check size={13} /> : undefined,
-          onSelect: () => onChange({ ...sortKey, column: column.name }),
-        }))}
-      >
-        <button type="button" className={cn(PART, 'max-w-40 text-accent')}>
-          {sortKey.column}
-        </button>
-      </MenuButton>
+      <FieldPick
+        names={names}
+        value={sortKey.column}
+        onChange={(column) => onChange({ ...sortKey, column })}
+      />
 
       <MenuButton
         items={[
