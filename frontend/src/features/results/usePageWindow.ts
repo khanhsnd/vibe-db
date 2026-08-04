@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 
-import { DEFAULT_PAGE_SIZE } from '@/bridge/rows'
+import { useSettingsStore } from '@/stores/settings'
 
 import { pageStep } from './paging'
 import type { Cell } from './resultSet'
@@ -15,7 +15,9 @@ import type { Cell } from './resultSet'
  */
 export function usePageWindow(rows: Cell[][]) {
   const [page, setPage] = useState(0)
-  const [size, setSize] = useState<number>(DEFAULT_PAGE_SIZE)
+  // Read once, because the preference is what a page *starts* at: changing it in Settings must not
+  // move a result the reader has already paged through.
+  const [size, setSize] = useState<number>(() => useSettingsStore.getState().settings.pageSize)
 
   const spanOf = (count: number) => pageStep(size, count)
 

@@ -66,7 +66,7 @@ export function CellChoice({ value, options, width, onCommit, onCancel }: CellCh
         onBlur={() => commit(draft)}
         onKeyDown={onKeyDown}
         style={{ width }}
-        className="shrink-0 border-r border-line/60 bg-canvas px-2 font-mono text-sm text-fg shadow-[inset_0_0_0_1px_var(--accent)] outline-none"
+        className="data-font shrink-0 border-r border-line/60 bg-canvas px-2 text-fg shadow-[inset_0_0_0_1px_var(--accent)] outline-none"
       />
 
       {anchor && matches.length > 0
@@ -84,7 +84,7 @@ export function CellChoice({ value, options, width, onCommit, onCancel }: CellCh
                   onMouseEnter={() => setActive(at)}
                   onClick={() => commit(option)}
                   className={cn(
-                    'cursor-default px-2 py-1 font-mono text-sm',
+                    'data-font cursor-default px-2 py-1',
                     at === active ? 'bg-hover text-fg' : 'text-muted',
                     option === value && 'text-accent',
                   )}

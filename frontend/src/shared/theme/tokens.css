@@ -50,6 +50,15 @@
   --syn-null: #7d8590;
 
   --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.7);
+
+  /** What data is drawn in — a cell, a value under an editor, an SQL line — and the one font the
+      reader picks, from the families the machine has. Settings writes these three back onto this
+      element, its family ahead of the fallbacks; what stands here is the default, light rather
+      than regular because a screenful of rows reads heavier than a paragraph of the same weight. */
+  --font-data-fallback: Consolas, ui-monospace, monospace;
+  --font-data: 'Cascadia Mono', var(--font-data-fallback);
+  --font-data-size: 13px;
+  --font-data-weight: 300;
 }
 
 :root[data-theme='light'] {
@@ -136,7 +145,7 @@
   --color-engine-postgres: var(--engine-postgres);
 
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  --font-mono: var(--font-data);
 
   --text-2xs: 11px;
   --text-2xs--line-height: 1.4;

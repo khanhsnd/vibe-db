@@ -30,6 +30,18 @@
   overridden under `:root[data-theme='light']`, and are mapped into Tailwind utilities via
   `@theme inline` — the `var()` indirection is what makes runtime theme switching work without a
   rebuild. Do not hardcode hex values in components.
+- **Data is drawn in `.data-font`, chrome is not.** The class is in `index.css` and carries the three
+  `--font-data*` tokens together — family, size, weight — so the font the reader picked in Options
+  cannot land on a cell and miss the editor beside it. A grid cell, a cell editor and an SQL line take
+  it; a row number, a type line, a toolbar box and the status bar stay `font-mono` at their own size,
+  because they are chrome about the data rather than the data.
+- **A preference lives in `stores/settings.ts`, transient UI state in `stores/ui.ts`.** The settings
+  store is the only place a preference is saved (one `localStorage` key) and put in force, through
+  `applyTheme` / `applyDataFont` in `shared/theme/appearance.ts` — a module with no store import of
+  its own, so nothing has to reason about which of the two loads first. A component reads
+  `s.settings.<field>`; `useTheme` is a thin hook over the same store. What a *new* tab starts with is
+  read with `getState()` in a `useState` initialiser rather than subscribed to, because a default that
+  followed an open tab around would not be a default.
 - Row height is shared between the object tree and the result grid via `shared/theme/density.ts`
   (the virtualizers need it as a number).
 - `shared/ui/Split.tsx` wraps `react-resizable-panels`, which renamed its entire public surface

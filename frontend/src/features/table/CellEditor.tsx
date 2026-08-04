@@ -67,7 +67,7 @@ export function CellEditor({ column, value, editable, busy, onApply }: CellEdito
         onChange={(e) => setDraft(e.target.value)}
         readOnly={isNull || !editable}
         spellCheck={false}
-        className="scroll-thin block min-h-0 w-full flex-1 resize-none bg-canvas px-3 py-2 font-mono text-sm leading-relaxed text-fg outline-none read-only:text-muted"
+        className="data-font scroll-thin block min-h-0 w-full flex-1 resize-none bg-canvas px-3 py-2 leading-relaxed text-fg outline-none read-only:text-muted"
       />
 
       {editable ? null : (

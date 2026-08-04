@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from 'react'
 
 import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
-import { ALL_ROWS, DEFAULT_PAGE_SIZE } from '@/bridge/rows'
+import { ALL_ROWS } from '@/bridge/rows'
 import { onRowsStreamed, tables, type Cell, type TablePage } from '@/bridge/tables'
 import type { Filter } from '@/features/results/filter'
 import type { SortKey } from '@/features/results/resultSet'
+import { useSettingsStore } from '@/stores/settings'
 
 const NO_SORT = { column: '', descending: false }
 const NO_FILTERS: Filter[] = []
@@ -30,7 +31,8 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
   const { database, schema } = namespace
 
   const [page, setPage] = useState(0)
-  const [limit, setLimit] = useState<number>(DEFAULT_PAGE_SIZE)
+  // Read once: the preference is where a tab starts, not a limit that follows it around.
+  const [limit, setLimit] = useState<number>(() => useSettingsStore.getState().settings.pageSize)
   const [sort, setSort] = useState<SortKey | null>(null)
   const [filters, setFilters] = useState<Filter[]>(NO_FILTERS)
   const [nonce, setNonce] = useState(0)

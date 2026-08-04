@@ -952,7 +952,7 @@ function CellView({ value, editor, numeric, width, inRange, focused, edited }: C
     <div
       className={cn(
         'flex shrink-0 items-center gap-1 overflow-hidden border-r border-line/60 px-2',
-        'font-mono text-sm whitespace-nowrap',
+        'data-font whitespace-nowrap',
         numeric && 'justify-end',
         isToggle(editor) && 'justify-center',
         focused ? 'bg-accent' : inRange && 'bg-grid-cell-selected',
@@ -1052,7 +1052,7 @@ function CellInput({ value, picker, width, onCommit, onCancel }: CellInputProps)
           event.preventDefault()
           event.stopPropagation()
         }}
-        className="h-full min-w-0 flex-1 bg-transparent px-2 font-mono text-sm text-fg outline-none"
+        className="data-font h-full min-w-0 flex-1 bg-transparent px-2 text-fg outline-none"
       />
 
       {picker ? (

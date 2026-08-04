@@ -13,6 +13,11 @@ internal/app  ->  session / profile / secret  ->  internal/driver  ->  internal/
 - **`internal/app`** — the Wails boundary and the only package bound to JavaScript. Speaks `dto.go`
   wire types, never domain types, and maps every error to a stable code (see
   [errors.md](errors.md)).
+- **`internal/fonts`** — the font families the host machine has, read from the Windows font registry
+  (both the machine-wide hive and the reader's own, since a per-user install is registered only
+  there). Bound through `SystemAPI`, the one API that answers about the *machine* rather than about a
+  server. It returns no error: a list that cannot be read is not a failure a reader can act on, and
+  the picker falls back to the families the stylesheet ships with.
 - **`frontend/src/bridge`** — the only frontend directory permitted to import `frontend/wailsjs/**`.
   Wails regenerates those bindings on every build, so wrapping them once keeps a signature change
   to a one-file fix.

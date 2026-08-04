@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { NO_NAMESPACE, toProfileInput, type Profile, type ProfileInput } from '@/bridge/connections'
-import { DEFAULT_QUERY_ROWS } from '@/bridge/rows'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
 import { PasswordPrompt } from '@/features/connections/PasswordPrompt'
 import {
@@ -15,6 +14,7 @@ import { useTreeMenu } from '@/features/connections/useTreeMenu'
 import { SchemaDialogs } from '@/features/schema/SchemaDialogs'
 import { Split, SplitHandle, SplitPanel, usePanelRef } from '@/shared/ui/Split'
 import { buildTree, useConnectionsStore } from '@/stores/connections'
+import { useSettingsStore } from '@/stores/settings'
 import { useTabsStore } from '@/stores/tabs'
 import { useUIStore } from '@/stores/ui'
 
@@ -198,7 +198,7 @@ export function App() {
       profileId,
       namespace,
       sql: '',
-      rowLimit: DEFAULT_QUERY_ROWS,
+      rowLimit: useSettingsStore.getState().settings.queryRows,
     })
   }, [openTab, selected, sessions, activeNamespace])
 

@@ -1,11 +1,11 @@
-import { useUIStore } from '@/stores/ui'
-
-export function applyTheme(theme: 'dark' | 'light') {
-  document.documentElement.dataset.theme = theme
-}
+import { useSettingsStore } from '@/stores/settings'
 
 export function useTheme() {
-  const theme = useUIStore((s) => s.theme)
-  const toggleTheme = useUIStore((s) => s.toggleTheme)
-  return { theme, toggleTheme }
+  const theme = useSettingsStore((s) => s.settings.theme)
+  const update = useSettingsStore((s) => s.update)
+
+  return {
+    theme,
+    toggleTheme: () => update({ theme: theme === 'dark' ? 'light' : 'dark' }),
+  }
 }

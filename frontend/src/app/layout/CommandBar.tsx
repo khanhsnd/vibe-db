@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Moon, PanelLeft, Plus, Settings, Sun, Terminal } from 'lucide-react'
 
+import { SettingsDialog } from '@/features/settings/SettingsDialog'
 import { IconButton } from '@/shared/ui/IconButton'
 import { Button } from '@/shared/ui/Button'
 import { useTheme } from '@/shared/theme/useTheme'
@@ -13,6 +15,7 @@ interface CommandBarProps {
 export function CommandBar({ onNewConnection, onNewQuery }: CommandBarProps) {
   const { theme, toggleTheme } = useTheme()
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
+  const [options, setOptions] = useState(false)
 
   return (
     <header className="flex h-9 shrink-0 items-center gap-2 border-b border-line bg-panel px-2">
@@ -41,7 +44,13 @@ export function CommandBar({ onNewConnection, onNewQuery }: CommandBarProps) {
         icon={theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
         onClick={toggleTheme}
       />
-      <IconButton label="Settings" icon={<Settings size={15} />} />
+      <IconButton
+        label="Options"
+        icon={<Settings size={15} />}
+        onClick={() => setOptions(true)}
+      />
+
+      <SettingsDialog open={options} onOpenChange={setOptions} />
     </header>
   )
 }

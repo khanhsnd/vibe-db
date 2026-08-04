@@ -9,7 +9,7 @@ empty / truncate / drop a table, add / edit / rename / drop a field, add or drop
 foreign key, drop a view or a routine — table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
 or SQL**, query tabs with completion that **run a whole script**, passwords in Windows Credential
-Manager, and the full layout shell with dark and light themes.
+Manager, and the full layout shell with dark and light themes and a **data font the reader picks**.
 
 Not there yet: a **materialised view** is not listed, because it is dropped by a statement of its
 own and a list that cannot be acted on is worse than one that does not claim it. A routine can be
@@ -497,6 +497,46 @@ One `Dialect` field decides how a quoted name is read, so `` `shop`.`users` `` i
 and a string on PostgreSQL, where `"shop"."users"` is the table instead. The qualifier the statement
 carries is read as whatever the engine's inner level is: a database on MySQL, a schema on
 PostgreSQL, whose statements cannot name another database at all.
+
+## Options
+
+The gear at the right of the command bar opens **Options** (`features/settings/SettingsDialog`): a
+rail of sections on the left, the one in force on the right, which is the shape a reader already
+knows a settings dialog by. Sections are added to that rail — never a second dialog.
+
+| Section | Holds |
+|---|---|
+| General | **Theme** — dark or light, the same switch the command bar's sun/moon is. |
+| Editor | The **data font** — family, size, weight, with a preview line — and **word wrap** for the SQL editor, which reconfigures a live editor through a CodeMirror compartment rather than rebuilding it. |
+| Records | What a **new tab** starts with: records per page (a table read and a query result alike) and the row limit a query tab caps its read at. Both are defaults, read once when a tab mounts, so changing one never moves a result the reader has already paged through. |
+
+**A pick applies as it is made**, not behind an OK: the app behind the dialog is the preview, and a
+dialog that could be dismissed half-set would need a draft of every preference to do it. The footer
+therefore offers **Restore Defaults** and **Done**, and nothing that cancels. Everything is kept in
+`localStorage` under one key, `vibe-db.settings`, by `stores/settings.ts` — the one place a
+preference is saved and put in force.
+
+### The font list is the machine's
+
+The family list is **every font installed on this machine**, not a list the app ships: `SystemAPI.
+ListFonts` reads the Windows font registry — the machine-wide hive *and* the reader's own, since a
+font installed for one user is registered only there — strips the `(TrueType)` tag, folds a family's
+`Regular`, `Italic`, `Bold` and `Oblique` variants back into it, and answers sorted. `Segoe UI Light`
+and `Arial Black` survive whole, because those are families a stylesheet can name; `Arial Bold` is
+Arial asked for in bold and is folded away. A few hundred families is normal, so the list is
+**searched rather than scrolled**, and every row is drawn in its own family — the only honest preview
+of a pick. Outside the desktop shell (a browser dev run) the host answers with nothing and the picker
+offers the six families in `FALLBACK_FAMILIES`.
+
+The default is **Cascadia Mono light 13 px**: a screenful of rows reads heavier than a paragraph of
+the same weight, so data is set a weight below regular. A weight only draws as itself where the
+family has it — Cascadia is variable and does, Consolas and Lucida Console ship 400 and 700 alone, and
+Windows then rounds to the nearest they have. Sizes run 10–16 px, which is what a 28 px row can hold.
+
+The pick is written onto the root element as `--font-data`, `--font-data-size` and
+`--font-data-weight`, ahead of `--font-data-fallback`, which is why nothing rebuilds, why a family the
+machine turns out not to have still lands on something monospaced, and why a column fit measures the
+font the reader actually chose.
 
 ## Grid behaviour
 

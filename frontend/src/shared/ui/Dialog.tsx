@@ -27,6 +27,8 @@ interface DialogProps {
   children: ReactNode
   footer?: ReactNode
   width?: number
+  /** What the body is padded with, for a dialog that lays out its own — Options has a side rail. */
+  bodyClassName?: string
 }
 
 export function Dialog({
@@ -39,6 +41,7 @@ export function Dialog({
   children,
   footer,
   width = 460,
+  bodyClassName = 'px-4 py-3.5',
 }: DialogProps) {
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -72,7 +75,9 @@ export function Dialog({
             </RadixDialog.Close>
           </div>
 
-          <div className="scroll-thin max-h-[60vh] overflow-y-auto px-4 py-3.5">{children}</div>
+          <div className={cn('scroll-thin max-h-[60vh] overflow-y-auto', bodyClassName)}>
+            {children}
+          </div>
 
           {footer ? (
             <div className="flex items-center justify-end gap-2 border-t border-line bg-bar px-4 py-2.5">

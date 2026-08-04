@@ -5,11 +5,13 @@ function measurer(): CanvasRenderingContext2D | null {
   return context
 }
 
+/** The data font as the reader set it, so a fit measures the cells that are actually drawn. */
 export function gridFont(): string {
   const style = getComputedStyle(document.documentElement)
-  const size = style.getPropertyValue('--text-sm').trim()
-  const family = style.getPropertyValue('--font-mono').trim()
-  return `${size} ${family}`
+  const weight = style.getPropertyValue('--font-data-weight').trim()
+  const size = style.getPropertyValue('--font-data-size').trim()
+  const family = style.getPropertyValue('--font-data').trim()
+  return `${weight} ${size} ${family}`
 }
 
 /** The header's own font, since a column name is drawn as a label rather than as a cell. */
