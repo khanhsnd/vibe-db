@@ -12,7 +12,7 @@ func joined(statements []string) string {
 func TestSplitCutsOnTheSemicolonsThatEndAStatement(t *testing.T) {
 	script := "SELECT 1;\nSELECT 2;\n"
 
-	if got, want := joined(Split(script, Postgres)), "SELECT 1 | SELECT 2"; got != want {
+	if got, want := joined(Postgres.Split(script)), "SELECT 1 | SELECT 2"; got != want {
 		t.Errorf("Split = %s, want %s", got, want)
 	}
 }
@@ -65,7 +65,7 @@ func TestSplitIgnoresASemicolonThatIsInsideSomething(t *testing.T) {
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			if got := joined(Split(test.script, test.dialect)); got != test.want {
+			if got := joined(test.dialect.Split(test.script)); got != test.want {
 				t.Errorf("Split = %s, want %s", got, test.want)
 			}
 		})
@@ -76,7 +76,7 @@ func TestSplitIgnoresASemicolonThatIsInsideSomething(t *testing.T) {
 func TestSplitKeepsADollarQuotedBodyWhole(t *testing.T) {
 	script := "CREATE FUNCTION f() RETURNS int AS $$ BEGIN; SELECT 1; END; $$ LANGUAGE plpgsql;\nSELECT 2"
 
-	got := Split(script, Postgres)
+	got := Postgres.Split(script)
 	if len(got) != 2 {
 		t.Fatalf("got %d statements, want 2:\n%s", len(got), joined(got))
 	}
@@ -89,11 +89,11 @@ func TestSplitKeepsADollarQuotedBodyWhole(t *testing.T) {
 func TestSplitReadsABackslashByTheEnginesRule(t *testing.T) {
 	script := `SELECT 'C:\'; SELECT 2`
 
-	if got, want := len(Split(script, Postgres)), 2; got != want {
+	if got, want := len(Postgres.Split(script)), 2; got != want {
 		t.Errorf("Postgres: got %d statements, want %d", got, want)
 	}
 	// MySQL escapes the closing quote instead, so the whole of it is one runaway statement.
-	if got, want := len(Split(script, MySQL)), 1; got != want {
+	if got, want := len(MySQL.Split(script)), 1; got != want {
 		t.Errorf("MySQL: got %d statements, want %d", got, want)
 	}
 }
@@ -102,7 +102,7 @@ func TestSplitReadsABackslashByTheEnginesRule(t *testing.T) {
 func TestSplitLeavesAPlaceholderAlone(t *testing.T) {
 	script := "SELECT $1, $2; SELECT 3"
 
-	if got, want := joined(Split(script, Postgres)), "SELECT $1, $2 | SELECT 3"; got != want {
+	if got, want := joined(Postgres.Split(script)), "SELECT $1, $2 | SELECT 3"; got != want {
 		t.Errorf("Split = %s, want %s", got, want)
 	}
 }
@@ -117,7 +117,7 @@ func TestSplitDropsWhatIsNotAStatement(t *testing.T) {
 
 	for name, script := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := Split(script, Postgres)
+			got := Postgres.Split(script)
 			if name == "a trailing comment" {
 				if len(got) != 1 || got[0] != "SELECT 1" {
 					t.Errorf("Split = %v, want [SELECT 1]", got)

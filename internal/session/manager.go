@@ -6,9 +6,22 @@ import (
 	"encoding/hex"
 	"sync"
 
+	"github.com/khanhsnd/vibe-db/internal/cloudauth"
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/sshtunnel"
 )
+
+// Secrets is everything a connection is opened with that the profile does not hold: the password
+// the *database* takes, and — for a profile that reaches it through a bastion — what the *bastion*
+// takes, which is a password or the pass phrase of a private key.
+//
+// A profile authenticating by a cloud identity leaves Password empty and it is minted here; see
+// Open.
+type Secrets struct {
+	Password string
+	SSH      string
+}
 
 type Session struct {
 	ID            string
@@ -16,6 +29,9 @@ type Session struct {
 	ServerVersion string
 
 	driverSession driver.Session
+	// tunnel is the bastion this session is carried over, and is nil for a direct connection.
+	// It lives exactly as long as the session: closing one closes the other.
+	tunnel *sshtunnel.Tunnel
 }
 
 type Manager struct {
@@ -32,10 +48,15 @@ func NewManager(registry *driver.Registry) *Manager {
 	}
 }
 
+// Open dials a server, doing in order the three things that have to happen before an engine
+// adapter is given anything: the profile is checked, the bastion is stood up, and the password is
+// minted where the profile says it is not known but signed for. All three are here rather than in
+// an adapter because none of them varies by engine — see the dependency rule in
+// docs/architecture.md.
 func (m *Manager) Open(
 	ctx context.Context,
 	profile domain.ConnectionProfile,
-	creds driver.Credentials,
+	secrets Secrets,
 ) (*Session, error) {
 	if err := profile.Validate(); err != nil {
 		return nil, err
@@ -46,21 +67,39 @@ func (m *Manager) Open(
 		return nil, err
 	}
 
-	driverSession, err := engineDriver.Open(ctx, profile, creds)
+	tunnel, err := openTunnel(ctx, profile, secrets)
 	if err != nil {
 		return nil, err
+	}
+
+	// Anything that fails from here on has a tunnel to take down with it.
+	fail := func(err error) (*Session, error) {
+		if tunnel != nil {
+			tunnel.Close()
+		}
+		return nil, err
+	}
+
+	creds, err := credentials(ctx, profile, secrets)
+	if err != nil {
+		return fail(err)
+	}
+
+	driverSession, err := engineDriver.Open(ctx, profile, creds, dialerFor(tunnel))
+	if err != nil {
+		return fail(err)
 	}
 
 	info, err := driverSession.ServerInfo(ctx)
 	if err != nil {
 		driverSession.Close()
-		return nil, err
+		return fail(err)
 	}
 
 	id, err := newID()
 	if err != nil {
 		driverSession.Close()
-		return nil, err
+		return fail(err)
 	}
 
 	s := &Session{
@@ -68,6 +107,7 @@ func (m *Manager) Open(
 		Profile:       profile,
 		ServerVersion: info.Version,
 		driverSession: driverSession,
+		tunnel:        tunnel,
 	}
 
 	m.mu.Lock()
@@ -75,6 +115,49 @@ func (m *Manager) Open(
 	m.mu.Unlock()
 
 	return s, nil
+}
+
+func openTunnel(
+	ctx context.Context,
+	profile domain.ConnectionProfile,
+	secrets Secrets,
+) (*sshtunnel.Tunnel, error) {
+	if !profile.SSH.Enabled {
+		return nil, nil
+	}
+	return sshtunnel.Open(ctx, profile.SSH, sshtunnel.Secrets{Secret: secrets.SSH})
+}
+
+// dialerFor is the tunnel as the driver layer sees it: a function, and nil where there is none.
+// A typed nil pointer would not be nil once it were a `driver.Dialer`, which is exactly the bug
+// that would make every direct connection try to dial through nothing.
+func dialerFor(tunnel *sshtunnel.Tunnel) driver.Dialer {
+	if tunnel == nil {
+		return nil
+	}
+	return tunnel.Dial
+}
+
+// credentials is the password the database will be given. For most profiles it is the one the
+// reader knows; for a cloud identity it is a token minted here, per connection, and never stored:
+// it is good for minutes, and one read back out of a keychain later would only fail.
+func credentials(
+	ctx context.Context,
+	profile domain.ConnectionProfile,
+	secrets Secrets,
+) (driver.Credentials, error) {
+	switch profile.Auth {
+	case domain.AuthAWSIAM:
+		token, err := cloudauth.AWS(ctx, profile.Region, profile.Host, profile.Port, profile.User)
+		return driver.Credentials{Password: token}, err
+
+	case domain.AuthGoogleIAM:
+		token, err := cloudauth.Google(ctx)
+		return driver.Credentials{Password: token}, err
+
+	default:
+		return driver.Credentials{Password: secrets.Password}, nil
+	}
 }
 
 func (m *Manager) Get(id string) (*Session, error) {
@@ -97,7 +180,7 @@ func (m *Manager) Close(id string) error {
 	if !ok {
 		return domain.ErrSessionNotFound
 	}
-	return s.driverSession.Close()
+	return s.close()
 }
 
 func (m *Manager) CloseAll() {
@@ -107,8 +190,19 @@ func (m *Manager) CloseAll() {
 	m.mu.Unlock()
 
 	for _, s := range sessions {
-		s.driverSession.Close()
+		s.close()
 	}
+}
+
+// close takes the pools down first and the tunnel after them, because every one of those pools
+// is carried over it. The session's own failure is what is reported: a tunnel that will not shut
+// cleanly is not something the reader who pressed Disconnect can do anything about.
+func (s *Session) close() error {
+	err := s.driverSession.Close()
+	if s.tunnel != nil {
+		s.tunnel.Close()
+	}
+	return err
 }
 
 func (m *Manager) Databases(ctx context.Context, id string) ([]string, error) {
@@ -209,12 +303,52 @@ func (m *Manager) Query(
 	return s.driverSession.Query(ctx, query)
 }
 
-func (m *Manager) Split(id, script string) ([]string, error) {
+// Text is the lexical half of the engine this session speaks: cutting a script into statements,
+// laying it out, and reading what each statement will do. None of it needs the connection — it is
+// reached through a session only because that is what the caller has, and what says which engine.
+func (m *Manager) Text(id string) (driver.Text, error) {
 	s, err := m.Get(id)
 	if err != nil {
 		return nil, err
 	}
-	return s.driverSession.Split(script), nil
+
+	engineDriver, err := m.registry.For(s.Profile.Engine)
+	if err != nil {
+		return nil, err
+	}
+	return engineDriver.Text(), nil
+}
+
+func (m *Manager) Split(id, script string) ([]string, error) {
+	text, err := m.Text(id)
+	if err != nil {
+		return nil, err
+	}
+	return text.Split(script), nil
+}
+
+func (m *Manager) Format(id, script string) (string, error) {
+	text, err := m.Text(id)
+	if err != nil {
+		return "", err
+	}
+	return text.Format(script), nil
+}
+
+// Review reads what a script will do, and answers with the environment it would do it in — which
+// is what turns a hazard into a question the reader has to answer. Pairing the two is the app
+// layer's, through domain.Environment.NeedsConfirmation; this only hands over both halves.
+func (m *Manager) Review(id, script string) (driver.Review, domain.Environment, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return driver.Review{}, "", err
+	}
+
+	text, err := m.Text(id)
+	if err != nil {
+		return driver.Review{}, "", err
+	}
+	return text.Review(script), s.Profile.Environment, nil
 }
 
 func (m *Manager) UpdateCell(ctx context.Context, id string, edit driver.CellEdit) error {

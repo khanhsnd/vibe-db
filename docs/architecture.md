@@ -22,6 +22,19 @@ internal/app  ->  session / profile / secret / history  ->  internal/driver  -> 
   one. `File[T].Update` does the read-change-write under one lock, and writes nothing if the change
   fails, which is how a rejected delete leaves the file alone. The connection profiles and the query
   history are each one of these, which is why neither adapter spells atomic writing out.
+- **`internal/sshtunnel`** — a database connection carried over SSH. It knows nothing about
+  databases: it dials a bastion and hands back a function that opens connections *from* it, which is
+  exactly the shape `driver.Dialer` has, and is why neither engine adapter has ever heard of SSH.
+  Nothing is listened on locally — there is no forwarded port to collide with anything, and the
+  address the engine asks for is resolved on the far side. It is the one package in the app that
+  reads an error's *message*, because `x/crypto/ssh` gives no code to switch on; see
+  [errors.md](errors.md).
+- **`internal/cloudauth`** — the password for a connection that authenticates by a cloud identity
+  rather than by something the reader knows: an RDS IAM token, signed here with SigV4 from the
+  machine's AWS environment, and a Google OAuth access token from its application default
+  credentials. Nothing here is ever stored — a credential good for a quarter of an hour is not a
+  secret worth keeping — and no SDK is pulled in for either: one is a documented signing algorithm
+  and the other is a documented token exchange.
 - **`internal/fonts`** — the font families the host machine has, read from the Windows font registry
   (both the machine-wide hive and the reader's own, since a per-user install is registered only
   there). Bound through `SystemAPI`, the one API that answers about the *machine* rather than about a
@@ -39,13 +52,16 @@ native errors to `domain` sentinels, add the engine to `domain.Engine` and to `E
 those two ends should need to change — if it does, an abstraction leaked.
 
 Reach for `internal/driver/sqlkit` before writing anything: row scanning, result-column
-reflection, statement classification, **script splitting**, source parsing, identifier and string
-quoting, the transport errors and **the DDL statements both engines spell the same way** are all
+reflection, statement classification, **the lexer** and everything written over it — script
+splitting, **laying a script out**, **reviewing it** — source parsing, identifier and string
+quoting, **building a `*tls.Config` from a profile's certificate files**, the transport errors and
+**the DDL statements both engines spell the same way** are all
 there already, and an engine differs from another only in
 
 | Part | MySQL | PostgreSQL |
 |---|---|---|
 | `dsn.go` | go-sql-driver config, `tls=…` | libpq keyword/value, `sslmode=…` |
+| a dialler and a TLS configuration | registered **globally by name** before the DSN can refer to them, and deregistered with the session (`transport.go`) | set on the parsed `pgx.ConnConfig`, which `stdlib` then takes by name — the certificate *files* need none of it, being libpq keywords already |
 | `errors.go` | errno → sentinel | SQLSTATE → sentinel |
 | catalogue reads | `information_schema` | `pg_catalog`, for `format_type` |
 | placeholders | `?` | `$1` |
@@ -53,6 +69,23 @@ there already, and an engine differs from another only in
 | levels above a table | one pool, `USE <database>` | a pool per database, `SET search_path` |
 | `ddl.go` | `MODIFY COLUMN` restates a column whole; a qualified rename target; `DROP INDEX` on the table; every primary key is called `PRIMARY`; `USING` comes before the table | one `ALTER COLUMN` action per fact; an unqualified rename target; an index is an object of the schema; a key's constraint name has to be read before it can be dropped; `USING` comes after the table |
 | `database.go` | a database is a namespace with a character set | a database is an object with an owner, a template, a locale, a tablespace and a connection limit, and can carry extensions and a comment |
+
+**`sqlkit.Lex` is the one place a script is read character by character.** Splitting, formatting and
+reviewing are all written over its tokens, so what counts as a string, a comment or a `$tag$` body
+is settled once per engine instead of three times — and a fourth thing built on it inherits that for
+free.
+
+**`driver.Text` is the half of an engine that needs no connection**: `Split`, `Format`, `Review`.
+It hangs off the `Driver` rather than off a `Session`, because a reader lays out and is warned about
+a script whether or not anything is dialled — `sqlkit.Dialect` is the whole implementation, and both
+adapters return theirs from one line.
+
+**Three things happen above the adapters, before either is handed anything**, because none of them
+varies by engine: the profile is validated, the bastion is stood up, and a cloud password is minted.
+All three are in `session.Manager.Open`. The tunnel arrives at the adapter as a `driver.Dialer` and
+the token as an ordinary `driver.Credentials.Password`, so neither adapter knows either exists. The
+tunnel then lives exactly as long as the session and is closed after its pools, since every pool is
+carried over it.
 
 `driver.Schema` is the DDL half of a session, and `sqlkit.DDL` supplies the part of it that does not
 vary: an adapter embeds it, hands it one `Run(ctx, database, statement)`, and writes only the

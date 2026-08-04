@@ -1,6 +1,7 @@
 import { List, Plus, Table2, Terminal, X } from 'lucide-react'
 
-import { namespaceLabel, type Profile } from '@/bridge/connections'
+import { environmentInfo, namespaceLabel, type Profile } from '@/bridge/connections'
+import { EnvironmentStripe } from '@/features/connections/EnvironmentDot'
 import { cn } from '@/lib/cn'
 import { IconButton } from '@/shared/ui/IconButton'
 import { useConnectionsStore } from '@/stores/connections'
@@ -28,19 +29,21 @@ export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
       role="tablist"
       className="scroll-thin flex h-8 shrink-0 items-stretch overflow-x-auto border-b border-line bg-panel"
     >
-      {tabs.map((tab) => (
-        <TabItem
-          key={tab.id}
-          tab={tab}
-          active={tab.id === activeId}
-          tooltip={tabTooltip(
-            tab,
-            profiles.find((profile) => profile.id === tab.profileId),
-          )}
-          onSelect={() => activate(tab.id)}
-          onClose={() => close(tab.id)}
-        />
-      ))}
+      {tabs.map((tab) => {
+        const profile = profiles.find((one) => one.id === tab.profileId)
+
+        return (
+          <TabItem
+            key={tab.id}
+            tab={tab}
+            active={tab.id === activeId}
+            environment={profile?.environment ?? ''}
+            tooltip={tabTooltip(tab, profile)}
+            onSelect={() => activate(tab.id)}
+            onClose={() => close(tab.id)}
+          />
+        )
+      })}
 
       <div className="flex items-center px-1">
         <IconButton label="New query" icon={<Plus size={14} />} onClick={onNewQuery} />
@@ -62,6 +65,9 @@ function tabTooltip(tab: Tab, profile: Profile | undefined): string {
   if (profile) {
     lines.push(`Connection: ${profile.name}`)
     lines.push(`Server: ${profile.user}@${profile.host}:${profile.port}`)
+    if (profile.environment !== '') {
+      lines.push(`Environment: ${environmentInfo(profile.environment).label}`)
+    }
   }
   return lines.join('\n')
 }
@@ -69,12 +75,14 @@ function tabTooltip(tab: Tab, profile: Profile | undefined): string {
 interface TabItemProps {
   tab: Tab
   active: boolean
+  /** The connection's environment, drawn as the stripe down the tab's leading edge. */
+  environment: string
   tooltip: string
   onSelect: () => void
   onClose: () => void
 }
 
-function TabItem({ tab, active, tooltip, onSelect, onClose }: TabItemProps) {
+function TabItem({ tab, active, environment, tooltip, onSelect, onClose }: TabItemProps) {
   const Icon = tab.kind === 'query' ? Terminal : tab.kind === 'objects' ? List : Table2
 
   return (
@@ -93,6 +101,7 @@ function TabItem({ tab, active, tooltip, onSelect, onClose }: TabItemProps) {
       )}
     >
       {active ? <span className="absolute inset-x-0 top-0 h-0.5 bg-accent" /> : null}
+      <EnvironmentStripe environment={environment} />
 
       <Icon size={13} className="shrink-0 text-faint" />
       <span className="truncate">{tab.title}</span>

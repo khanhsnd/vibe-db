@@ -16,6 +16,7 @@ const (
 const (
 	DefaultMySQLPort    = 3306
 	DefaultPostgresPort = 5432
+	DefaultSSHPort      = 22
 )
 
 // DefaultPort is the port an engine listens on when the profile names none.
@@ -37,33 +38,235 @@ func (e Engine) Valid() bool {
 	}
 }
 
-type TLSMode string
+// Environment is what a server is *for*, and the one fact about a profile that changes how the
+// app behaves rather than how it connects: every surface wearing a connection's name wears its
+// colour, and a statement that cannot be taken back is confirmed before it runs on a guarded one.
+type Environment string
 
 const (
-	TLSDisabled  TLSMode = "disabled"
-	TLSPreferred TLSMode = "preferred"
-	TLSRequired  TLSMode = "required"
-	TLSVerifyCA  TLSMode = "verify-ca"
+	// EnvironmentUnset is a profile that has not said, which is every profile written before
+	// this field existed. It is coloured like the app and guards nothing.
+	EnvironmentUnset       Environment = ""
+	EnvironmentDevelopment Environment = "development"
+	EnvironmentStaging     Environment = "staging"
+	EnvironmentProduction  Environment = "production"
 )
 
-func (m TLSMode) Valid() bool {
-	switch m {
-	case TLSDisabled, TLSPreferred, TLSRequired, TLSVerifyCA:
+func (e Environment) Valid() bool {
+	switch e {
+	case EnvironmentUnset, EnvironmentDevelopment, EnvironmentStaging, EnvironmentProduction:
 		return true
 	default:
 		return false
 	}
 }
 
+// Guarded says a statement that cannot be taken back has to be answered for before it runs here.
+// Production alone is: a warning a reader meets on every environment is one they stop reading,
+// and that habit is exactly what this exists to prevent.
+func (e Environment) Guarded() bool {
+	return e == EnvironmentProduction
+}
+
+// NeedsConfirmation is the rule the query tab asks before it runs anything. Two things are
+// confirmed, and for different reasons: **anything at all that writes** on a guarded environment,
+// because the cost of being on the wrong connection is the whole point of labelling one; and an
+// **unfiltered** write anywhere, because `DELETE FROM users` with no WHERE is a mistake on a
+// laptop as surely as it is in production.
+func (e Environment) NeedsConfirmation(h Hazard) bool {
+	if h == HazardNone {
+		return false
+	}
+	return e.Guarded() || h == HazardUnfiltered
+}
+
+type TLSMode string
+
+const (
+	TLSDisabled   TLSMode = "disabled"
+	TLSPreferred  TLSMode = "preferred"
+	TLSRequired   TLSMode = "required"
+	TLSVerifyCA   TLSMode = "verify-ca"
+	TLSVerifyFull TLSMode = "verify-full"
+)
+
+func (m TLSMode) Valid() bool {
+	switch m {
+	case TLSDisabled, TLSPreferred, TLSRequired, TLSVerifyCA, TLSVerifyFull:
+		return true
+	default:
+		return false
+	}
+}
+
+// Verifies says the mode holds the server to a certificate this machine can check, which is what
+// decides whether a root certificate is worth carrying. `required` encrypts and verifies nothing,
+// which is the honest reading of both engines' own middle mode.
+func (m TLSMode) Verifies() bool {
+	return m == TLSVerifyCA || m == TLSVerifyFull
+}
+
+// Encrypts says TLS is definitely in force. `preferred` is left out on purpose: it takes TLS
+// where the server offers it and plain text where it does not, so it can promise neither.
+func (m TLSMode) Encrypts() bool {
+	return m == TLSRequired || m.Verifies()
+}
+
+// TLSOptions is the whole of what a profile says about the transport's own security: the mode,
+// and the files this machine holds the server — and itself — to. A path is a path on *this*
+// machine, which is why none of them is ever sent anywhere.
+type TLSOptions struct {
+	Mode TLSMode
+	// RootCert is the authority the server's chain is checked against. Empty falls back to the
+	// machine's own trust store, which is what a server with a publicly issued certificate needs
+	// and what a private authority — a cloud provider's bundle — does not.
+	RootCert string
+	// ClientCert and ClientKey are the certificate this client presents. Neither is any use
+	// without the other, so a profile carrying one and not the other is refused.
+	ClientCert string
+	ClientKey  string
+	// ServerName is the name the certificate is checked against when it is not the host dialled,
+	// which is what a tunnel makes ordinary: the connection goes to 127.0.0.1 and the certificate
+	// is still the server's own.
+	ServerName string
+}
+
+func (o TLSOptions) Validate() error {
+	if !o.Mode.Valid() {
+		return ValidationError{Field: "tlsMode", Message: "is not a known TLS mode"}
+	}
+
+	// A file named under a mode that never opens one is not a harmless extra: it is a reader
+	// believing they have configured something. Say so rather than ignoring it.
+	if !o.Mode.Encrypts() && (o.RootCert != "" || o.ClientCert != "" || o.ClientKey != "") {
+		return ValidationError{
+			Field:   "tlsMode",
+			Message: "must be Required or higher for a certificate file to be used",
+		}
+	}
+	if (o.ClientCert == "") != (o.ClientKey == "") {
+		return ValidationError{
+			Field:   "clientCert",
+			Message: "needs both a certificate and its key",
+		}
+	}
+	return nil
+}
+
+// SSHAuth is how the bastion authenticates the reader. The private key is the ordinary one and
+// the default; a password is what a server still asking for one takes; and the agent is the
+// key the reader has already unlocked, which is the only one of the three this app never holds.
+type SSHAuth string
+
+const (
+	SSHKey      SSHAuth = "key"
+	SSHPassword SSHAuth = "password"
+	SSHAgent    SSHAuth = "agent"
+)
+
+func (a SSHAuth) Valid() bool {
+	switch a {
+	case SSHKey, SSHPassword, SSHAgent:
+		return true
+	default:
+		return false
+	}
+}
+
+// SSHTunnel is the bastion a profile reaches its server through. The database host and port stay
+// what they are: they are resolved *on the far side* of the tunnel, which is why a server bound to
+// localhost on the bastion is reached as `127.0.0.1` here and means the bastion's own loopback.
+type SSHTunnel struct {
+	Enabled bool
+	Host    string
+	Port    int
+	User    string
+	Auth    SSHAuth
+	// KeyPath is the private key file, for SSHKey. Its pass phrase is a secret and lives in the
+	// credential store beside the connection's own password, never here.
+	KeyPath string
+	// KnownHosts is the file the bastion's host key is checked against. Empty means the reader's
+	// own `~/.ssh/known_hosts`, and a bastion missing from it is refused rather than trusted —
+	// see StrictHostKey.
+	KnownHosts string
+	// StrictHostKey says an unknown bastion is refused. It defaults to on, and turning it off is
+	// a deliberate choice a reader makes for a host they cannot enrol: an SSH tunnel whose far end
+	// is not identified protects the credentials it carries from nobody.
+	StrictHostKey bool
+}
+
+func (t SSHTunnel) Validate() error {
+	if !t.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(t.Host) == "" {
+		return ValidationError{Field: "sshHost", Message: "is required"}
+	}
+	if t.Port < 1 || t.Port > 65535 {
+		return ValidationError{Field: "sshPort", Message: "must be between 1 and 65535"}
+	}
+	if strings.TrimSpace(t.User) == "" {
+		return ValidationError{Field: "sshUser", Message: "is required"}
+	}
+	if !t.Auth.Valid() {
+		return ValidationError{Field: "sshAuth", Message: "is not a known SSH authentication"}
+	}
+	if t.Auth == SSHKey && strings.TrimSpace(t.KeyPath) == "" {
+		return ValidationError{Field: "sshKeyPath", Message: "is required for key authentication"}
+	}
+	return nil
+}
+
+func (t SSHTunnel) Address() string {
+	return net.JoinHostPort(t.Host, strconv.Itoa(t.Port))
+}
+
+// AuthMethod is what the *database* authenticates the reader by. A password is one the reader
+// knows; the other two are tokens this app mints per connection from a cloud identity the machine
+// already holds, and are therefore never stored — a token that lasts a quarter of an hour is not
+// a secret worth keeping.
+type AuthMethod string
+
+const (
+	AuthPassword AuthMethod = "password"
+	// AuthAWSIAM is an RDS IAM authentication token: the password is a request to the RDS
+	// control plane, signed with the machine's AWS credentials and good for fifteen minutes.
+	AuthAWSIAM AuthMethod = "aws-iam"
+	// AuthGoogleIAM is a Google OAuth 2.0 access token from the machine's application default
+	// credentials, which is what Cloud SQL IAM database authentication takes as a password.
+	AuthGoogleIAM AuthMethod = "google-iam"
+)
+
+func (a AuthMethod) Valid() bool {
+	switch a {
+	case AuthPassword, AuthAWSIAM, AuthGoogleIAM:
+		return true
+	default:
+		return false
+	}
+}
+
+// Minted says the password is made at connect time rather than known, which is what decides
+// whether there is anything to save, prompt for, or read back out of the credential store.
+func (a AuthMethod) Minted() bool {
+	return a == AuthAWSIAM || a == AuthGoogleIAM
+}
+
 type ConnectionProfile struct {
-	ID           string
-	Name         string
-	Engine       Engine
-	Host         string
-	Port         int
-	User         string
-	Database     string
-	TLSMode      TLSMode
+	ID          string
+	Name        string
+	Engine      Engine
+	Environment Environment
+	Host        string
+	Port        int
+	User        string
+	Database    string
+	Auth        AuthMethod
+	// Region is the AWS region the IAM token is signed for. Empty reads it out of the host name,
+	// which is where an RDS endpoint already carries it.
+	Region       string
+	TLS          TLSOptions
+	SSH          SSHTunnel
 	SavePassword bool
 }
 
@@ -83,15 +286,21 @@ func (p ConnectionProfile) Validate() error {
 	if !p.Engine.Valid() {
 		return ValidationError{Field: "engine", Message: "is not supported"}
 	}
+	if !p.Environment.Valid() {
+		return ValidationError{Field: "environment", Message: "is not a known environment"}
+	}
 	// A PostgreSQL session is bound to one database for its whole life and cannot cross to
 	// another, so a profile that names none has nothing to connect to.
 	if p.Engine == EnginePostgres && strings.TrimSpace(p.Database) == "" {
 		return ValidationError{Field: "database", Message: "is required for PostgreSQL"}
 	}
-	if !p.TLSMode.Valid() {
-		return ValidationError{Field: "tlsMode", Message: "is not a known TLS mode"}
+	if !p.Auth.Valid() {
+		return ValidationError{Field: "auth", Message: "is not a known authentication method"}
 	}
-	return nil
+	if err := p.TLS.Validate(); err != nil {
+		return err
+	}
+	return p.SSH.Validate()
 }
 
 func (p ConnectionProfile) Target() string {

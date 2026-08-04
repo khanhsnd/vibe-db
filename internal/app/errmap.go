@@ -28,7 +28,13 @@ const (
 	CodeTLSUnsupported   ErrorCode = "TLS_UNSUPPORTED"
 	CodeTLSNotVerified   ErrorCode = "TLS_NOT_VERIFIED"
 	CodePasswordNotFound ErrorCode = "PASSWORD_NOT_FOUND"
-	CodeInternal         ErrorCode = "INTERNAL"
+
+	CodeTunnelFailed      ErrorCode = "TUNNEL_FAILED"
+	CodeTunnelCredentials ErrorCode = "TUNNEL_CREDENTIALS"
+	CodeTunnelHostKey     ErrorCode = "TUNNEL_HOST_KEY"
+	CodeTokenUnavailable  ErrorCode = "TOKEN_UNAVAILABLE"
+
+	CodeInternal ErrorCode = "INTERNAL"
 )
 
 type wireError struct {
@@ -65,6 +71,10 @@ var sentinelToWire = []struct {
 	{domain.ErrTLSUnsupported, CodeTLSUnsupported, "The server does not support TLS. Try a lower TLS mode."},
 	{domain.ErrTLSNotVerified, CodeTLSNotVerified, "The server's TLS certificate is not trusted. Use TLS mode Required to encrypt without verifying it."},
 	{domain.ErrPasswordNotFound, CodePasswordNotFound, "No saved password. Enter the password to connect."},
+	{domain.ErrTunnelFailed, CodeTunnelFailed, "Could not reach the SSH server. Check the tunnel's host and port."},
+	{domain.ErrTunnelCredentials, CodeTunnelCredentials, "The SSH server rejected the credentials. Check the user, the key and its pass phrase."},
+	{domain.ErrTunnelHostKey, CodeTunnelHostKey, "The SSH server's host key is not in known_hosts, or does not match the one stored there."},
+	{domain.ErrTokenUnavailable, CodeTokenUnavailable, "No cloud credentials on this machine to sign in with. The detail says what to set."},
 }
 
 func wrapError(err error) error {

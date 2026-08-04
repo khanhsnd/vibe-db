@@ -10,8 +10,16 @@ export function ClearHistory() {
   return window['go']['app']['QueryAPI']['ClearHistory']();
 }
 
+export function Format(arg1, arg2) {
+  return window['go']['app']['QueryAPI']['Format'](arg1, arg2);
+}
+
 export function ListHistory() {
   return window['go']['app']['QueryAPI']['ListHistory']();
+}
+
+export function Review(arg1, arg2) {
+  return window['go']['app']['QueryAPI']['Review'](arg1, arg2);
 }
 
 export function Run(arg1, arg2) {

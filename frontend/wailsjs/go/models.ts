@@ -320,17 +320,68 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class SSHSettings {
+	    enabled: boolean;
+	    host: string;
+	    port: number;
+	    user: string;
+	    auth: string;
+	    keyPath: string;
+	    knownHosts: string;
+	    strictHostKey: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SSHSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.host = source["host"];
+	        this.port = source["port"];
+	        this.user = source["user"];
+	        this.auth = source["auth"];
+	        this.keyPath = source["keyPath"];
+	        this.knownHosts = source["knownHosts"];
+	        this.strictHostKey = source["strictHostKey"];
+	    }
+	}
+	export class TLSSettings {
+	    mode: string;
+	    rootCert: string;
+	    clientCert: string;
+	    clientKey: string;
+	    serverName: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TLSSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.rootCert = source["rootCert"];
+	        this.clientCert = source["clientCert"];
+	        this.clientKey = source["clientKey"];
+	        this.serverName = source["serverName"];
+	    }
+	}
 	export class Profile {
 	    id: string;
 	    name: string;
 	    engine: string;
+	    environment: string;
 	    host: string;
 	    port: number;
 	    user: string;
 	    database: string;
-	    tlsMode: string;
+	    auth: string;
+	    region: string;
+	    tls: TLSSettings;
+	    ssh: SSHSettings;
 	    savePassword: boolean;
 	    hasPassword: boolean;
+	    hasSshSecret: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
@@ -341,25 +392,53 @@ export namespace app {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.engine = source["engine"];
+	        this.environment = source["environment"];
 	        this.host = source["host"];
 	        this.port = source["port"];
 	        this.user = source["user"];
 	        this.database = source["database"];
-	        this.tlsMode = source["tlsMode"];
+	        this.auth = source["auth"];
+	        this.region = source["region"];
+	        this.tls = this.convertValues(source["tls"], TLSSettings);
+	        this.ssh = this.convertValues(source["ssh"], SSHSettings);
 	        this.savePassword = source["savePassword"];
 	        this.hasPassword = source["hasPassword"];
+	        this.hasSshSecret = source["hasSshSecret"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ProfileInput {
 	    id: string;
 	    name: string;
 	    engine: string;
+	    environment: string;
 	    host: string;
 	    port: number;
 	    user: string;
 	    password: string;
 	    database: string;
-	    tlsMode: string;
+	    auth: string;
+	    region: string;
+	    tls: TLSSettings;
+	    ssh: SSHSettings;
+	    sshSecret: string;
 	    savePassword: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -371,14 +450,37 @@ export namespace app {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.engine = source["engine"];
+	        this.environment = source["environment"];
 	        this.host = source["host"];
 	        this.port = source["port"];
 	        this.user = source["user"];
 	        this.password = source["password"];
 	        this.database = source["database"];
-	        this.tlsMode = source["tlsMode"];
+	        this.auth = source["auth"];
+	        this.region = source["region"];
+	        this.tls = this.convertValues(source["tls"], TLSSettings);
+	        this.ssh = this.convertValues(source["ssh"], SSHSettings);
+	        this.sshSecret = source["sshSecret"];
 	        this.savePassword = source["savePassword"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class QueryInput {
 	    database: string;
@@ -472,6 +574,23 @@ export namespace app {
 		}
 	}
 	
+	
+	export class ScriptProblem {
+	    start: number;
+	    end: number;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScriptProblem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.start = source["start"];
+	        this.end = source["end"];
+	        this.message = source["message"];
+	    }
+	}
 	export class StatementOutcome {
 	    sql: string;
 	    rows: number;
@@ -562,6 +681,62 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class StatementReview {
+	    start: number;
+	    end: number;
+	    sql: string;
+	    keyword: string;
+	    hazard: string;
+	    confirm: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new StatementReview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.start = source["start"];
+	        this.end = source["end"];
+	        this.sql = source["sql"];
+	        this.keyword = source["keyword"];
+	        this.hazard = source["hazard"];
+	        this.confirm = source["confirm"];
+	    }
+	}
+	export class ScriptReview {
+	    statements: StatementReview[];
+	    problems: ScriptProblem[];
+	    environment: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ScriptReview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.statements = this.convertValues(source["statements"], StatementReview);
+	        this.problems = this.convertValues(source["problems"], ScriptProblem);
+	        this.environment = source["environment"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Session {
 	    id: string;
 	    profileId: string;
@@ -580,6 +755,8 @@ export namespace app {
 	        this.serverVersion = source["serverVersion"];
 	    }
 	}
+	
+	
 	
 	
 	export class TableCriterionInput {

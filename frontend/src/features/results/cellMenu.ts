@@ -53,6 +53,8 @@ export interface CellMenuContext {
   filtering?: GridFiltering | undefined
   /** The grid's own paste, so the menu writes a block exactly as `Ctrl`+`V` does. */
   onPaste: (at: CellRef) => void
+  /** The grid's own value viewer, which every grid has — see `ValueDialog`. */
+  onViewValue: (at: CellRef) => void
 }
 
 /** The cell the menu names: its column, and the value the filter items compare against. */
@@ -97,7 +99,7 @@ export function cellMenuItems(context: CellMenuContext): MenuItem[] {
 }
 
 function writeItems(context: CellMenuContext): MenuItem[] {
-  const { at, data, selection, onEditCell, onEditInPanel } = context
+  const { at, data, selection, onEditCell, onEditInPanel, onViewValue } = context
 
   const cells = selectedCells(selection, data.rows.length, data.columns.length)
   const write = (make: () => Cell) => () => {
@@ -105,9 +107,17 @@ function writeItems(context: CellMenuContext): MenuItem[] {
   }
 
   return [
+    // First, because it is the one item every grid offers and the one that asks nothing of the
+    // reader: it reads the cell and changes nothing.
+    { label: 'View Value', icon: ICON.viewValue, onSelect: () => onViewValue(at) },
     ...(onEditCell
       ? [
-          { label: 'Set to Empty String', icon: ICON.emptyString, onSelect: write(() => '') },
+          {
+            label: 'Set to Empty String',
+            icon: ICON.emptyString,
+            separatorBefore: true,
+            onSelect: write(() => ''),
+          },
           { label: 'Set to NULL', icon: ICON.nullValue, onSelect: write(() => null) },
           {
             label: 'Generate UUID',

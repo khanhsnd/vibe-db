@@ -1,6 +1,7 @@
 package sqlkit
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/khanhsnd/vibe-db/internal/driver"
@@ -129,4 +130,53 @@ func TestAppendColumnGroupsConsecutiveRows(t *testing.T) {
 	if tables[1].Name != "orders" {
 		t.Errorf("tables[1].Name = %q, want orders", tables[1].Name)
 	}
+}
+
+func TestTextOrNilKeepsTextAndHexesBytes(t *testing.T) {
+	tests := []struct {
+		name  string
+		value sql.NullString
+		want  *string
+	}{
+		{"a NULL", sql.NullString{}, nil},
+		{"the empty string", sql.NullString{String: "", Valid: true}, ptr("")},
+		{"plain text", sql.NullString{String: "hello", Valid: true}, ptr("hello")},
+		{
+			// Text that is not ASCII is still text, and must not be turned into hex: a column of
+			// Vietnamese names is the ordinary case, not a blob.
+			"text outside ASCII",
+			sql.NullString{String: "Nguyễn — 日本", Valid: true},
+			ptr("Nguyễn — 日本"),
+		},
+		{
+			// A PNG's first bytes are not valid UTF-8, and are exactly what the WebView would
+			// otherwise replace character by character on its way across.
+			"bytes that are not text",
+			sql.NullString{String: "\x89PNG\r\n\x1a\n", Valid: true},
+			ptr(`\x89504e470d0a1a0a`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TextOrNil(tt.value)
+
+			if tt.want == nil {
+				if got != nil {
+					t.Fatalf("TextOrNil() = %q, want nil", *got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("TextOrNil() = nil, want %q", *tt.want)
+			}
+			if *got != *tt.want {
+				t.Errorf("TextOrNil() = %q, want %q", *got, *tt.want)
+			}
+		})
+	}
+}
+
+func ptr(text string) *string {
+	return &text
 }

@@ -7,13 +7,26 @@ import (
 
 func validProfile() ConnectionProfile {
 	return ConnectionProfile{
-		ID:      "abc",
-		Name:    "local",
-		Engine:  EngineMySQL,
-		Host:    "127.0.0.1",
-		Port:    DefaultMySQLPort,
-		User:    "root",
-		TLSMode: TLSPreferred,
+		ID:     "abc",
+		Name:   "local",
+		Engine: EngineMySQL,
+		Host:   "127.0.0.1",
+		Port:   DefaultMySQLPort,
+		User:   "root",
+		Auth:   AuthPassword,
+		TLS:    TLSOptions{Mode: TLSPreferred},
+	}
+}
+
+func validTunnel() SSHTunnel {
+	return SSHTunnel{
+		Enabled:       true,
+		Host:          "bastion.example.com",
+		Port:          DefaultSSHPort,
+		User:          "deploy",
+		Auth:          SSHKey,
+		KeyPath:       `C:\Users\me\.ssh\id_ed25519`,
+		StrictHostKey: true,
 	}
 }
 
@@ -31,7 +44,9 @@ func TestValidate(t *testing.T) {
 		{"port negative", func(p *ConnectionProfile) { p.Port = -1 }, "port"},
 		{"blank user", func(p *ConnectionProfile) { p.User = "" }, "user"},
 		{"unsupported engine", func(p *ConnectionProfile) { p.Engine = "oracle" }, "engine"},
-		{"unknown tls mode", func(p *ConnectionProfile) { p.TLSMode = "sometimes" }, "tlsMode"},
+		{"unknown tls mode", func(p *ConnectionProfile) { p.TLS.Mode = "sometimes" }, "tlsMode"},
+		{"unknown environment", func(p *ConnectionProfile) { p.Environment = "uat" }, "environment"},
+		{"unknown auth", func(p *ConnectionProfile) { p.Auth = "kerberos" }, "auth"},
 		{
 			"postgres without a database",
 			func(p *ConnectionProfile) { p.Engine = EnginePostgres },
@@ -40,6 +55,80 @@ func TestValidate(t *testing.T) {
 		{
 			"postgres with a database",
 			func(p *ConnectionProfile) { p.Engine, p.Database = EnginePostgres, "shop" },
+			"",
+		},
+		{
+			"a root certificate under a mode that never opens one",
+			func(p *ConnectionProfile) { p.TLS.RootCert = `C:\ca.pem` },
+			"tlsMode",
+		},
+		{
+			"a root certificate under a mode that does",
+			func(p *ConnectionProfile) {
+				p.TLS.Mode, p.TLS.RootCert = TLSVerifyFull, `C:\ca.pem`
+			},
+			"",
+		},
+		{
+			"a client certificate without its key",
+			func(p *ConnectionProfile) {
+				p.TLS.Mode, p.TLS.ClientCert = TLSRequired, `C:\client.pem`
+			},
+			"clientCert",
+		},
+		{
+			"a client certificate with its key",
+			func(p *ConnectionProfile) {
+				p.TLS.Mode = TLSRequired
+				p.TLS.ClientCert, p.TLS.ClientKey = `C:\client.pem`, `C:\client.key`
+			},
+			"",
+		},
+		{"a tunnel", func(p *ConnectionProfile) { p.SSH = validTunnel() }, ""},
+		{
+			"a tunnel with no host",
+			func(p *ConnectionProfile) {
+				p.SSH = validTunnel()
+				p.SSH.Host = " "
+			},
+			"sshHost",
+		},
+		{
+			"a tunnel with no port",
+			func(p *ConnectionProfile) {
+				p.SSH = validTunnel()
+				p.SSH.Port = 0
+			},
+			"sshPort",
+		},
+		{
+			"a tunnel with no user",
+			func(p *ConnectionProfile) {
+				p.SSH = validTunnel()
+				p.SSH.User = ""
+			},
+			"sshUser",
+		},
+		{
+			"key authentication with no key",
+			func(p *ConnectionProfile) {
+				p.SSH = validTunnel()
+				p.SSH.KeyPath = ""
+			},
+			"sshKeyPath",
+		},
+		{
+			"agent authentication needs no key",
+			func(p *ConnectionProfile) {
+				p.SSH = validTunnel()
+				p.SSH.Auth, p.SSH.KeyPath = SSHAgent, ""
+			},
+			"",
+		},
+		{
+			// A tunnel nobody turned on is not half-filled-in, it is off.
+			"a disabled tunnel is not checked",
+			func(p *ConnectionProfile) { p.SSH = SSHTunnel{} },
 			"",
 		},
 	}

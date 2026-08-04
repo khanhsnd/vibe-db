@@ -32,6 +32,7 @@ import { ExportMenu } from './ExportMenu'
 import { FilterSortButton } from './FilterSortButton'
 import { FilterSortPanel } from './FilterSortPanel'
 import { cellMenuItems } from './cellMenu'
+import { ValueDialog } from './ValueDialog'
 import { ColumnTypeIcon, isNumeric, temporalPicker, type TemporalPicker } from './columnType'
 import { countConditions, type GridFiltering } from './filter'
 import { gridFont, headerFont, widestText } from './measureText'
@@ -209,6 +210,13 @@ export function ResultGrid({
   const [editing, setEditing] = useState<CellRef | null>(null)
   /** The cell the last right-click landed on, which the menu names — see `onCellContextMenu`. */
   const [menuCell, setMenuCell] = useState<CellRef | null>(null)
+
+  /**
+   * The cell open in the value viewer, or null. It is the grid's own rather than a call site's
+   * because *every* grid has cells worth looking at whole — a query result's JSON, a history
+   * entry's statement — and only the two writable surfaces have a cell-editor panel.
+   */
+  const [viewing, setViewing] = useState<CellRef | null>(null)
 
   const current = selection === undefined ? ownSelection : selection
 
@@ -393,6 +401,7 @@ export function ResultGrid({
       onRefresh,
       filtering,
       onPaste: (origin) => void paste(origin),
+      onViewValue: setViewing,
     })
   }
 
@@ -722,6 +731,12 @@ export function ResultGrid({
           </ContextMenu>
         </div>
       </div>
+
+      <ValueDialog
+        at={viewing}
+        data={result}
+        onClose={() => setViewing(null)}
+      />
     </div>
   )
 }

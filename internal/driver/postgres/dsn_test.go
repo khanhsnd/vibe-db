@@ -18,7 +18,8 @@ func profile() domain.ConnectionProfile {
 		Port:     5432,
 		User:     "postgres",
 		Database: "shop",
-		TLSMode:  domain.TLSPreferred,
+		Auth:     domain.AuthPassword,
+		TLS:      domain.TLSOptions{Mode: domain.TLSPreferred},
 	}
 }
 
@@ -31,12 +32,13 @@ func TestBuildDSNTLSModes(t *testing.T) {
 		{domain.TLSPreferred, "sslmode='prefer'"},
 		{domain.TLSRequired, "sslmode='require'"},
 		{domain.TLSVerifyCA, "sslmode='verify-ca'"},
+		{domain.TLSVerifyFull, "sslmode='verify-full'"},
 	}
 
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {
 			p := profile()
-			p.TLSMode = tt.mode
+			p.TLS.Mode = tt.mode
 
 			dsn, err := BuildDSN(p, driver.Credentials{Password: "secret"})
 			if err != nil {
@@ -49,9 +51,48 @@ func TestBuildDSNTLSModes(t *testing.T) {
 	}
 }
 
+// libpq takes the certificate files as keywords of its own, so they are in the string rather
+// than registered the way MySQL's are — and a file nobody named is left out of it entirely,
+// because `sslrootcert=”` is a file called nothing and fails on it.
+func TestBuildDSNCarriesCertificateFilesOnlyWhenNamed(t *testing.T) {
+	bare, err := BuildDSN(profile(), driver.Credentials{})
+	if err != nil {
+		t.Fatalf("BuildDSN() error = %v", err)
+	}
+	for _, absent := range []string{"sslrootcert", "sslcert", "sslkey"} {
+		if strings.Contains(bare, absent) {
+			t.Errorf("dsn = %q, want no %s when none is named", bare, absent)
+		}
+	}
+
+	p := profile()
+	p.TLS = domain.TLSOptions{
+		Mode:       domain.TLSVerifyFull,
+		RootCert:   `C:\certs\ca.pem`,
+		ClientCert: `C:\certs\client.pem`,
+		ClientKey:  `C:\certs\client.key`,
+	}
+
+	dsn, err := BuildDSN(p, driver.Credentials{})
+	if err != nil {
+		t.Fatalf("BuildDSN() error = %v", err)
+	}
+	// The backslashes of a Windows path have to survive the quoting, or libpq goes looking for
+	// a file with half a name.
+	for _, want := range []string{
+		`sslrootcert='C:\\certs\\ca.pem'`,
+		`sslcert='C:\\certs\\client.pem'`,
+		`sslkey='C:\\certs\\client.key'`,
+	} {
+		if !strings.Contains(dsn, want) {
+			t.Errorf("dsn = %q, want it to contain %q", dsn, want)
+		}
+	}
+}
+
 func TestBuildDSNRejectsUnknownTLSMode(t *testing.T) {
 	p := profile()
-	p.TLSMode = "sometimes"
+	p.TLS.Mode = "sometimes"
 
 	_, err := BuildDSN(p, driver.Credentials{})
 

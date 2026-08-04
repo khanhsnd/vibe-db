@@ -29,18 +29,32 @@ func (*Driver) Engine() domain.Engine {
 	return domain.EngineMySQL
 }
 
+// Text is the lexical half of the engine, which needs no connection: MySQL reads `#` as a
+// comment and a backslash as an escape, and `sqlkit.MySQL` is where both of those live.
+func (*Driver) Text() driver.Text {
+	return dialect
+}
+
 func (*Driver) Open(
 	ctx context.Context,
 	profile domain.ConnectionProfile,
 	creds driver.Credentials,
+	tunnel driver.Dialer,
 ) (driver.Session, error) {
-	dsn, err := BuildDSN(profile, creds)
+	transport, err := dial(profile, tunnel)
 	if err != nil {
+		return nil, err
+	}
+
+	dsn, err := BuildDSN(profile, creds, transport)
+	if err != nil {
+		transport.release()
 		return nil, err
 	}
 
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
+		transport.release()
 		return nil, translateError(err)
 	}
 
@@ -50,10 +64,11 @@ func (*Driver) Open(
 
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
+		transport.release()
 		return nil, translateError(err)
 	}
 
-	s := &session{db: db}
+	s := &session{db: db, release: transport.release}
 	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
 	return s, nil
 }
@@ -64,6 +79,9 @@ type session struct {
 	sqlkit.DDL
 
 	db *sql.DB
+	// release forgets the dialler and the TLS configuration this session registered with
+	// go-sql-driver, which are named globally and would otherwise outlive it.
+	release func()
 }
 
 func (s *session) Ping(ctx context.Context) error {
@@ -197,10 +215,7 @@ func (s *session) names(ctx context.Context, query string, args ...any) ([]strin
 	return names, nil
 }
 
-func (*session) Split(script string) []string {
-	return sqlkit.Split(script, dialect)
-}
-
 func (s *session) Close() error {
+	defer s.release()
 	return s.db.Close()
 }

@@ -6,7 +6,9 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
@@ -30,12 +32,25 @@ func (*Driver) Engine() domain.Engine {
 	return domain.EnginePostgres
 }
 
+// Text is the lexical half of the engine, which needs no connection: PostgreSQL reads a `$tag$`
+// body as a string and a backslash as an ordinary character, and `sqlkit.Postgres` is where both
+// of those live.
+func (*Driver) Text() driver.Text {
+	return dialect
+}
+
 func (*Driver) Open(
 	ctx context.Context,
 	profile domain.ConnectionProfile,
 	creds driver.Credentials,
+	tunnel driver.Dialer,
 ) (driver.Session, error) {
-	s := &session{profile: profile, creds: creds, pools: map[string]*sql.DB{}}
+	s := &session{
+		profile: profile,
+		creds:   creds,
+		tunnel:  tunnel,
+		pools:   map[string]*sql.DB{},
+	}
 	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
 
 	// The profile's own database is what the session is judged on: reaching it proves the
@@ -62,9 +77,15 @@ type session struct {
 
 	profile domain.ConnectionProfile
 	creds   driver.Credentials
+	// tunnel is what every pool of this session dials through, or nil for a direct connection.
+	// It is held rather than applied once because a pool is opened per database, lazily.
+	tunnel driver.Dialer
 
 	mu    sync.Mutex
 	pools map[string]*sql.DB
+	// registered names the connection configurations handed to `stdlib`, which keeps them in a
+	// package-level map until they are given back. One per pool, forgotten with the session.
+	registered []string
 }
 
 func (s *session) pool(database string) (*sql.DB, error) {
@@ -87,8 +108,25 @@ func (s *session) pool(database string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("pgx", dsn)
+	// The DSN carries everything libpq has a keyword for. The two things it has none for — the
+	// dialler under the connection, and a certificate belonging to a name other than the host
+	// dialled — are set on the parsed configuration, which `stdlib` then takes by name.
+	config, err := pgx.ParseConfig(dsn)
 	if err != nil {
+		return nil, translateError(err)
+	}
+	if s.tunnel != nil {
+		config.DialFunc = pgconn.DialFunc(s.tunnel)
+	}
+	if name := s.profile.TLS.ServerName; name != "" {
+		verifyAs(config, name)
+	}
+
+	registered := stdlib.RegisterConnConfig(config)
+
+	db, err := sql.Open("pgx", registered)
+	if err != nil {
+		stdlib.UnregisterConnConfig(registered)
 		return nil, translateError(err)
 	}
 
@@ -97,13 +135,31 @@ func (s *session) pool(database string) (*sql.DB, error) {
 	db.SetConnMaxIdleTime(connMaxIdleTime)
 
 	s.pools[database] = db
+	s.registered = append(s.registered, registered)
 	return db, nil
+}
+
+// verifyAs holds the server's certificate to a name other than the one dialled, which is what a
+// tunnel makes ordinary: the connection goes to a local port and the certificate is still the
+// database server's. Every fallback is changed too — `prefer` builds one per attempt, and a
+// name applied to the first alone would be dropped the moment the first attempt failed.
+func verifyAs(config *pgx.ConnConfig, name string) {
+	if config.TLSConfig != nil {
+		config.TLSConfig.ServerName = name
+	}
+	for _, fallback := range config.Fallbacks {
+		if fallback.TLSConfig != nil {
+			fallback.TLSConfig.ServerName = name
+		}
+	}
 }
 
 func (s *session) Close() error {
 	s.mu.Lock()
 	pools := s.pools
+	registered := s.registered
 	s.pools = map[string]*sql.DB{}
+	s.registered = nil
 	s.mu.Unlock()
 
 	var first error
@@ -112,11 +168,10 @@ func (s *session) Close() error {
 			first = err
 		}
 	}
+	for _, name := range registered {
+		stdlib.UnregisterConnConfig(name)
+	}
 	return first
-}
-
-func (*session) Split(script string) []string {
-	return sqlkit.Split(script, dialect)
 }
 
 func (s *session) Ping(ctx context.Context) error {

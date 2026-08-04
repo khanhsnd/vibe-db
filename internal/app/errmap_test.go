@@ -41,6 +41,10 @@ func TestWrapErrorMapsSentinels(t *testing.T) {
 		{domain.ErrPasswordNotFound, CodePasswordNotFound},
 		{domain.ErrEmptyStatement, CodeEmptyStatement},
 		{domain.ErrQueryCancelled, CodeQueryCancelled},
+		{domain.ErrTunnelFailed, CodeTunnelFailed},
+		{domain.ErrTunnelCredentials, CodeTunnelCredentials},
+		{domain.ErrTunnelHostKey, CodeTunnelHostKey},
+		{domain.ErrTokenUnavailable, CodeTokenUnavailable},
 	}
 
 	for _, tt := range tests {

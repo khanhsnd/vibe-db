@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"net"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 )
@@ -9,6 +10,15 @@ import (
 type Credentials struct {
 	Password string
 }
+
+// Dialer opens the network connection a session is carried over. It is nil for a profile that
+// reaches its server directly, and a tunnel's own dial for one that goes through a bastion —
+// which is the whole reason neither adapter has ever heard of SSH: the tunnel is stood up above
+// this layer and arrives as a function.
+//
+// It takes the address the *engine* asked for, resolved on the far side of whatever carries it,
+// so a server bound to loopback on a bastion is still `127.0.0.1` in the profile.
+type Dialer func(ctx context.Context, network, address string) (net.Conn, error)
 
 type ServerInfo struct {
 	Version string
@@ -346,9 +356,62 @@ type RowDelete struct {
 	Key   map[string]string
 }
 
+// ReviewedStatement is one statement of a script as the reviewer reads it, without running any
+// of it: where it sits in the text the reader is looking at, and what it is going to do. Start
+// and End are byte offsets into the script, so a warning can point back at the statement that
+// earned it rather than repeating it.
+type ReviewedStatement struct {
+	Start   int
+	End     int
+	SQL     string
+	Keyword string
+	Hazard  domain.Hazard
+}
+
+// Problem is something wrong with a script that the lexer can *prove* without a server: a quote
+// or a comment the text ends inside of, a parenthesis with no partner. It is deliberately not a
+// parser — anything needing to know whether a name exists or a clause is in the right order is
+// the server's answer to give, and guessing at it would cost the reader more than it saved.
+type Problem struct {
+	Start   int
+	End     int
+	Message string
+}
+
+// Review is what a script says about itself before anything runs it.
+type Review struct {
+	Statements []ReviewedStatement
+	Problems   []Problem
+}
+
+// Text is the half of an engine that is purely lexical: where a statement ends, how a script is
+// laid out, and what each of its statements will do. It is the driver's for the reason splitting
+// always was — a semicolon inside a `$body$` ends nothing on PostgreSQL and a backslash escapes a
+// quote only on MySQL — and it is its own interface so `sqlkit.Dialect` can supply the whole of it.
+type Text interface {
+	// Split cuts a script into the statements it holds.
+	Split(script string) []string
+	// Format lays a script out: one clause to a line, keywords in upper case, and the statement
+	// it was handed back unchanged in every respect a server would notice.
+	Format(script string) string
+	// Review reads what a script is going to do, and what is already wrong with it.
+	Review(script string) Review
+}
+
 type Driver interface {
 	Engine() domain.Engine
-	Open(ctx context.Context, profile domain.ConnectionProfile, creds Credentials) (Session, error)
+	// Open dials the server. `dial` is nil for a direct connection and a tunnel's own dial for
+	// one carried through a bastion; an adapter that cannot honour it must say so rather than
+	// quietly connecting around it.
+	Open(
+		ctx context.Context,
+		profile domain.ConnectionProfile,
+		creds Credentials,
+		dial Dialer,
+	) (Session, error)
+	// Text needs no connection, so it answers for the engine rather than for a session: a reader
+	// lays out and is warned about a script whether or not anything is dialled.
+	Text() Text
 }
 
 // Schema is the DDL half of a session: reading a table's shape and changing it. It is its own
@@ -422,9 +485,6 @@ type Session interface {
 	InsertRow(ctx context.Context, insert RowInsert) error
 	DeleteRow(ctx context.Context, removal RowDelete) error
 	Query(ctx context.Context, query Query) (QueryResult, error)
-	// Split cuts a script into the statements it holds. Where one ends is lexical and so the
-	// engine's: a semicolon inside a string, a comment or a quoted body ends nothing.
-	Split(script string) []string
 	Close() error
 }
 

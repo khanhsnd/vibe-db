@@ -65,6 +65,8 @@ export const ICON = {
   nullValue: <Ban size={SIZE} />,
   uuid: <Fingerprint size={SIZE} />,
   cellEditor: <PanelBottom size={SIZE} />,
+  // The same glyph the tree's `Open View` wears, and for the same reason: both only look.
+  viewValue: <Eye size={SIZE} />,
   saveAs: <Save size={SIZE} />,
   filter: <Filter size={SIZE} />,
   filterNone: <FilterX size={SIZE} />,

@@ -23,6 +23,7 @@ import { ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 
 import { EngineIcon } from './EngineIcon'
+import { EnvironmentStripe } from './EnvironmentDot'
 import { StatusDot } from './StatusDot'
 import { flatten, type NodeKind, type TreeNode } from './tree'
 
@@ -115,6 +116,10 @@ export function ObjectTree({
                   paddingLeft: BASE_INDENT + depth * INDENT_PER_DEPTH,
                 }}
               >
+                {/* Only a connection carries one, and everything under it inherits the warning
+                    by being under it — see EnvironmentStripe. */}
+                <EnvironmentStripe environment={node.environment ?? ''} />
+
                 {expandable ? (
                   <button
                     type="button"

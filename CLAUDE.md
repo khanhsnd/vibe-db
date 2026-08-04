@@ -17,7 +17,8 @@ vary by engine.
    `internal/app` → `session / profile / secret / history` → `internal/driver` → `internal/domain`.
    Business rules live in `domain`, not in the API layer. `internal/app` speaks `dto.go` wire types,
    never domain types. `frontend/src/bridge` is the only frontend directory allowed to import
-   `frontend/wailsjs/**`.
+   `frontend/wailsjs/**`. **What is dangerous to run is a `domain` rule**
+   (`Environment.NeedsConfirmation`); the frontend receives its answer and never re-derives it.
 2. **Never return a raw error from a bound method** — wrap it with `wrapError`. **Never match on
    message text in the UI**; switch on `code`.
 3. **Bound methods must not take `context.Context`** — Wails v2 would expose it as a real
@@ -31,6 +32,14 @@ vary by engine.
 7. **Anything that shows rows and columns is `ResultGrid`** — never a `<table>` or a second grid.
    Its look and behaviour are fixed by [docs/grid.md](docs/grid.md); add features to the grid, and
    update that file in the same change.
+8. **Reading a script is the driver's, never the frontend's.** Where a statement ends, how it is
+   laid out, and what it is going to do are all lexical and therefore the engine's — they live on
+   `sqlkit.Dialect` over one lexer (`sqlkit.Lex`) and reach the app through `driver.Text`. Never
+   write a second SQL scanner, in Go or in TypeScript.
+9. **No secret goes in `connections.json`.** A password, a bastion's pass phrase and a cloud token
+   all live in the credential store — the profile's id for the first, `<id>:ssh` for the second, and
+   the third is never stored at all. A DTO says *that* one exists (`hasPassword`,
+   `hasSshSecret`), never what it is.
 
 ## Where to read before changing something
 

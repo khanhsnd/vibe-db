@@ -10,16 +10,42 @@ const (
 	version  = 1
 )
 
+// record is a profile as it sits on disk. Every field added since version 1 is `omitempty`, so a
+// reader who has never opened the SSH or TLS tabs keeps the file they already had — and a field a
+// document written before it existed does not carry reads back as its zero value, which `toDomain`
+// then fills in.
+//
+// **No secret is here.** A password, a bastion's pass phrase and a cloud token all live in the
+// credential store; this file is copied into backups and read by anything that can read the
+// reader's home directory.
 type record struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Engine       string `json:"engine"`
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
-	User         string `json:"user"`
-	Database     string `json:"database"`
-	TLSMode      string `json:"tlsMode"`
-	SavePassword bool   `json:"savePassword"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Engine      string `json:"engine"`
+	Environment string `json:"environment,omitempty"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	User        string `json:"user"`
+	Database    string `json:"database"`
+	Auth        string `json:"auth,omitempty"`
+	Region      string `json:"region,omitempty"`
+
+	TLSMode       string `json:"tlsMode"`
+	TLSRootCert   string `json:"tlsRootCert,omitempty"`
+	TLSClientCert string `json:"tlsClientCert,omitempty"`
+	TLSClientKey  string `json:"tlsClientKey,omitempty"`
+	TLSServerName string `json:"tlsServerName,omitempty"`
+
+	SSHEnabled       bool   `json:"sshEnabled,omitempty"`
+	SSHHost          string `json:"sshHost,omitempty"`
+	SSHPort          int    `json:"sshPort,omitempty"`
+	SSHUser          string `json:"sshUser,omitempty"`
+	SSHAuth          string `json:"sshAuth,omitempty"`
+	SSHKeyPath       string `json:"sshKeyPath,omitempty"`
+	SSHKnownHosts    string `json:"sshKnownHosts,omitempty"`
+	SSHStrictHostKey bool   `json:"sshStrictHostKey,omitempty"`
+
+	SavePassword bool `json:"savePassword"`
 }
 
 type document struct {
@@ -101,30 +127,75 @@ func (r *Repo) Delete(id string) error {
 	})
 }
 
+// toDomain reads a record back, filling in the one field a document written before it existed
+// cannot carry: a profile that names no authentication method uses a password, which is what
+// every profile did before there was anything else to name.
 func toDomain(rec record) domain.ConnectionProfile {
+	auth := domain.AuthMethod(rec.Auth)
+	if auth == "" {
+		auth = domain.AuthPassword
+	}
+
 	return domain.ConnectionProfile{
-		ID:           rec.ID,
-		Name:         rec.Name,
-		Engine:       domain.Engine(rec.Engine),
-		Host:         rec.Host,
-		Port:         rec.Port,
-		User:         rec.User,
-		Database:     rec.Database,
-		TLSMode:      domain.TLSMode(rec.TLSMode),
+		ID:          rec.ID,
+		Name:        rec.Name,
+		Engine:      domain.Engine(rec.Engine),
+		Environment: domain.Environment(rec.Environment),
+		Host:        rec.Host,
+		Port:        rec.Port,
+		User:        rec.User,
+		Database:    rec.Database,
+		Auth:        auth,
+		Region:      rec.Region,
+		TLS: domain.TLSOptions{
+			Mode:       domain.TLSMode(rec.TLSMode),
+			RootCert:   rec.TLSRootCert,
+			ClientCert: rec.TLSClientCert,
+			ClientKey:  rec.TLSClientKey,
+			ServerName: rec.TLSServerName,
+		},
+		SSH: domain.SSHTunnel{
+			Enabled:       rec.SSHEnabled,
+			Host:          rec.SSHHost,
+			Port:          rec.SSHPort,
+			User:          rec.SSHUser,
+			Auth:          domain.SSHAuth(rec.SSHAuth),
+			KeyPath:       rec.SSHKeyPath,
+			KnownHosts:    rec.SSHKnownHosts,
+			StrictHostKey: rec.SSHStrictHostKey,
+		},
 		SavePassword: rec.SavePassword,
 	}
 }
 
 func fromDomain(profile domain.ConnectionProfile) record {
 	return record{
-		ID:           profile.ID,
-		Name:         profile.Name,
-		Engine:       string(profile.Engine),
-		Host:         profile.Host,
-		Port:         profile.Port,
-		User:         profile.User,
-		Database:     profile.Database,
-		TLSMode:      string(profile.TLSMode),
+		ID:          profile.ID,
+		Name:        profile.Name,
+		Engine:      string(profile.Engine),
+		Environment: string(profile.Environment),
+		Host:        profile.Host,
+		Port:        profile.Port,
+		User:        profile.User,
+		Database:    profile.Database,
+		Auth:        string(profile.Auth),
+		Region:      profile.Region,
+
+		TLSMode:       string(profile.TLS.Mode),
+		TLSRootCert:   profile.TLS.RootCert,
+		TLSClientCert: profile.TLS.ClientCert,
+		TLSClientKey:  profile.TLS.ClientKey,
+		TLSServerName: profile.TLS.ServerName,
+
+		SSHEnabled:       profile.SSH.Enabled,
+		SSHHost:          profile.SSH.Host,
+		SSHPort:          profile.SSH.Port,
+		SSHUser:          profile.SSH.User,
+		SSHAuth:          string(profile.SSH.Auth),
+		SSHKeyPath:       profile.SSH.KeyPath,
+		SSHKnownHosts:    profile.SSH.KnownHosts,
+		SSHStrictHostKey: profile.SSH.StrictHostKey,
+
 		SavePassword: profile.SavePassword,
 	}
 }

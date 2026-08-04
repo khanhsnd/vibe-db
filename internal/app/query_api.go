@@ -127,6 +127,34 @@ func wireFields(err error) (string, string) {
 	return string(CodeInternal), err.Error()
 }
 
+// Review reads what a script is going to do, and what is already wrong with it, without sending
+// any of it to the server. It answers two questions the editor asks continuously: which statements
+// have to be confirmed before Execute may run them, and where the lexer can already prove
+// something is wrong — an unclosed quote, a bracket with no partner.
+//
+// It is deliberately not a parser. Whether a column exists or a clause is in the right order is
+// the server's answer to give, and a client that guessed would be wrong often enough that a reader
+// learned to ignore it — see sqlkit.Review.
+func (a *QueryAPI) Review(sessionID, sql string) (ScriptReview, error) {
+	review, environment, err := a.sessions.Review(sessionID, sql)
+	if err != nil {
+		return ScriptReview{}, wrapError(err)
+	}
+	return toReviewDTO(review, environment), nil
+}
+
+// Format lays a script out and answers with it. Nothing a server would notice changes: only the
+// whitespace between tokens and the case of unquoted keywords, since a string, a quoted name and a
+// comment are single tokens written back byte for byte. A script the lexer cannot make sense of
+// comes back exactly as it went in — Review is what says why.
+func (a *QueryAPI) Format(sessionID, sql string) (string, error) {
+	formatted, err := a.sessions.Format(sessionID, sql)
+	if err != nil {
+		return "", wrapError(err)
+	}
+	return formatted, nil
+}
+
 // ListHistory answers with the statements this app has run, newest first — one entry per statement
 // of a namespace, however many times it has been run. It is every connection's, because a log
 // filtered by the pane showing it can still say what a connection that has gone once did.

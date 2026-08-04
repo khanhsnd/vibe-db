@@ -13,10 +13,63 @@
   pool's other connections keep whatever they had.
 - **`multiStatements` stays `false`** in the MySQL DSN. Statements are split client-side, which
   removes an injection surface and allows per-statement timing.
-- **TLS modes keep libpq's meaning on PostgreSQL.** The four modes the dialog offers map onto
-  `disable` / `prefer` / `require` / `verify-ca`, so `Verify CA` checks the chain but not the host
-  name. MySQL's `tls=true` checks both. The label names what the *engine* will do, rather than
-  papering over a difference the server decides.
+- **TLS modes keep libpq's meaning on both engines.** The five modes map onto
+  `disable` / `prefer` / `require` / `verify-ca` / `verify-full`, and `Verify CA` therefore checks
+  the chain and *not* the host name — the only reading that works against a server addressed by an
+  address. Go verifies the chain and the name together or not at all, so MySQL's two verifying modes
+  are a `*tls.Config` this side builds, with `verify-ca` doing its own chain-only check in
+  `VerifyPeerCertificate`. `Required` is encryption and no verification, on both, and the label says
+  so rather than implying a weaker check.
+- **A certificate file named under a mode that never opens one is refused, not ignored.** A file the
+  app quietly drops is a reader believing they have configured something.
+- **The SSH tunnel forwards no local port.** It dials the bastion and opens connections *from* it
+  through the SSH channel, which the driver receives as a `driver.Dialer`. A listening port would be
+  one more thing to collide, one more thing anything on the machine could reach, and one more thing
+  to tidy up when a session ends. It also means the profile's host and port are resolved on the far
+  side, which is what makes `127.0.0.1` mean the bastion's loopback.
+- **A bastion not in `known_hosts` is refused by default.** A tunnel whose far end is not identified
+  protects the credentials it carries from nobody, which is the one thing it exists to do. The
+  checkbox that turns it off exists for a host that genuinely cannot be enrolled.
+- **The host-key algorithms offered are the ones `known_hosts` already holds** — `hostKeyAlgorithms`
+  in `internal/sshtunnel`. Do not delete this and trust the library's defaults. A server usually
+  offers three host keys (RSA, ECDSA, Ed25519) and presents whichever the client asks for first;
+  `x/crypto/ssh` asks in *its own* preference order, RSA and ECDSA above Ed25519, while
+  `known_hosts` commonly holds only one of the three — so the server hands over a key the file has
+  never seen and the check reports **`knownhosts: key mismatch` for a host whose key has not
+  changed**. OpenSSH, `ssh` on the command line and every client built on libssh avoid this by
+  putting the known algorithms first, which is why such a host connects everywhere else and failed
+  only here. The list is read by *probing* the callback with a key no server has, because
+  `x/crypto/ssh/knownhosts` exposes its entries no other way. An `ssh-rsa` entry expands to
+  `rsa-sha2-512` and `rsa-sha2-256` as well, since it names a key and not a signature algorithm and
+  asking for `ssh-rsa` alone asks for SHA-1, which OpenSSH 8.8 and later refuse.
+- **A cloud token is never stored.** AWS IAM and Google IAM passwords are minted per connection and
+  last minutes; keeping one in the credential store would only produce a failure later that looked
+  like a bad password. `SavePassword` is forced off for them and the connect prompt is skipped.
+- **No cloud SDK is pulled in for either.** An RDS token is a documented SigV4 signing algorithm and
+  a Google access token is a documented OAuth exchange; both are under a hundred lines of standard
+  library, against two dependency trees larger than this application. The cost is that AWS
+  credentials are read from the **environment** alone — a named profile or an SSO cache is resolved
+  by exporting them, which is what the dialog says.
+- **Only production is guarded.** A confirmation a reader meets on every environment is one they
+  stop reading, and that habit is exactly what the label exists to prevent. An *unfiltered* `UPDATE`
+  or `DELETE` is confirmed everywhere, because that one is about what the statement is rather than
+  about where it is going. The rule is `domain.Environment.NeedsConfirmation` and the frontend
+  receives its answer rather than re-deriving it.
+- **The reviewer is a lexer, not a parser.** It reports only what it can prove — an unclosed quote,
+  comment or bracket — and leaves every question about names, clause order and types to the server.
+  A client that guessed at those would be wrong often enough that a reader learned to ignore it,
+  which costs more than the warning saved.
+- **The formatter changes nothing a server would notice**, and hands back untouched any script it
+  cannot lex. A formatted script that no longer runs is worse than an unformatted one, and a test
+  compares the token stream before and after to keep that true.
+- **A value that is not valid UTF-8 crosses the wire as `\x…` hex.** It is not a preference: a bound
+  method's result reaches the WebView as one JSON string, and bytes that are not text are replaced
+  character by character on the way, irrecoverably. Bytes that *are* text stay text, because a
+  `BLOB` holding JSON is commoner than one holding a PNG. `sqlkit.TextOrNil` is the only place that
+  decides it, and it decides from the bytes rather than from the column's declared type — which is
+  also why it cannot be wrong about a `TEXT` column an engine reports as a `BLOB`.
+- **A GeoJSON value is drawn as a plain SVG and never on a map.** A basemap means tiles, and tiles
+  mean sending the coordinates in a reader's database to a third party to find out where they are.
 - **Connection pools are capped at 4 open / 2 idle.** A GUI needs no more, and it is half of the
   memory story. The cap is per pool, so a PostgreSQL session browsing three databases holds three
   pools of four.

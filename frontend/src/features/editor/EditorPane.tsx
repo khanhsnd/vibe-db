@@ -11,16 +11,17 @@ import {
   lineNumbers,
   placeholder,
 } from '@codemirror/view'
-import { useEffect, useRef } from 'react'
+import { useEffect, useImperativeHandle, useRef, type Ref } from 'react'
 
 import type { TableSchema } from '@/bridge/connections'
 import { useSettingsStore } from '@/stores/settings'
 
+import { diagnostics, position, showDiagnostics, type Diagnostics } from './diagnostics'
 import { editorTheme } from './editorTheme'
 import { sqlLanguage } from './sqlLanguage'
 
-// QueryWorkspace runs the query from a window listener, so the editor only has to keep
-// defaultKeymap from inserting a blank line on the same chord.
+// QueryWorkspace runs the query and lays it out from window listeners, so the editor only has to
+// keep defaultKeymap from inserting a blank line on the same chord.
 const swallowRunShortcut = { key: 'Mod-Enter', run: () => true }
 
 const baseExtensions: Extension = [
@@ -33,6 +34,7 @@ const baseExtensions: Extension = [
   bracketMatching(),
   closeBrackets(),
   autocompletion(),
+  diagnostics,
   placeholder('SELECT * FROM ...'),
   keymap.of([swallowRunShortcut, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
   editorTheme,
@@ -46,12 +48,21 @@ const wrapping = new Compartment()
 
 const lineWrap = (wordWrap: boolean): Extension => (wordWrap ? EditorView.lineWrapping : [])
 
+/** What the panes around the editor can ask of it, which is one thing: show me that offset. */
+export interface EditorHandle {
+  /** Puts the caret at a **byte** offset — what a review reports — and scrolls it into view. */
+  reveal: (offset: number) => void
+}
+
 interface EditorPaneProps {
   value: string
   onChange: (value: string) => void
   onSelectionChange: (selected: string) => void
   schema: TableSchema[]
   engine: string
+  /** What the last review found, marked in the text itself — see `diagnostics.ts`. */
+  review: Diagnostics
+  ref?: Ref<EditorHandle>
 }
 
 export function EditorPane({
@@ -60,10 +71,24 @@ export function EditorPane({
   onSelectionChange,
   schema,
   engine,
+  review,
+  ref,
 }: EditorPaneProps) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const wordWrap = useSettingsStore((s) => s.settings.wordWrap)
+
+  useImperativeHandle(ref, () => ({
+    reveal(offset) {
+      const instance = view.current
+      if (!instance) return
+
+      const text = instance.state.doc.toString()
+      const at = Math.min(position(text)(offset), instance.state.doc.length)
+      instance.dispatch({ selection: { anchor: at }, scrollIntoView: true })
+      instance.focus()
+    },
+  }))
 
   const emit = useRef({ onChange, onSelectionChange })
   emit.current = { onChange, onSelectionChange }
@@ -107,6 +132,10 @@ export function EditorPane({
   useEffect(() => {
     view.current?.dispatch({ effects: wrapping.reconfigure(lineWrap(wordWrap)) })
   }, [wordWrap])
+
+  useEffect(() => {
+    showDiagnostics(view.current, review)
+  }, [review])
 
   // The store owns the buffer, but echoing our own edits back would reset the caret,
   // so only a genuine divergence is written into the document.

@@ -36,6 +36,11 @@ export interface TreeNode {
   children?: TreeNode[]
   /** The engine this connection speaks, which is drawn as its chip. Only a connection has one. */
   engine?: Engine
+  /**
+   * What this connection is *for*, drawn as the stripe down its row. Only a connection has one:
+   * everything under it belongs to that connection and inherits the warning by being under it.
+   */
+  environment?: string
   status?: ConnectionStatus
   active?: boolean
   badge?: string

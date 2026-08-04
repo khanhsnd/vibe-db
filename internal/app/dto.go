@@ -23,30 +23,71 @@ const (
 	AllRows = -1
 )
 
+// TLSSettings is the transport half of a profile on the wire. Every path is a path on the
+// reader's own machine and is only ever read there — nothing in it crosses to a server.
+type TLSSettings struct {
+	Mode       string `json:"mode"`
+	RootCert   string `json:"rootCert"`
+	ClientCert string `json:"clientCert"`
+	ClientKey  string `json:"clientKey"`
+	ServerName string `json:"serverName"`
+}
+
+// SSHSettings is the bastion half. The pass phrase or password it needs is *not* here: it is a
+// secret and travels in ProfileInput.SSHSecret on its way in, and never comes back out.
+type SSHSettings struct {
+	Enabled       bool   `json:"enabled"`
+	Host          string `json:"host"`
+	Port          int    `json:"port"`
+	User          string `json:"user"`
+	Auth          string `json:"auth"`
+	KeyPath       string `json:"keyPath"`
+	KnownHosts    string `json:"knownHosts"`
+	StrictHostKey bool   `json:"strictHostKey"`
+}
+
 type Profile struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Engine       string `json:"engine"`
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
-	User         string `json:"user"`
-	Database     string `json:"database"`
-	TLSMode      string `json:"tlsMode"`
-	SavePassword bool   `json:"savePassword"`
-	HasPassword  bool   `json:"hasPassword"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Engine      string `json:"engine"`
+	Environment string `json:"environment"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	User        string `json:"user"`
+	Database    string `json:"database"`
+	Auth        string `json:"auth"`
+	Region      string `json:"region"`
+
+	TLS TLSSettings `json:"tls"`
+	SSH SSHSettings `json:"ssh"`
+
+	SavePassword bool `json:"savePassword"`
+	HasPassword  bool `json:"hasPassword"`
+	// HasSSHSecret is the same fact about the bastion's own secret, so the dialog can say a pass
+	// phrase is already stored rather than making the reader type one they have saved.
+	HasSSHSecret bool `json:"hasSshSecret"`
 }
 
 type ProfileInput struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Engine       string `json:"engine"`
-	Host         string `json:"host"`
-	Port         int    `json:"port"`
-	User         string `json:"user"`
-	Password     string `json:"password"`
-	Database     string `json:"database"`
-	TLSMode      string `json:"tlsMode"`
-	SavePassword bool   `json:"savePassword"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Engine      string `json:"engine"`
+	Environment string `json:"environment"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	User        string `json:"user"`
+	Password    string `json:"password"`
+	Database    string `json:"database"`
+	Auth        string `json:"auth"`
+	Region      string `json:"region"`
+
+	TLS TLSSettings `json:"tls"`
+	SSH SSHSettings `json:"ssh"`
+	// SSHSecret is the bastion's password, or the pass phrase of its private key. Blank means
+	// "keep whatever is stored", exactly as a blank Password does.
+	SSHSecret string `json:"sshSecret"`
+
+	SavePassword bool `json:"savePassword"`
 }
 
 type TestResult struct {
@@ -300,6 +341,38 @@ type ScriptResult struct {
 	Statements []StatementOutcome `json:"statements"`
 }
 
+// StatementReview is one statement of a script as the reviewer reads it, without running any of
+// it. `start` and `end` are byte offsets into the script the editor holds, so a warning marks the
+// statement that earned it rather than repeating it.
+//
+// `confirm` is the whole point of the shape: it is the *answer* to "does this have to be asked
+// about here", worked out from the hazard and the connection's environment on the Go side, so the
+// editor never re-derives a rule about what is dangerous — see domain.Environment.
+type StatementReview struct {
+	Start   int    `json:"start"`
+	End     int    `json:"end"`
+	SQL     string `json:"sql"`
+	Keyword string `json:"keyword"`
+	Hazard  string `json:"hazard"`
+	Confirm bool   `json:"confirm"`
+}
+
+// ScriptProblem is something wrong with a script that could be proved without a server.
+type ScriptProblem struct {
+	Start   int    `json:"start"`
+	End     int    `json:"end"`
+	Message string `json:"message"`
+}
+
+// ScriptReview is everything a script says about itself before anything runs it. `environment` is
+// the connection's, so the editor can *say* which one it is about to run against without asking
+// a second question.
+type ScriptReview struct {
+	Statements  []StatementReview `json:"statements"`
+	Problems    []ScriptProblem   `json:"problems"`
+	Environment string            `json:"environment"`
+}
+
 // HistoryEntry is one Execute the reader asked for, as the History pane lists it. `ranAt` is epoch
 // milliseconds — the clock the rest of the wire counts in — so the pane draws it in the reader's
 // own time zone rather than in whatever one the log was written in.
@@ -344,18 +417,38 @@ type RowDeleteInput struct {
 	Key   map[string]string `json:"key"`
 }
 
-func toProfileDTO(profile domain.ConnectionProfile, hasPassword bool) Profile {
+func toProfileDTO(profile domain.ConnectionProfile, hasPassword, hasSSHSecret bool) Profile {
 	return Profile{
-		ID:           profile.ID,
-		Name:         profile.Name,
-		Engine:       string(profile.Engine),
-		Host:         profile.Host,
-		Port:         profile.Port,
-		User:         profile.User,
-		Database:     profile.Database,
-		TLSMode:      string(profile.TLSMode),
+		ID:          profile.ID,
+		Name:        profile.Name,
+		Engine:      string(profile.Engine),
+		Environment: string(profile.Environment),
+		Host:        profile.Host,
+		Port:        profile.Port,
+		User:        profile.User,
+		Database:    profile.Database,
+		Auth:        string(profile.Auth),
+		Region:      profile.Region,
+		TLS: TLSSettings{
+			Mode:       string(profile.TLS.Mode),
+			RootCert:   profile.TLS.RootCert,
+			ClientCert: profile.TLS.ClientCert,
+			ClientKey:  profile.TLS.ClientKey,
+			ServerName: profile.TLS.ServerName,
+		},
+		SSH: SSHSettings{
+			Enabled:       profile.SSH.Enabled,
+			Host:          profile.SSH.Host,
+			Port:          profile.SSH.Port,
+			User:          profile.SSH.User,
+			Auth:          string(profile.SSH.Auth),
+			KeyPath:       profile.SSH.KeyPath,
+			KnownHosts:    profile.SSH.KnownHosts,
+			StrictHostKey: profile.SSH.StrictHostKey,
+		},
 		SavePassword: profile.SavePassword,
 		HasPassword:  hasPassword,
+		HasSSHSecret: hasSSHSecret,
 	}
 }
 
@@ -486,6 +579,38 @@ func toQueryResultDTO(result driver.QueryResult, elapsed time.Duration) QueryRes
 		Truncated:    result.Truncated,
 		ElapsedMs:    elapsed.Milliseconds(),
 		Table:        result.Table,
+	}
+}
+
+// toReviewDTO pairs what a script will do with where it will do it, which is the one place the
+// two meet: domain.Environment decides, and this carries the decision across the wire so the
+// editor has a `confirm` to act on rather than a rule to re-implement.
+func toReviewDTO(review driver.Review, environment domain.Environment) ScriptReview {
+	statements := make([]StatementReview, 0, len(review.Statements))
+	for _, statement := range review.Statements {
+		statements = append(statements, StatementReview{
+			Start:   statement.Start,
+			End:     statement.End,
+			SQL:     statement.SQL,
+			Keyword: statement.Keyword,
+			Hazard:  string(statement.Hazard),
+			Confirm: environment.NeedsConfirmation(statement.Hazard),
+		})
+	}
+
+	problems := make([]ScriptProblem, 0, len(review.Problems))
+	for _, problem := range review.Problems {
+		problems = append(problems, ScriptProblem{
+			Start:   problem.Start,
+			End:     problem.End,
+			Message: problem.Message,
+		})
+	}
+
+	return ScriptReview{
+		Statements:  statements,
+		Problems:    problems,
+		Environment: string(environment),
 	}
 }
 
@@ -662,7 +787,8 @@ func toColumnDTOs(source []driver.Column) []TableColumn {
 
 // toDomain fills in what the dialog may leave blank. An unnamed engine is MySQL, which is
 // what a profile written before the second engine existed means, and the port then follows
-// from the engine rather than from a constant.
+// from the engine rather than from a constant. An unnamed authentication is a password, for the
+// same reason: it is what every profile did before there was anything else to name.
 func (in ProfileInput) toDomain() domain.ConnectionProfile {
 	engine := domain.Engine(in.Engine)
 	if engine == "" {
@@ -674,20 +800,62 @@ func (in ProfileInput) toDomain() domain.ConnectionProfile {
 		port = engine.DefaultPort()
 	}
 
-	tlsMode := domain.TLSMode(in.TLSMode)
+	tlsMode := domain.TLSMode(in.TLS.Mode)
 	if tlsMode == "" {
 		tlsMode = domain.TLSPreferred
 	}
 
+	auth := domain.AuthMethod(in.Auth)
+	if auth == "" {
+		auth = domain.AuthPassword
+	}
+
 	return domain.ConnectionProfile{
-		ID:           in.ID,
-		Name:         in.Name,
-		Engine:       engine,
-		Host:         in.Host,
-		Port:         port,
-		User:         in.User,
-		Database:     in.Database,
-		TLSMode:      tlsMode,
-		SavePassword: in.SavePassword,
+		ID:          in.ID,
+		Name:        in.Name,
+		Engine:      engine,
+		Environment: domain.Environment(in.Environment),
+		Host:        in.Host,
+		Port:        port,
+		User:        in.User,
+		Database:    in.Database,
+		Auth:        auth,
+		Region:      in.Region,
+		TLS: domain.TLSOptions{
+			Mode:       tlsMode,
+			RootCert:   in.TLS.RootCert,
+			ClientCert: in.TLS.ClientCert,
+			ClientKey:  in.TLS.ClientKey,
+			ServerName: in.TLS.ServerName,
+		},
+		SSH: in.SSH.toDomain(),
+		// A minted password is not one there is anything to save: it lasts minutes, and one read
+		// back out of the credential store later would only fail.
+		SavePassword: in.SavePassword && !auth.Minted(),
+	}
+}
+
+// toDomain fills in the bastion's own default port, and reads an unnamed authentication as a key,
+// which is what an SSH tunnel is nearly always set up with.
+func (in SSHSettings) toDomain() domain.SSHTunnel {
+	port := in.Port
+	if port == 0 {
+		port = domain.DefaultSSHPort
+	}
+
+	auth := domain.SSHAuth(in.Auth)
+	if auth == "" {
+		auth = domain.SSHKey
+	}
+
+	return domain.SSHTunnel{
+		Enabled:       in.Enabled,
+		Host:          in.Host,
+		Port:          port,
+		User:          in.User,
+		Auth:          auth,
+		KeyPath:       in.KeyPath,
+		KnownHosts:    in.KnownHosts,
+		StrictHostKey: in.StrictHostKey,
 	}
 }

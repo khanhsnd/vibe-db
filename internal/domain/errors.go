@@ -19,6 +19,20 @@ var (
 	ErrEmptyStatement    = errors.New("no statement to run")
 	ErrStatementFailed   = errors.New("statement rejected by the server")
 	ErrQueryCancelled    = errors.New("query cancelled")
+
+	// The three ways a connection through a bastion fails before the database is ever reached.
+	// They are separate sentinels because a reader answers each of them differently: one is a
+	// host that is not there, one is a key or a password the bastion refused, and one is the
+	// bastion not being the bastion — which is the only one of the three that may mean something
+	// is wrong rather than mistyped.
+	ErrTunnelFailed      = errors.New("cannot reach the SSH server")
+	ErrTunnelCredentials = errors.New("SSH server rejected the credentials")
+	ErrTunnelHostKey     = errors.New("SSH host key is not known or does not match")
+
+	// ErrTokenUnavailable is a cloud identity this machine could not produce a token from. It is
+	// not a rejection by the database — nothing was sent to one — and the reader fixes it where
+	// their cloud credentials live rather than in the profile.
+	ErrTokenUnavailable = errors.New("no cloud credentials to sign in with")
 )
 
 // StatementError carries an engine's own rejection of a statement. Its message is

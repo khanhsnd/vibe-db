@@ -42,6 +42,15 @@
   --engine-mysql: #0e8fa8;
   --engine-postgres: #4779b8;
 
+  /** One per environment, so a connection says what it is *for* before anything is run on it.
+      They are a traffic light deliberately: what those three colours already mean to everybody is
+      the whole of why the label is worth drawing. A connection that names no environment wears
+      none of them — see `--env-none`, which is the muted foreground and says nothing. */
+  --env-development: #3fb950;
+  --env-staging: #d29922;
+  --env-production: #f85149;
+  --env-none: #767f8f;
+
   --syn-keyword: #ff7b72;
   --syn-string: #a5d6ff;
   --syn-number: #79c0ff;
@@ -99,6 +108,11 @@
   --engine-mysql: #00758f;
   --engine-postgres: #336791;
 
+  --env-development: #1a7f37;
+  --env-staging: #9a6700;
+  --env-production: #cf222e;
+  --env-none: #79818d;
+
   --syn-keyword: #cf222e;
   --syn-string: #0a3069;
   --syn-number: #0550ae;
@@ -143,6 +157,11 @@
 
   --color-engine-mysql: var(--engine-mysql);
   --color-engine-postgres: var(--engine-postgres);
+
+  --color-env-development: var(--env-development);
+  --color-env-staging: var(--env-staging);
+  --color-env-production: var(--env-production);
+  --color-env-none: var(--env-none);
 
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   --font-mono: var(--font-data);

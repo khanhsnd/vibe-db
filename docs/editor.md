@@ -10,6 +10,29 @@ compartment as the schema, so it reconfigures in place rather than rebuilding th
 **A selection narrows what runs.** Highlight one statement of a script and Execute sends only that;
 with nothing selected it sends the whole buffer.
 
+## Laying out and reviewing
+
+Neither is done here. **Format** and **Review** are `QueryAPI` calls onto `sqlkit.Dialect`, for the
+reason splitting always was: where a statement ends and what counts as a quote are lexical and
+therefore the engine's. What this side does is dispatch the result.
+
+- **`Ctrl`+`Shift`+`F`** formats, bound on the *window* alongside `F5` — the editor does not own the
+  keyboard when the reader is in the output pane, and a shortcut that only works with the caret in
+  the text is a shortcut readers stop reaching for. What it does to a script, and the rules it
+  follows, are in [features.md](features.md#laying-a-script-out).
+- **`diagnostics.ts`** is the marking: one `StateField` holding a `DecorationSet`, updated by a
+  `StateEffect` when a fresh review lands and **mapped through every change between** — a squiggle a
+  character behind the typing is worse than none. It is a field rather than a compartment because
+  marks change on nearly every keystroke, and reconfiguring the editor that often throws away work
+  the other extensions are holding.
+- **Offsets are translated before they are positions.** Go counts a string in bytes and CodeMirror
+  counts it in UTF-16 units, so `position()` maps one to the other; a script that is entirely ASCII
+  skips the scan, which is the common case. Without it every mark after the first non-ASCII
+  character lands short of its text.
+- The editor answers exactly one question from outside — `EditorHandle.reveal(offset)`, which puts
+  the caret on a byte offset and scrolls to it. That is what makes the problems strip clickable, and
+  it is the whole of the imperative surface.
+
 ## Completion
 
 Completion fires as you type and on `Ctrl`+`Space`, over four sources:

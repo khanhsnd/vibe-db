@@ -1,15 +1,19 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { engineInfo, namespaceOf, type TableSchema } from '@/bridge/connections'
 import type { HistoryEntry } from '@/bridge/history'
+import { needsConfirming, queries, type ScriptReview } from '@/bridge/query'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import { namespaceKey, useConnectionsStore } from '@/stores/connections'
 import { IDLE_RUN, useQueriesStore } from '@/stores/queries'
 import { useTabsStore, type QueryTab } from '@/stores/tabs'
 
-import { EditorPane } from './EditorPane'
+import { EditorPane, type EditorHandle } from './EditorPane'
 import { QueryOutput } from './QueryOutput'
 import { QueryToolbar } from './QueryToolbar'
+import { RunGuard } from './RunGuard'
+import { ScriptProblems } from './ScriptProblems'
+import { useScriptReview } from './useScriptReview'
 
 const NO_SCHEMA: TableSchema[] = []
 
@@ -58,18 +62,76 @@ export function QueryWorkspace({
   // dragging over the text would otherwise re-render the whole workspace.
   const selection = useRef('')
 
+  // The editor answers one question from outside: show me that offset. It is what makes the
+  // problems strip worth clicking.
+  const editor = useRef<EditorHandle>(null)
+
   const canRun = sessionId !== null && tab.sql.trim() !== ''
 
-  const start = (explain: boolean) => {
-    if (!canRun || sessionId === null) return
+  // What the whole buffer says about itself, on its own clock: it is what the editor underlines
+  // and what the strip above it reports, and it follows the buffer rather than the selection so
+  // the reader is warned about a statement before they think to select it.
+  const review = useScriptReview(sessionId, tab.sql)
+
+  /** Non-null exactly while the guard is asking about a run that has not started. */
+  const [asking, setAsking] = useState<ScriptReview | null>(null)
+
+  const send = (sql: string, explain: boolean) => {
+    if (sessionId === null) return
     void execute(tab.id, sessionId, {
       database,
       schema,
-      sql: selection.current.trim() || tab.sql,
+      sql,
       maxRows: tab.rowLimit,
       explain,
     })
   }
+
+  /**
+   * Execute, with the one question that stands between the reader and a statement they cannot take
+   * back. What is asked about is reviewed **here and now** rather than read off the strip: the
+   * strip follows the whole buffer on a debounce, and what runs may be a *selection* made since.
+   */
+  const start = (explain: boolean) => {
+    if (!canRun || sessionId === null) return
+
+    const sql = selection.current.trim() || tab.sql
+    // Explain runs a plan and changes nothing, whatever the statement under it would have done.
+    if (explain) {
+      send(sql, true)
+      return
+    }
+
+    void queries
+      .review(sessionId, sql)
+      .then((read) => {
+        if (needsConfirming(read).length === 0) {
+          send(sql, false)
+          return
+        }
+        setAsking(read)
+      })
+      // A review that cannot be had is not a reason to refuse to run: the reader asked, and the
+      // server is still the thing that decides. It is the guard that is missing, not the query.
+      .catch(() => send(sql, false))
+  }
+
+  const confirmRun = () => {
+    setAsking(null)
+    send(selection.current.trim() || tab.sql, false)
+  }
+
+  /**
+   * Lays the buffer out. The whole buffer, never the selection: a statement pulled out of its
+   * script, re-indented and put back would be indented against nothing.
+   */
+  const format = useCallback(() => {
+    if (sessionId === null || tab.sql.trim() === '') return
+    void queries
+      .format(sessionId, tab.sql)
+      .then((laid) => laid !== tab.sql && editQuery(tab.id, { sql: laid }))
+      .catch(() => {})
+  }, [editQuery, sessionId, tab.id, tab.sql])
 
   // Refresh replays the statement that produced the rows on screen, not whatever the
   // editor holds now, so applying an edit cannot silently run something else.
@@ -96,19 +158,24 @@ export function QueryWorkspace({
     editQuery(tab.id, entry.database === '' ? { sql: entry.sql } : { sql: entry.sql, namespace })
   }
 
-  // The shortcut is bound on the window, because F5 reloads the WebView whenever
-  // focus sits outside this panel. The ref keeps the listener off the keystroke path.
-  const latest = useRef(start)
-  latest.current = start
+  // Both shortcuts are bound on the window, because F5 reloads the WebView whenever focus sits
+  // outside this panel. The ref keeps the listeners off the keystroke path.
+  const latest = useRef({ start, format })
+  latest.current = { start, format }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const shortcut =
-        event.key === 'F5' || (event.key === 'Enter' && (event.ctrlKey || event.metaKey))
-      if (!shortcut) return
+      const modifier = event.ctrlKey || event.metaKey
 
-      event.preventDefault()
-      latest.current(false)
+      if (modifier && event.shiftKey && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        latest.current.format()
+        return
+      }
+      if (event.key === 'F5' || (event.key === 'Enter' && modifier)) {
+        event.preventDefault()
+        latest.current.start(false)
+      }
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -132,8 +199,11 @@ export function QueryWorkspace({
         onRowLimitChange={(rowLimit) => editQuery(tab.id, { rowLimit })}
         onExecute={() => start(false)}
         onExplain={() => start(true)}
+        onFormat={format}
         onStop={() => cancel(tab.id)}
       />
+
+      <ScriptProblems review={review} onReveal={(offset) => editor.current?.reveal(offset)} />
 
       <Split
         id="vibe-db.workarea"
@@ -143,9 +213,11 @@ export function QueryWorkspace({
       >
         <SplitPanel id="editor" defaultSize="38%" minSize="15%">
           <EditorPane
+            ref={editor}
             value={tab.sql}
             schema={tableSchemas}
             engine={engine}
+            review={review}
             onChange={(sql) => editQuery(tab.id, { sql })}
             onSelectionChange={(selected) => {
               selection.current = selected
@@ -167,6 +239,8 @@ export function QueryWorkspace({
           />
         </SplitPanel>
       </Split>
+
+      <RunGuard review={asking} onCancel={() => setAsking(null)} onConfirm={confirmRun} />
     </div>
   )
 }

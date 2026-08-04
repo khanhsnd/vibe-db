@@ -3,8 +3,10 @@ package sqlkit
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
@@ -304,10 +306,30 @@ func fold(name string) string {
 	return strings.ToLower(name)
 }
 
+// BinaryPrefix marks a value that is bytes rather than text. It is PostgreSQL's own spelling for
+// a `bytea`, borrowed so that one form means one thing on both engines and a reader who knows
+// what `\x89504e47` is does not have to learn a second notation.
+const BinaryPrefix = `\x`
+
+// TextOrNil is how every value becomes the one thing the grid can draw: text.
+//
+// A value that is **not valid UTF-8** is written as hex instead, because it cannot survive the
+// journey otherwise: a bound method's result reaches the WebView as a JSON string, and a byte
+// sequence that is not text is replaced by the replacement character on the way — a BLOB arriving
+// as a row of diamonds — and what has been replaced can never be recovered. Hex is lossless, it is
+// what the value viewer decodes to show the bytes, an image or a hex dump, and it is what a reader
+// would have had to ask for anyway.
+//
+// Bytes that *are* text stay text. A `BLOB` holding JSON is far commoner than one holding a PNG,
+// and a reader who stored text wants to read it rather than decode it.
 func TextOrNil(value sql.NullString) *string {
 	if !value.Valid {
 		return nil
 	}
+
 	text := value.String
+	if !utf8.ValidString(text) {
+		text = BinaryPrefix + hex.EncodeToString([]byte(text))
+	}
 	return &text
 }

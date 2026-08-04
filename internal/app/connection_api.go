@@ -16,7 +16,10 @@ import (
 
 const (
 	connectTimeout = 8 * time.Second
-	queryTimeout   = 15 * time.Second
+	// tunnelTimeout is what a connection through a bastion is given *on top of* the above: the
+	// dial and the handshake are a hop of their own before the database has been reached at all.
+	tunnelTimeout = 12 * time.Second
+	queryTimeout  = 15 * time.Second
 
 	// noDeadline leaves a read bounded by StopTableRows rather than by a clock — see rowsTimeout.
 	noDeadline = 0
@@ -53,7 +56,7 @@ func (a *ConnectionAPI) ListProfiles() ([]Profile, error) {
 
 	out := make([]Profile, 0, len(stored))
 	for _, p := range stored {
-		out = append(out, toProfileDTO(p, a.hasStoredPassword(p)))
+		out = append(out, a.profileDTO(p))
 	}
 	return out, nil
 }
@@ -80,8 +83,11 @@ func (a *ConnectionAPI) SaveProfile(input ProfileInput) (Profile, error) {
 	if err := a.persistPassword(target, input.Password); err != nil {
 		return Profile{}, wrapError(err)
 	}
+	if err := a.persistSSHSecret(target, input.SSHSecret); err != nil {
+		return Profile{}, wrapError(err)
+	}
 
-	return toProfileDTO(target, a.hasStoredPassword(target)), nil
+	return a.profileDTO(target), nil
 }
 
 func (a *ConnectionAPI) DeleteProfile(id string) error {
@@ -89,6 +95,9 @@ func (a *ConnectionAPI) DeleteProfile(id string) error {
 		return wrapError(err)
 	}
 	if err := a.secrets.Delete(id); err != nil {
+		return wrapError(err)
+	}
+	if err := a.secrets.Delete(sshSecretKey(id)); err != nil {
 		return wrapError(err)
 	}
 	return nil
@@ -100,16 +109,18 @@ func (a *ConnectionAPI) TestConnection(input ProfileInput) (TestResult, error) {
 		return TestResult{}, wrapError(err)
 	}
 
-	creds, err := a.resolveCredentials(target, input.Password)
+	secrets, err := a.resolveSecrets(target, input.Password, input.SSHSecret)
 	if err != nil {
 		return TestResult{}, wrapError(err)
 	}
 
-	ctx, cancel := a.withTimeout(connectTimeout)
+	// A tunnel is dialled before the database is, so a profile that goes through one is given
+	// room for both hops rather than being cut off part way through the first.
+	ctx, cancel := a.withTimeout(openTimeout(target))
 	defer cancel()
 
 	started := time.Now()
-	opened, err := a.sessions.Open(ctx, target, creds)
+	opened, err := a.sessions.Open(ctx, target, secrets)
 	if err != nil {
 		return TestResult{}, wrapError(err)
 	}
@@ -125,21 +136,24 @@ func (a *ConnectionAPI) TestConnection(input ProfileInput) (TestResult, error) {
 	}, nil
 }
 
+// Connect dials a stored profile. The password is the one the reader was prompted for, or empty
+// to use whatever is stored — and a profile that authenticates by a cloud identity needs neither,
+// since its password is minted at the moment of connecting.
 func (a *ConnectionAPI) Connect(profileID, password string) (Session, error) {
 	stored, err := a.profiles.Get(profileID)
 	if err != nil {
 		return Session{}, wrapError(err)
 	}
 
-	creds, err := a.resolveCredentials(stored, password)
+	secrets, err := a.resolveSecrets(stored, password, "")
 	if err != nil {
 		return Session{}, wrapError(err)
 	}
 
-	ctx, cancel := a.withTimeout(connectTimeout)
+	ctx, cancel := a.withTimeout(openTimeout(stored))
 	defer cancel()
 
-	opened, err := a.sessions.Open(ctx, stored, creds)
+	opened, err := a.sessions.Open(ctx, stored, secrets)
 	if err != nil {
 		return Session{}, wrapError(err)
 	}
@@ -317,42 +331,112 @@ func (a *ConnectionAPI) DeleteRow(sessionID string, removal RowDeleteInput) erro
 	return wrapError(a.sessions.DeleteRow(ctx, sessionID, removal.toDriver()))
 }
 
-func (a *ConnectionAPI) resolveCredentials(
-	target domain.ConnectionProfile,
-	password string,
-) (driver.Credentials, error) {
-	if password != "" {
-		return driver.Credentials{Password: password}, nil
+// openTimeout is how long a connection is given to come up. A tunnelled one has two hops to make
+// — the bastion, then the database through it — and cutting the second one off because the first
+// took its time would report a working server as unreachable.
+func openTimeout(target domain.ConnectionProfile) time.Duration {
+	if target.SSH.Enabled {
+		return connectTimeout + tunnelTimeout
 	}
-	if !target.SavePassword || target.ID == "" {
-		return driver.Credentials{}, nil
+	return connectTimeout
+}
+
+// sshSecretKey is where a bastion's own secret lives in the credential store. The store is keyed
+// by string and a profile has two secrets rather than one, so the connection's password keeps the
+// profile's id and the bastion's takes a suffix — one profile, two entries, both deleted with it.
+func sshSecretKey(profileID string) string {
+	return profileID + ":ssh"
+}
+
+// resolveSecrets is what a connection is opened with: whatever was typed just now, falling back to
+// what is stored. A blank one is not an error — a server with no password is ordinary, and so is a
+// profile whose password was never saved, which is what the prompt is for.
+func (a *ConnectionAPI) resolveSecrets(
+	target domain.ConnectionProfile,
+	password, sshSecret string,
+) (session.Secrets, error) {
+	// A minted password is signed for at the moment of connecting, so nothing typed or stored is
+	// read for one: passing a stale token along would fail in a way that looked like a bad
+	// password rather than like an expired identity.
+	if target.Auth.Minted() {
+		password = ""
+	} else if password == "" {
+		stored, err := a.storedSecret(target, target.ID)
+		if err != nil {
+			return session.Secrets{}, err
+		}
+		password = stored
 	}
 
-	stored, err := a.secrets.Get(target.ID)
+	if sshSecret == "" && target.SSH.Enabled {
+		stored, err := a.storedSecret(target, sshSecretKey(target.ID))
+		if err != nil {
+			return session.Secrets{}, err
+		}
+		sshSecret = stored
+	}
+
+	return session.Secrets{Password: password, SSH: sshSecret}, nil
+}
+
+// storedSecret reads one entry of the credential store, answering blank where the profile does not
+// keep its secrets or nothing has been kept yet.
+func (a *ConnectionAPI) storedSecret(target domain.ConnectionProfile, key string) (string, error) {
+	if !target.SavePassword || target.ID == "" {
+		return "", nil
+	}
+
+	stored, err := a.secrets.Get(key)
 	if errors.Is(err, domain.ErrPasswordNotFound) {
-		return driver.Credentials{}, nil
+		return "", nil
 	}
 	if err != nil {
-		return driver.Credentials{}, err
+		return "", err
 	}
-	return driver.Credentials{Password: stored}, nil
+	return stored, nil
 }
 
 func (a *ConnectionAPI) persistPassword(target domain.ConnectionProfile, password string) error {
-	if !target.SavePassword {
-		return a.secrets.Delete(target.ID)
-	}
-	if password == "" {
-		return nil
-	}
-	return a.secrets.Set(target.ID, password)
+	return a.persistSecret(target, target.ID, password)
 }
 
-func (a *ConnectionAPI) hasStoredPassword(target domain.ConnectionProfile) bool {
+func (a *ConnectionAPI) persistSSHSecret(target domain.ConnectionProfile, secret string) error {
+	// A tunnel that has been turned off keeps no pass phrase, the same rule the password follows
+	// when a profile stops saving one.
+	if !target.SSH.Enabled {
+		return a.secrets.Delete(sshSecretKey(target.ID))
+	}
+	return a.persistSecret(target, sshSecretKey(target.ID), secret)
+}
+
+// persistSecret writes one entry, and forgets it where the profile has stopped keeping secrets.
+// A blank secret leaves what is stored alone, which is what "leave it blank to keep the saved
+// password" means in the dialog.
+func (a *ConnectionAPI) persistSecret(
+	target domain.ConnectionProfile,
+	key, secret string,
+) error {
+	if !target.SavePassword {
+		return a.secrets.Delete(key)
+	}
+	if secret == "" {
+		return nil
+	}
+	return a.secrets.Set(key, secret)
+}
+
+// profileDTO answers the two questions the dialog asks about secrets it must never be shown: is
+// there a password stored, and is there a pass phrase for the bastion.
+func (a *ConnectionAPI) profileDTO(target domain.ConnectionProfile) Profile {
+	return toProfileDTO(target, a.hasSecret(target, target.ID),
+		target.SSH.Enabled && a.hasSecret(target, sshSecretKey(target.ID)))
+}
+
+func (a *ConnectionAPI) hasSecret(target domain.ConnectionProfile, key string) bool {
 	if !target.SavePassword {
 		return false
 	}
-	_, err := a.secrets.Get(target.ID)
+	_, err := a.secrets.Get(key)
 	return err == nil
 }
 

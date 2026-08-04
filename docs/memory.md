@@ -28,3 +28,9 @@ Re-measure after each milestone and record it here, so a regression is visible:
 
 Treat differences under ~30 MB as noise: the shared-page total moves with how much Edge/WebView2 is
 already running, so runs are not directly comparable at that resolution.
+
+One thing added since is worth knowing rather than measuring: **a value that is not valid UTF-8 is
+carried as hex, so it costs a little over twice its own size** on the wire and in the grid. It is
+not a choice — bytes that are not text cannot cross a JSON string intact — but it means a page of
+blob columns is a page of hex, and the bound on how much of that is held is the ordinary row limit
+in [decisions.md](decisions.md). Text is unaffected: it stays text.

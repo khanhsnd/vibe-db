@@ -25,7 +25,8 @@ func sample(id, name string) domain.ConnectionProfile {
 		Port:         3306,
 		User:         "root",
 		Database:     "shop",
-		TLSMode:      domain.TLSPreferred,
+		Auth:         domain.AuthPassword,
+		TLS:          domain.TLSOptions{Mode: domain.TLSPreferred},
 		SavePassword: true,
 	}
 }
@@ -144,6 +145,73 @@ func TestWriteLeavesNoTempFilesBehind(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Errorf("directory holds %d entries, want just connections.json", len(entries))
+	}
+}
+
+func TestTunnelAndCertificatesSurviveARoundTrip(t *testing.T) {
+	repo, _ := newRepo(t)
+
+	saved := sample("a", "prod")
+	saved.Environment = domain.EnvironmentProduction
+	saved.Auth = domain.AuthAWSIAM
+	saved.Region = "ap-southeast-1"
+	saved.TLS = domain.TLSOptions{
+		Mode:       domain.TLSVerifyFull,
+		RootCert:   `C:\certs\rds-ca.pem`,
+		ServerName: "shop.example.com",
+	}
+	saved.SSH = domain.SSHTunnel{
+		Enabled:       true,
+		Host:          "bastion",
+		Port:          22,
+		User:          "deploy",
+		Auth:          domain.SSHKey,
+		KeyPath:       `C:\keys\id_ed25519`,
+		StrictHostKey: true,
+	}
+
+	if err := repo.Save(saved); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	got, err := repo.Get("a")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got.Environment != saved.Environment || got.Auth != saved.Auth || got.Region != saved.Region {
+		t.Errorf("Get() = %+v, want the environment, auth and region back", got)
+	}
+	if got.TLS != saved.TLS {
+		t.Errorf("TLS = %+v, want %+v", got.TLS, saved.TLS)
+	}
+	if got.SSH != saved.SSH {
+		t.Errorf("SSH = %+v, want %+v", got.SSH, saved.SSH)
+	}
+}
+
+// A file written before there was anything but a password to name must still connect.
+func TestProfileWithNoAuthReadsAsPassword(t *testing.T) {
+	repo, path := newRepo(t)
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	const old = `{"version":1,"profiles":[{"id":"a","name":"local","engine":"mysql",` +
+		`"host":"127.0.0.1","port":3306,"user":"root","database":"shop",` +
+		`"tlsMode":"preferred","savePassword":true}]}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	got, err := repo.Get("a")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got.Auth != domain.AuthPassword {
+		t.Errorf("Auth = %q, want %q", got.Auth, domain.AuthPassword)
+	}
+	if err := got.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want a profile that still connects", err)
 	}
 }
 

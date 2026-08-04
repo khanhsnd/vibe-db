@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { NO_NAMESPACE, toProfileInput, type Profile, type ProfileInput } from '@/bridge/connections'
+import {
+  authInfo,
+  NO_NAMESPACE,
+  toProfileInput,
+  type Profile,
+  type ProfileInput,
+} from '@/bridge/connections'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
 import { PasswordPrompt } from '@/features/connections/PasswordPrompt'
 import {
@@ -96,7 +102,9 @@ export function App() {
 
   const startConnect = useCallback(
     (profile: Profile) => {
-      if (!profile.hasPassword) {
+      // A cloud identity has no password to ask for: one is signed for at the moment of
+      // connecting, and a prompt would be a box the reader has nothing to type into.
+      if (!profile.hasPassword && !authInfo(profile.auth).minted) {
         setPromptFor(profile)
         return
       }
@@ -211,16 +219,20 @@ export function App() {
         status: error ? 'error' : 'idle',
         target: error ? error.message : null,
         engine: null,
+        environment: '',
         serverVersion: null,
         rowCount: null,
         elapsedMs: null,
       }
     }
 
+    const profile = profiles.find((p) => p.id === activeProfileId)
+
     return {
       status: 'connected',
       target: session.target,
-      engine: profiles.find((p) => p.id === activeProfileId)?.engine ?? null,
+      engine: profile?.engine ?? null,
+      environment: profile?.environment ?? '',
       serverVersion: session.serverVersion,
       rowCount: null,
       elapsedMs: null,

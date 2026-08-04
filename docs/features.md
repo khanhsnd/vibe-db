@@ -1,7 +1,12 @@
 # Features and UI behaviour
 
-Working: connection profiles (create / edit / delete) for **MySQL and PostgreSQL**, Test Connection
-with server version and latency, connect / disconnect, **creating and dropping a database**,
+Working: connection profiles (create / edit / delete) for **MySQL and PostgreSQL**, **over an SSH
+tunnel, with TLS held to a certificate this machine trusts, and signing in by AWS or Google cloud
+identity as well as by password**, Test Connection
+with server version and latency, connect / disconnect, **an environment label that colours a
+connection everywhere and stands between the reader and a statement they cannot take back**,
+**laying a script out and warning about it before it runs**, **a value viewer that reads a cell as
+the JSON, GeoJSON, array or blob it holds**, **creating and dropping a database**,
 **tables, views and routines listed per namespace**, **a table list of what the catalogue keeps about
 each table**, **a table's fields, indexes and foreign keys in
 the tree and in a designer tab**, **schema changes from the tree's context menu** — new / rename /
@@ -40,6 +45,105 @@ sits: what the connection *is* on the left, how it is *doing* on the right.
 One field differs rather than just defaulting: **PostgreSQL needs a database**. A session is bound to
 one for life, so that is the database the connection bootstraps from — the one its database list is
 read in. Reaching any other database dials it separately, which the adapter does on first use.
+
+## Filling a connection in
+
+The form is three tabs, because the three answer different questions and only the first is asked
+every time: **General** is where the server is, **Security** is what it is held to, and **SSH** is
+what carries the connection there. Every tab is the same height, so switching one never moves the
+footer under it.
+
+### Security
+
+- **Authentication** is a password, **AWS IAM** or **Google Cloud IAM**. The two cloud methods have
+  nothing to type and nothing to save: the password is a token minted *per connection* from an
+  identity the machine already holds, and one good for a quarter of an hour is not a secret worth
+  keeping — so the Password box and `Save password` are both switched off for them, and the
+  connection never prompts. What each one needs is written under the picker rather than in a manual:
+  | Method | What the machine has to hold |
+  |---|---|
+  | AWS IAM | `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in the environment, plus `AWS_SESSION_TOKEN` for temporary credentials. A reader on SSO or a named profile exports them with `aws configure export-credentials --format env`. The **region** is read off an RDS endpoint — `name.hash.region.rds.amazonaws.com` — and only has to be typed for a host that is not one, such as a proxy or a CNAME. The token is a SigV4-signed request to connect, so it **must** go over TLS: a signature anybody can read is a signature anybody can replay |
+  | Google Cloud IAM | The application default credentials — `gcloud auth application-default login`, or `GOOGLE_APPLICATION_CREDENTIALS` pointing at a service-account key file. Both routes end at Google's token endpoint, one by refreshing and one by signing an assertion, and the access token that comes back is the password |
+- **TLS** has five modes, and the two above `Required` are the only two that hold the server to
+  anything: `Disabled` is plain text, `Preferred` takes TLS where the server offers it,
+  `Required` encrypts and checks nothing, `Verify CA` checks the certificate chain but not the host
+  name, and `Verify Full` checks both. The middle one is not a weaker verification — it is
+  encryption without any — and the labels say so.
+- **The certificate files are files on this machine** and are only ever read here: a root
+  certificate to check the chain against (blank uses the machine's own trust store), and a client
+  certificate and key to present. Naming one under a mode that never opens it is **refused** rather
+  than ignored, because a file the app quietly drops is a reader believing they have configured
+  something. A **certificate name** holds the server to a name other than the one dialled, which is
+  what a tunnel makes ordinary — the connection goes to a local port and the certificate is still
+  the database server's.
+
+### SSH
+
+A connection through a bastion dials the bastion first and the database *from* it. **The host and
+port on the General tab are resolved on the far side**, so a server bound to loopback on the bastion
+is reached by naming `127.0.0.1` — the loopback that matters is the bastion's. Nothing is listened
+on locally: there is no forwarded port to collide with anything, and nothing else on this machine
+can reach the tunnel.
+
+- **Three authentications**: a private key with a pass phrase, a password, or the **SSH agent** —
+  which is the only one of the three where this app never holds the key or the phrase, since the
+  agent does the signing.
+- **The host key is checked against `known_hosts` by default**, and a bastion that is not in it is
+  refused rather than trusted. Turning that off is a deliberate act for a host that cannot be
+  enrolled: a tunnel whose far end is not identified protects the credentials it carries from
+  nobody, which is the one thing it exists to do.
+- **Which key is asked for is decided by what the file already holds.** A server offers several —
+  RSA, ECDSA, Ed25519 — and hands over whichever the client asks for first, so a client asking in
+  its own order gets a key `known_hosts` has never seen and reports a mismatch for a host whose key
+  has not changed. That is the `knownhosts: key mismatch` a reader sees on a host that connects
+  perfectly well from `ssh` or from another client; see [decisions.md](decisions.md).
+- The pass phrase or password lives in the credential store beside the connection's own, under the
+  profile's id with a `:ssh` suffix — one profile, two entries, both forgotten when it is deleted.
+  Neither ever comes back out: the dialog is told *that* one is stored, never what it is.
+- A tunnelled connection is given the ordinary connect timeout **plus** a tunnel's own, because it
+  has two hops to make and cutting the second off for the first taking its time would report a
+  working server as unreachable.
+
+## Which environment a connection is for
+
+**A connection says what it is for, and every surface that names it says so too.** The environment
+is picked in the dialog — none, Development, Staging or Production — and it is the one fact about a
+profile that changes how the app *behaves* rather than how it connects.
+
+- The colours are a traffic light on purpose: what green, amber and red already mean is the whole
+  reason the label is worth drawing. They are `--env-*` tokens in `shared/theme/tokens.css` and
+  nothing else draws an environment — `features/connections/EnvironmentDot.tsx` has all three
+  shapes, so adding an environment is a row in `ENVIRONMENTS` and nothing else.
+- **A stripe** down the leading edge of the connection's row in the tree and of every tab on that
+  connection; **a badge** in the status bar and in the dialog that asks about a dangerous statement.
+  A connection naming no environment draws no stripe and no badge, and the picker still shows the
+  muted dot — a gap where the other rows have a mark reads as a fault rather than as an absence.
+- **Only the connection row is striped**, not everything under it: a database, a table and a field
+  all belong to that connection and inherit the warning by sitting beneath it.
+
+### What gets confirmed before it runs
+
+**Production is the only guarded environment.** A warning a reader meets everywhere is one they stop
+reading, and that habit is exactly what this exists to prevent. Two things are therefore asked about,
+for two different reasons:
+
+| Confirmed | Where | Because |
+|---|---|---|
+| Anything that writes — `INSERT`, `UPDATE`, `DELETE`, `CREATE`, `DROP`, `TRUNCATE`, `ALTER` | On a **Production** connection | The cost of being on the wrong connection is the whole point of labelling one |
+| An `UPDATE` or a `DELETE` carrying **no `WHERE`** | Anywhere at all | `DELETE FROM users` is a mistake on a laptop as surely as it is in production |
+
+- **The rule lives in `domain.Environment.NeedsConfirmation`**, and the *answer* crosses the wire as
+  `confirm` on each statement. Nothing in the frontend re-derives what is dangerous: the guard
+  dialog lists exactly the statements the Go side flagged, and the editor underlines the same ones.
+- **What is asked about is reviewed at the moment Execute is pressed**, not read off the strip above
+  the editor — the strip follows the whole buffer on a debounce, and what runs may be a selection
+  made since.
+- **Explain is never guarded.** It runs a plan and changes nothing, whatever the statement under it
+  would have done.
+- A review that cannot be had is not a reason to refuse to run. The reader asked, and the server is
+  still what decides; it is the guard that is missing, not the query.
+- The confirming button is drawn `danger` rather than `primary`. The accent button is the one a
+  reader presses without reading it.
 
 ## Browsing a schema
 
@@ -272,7 +376,8 @@ whichever connection is open.
 
 A query tab carries its own toolbar, editor buffer, database and row limit, so several tabs can sit
 on the same connection without treading on each other. The toolbar picks the database, then
-**Execute** (`F5` or `Ctrl`+`Enter`) or **Explain** runs the statement; **Stop** cancels it.
+**Execute** (`F5` or `Ctrl`+`Enter`) or **Explain** runs the statement; **Format**
+(`Ctrl`+`Shift`+`F`) lays it out; **Stop** cancels it.
 
 - The namespace is applied on a connection pinned for that one statement — `USE` on MySQL,
   `SET search_path` on PostgreSQL — so the pool's other connections keep whatever they had. On
@@ -411,6 +516,57 @@ real bound, which is the trade `All` is asking for. And a **query** result's `Al
 still replays the statement under the ordinary statement timeout, since a script's outcome is one
 answer rather than a stream.
 
+### Laying a script out
+
+**Format** rewrites the buffer the way the script reads: one clause to a line, its items indented
+under it, keywords in upper case, and one blank line between statements. It is
+`QueryAPI.Format` → `sqlkit.Dialect.Format`, and it is the **driver's** for the reason splitting
+always was — a semicolon inside a `$body$` ends nothing on PostgreSQL and a backslash escapes a
+quote only on MySQL. A tab with nothing dialled cannot format, exactly as it cannot execute.
+
+- **Nothing a server would notice changes.** A string, a quoted identifier and a comment are single
+  tokens and are written back byte for byte, so only the whitespace *between* tokens and the case of
+  *unquoted* keywords ever move. A test compares the token stream before and against after to keep
+  that true.
+- **A script the lexer cannot make sense of comes back untouched** — one ending inside a quote or a
+  block comment. The one thing worse than an unformatted script is a formatted one that no longer
+  runs, and the strip above the editor is already saying what is wrong with it.
+- **It is the whole buffer, never the selection**: a statement pulled out of its script,
+  re-indented and put back would be indented against nothing.
+- **Formatting twice is the same as formatting once.** Every rule that decides a line break counts
+  *items* rather than characters, because formatting changes how wide a list is written and a width
+  test would break on the second pass what it left alone on the first.
+- A parenthesis is punctuation or a block, and three things make it a block: it holds a statement,
+  it is the field list of a `CREATE` or an `ALTER`, or it holds more than a line's worth of items.
+  **A function call is none of them** — and what tells `COUNT(*)` from `INSERT INTO users (id, name)`
+  is the reader's own spacing, which is also what decides the space in front of it. No rule this
+  side can tell a call from a field list better than the person who wrote it.
+
+### What the editor says before anything runs
+
+`QueryAPI.Review` reads what the script is going to do, and what is already wrong with it, without
+sending any of it anywhere. One call answers both, so what is underlined in the text and what the
+guard dialog lists cannot disagree. It runs on a **250 ms debounce** after a keystroke — the call is
+local, so that is pacing the render and not the network.
+
+**It is a lexer and not a parser, deliberately.** Everything it reports it can prove: a quote, a
+comment or a `$tag$` body the script ends inside of, and a bracket with no partner. Whether a column
+exists, whether a clause is in the right order, whether a type will take that value — those are the
+server's answers to give, and a client that guessed at them would be wrong often enough that a
+reader learned to ignore it, which costs more than the warning saved.
+
+- **The text itself is where a fault is located**: a wavy `--danger` underline under what is wrong,
+  and a flat `--warn` one under the **first line** of a statement that will have to be confirmed. A
+  twenty-line `DELETE` underlined end to end is a wall of colour that says nothing more and makes
+  the statement harder to read at the moment the reader is checking it.
+- **The strip between the toolbar and the editor is one line each and never grows**: the first
+  fault, and a count of the statements that change data. Clicking either puts the caret on it. A
+  list of twenty repeated messages would push the editor off the screen exactly when the reader
+  wants to look at it.
+- The offsets a review carries are **byte** offsets, because Go counts bytes; the editor translates
+  them before they are positions in the document. Without that every mark after the first
+  non-ASCII character — a Vietnamese column name, a comment, a string — would land short of its text.
+
 ### Every statement run is kept
 
 **Execute writes what it ran into a log on disk**, and the `History` pane is that log — see
@@ -547,6 +703,60 @@ consequences: the six text matches compare the column **as text** (`CAST(… AS 
 they work on a number or a date as well as a name, and a `%` the reader typed is their own wildcard.
 In memory those matches ignore case; on the server the collation decides, which is MySQL ignoring it
 and PostgreSQL not.
+
+## Reading a value whole
+
+A cell is a line in a grid, and plenty of what a database holds is not one line: a JSON document, a
+GeoJSON shape, a PostgreSQL array, a blob. **View Value** in every grid's cell menu opens
+`ValueDialog` on the cell under the pointer, and the table tab's **Cell Editor** panel shows the same
+`ValueViewer` on the cell it is editing.
+
+**Which views a value offers is read off the value, not off its column.** The type is not enough and
+never was: a `TEXT` column holds JSON as often as a `JSON` one does, a `JSON` column holds GeoJSON,
+and every value arrives as a string whatever it started as. `features/results/value.ts` is where one
+cell is read, and it reads nothing else.
+
+| The value | Views, in the order they open |
+|---|---|
+| JSON — an object or an array that parses | **JSON** laid out, then **Raw**. Only a leading `{` or `[` is tried, or every number in the grid would be handed to `JSON.parse`, which happily accepts `42` and calls it a document |
+| **GeoJSON** — a `type` from the GeoJSON set *and* the member that type is defined by | **Shape**, then **JSON**, then **Raw**. A `{"type": "Point"}` with no coordinates is malformed, and drawing nothing says more than drawing the origin |
+| A **PostgreSQL array** — `{a,"b,c",NULL}` | **Items**, then **Raw**. Read as an array only where the column says it is one, since `{a,b}` is also perfectly good text. An unquoted `NULL` inside one is the absence of a value and is drawn in the grid's own NULL colour; a nested `{…}` is kept whole, because a two-dimensional array is a list of lists |
+| **Bytes** — a `\x…` value | **Image**, then **Hex**, then **Raw**. A reader who opened a blob wants to know whether it is a picture before they want its bytes |
+| Anything else | **Raw** alone |
+
+- **`Raw` is always there and is always exactly what the cell holds**, so however clever the
+  detection is there is one view that cannot be wrong. It is also the **only** editable one: a
+  laid-out document, a hex dump and a drawing are renderings, and writing one back would write the
+  rendering.
+- **A shape is a plain SVG and deliberately not a map.** A basemap means tiles, and this app has no
+  business sending the coordinates in a reader's database to a tile server to find out where they
+  are. What the shape *is* — a ring, a route, a scatter — is readable without one, and the numbers
+  are in the JSON tab beside it. Coordinates are fitted to the box rather than projected; at the
+  size of one geometry the difference is a slight vertical stretch, and a projection would imply a
+  map that is not there. A shape with no extent in one direction is centred on that axis.
+- **An image is drawn from the bytes already in hand**, as a `data:` URI, so nothing in a reader's
+  database is ever sent anywhere to be rendered. Which image it is comes from the **first bytes** —
+  PNG, JPEG, GIF, BMP, WebP — because a blob column carries no type and its magic number is the only
+  honest evidence there is. Bytes that begin like nothing say so, with the Hex view beside them.
+- The hex dump is offset, hex and printable characters, sixteen bytes to a line, capped at 4 096
+  bytes — beyond that a reader is not reading bytes, they are scrolling — and the cap says how much
+  of how many it showed.
+
+### Why bytes arrive as `\x…`
+
+**A value that is not valid UTF-8 crosses the wire as hex**, written the way PostgreSQL already
+spells a `bytea` so that one form means one thing on both engines. `sqlkit.TextOrNil` is the single
+place that decides it.
+
+It is not a preference. A bound method's result reaches the WebView as one JSON string, and a byte
+sequence that is not text is replaced by the replacement character on the way — a blob arriving as
+a row of diamonds — and what has been replaced can never be recovered. Hex is lossless, and it is
+what the viewer decodes to show the bytes, the image or the dump.
+
+**Bytes that *are* text stay text.** A `BLOB` holding JSON is far commoner than one holding a PNG,
+and a reader who stored text wants to read it rather than decode it. Nothing consults the column's
+type to decide this: the bytes themselves are the evidence, which is also why it cannot be wrong
+about a `TEXT` column an engine happens to report as a `BLOB`.
 
 ## Exporting a grid
 

@@ -1,4 +1,4 @@
-import { Boxes, Database, ListTree, Loader2, Play, Square } from 'lucide-react'
+import { Boxes, Database, ListTree, Loader2, Play, Square, WrapText } from 'lucide-react'
 
 import type { Namespace } from '@/bridge/connections'
 import { DEFAULT_QUERY_ROWS, QUERY_ROW_LIMITS } from '@/bridge/rows'
@@ -20,6 +20,7 @@ interface QueryToolbarProps {
   onRowLimitChange: (limit: number) => void
   onExecute: () => void
   onExplain: () => void
+  onFormat: () => void
   onStop: () => void
 }
 
@@ -36,6 +37,7 @@ export function QueryToolbar({
   onRowLimitChange,
   onExecute,
   onExplain,
+  onFormat,
   onStop,
 }: QueryToolbarProps) {
   return (
@@ -89,6 +91,20 @@ export function QueryToolbar({
       <Button variant="default" icon={<Square size={11} />} disabled={!running} onClick={onStop}>
         Stop
       </Button>
+
+      <span className="mx-1 h-4 w-px bg-line" />
+
+      {/* Laying a script out is the engine's — where a statement ends and what a quote is are
+          lexical — so it needs the connection exactly as Execute does. */}
+      <Button
+        variant="default"
+        icon={<WrapText size={12} />}
+        disabled={!canRun || running}
+        onClick={onFormat}
+      >
+        Format
+      </Button>
+      <span className="mr-1 font-mono text-2xs text-faint">Ctrl+Shift+F</span>
 
       {running ? (
         <span className="ml-1 flex items-center gap-1.5 text-xs text-muted">

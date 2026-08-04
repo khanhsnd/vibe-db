@@ -21,6 +21,7 @@ frontend depends on.
 | `UNKNOWN_TABLE` | errno 1146, or no columns in `information_schema` | SQLSTATE 42P01, or no rows in `pg_attribute` |
 | `QUERY_CANCELLED` | Stop was pressed, or the run context was cancelled | as MySQL, plus SQLSTATE 57014 |
 | `TLS_UNSUPPORTED` | `mysql.ErrNoTLS` | pgx refusing a TLS-less server |
+| `INVALID_PROFILE` on `tlsMode` | A certificate file named under a mode that never opens one. A file the app quietly ignores is a reader believing they have configured something, so it is refused instead | as MySQL |
 | `SQL_ERROR` | Any other server rejection; `message` is its own wording, `detail` the errno | the same, `detail` the SQLSTATE |
 
 `domain.StatementError.Code` is a string for exactly that last row: MySQL numbers its errors and
@@ -50,4 +51,14 @@ layer, and the three transport rows are mapped once in `sqlkit.TransportError`.
 | `TLS_NOT_VERIFIED` | Certificate chain or hostname did not verify |
 | `PROFILE_NOT_FOUND` / `SESSION_NOT_FOUND` | Stale id from the frontend |
 | `PASSWORD_NOT_FOUND` | Nothing stored in the credential store |
+| `TUNNEL_FAILED` | The bastion could not be dialled at all — refused, no route, no such host |
+| `TUNNEL_CREDENTIALS` | The bastion refused the user, the key, or the pass phrase; also a key file that cannot be read, and an agent that is not running |
+| `TUNNEL_HOST_KEY` | The bastion is not in `known_hosts`, or the key there is not the one it presented. The one failure of the three that may mean something is *wrong* rather than mistyped, which is why it is its own code |
+| `TOKEN_UNAVAILABLE` | A cloud identity this machine could not produce a token from. Nothing was sent to a database, so it is not a rejection; `detail` names the variable to set or the command to run |
 | `INTERNAL` | Anything unmapped; `detail` carries the original message |
+
+**The three tunnel codes are raised before the database is reached at all.** They come from
+`internal/sshtunnel`, which maps them from `x/crypto/ssh`'s own failures — and that package is the
+one place in the app that reads an error's *message*, because `x/crypto/ssh` offers no code to
+switch on. It is the same trade an engine adapter makes with an errno: the text is the library's
+and not anything a reader typed, and what the UI switches on is still the code it produces.

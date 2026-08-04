@@ -377,6 +377,7 @@ export function buildTree(input: TreeInput): TreeNode[] {
       label: profile.name,
       profileId: profile.id,
       engine,
+      environment: profile.environment,
       status: input.statuses[profile.id] ?? 'idle',
       children: (input.databases[profile.id] ?? []).map((database) =>
         hasSchemas
