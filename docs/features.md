@@ -312,10 +312,11 @@ the server rejects.
   limit. Two things follow from the replay: a statement
   with no `ORDER BY` may reshuffle what lands on a page, and the reader keeps their page number
   across a read of the same statement — only a different statement sends them back to page one.
-- **A header's `⋮` menu, and the Filter & Sort panel, sort the result in memory**, since there is no
-  statement to re-order: they reach the rows fetched so far and no further, so on a truncated read the
-  prefix is sorted rather than the table. Fetching more re-sorts what arrives. A different statement
-  drops the sort.
+- **A header's `⋮` menu sorts the result in memory**, since there is no statement to re-order: it
+  reaches the rows fetched so far and no further, so on a truncated read the prefix is sorted rather
+  than the table. Fetching more re-sorts what arrives. A different statement drops the sort. **A
+  query result is not filtered** — narrowing belongs to a tab whose rows come from a statement this
+  side writes, which is the table tab.
 - **Errors surface in the output panel below the editor**, with the code, the server's own wording
   and the engine's error code, never as a dialog. A cancel is reported as `QUERY_CANCELLED`, not as
   a failure.
@@ -456,10 +457,9 @@ everything else that shows rows and columns: `When`, `Statement`, `Database`, `R
   because a statement names tables of one database and one run against another would fail on names
   that are not there — the toolbar's pickers move with it, visibly. The editor's own undo is what
   puts back whatever was being typed.
-- **It is searched by the Filter & Sort panel every grid has**, in memory, there being no statement
-  of its own to narrow: finding one statement among five hundred is a `contains` on the `Statement`
-  column, and the footer counts what the conditions left of the log. `When` is spelled
-  `2026-08-04 14:23:05` — local time, in the one spelling that also sorts as text.
+- **It is ordered by a header's own `⋮` menu**, in memory, there being no statement of its own to
+  re-order; the footer says how many statements the log holds. There is no filtering here. `When` is
+  spelled `2026-08-04 14:23:05` — local time, in the one spelling that also sorts as text.
 - **The pane is read on mount rather than held in a store.** It is drawn only while the reader is
   looking at it, so every open is a fresh log and an Execute never has to tell it anything.
 - **The log is every connection's and the pane shows one.** A statement of another server names
@@ -484,10 +484,14 @@ its right — the qualified table, or why the result is read-only:
 
 ## Filtering and sorting
 
+**Filtering is the table tab's**, since it is the one surface whose rows come from a statement this
+side writes and can therefore narrow. A query result and the history log hold their rows already and
+are only ever *sorted* — by a header's `⋮` menu, in memory. What follows is the table tab.
+
 There are **two ways in**, and they hold the same conditions:
 
-- **The Filter & Sort button**, over every grid — its own head strip on a query result, the table
-  view's toolbar beside `Cell Editor` and `Column`. It opens `FilterSortPanel`, which is where a
+- **The Filter & Sort button** in the table view's toolbar, beside `Cell Editor` and `Column`. It
+  opens `FilterSortPanel`, which is where a
   condition is *built*: a tick box, a column, an operator and a value, each of the three parts
   opening the list of what it may be. `+` adds a condition beside the row and `()+` adds a **group**,
   which is parentheses joining its children by `and` or by `or` — the word between the rows is a
@@ -527,13 +531,10 @@ a negative operator becomes `is not in list`, and unticking back to one gives th
 while the panel is still open. The four comparisons that name a **bound** (`<`, `≤`, `>`, `≥`) are
 single-pick instead: `> a` and `> b` are one comparison, not both.
 
-**Where the filtering happens depends on where the rows come from**, exactly as with the sort. A
-**table** tab filters *on the server*: the tree travels in `TablePageRequest`, becomes the read's
+**The filtering happens on the server**: the tree travels in `TablePageRequest`, becomes the read's
 `WHERE`, and the **total is counted through it too**, so the pager walks the pages that are actually
-there and the status line's statement shows the clause that ran. A **query result** filters the rows
-it already holds, since it has no statement of its own to narrow, and so a filter there reaches only
-what was fetched — the same bound its in-memory sort has. A draft row is never filtered away; it is
-a row still being filled in.
+there and the status line's statement shows the clause that ran. A draft row is never filtered away;
+it is a row still being filled in.
 
 The operator crosses the wire as a **token** (`gt`, `contains`, …) and is spelled into SQL by the
 driver, so nothing a reader typed arrives as an operator; a conjunction crosses as `and` or `or` and

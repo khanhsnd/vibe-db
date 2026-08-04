@@ -16,7 +16,7 @@ keys and its pending changes, and every one of those is a grid — the Fields on
 
 | Part | Rule |
 |---|---|
-| Head strip | 32 px above the header, on the header's own surface — the two read as one head — holding what acts on the grid *whole* rather than row by row: **Filter & Sort** on the left, where a reader looks for what narrows the table, and **Export** against the right, where they look for what to *do with* it. Both are labelled `Button`s with an accent-coloured glyph, not bare icons, because the strip has the room to say what they are. It sits outside the scroller, so it stays put while the columns scroll under it, and the grid draws it **where the call site passed `onExport` or `filtering` and did not pass `headStrip={false}`** — a surface with a toolbar of its own puts both buttons in that toolbar and turns the strip off, because one table must never carry two strips. It still passes the handlers, which is what the cell menu's own items run. |
+| Head strip | 32 px above the header, on the header's own surface — the two read as one head — holding what acts on the grid *whole* rather than row by row: **Filter & Sort** on the left, where a reader looks for what narrows the table, and **Export** against the right, where they look for what to *do with* it. Both are labelled `Button`s with an accent-coloured glyph, not bare icons, because the strip has the room to say what they are. It sits outside the scroller, so it stays put while the columns scroll under it, and the grid draws it **where the call site passed `onExport` or `filtering` and did not pass `headStrip={false}`** — a surface with a toolbar of its own puts both buttons in that toolbar and turns the strip off, because one table must never carry two strips. It still passes the handlers, which is what the cell menu's own items run. Today the one surface that filters is the table view, and its own toolbar carries that button, so the strip the grid draws for itself holds **Export** alone. |
 | Filter & Sort panel | Under the head strip and over the header, drawn only where the call site passed `filtering` and the reader asked for it — the **Filter & Sort** button, or the cell menu's **Show/Hide Filter & Sort**. It is `FilterSortPanel`, and it is the whole of what the section below describes. The conditions hold whether it is showing or not: hiding the panel is not widening the grid, which is why the button carries a **count** of the conditions and sort keys in force. |
 | Header | Two lines, 40 px on `--surface-bar`, so the shade alone says where the data starts. The column **name** on top in the **UI font**, bold 14 px — the one place the grid is neither mono nor the reader's own font, a size above its cells and weights clear of their light, so a name reads as a label and not as the data beneath it — and its **type** below in muted mono 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx`. Never uppercased — the server's own casing stands. On the right of every header sits the **`⋮` options button**, and beside the name of a sorted column an arrow saying which way — followed by **which key it is** where more than one is in force, so the header under the second key does not claim the order for itself. |
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
@@ -134,8 +134,10 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   of a group, and the driver puts them in for a group nested inside another and nowhere else. The
   operator travels as a **token**, never as the operator's own spelling: what turns `gt` into `>` is
   the driver, so nothing a reader typed reaches a statement as SQL.
-  **Who applies the tree is the call site**, exactly as with the sort: `TableDataView` puts it in the
-  read's `WHERE` and counts its total through it, `ResultPane` matches the rows it already holds.
+  **Who applies the tree is the call site**, and today that is `TableDataView` alone: it puts the
+  tree in the read's `WHERE` and counts its total through it. A surface holding its rows already —
+  a query result, the history log — passes no `filtering` and is therefore never narrowed, only
+  sorted.
 - **The grid never reorders its own rows.** It reports the keys through `onSortChange` and marks the
   headers from `sort`; who sorts is the call site, because only it knows where the rows come from.
   A **list** of keys, the first deciding and the rest breaking its ties — the panel is where a second
@@ -199,8 +201,8 @@ narrowing a table is nearly always about to order it too, and two panels would b
 - **A condition short of a value narrows nothing, and neither does an unticked one.** The tick box
   beside a row is how a condition is put aside without being lost. `activeFilter` is what prunes
   both, plus any group left holding nothing, and it prunes **once per read** — what is left is
-  exactly the tree that becomes a `WHERE`, and exactly the tree an in-memory result matches against.
-  Nothing else crosses the wire: the tick is the builder's business, not the server's.
+  exactly the tree that becomes a `WHERE`. Nothing else crosses the wire: the tick is the builder's
+  business, not the server's.
 - **`+` adds a condition beside the row, `()+` adds a group.** On a *group's* own row both add
   *inside* it, because a group is opened before it is filled; on the **Filter** header both append to
   the root. A group's conjunction is the word on every child but its first, and it is a button: one
@@ -327,18 +329,16 @@ Not in what an edit means — `useGridEdits` and `GridFooter` make that identica
 surrounds the grid:
 
 - `ResultPane` pages in memory, so it maps the grid's *page-local* row index back to the whole
-  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's rows alike. **It sorts and
-  filters in memory too**, there being no statement of its own to re-order or add a `WHERE` to, and
-  it keeps the outcome as a list of row numbers (`useGridOrder`, over `sortedOrder` and
-  `matchesFilter`) rather than as reordered rows: a pending change is keyed by the number a row had
-  when it was read. Only the rows **fetched** are ordered — a sort reaches no further, and a draft row
-  therefore stays pinned after them, so **Add** still lands on the last page and nothing the reader is
-  filling in is filtered away mid-typing. A sort is dropped when the statement changes.
+  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's rows alike. **It sorts in
+  memory**, there being no statement of its own to re-order, and it keeps the outcome as a list of
+  row numbers (`useGridOrder`, over `sortedOrder`) rather than as reordered rows: a pending change is
+  keyed by the number a row had when it was read. Only the rows **fetched** are ordered — a sort
+  reaches no further, and a draft row therefore stays pinned after them, so **Add** still lands on
+  the last page. A sort is dropped when the statement changes. **It does not filter**: it passes no
+  `filtering`, so it carries neither the button nor the panel, and its cell menu offers no condition
+  — a header's own menu, which sorts, is the whole of what acts on a result in hand.
   `QueryHistory` is the same arrangement without the drafts or the paging, which is the whole of what
-  `useGridOrder` is for: a surface holding its rows already narrows and orders them one way.
-  `ResultPane`'s value picker asks about the **table the result was traced to**, that being
-  the only table a query result knows of; a result the backend could not trace passes no `suggest`
-  at all, and neither does the history log, whose columns are not a table's. Its footer
+  `useGridOrder` is for. Its footer
   can also **Stop** the run, and **Add** jumps to the last page, which is where a draft row lands.
   Asking for a page past the rows it holds replays the statement for as many as that page needs
   (`reach`), so `All` really does load all; the page number therefore survives a read of the same

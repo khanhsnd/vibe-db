@@ -1,10 +1,8 @@
 import { useMemo, useState } from 'react'
 
 import type { HistoryEntry } from '@/bridge/history'
-import { FilterSortButton } from '@/features/results/FilterSortButton'
 import { GridFooter } from '@/features/results/GridFooter'
 import { ResultGrid } from '@/features/results/ResultGrid'
-import { countConditions, NO_FILTER, type Group } from '@/features/results/filter'
 import { NO_SORT, type Cell, type GridData, type SortKey } from '@/features/results/resultSet'
 import { useGridOrder } from '@/features/results/useGridOrder'
 import { Button } from '@/shared/ui/Button'
@@ -28,20 +26,16 @@ interface QueryHistoryProps {
  * columns. A **double-click loads a row's statement into the editor**, which is what the log is
  * for; the grid is read-only, so a click has nothing else to mean.
  *
- * It is filtered and sorted in memory by the same panel every grid has, there being no statement of
- * its own to narrow — and that is what searching a log of five hundred statements is: a `contains`
- * on the `Statement` column.
+ * It is sorted in memory by a header's own menu, there being no statement of its own to re-order.
  */
 export function QueryHistory({ profileId, onPick }: QueryHistoryProps) {
   const { entries, loading, error, refresh, clear } = useQueryHistory(profileId)
   const [sort, setSort] = useState<readonly SortKey[]>(NO_SORT)
-  const [criteria, setCriteria] = useState<Group>(NO_FILTER)
-  const [filterShown, setFilterShown] = useState(false)
   const ask = useSchemaStore((s) => s.ask)
 
   const log = entries ?? NO_ENTRIES
   const data = useMemo(() => historyRows(log), [log])
-  const order = useGridOrder(data.rows, data.columns, sort, criteria)
+  const order = useGridOrder(data.rows, data.columns, sort)
   const rows = useMemo(() => order.map((row) => data.rows[row] ?? []), [order, data.rows])
 
   /** The grid draws the ordered rows, so a row it reports is a place in that order. */
@@ -63,8 +57,7 @@ export function QueryHistory({ profileId, onPick }: QueryHistoryProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
       {/* Clearing the log acts on the whole of it, so it sits over the rows rather than in the
-          footer, which acts on a row. Filter & Sort joins it here and the grid draws no strip of
-          its own — the same arrangement the table view has. */}
+          footer, which acts on a row. */}
       <div
         role="toolbar"
         className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-bar px-1.5"
@@ -78,16 +71,6 @@ export function QueryHistory({ profileId, onPick }: QueryHistoryProps) {
         >
           Clear History
         </Button>
-
-        {/* An empty log has nothing to narrow, and the panel is the grid's own to draw — a button
-            that pressed itself over a pane with no grid in it would stick. */}
-        {log.length > 0 ? (
-          <FilterSortButton
-            shown={filterShown}
-            count={countConditions(criteria) + sort.length}
-            onToggle={() => setFilterShown(!filterShown)}
-          />
-        ) : null}
       </div>
 
       <div className="min-h-0 flex-1">
@@ -109,13 +92,6 @@ export function QueryHistory({ profileId, onPick }: QueryHistoryProps) {
             sort={sort}
             onSortChange={setSort}
             onRefresh={refresh}
-            headStrip={false}
-            filtering={{
-              criteria,
-              shown: filterShown,
-              onShownChange: setFilterShown,
-              onChange: setCriteria,
-            }}
           />
         )}
       </div>
@@ -129,12 +105,7 @@ export function QueryHistory({ profileId, onPick }: QueryHistoryProps) {
       ) : null}
 
       <GridFooter editable={false} busy={loading} onRefresh={refresh}>
-        {/* What the conditions left of the log, and only then how much there was to leave. */}
-        <span>
-          {rows.length === log.length
-            ? `${log.length} statements`
-            : `${rows.length} of ${log.length} statements`}
-        </span>
+        <span>{log.length} statements</span>
       </GridFooter>
     </div>
   )

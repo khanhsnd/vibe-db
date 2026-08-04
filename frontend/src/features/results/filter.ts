@@ -1,7 +1,6 @@
 import type { Cell } from '@/bridge/tables'
 
-import { isNumeric } from './columnType'
-import { cellText, type ResultColumn } from './resultSet'
+import { cellText } from './resultSet'
 
 /**
  * The comparisons a filter may make, named by the token the server reads rather than by the
@@ -260,8 +259,7 @@ export function fitValues(values: string[], arity: Arity): string[] {
  * yet. A group left holding nothing goes with them, because empty parentheses narrow nothing and
  * `()` is not a clause.
  *
- * Every side reads the same pruned tree: it is what crosses the wire to become a `WHERE`, and what
- * an in-memory result matches its rows against.
+ * What is left is exactly the tree that crosses the wire to become a `WHERE`.
  */
 export function activeFilter(root: Group): Group {
   const [kept] = prune(root)
@@ -282,84 +280,6 @@ export function countConditions(node: Criterion): number {
 }
 
 /**
- * Whether a row satisfies the tree — the in-memory half of filtering, for a query result whose
- * rows are already here. A table read is filtered by its own `WHERE` instead, and the two agree
- * except where an engine's collation has its own opinion: the text matches ignore case here.
- *
- * The tree is the **pruned** one, from `activeFilter`: pruning once per read beats pruning once
- * per row, and both sides then narrow by exactly the same conditions.
- */
-export function matchesFilter(row: Cell[], columns: ResultColumn[], filter: Group): boolean {
-  return holdsCriterion(row, columns, filter)
-}
-
-function holdsCriterion(row: Cell[], columns: ResultColumn[], node: Criterion): boolean {
-  if (node.kind === 'group') {
-    if (node.children.length === 0) return true
-
-    return node.conjunction === 'and'
-      ? node.children.every((child) => holdsCriterion(row, columns, child))
-      : node.children.some((child) => holdsCriterion(row, columns, child))
-  }
-
-  const index = columns.findIndex((column) => column.name === node.column)
-  if (index < 0) return true
-
-  return holds(row[index] ?? null, node, isNumeric(columns[index]?.type ?? ''))
-}
-
-function holds(value: Cell, condition: Condition, numeric: boolean): boolean {
-  if (condition.operator === 'isnull') return value === null
-  if (condition.operator === 'notnull') return value !== null
-  // Every other comparison is against a value, and a NULL is the absence of one.
-  if (value === null) return false
-
-  const [first = '', second = ''] = condition.values
-  const text = value.toLowerCase()
-  const order = (other: string) =>
-    numeric ? Number(value) - Number(other) : value.localeCompare(other)
-
-  switch (condition.operator) {
-    case 'empty':
-      return value === ''
-    case 'notempty':
-      return value !== ''
-    case 'contains':
-      return text.includes(first.toLowerCase())
-    case 'notcontains':
-      return !text.includes(first.toLowerCase())
-    case 'begins':
-      return text.startsWith(first.toLowerCase())
-    case 'notbegins':
-      return !text.startsWith(first.toLowerCase())
-    case 'ends':
-      return text.endsWith(first.toLowerCase())
-    case 'notends':
-      return !text.endsWith(first.toLowerCase())
-    case 'inlist':
-      return condition.values.includes(value)
-    case 'notinlist':
-      return !condition.values.includes(value)
-    case 'between':
-      return order(first) >= 0 && order(second) <= 0
-    case 'notbetween':
-      return order(first) < 0 || order(second) > 0
-    case 'eq':
-      return order(first) === 0
-    case 'ne':
-      return order(first) !== 0
-    case 'lt':
-      return order(first) < 0
-    case 'le':
-      return order(first) <= 0
-    case 'gt':
-      return order(first) > 0
-    case 'ge':
-      return order(first) >= 0
-  }
-}
-
-/**
  * What the grid needs to offer filtering: the tree in force, whether the builder that spells it is
  * showing, and how to change either. A surface that cannot filter passes none of it, and the grid
  * then leaves those items off its menu — the same rule `onEditCell` follows.
@@ -373,8 +293,7 @@ export interface GridFiltering {
   onChange: (criteria: Group) => void
   /**
    * The values a column actually holds, for the value picker to offer instead of making the
-   * reader type one. A surface that cannot ask — a query result the backend could not trace back
-   * to a table — leaves it out, and the picker is then the box alone.
+   * reader type one. A surface that cannot ask leaves it out, and the picker is then the box alone.
    */
   suggest?: ((column: string) => Promise<string[]>) | undefined
 }

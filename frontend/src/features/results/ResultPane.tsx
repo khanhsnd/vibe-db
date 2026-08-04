@@ -5,12 +5,10 @@ import type { AppError } from '@/bridge/errors'
 import { rowExport, type ExportFormat } from '@/bridge/export'
 import type { QueryResult } from '@/bridge/query'
 import { ALL_ROWS } from '@/bridge/rows'
-import { tables } from '@/bridge/tables'
 import { cn } from '@/lib/cn'
 import { Empty } from '@/shared/ui/Empty'
 import type { QueryRun } from '@/stores/queries'
 
-import { NO_FILTER, type Group } from './filter'
 import { GridFooter } from './GridFooter'
 import { GridPager } from './GridPager'
 import { GridStatus } from './GridStatus'
@@ -49,8 +47,6 @@ interface ResultPaneProps {
 export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: ResultPaneProps) {
   const [selection, setSelection] = useState<Selection | null>(null)
   const [sort, setSort] = useState<readonly SortKey[]>(NO_SORT)
-  const [criteria, setCriteria] = useState<Group>(NO_FILTER)
-  const [filterShown, setFilterShown] = useState(false)
   const { running, result, error } = run
 
   const grid = result !== null && result.columns.length > 0 ? result : null
@@ -58,31 +54,23 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
   const edits = useGridEdits(sourceOf(grid), sessionId, onRefresh)
 
   /**
-   * The rows are already in memory, so the sort and the filters are too — no statement to
-   * re-order and none to narrow. Only the rows *fetched* are ordered: a draft row stays after
-   * them, so Add still lands on the last page and nothing the reader is filling in is filtered
-   * away mid-typing.
+   * The rows are already in memory, so the sort is too — there is no statement to re-order. Only
+   * the rows *fetched* are ordered: a draft row stays after them, so Add still lands on the last
+   * page.
    */
-  const order = useGridOrder(
-    edits.rows,
-    grid?.columns ?? NO_COLUMNS,
-    sort,
-    criteria,
-    grid?.rows.length ?? 0,
-  )
+  const order = useGridOrder(edits.rows, grid?.columns ?? NO_COLUMNS, sort, grid?.rows.length ?? 0)
   const ordered = useMemo(() => order.map((row) => edits.rows[row] ?? []), [order, edits.rows])
   const paged = usePageWindow(ordered)
 
   // A selection names rows of the result that produced it, so it never survives a new one.
   useEffect(() => setSelection(null), [grid])
 
-  // The page number, the sort and the filters survive a read of the same statement — growing the
-  // fetch, or reloading after an edit, must leave the reader where they were — but not a
-  // different one, whose columns neither the sort nor a filter may even name.
+  // The page number and the sort survive a read of the same statement — growing the fetch, or
+  // reloading after an edit, must leave the reader where they were — but not a different one,
+  // whose columns the sort may not even name.
   const statement = run.request?.sql ?? ''
   useEffect(() => {
     setSort(NO_SORT)
-    setCriteria(NO_FILTER)
     paged.goToPage(0)
   }, [statement, paged.goToPage])
 
@@ -125,30 +113,6 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
     setSort(next)
     paged.goToPage(0)
   }
-
-  /** Narrowing drops rows out of every page, so it sends the reader back to the first as well. */
-  const changeCriteria = (next: Group) => {
-    setSelection(null)
-    setCriteria(next)
-    setFilterShown(next.children.length > 0 || filterShown)
-    paged.goToPage(0)
-  }
-
-  /**
-   * The values a column holds, for the filter builder to offer. They come from the **table the
-   * result was traced to**, which is the only thing a query result knows to ask about; a result
-   * the backend could not trace has no such table and the builder then offers its box alone.
-   *
-   * Held steady across renders, because the picker reads it once per column and one rebuilt on
-   * every render would have it read again for ever.
-   */
-  const suggest = useMemo(() => {
-    if (grid === null || grid.table === '' || sessionId === null) return undefined
-    const { database, schema, table } = grid
-
-    return (column: string) =>
-      tables.columnValues(sessionId, { database, schema, table, column })
-  }, [grid, sessionId])
 
   /**
    * A draft row lands after every fetched row, so the page holding it is the one to show — and
@@ -203,13 +167,6 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
             onExport={sessionId !== null ? exportRows : undefined}
             onDeleteRows={editable ? deleteRows : undefined}
             onRefresh={onRefresh}
-            filtering={{
-              criteria,
-              shown: filterShown,
-              onShownChange: setFilterShown,
-              onChange: changeCriteria,
-              suggest,
-            }}
           />
         ) : result !== null ? (
           <SuccessPanel rowsAffected={result.rowsAffected} />
