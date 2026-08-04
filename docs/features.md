@@ -8,7 +8,8 @@ the tree and in a designer tab**, **schema changes from the tree's context menu*
 empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index or a
 foreign key, drop a view or a routine — table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
-or SQL**, query tabs with completion that **run a whole script**, passwords in Windows Credential
+or SQL**, query tabs with completion that **run a whole script**, **a history of every statement run,
+kept on disk and put back in the editor by a double-click**, passwords in Windows Credential
 Manager, and the full layout shell with dark and light themes and a **data font the reader picks**.
 
 Not there yet: a **materialised view** is not listed, because it is dropped by a statement of its
@@ -409,12 +410,64 @@ real bound, which is the trade `All` is asking for. And a **query** result's `Al
 still replays the statement under the ordinary statement timeout, since a script's outcome is one
 answer rather than a stream.
 
+### Every statement run is kept
+
+**Execute writes what it ran into a log on disk**, and the `History` pane is that log — see
+[the history pane](#the-history-pane). It is kept whatever became of the statement, a rejected one
+being among the likeliest to be wanted back, and it is written after the run rather than before, so
+what is remembered is what actually happened. A log that cannot be written is dropped rather than
+reported: it is not a failure the reader can act on, and certainly not one the query they just ran
+should be reported as.
+
+- **The log is one entry per statement, not per Execute.** A statement run again is *moved* to the
+  head with its `Runs` counted up, rather than added beside itself — five hundred copies of one
+  `SELECT` is not a list anybody reads, and what a reader wants back is the statement. Two entries
+  are one when the text, the connection and the namespace all match: the same text against another
+  database is another statement, that being where the tables it names live.
+- **It holds 500 statements**, oldest dropped first, and lives in `history.json` beside
+  `connections.json` in the reader's own configuration directory. The rule for what a log holds
+  after one more statement is `domain.Remember`'s and is written down once.
+- **The whole of what the reader executed is one entry**, script or single statement. What they
+  pressed Execute on is what they want back, and cutting a twenty-statement script into twenty
+  entries would bury the nineteen runs before it.
+- The outcome kept is the **last** run's: the rows the grid ended up with, how long the whole
+  Execute took, and the wording of the statement it stopped at.
+
 ## The output panel
 
-The panel under the editor is a tab strip of **`Result`** and, for a script, **`Messages`**; a
-further pane — a query plan, history — is one more entry in the list `QueryOutput` hands
+The panel under the editor is a tab strip of **`Result`**, **`History`** and, for a script,
+**`Messages`**; a further pane — a query plan — is one more entry in the list `QueryOutput` hands
 `ResultTabs`. Nothing sits below that strip: what the run did is the pane's own to report, on the
 status line under its grid, so `QueryOutput` is the tabs and nothing else.
+
+**An Execute brings its own outcome forward** — `Result`, or `Messages` for a script that stopped —
+wherever the reader had got to, and otherwise the strip stays where they left it. `Messages` is
+there only for a script, so a single statement run while it was in front puts the reader back on
+`Result` rather than on a pane that has gone.
+
+### The history pane
+
+`History` is every statement **this connection** has run, newest first, in a `ResultGrid` like
+everything else that shows rows and columns: `When`, `Statement`, `Database`, `Runs`, `Rows`,
+`Time (ms)` and `Message`, which reads `OK` or the server's own wording exactly as `Messages` does.
+
+- **A double-click loads a row's statement into the editor**, which is what the log is for; the grid
+  is read-only, so a click has nothing else to mean. It brings **the namespace it ran in** with it,
+  because a statement names tables of one database and one run against another would fail on names
+  that are not there — the toolbar's pickers move with it, visibly. The editor's own undo is what
+  puts back whatever was being typed.
+- **It is searched by the Filter & Sort panel every grid has**, in memory, there being no statement
+  of its own to narrow: finding one statement among five hundred is a `contains` on the `Statement`
+  column, and the footer counts what the conditions left of the log. `When` is spelled
+  `2026-08-04 14:23:05` — local time, in the one spelling that also sorts as text.
+- **The pane is read on mount rather than held in a store.** It is drawn only while the reader is
+  looking at it, so every open is a fresh log and an Execute never has to tell it anything.
+- **The log is every connection's and the pane shows one.** A statement of another server names
+  tables that are not here, so it would be noise at best and unrunnable at worst.
+- **`Clear History` forgets every statement**, behind the same confirmation a drop is behind, and it
+  says that nothing on any server changes. It sits over the rows rather than in the footer, because
+  it acts on the whole log where the footer acts on a row. There is no way to forget one entry: a log
+  is what it is, and a reader who wants it gone wants it gone.
 
 Under the pane sits the same `GridFooter` the table view has, with the source of the rows named on
 its right — the qualified table, or why the result is read-only:

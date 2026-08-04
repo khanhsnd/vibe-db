@@ -300,6 +300,22 @@ type ScriptResult struct {
 	Statements []StatementOutcome `json:"statements"`
 }
 
+// HistoryEntry is one Execute the reader asked for, as the History pane lists it. `ranAt` is epoch
+// milliseconds — the clock the rest of the wire counts in — so the pane draws it in the reader's
+// own time zone rather than in whatever one the log was written in.
+type HistoryEntry struct {
+	Namespace
+	ProfileID    string `json:"profileId"`
+	SQL          string `json:"sql"`
+	Rows         int    `json:"rows"`
+	RowsAffected int64  `json:"rowsAffected"`
+	ElapsedMs    int64  `json:"elapsedMs"`
+	ErrorCode    string `json:"errorCode"`
+	Error        string `json:"error"`
+	Runs         int    `json:"runs"`
+	RanAt        int64  `json:"ranAt"`
+}
+
 type CellEditInput struct {
 	Namespace
 	Table  string            `json:"table"`
@@ -471,6 +487,25 @@ func toQueryResultDTO(result driver.QueryResult, elapsed time.Duration) QueryRes
 		ElapsedMs:    elapsed.Milliseconds(),
 		Table:        result.Table,
 	}
+}
+
+func toHistoryDTOs(entries []domain.HistoryEntry) []HistoryEntry {
+	out := make([]HistoryEntry, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, HistoryEntry{
+			Namespace:    Namespace{Database: entry.Database, Schema: entry.Schema},
+			ProfileID:    entry.ProfileID,
+			SQL:          entry.SQL,
+			Rows:         entry.Rows,
+			RowsAffected: entry.RowsAffected,
+			ElapsedMs:    entry.ElapsedMs,
+			ErrorCode:    entry.ErrorCode,
+			Error:        entry.Error,
+			Runs:         entry.Runs,
+			RanAt:        entry.RanAt.UnixMilli(),
+		})
+	}
+	return out
 }
 
 func (in ColumnInput) toDriver() driver.ColumnSpec {

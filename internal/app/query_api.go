@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"time"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/history"
 	"github.com/khanhsnd/vibe-db/internal/session"
 )
 
@@ -15,20 +17,23 @@ type QueryAPI struct {
 	apiContext
 
 	sessions *session.Manager
+	history  history.Repository
 	runs     *runRegistry
 }
 
-func NewQueryAPI(sessions *session.Manager) *QueryAPI {
+func NewQueryAPI(sessions *session.Manager, log history.Repository) *QueryAPI {
 	return &QueryAPI{
 		apiContext: newAPIContext(),
 		sessions:   sessions,
+		history:    log,
 		runs:       newRunRegistry(),
 	}
 }
 
 // Run executes whatever the editor holds and blocks until it finishes, fails, or is cancelled.
 // The text is cut into the statements it carries and they are run in order, stopping at the
-// first the server rejects.
+// first the server rejects. Whatever becomes of it, the text is kept in the history log — see
+// remember.
 //
 // How a rejection is reported depends on how many statements there were, and deliberately so:
 //
@@ -48,6 +53,19 @@ func (a *QueryAPI) Run(sessionID string, input QueryInput) (ScriptResult, error)
 	ctx, release := a.runs.begin(a.ctx, input.RunID, statementTimeout)
 	defer release()
 
+	started := time.Now()
+	script, failure := a.runScript(ctx, sessionID, input, statements)
+	a.remember(sessionID, input, script, failure, time.Since(started))
+
+	return script, failure
+}
+
+func (a *QueryAPI) runScript(
+	ctx context.Context,
+	sessionID string,
+	input QueryInput,
+	statements []string,
+) (ScriptResult, error) {
 	script := ScriptResult{Statements: make([]StatementOutcome, 0, len(statements))}
 
 	for _, statement := range statements {
@@ -90,18 +108,89 @@ func ranStatement(sql string, elapsed time.Duration, result driver.QueryResult) 
 // failedStatement carries the same code and wording a thrown failure would have, so a script's
 // messages read exactly as the output panel does for one statement.
 func failedStatement(sql string, elapsed time.Duration, err error) StatementOutcome {
-	outcome := StatementOutcome{SQL: sql, ElapsedMs: elapsed.Milliseconds()}
+	code, message := wireFields(err)
+	return StatementOutcome{
+		SQL:       sql,
+		ElapsedMs: elapsed.Milliseconds(),
+		ErrorCode: code,
+		Error:     message,
+	}
+}
 
+// wireFields is the code and the wording a failure would cross the wire with, for the two places
+// that report one as data rather than by returning it.
+func wireFields(err error) (string, string) {
 	var wire wireError
 	if errors.As(wrapError(err), &wire) {
-		outcome.ErrorCode = string(wire.Code)
-		outcome.Error = wire.Message
-		return outcome
+		return string(wire.Code), wire.Message
+	}
+	return string(CodeInternal), err.Error()
+}
+
+// ListHistory answers with the statements this app has run, newest first — one entry per statement
+// of a namespace, however many times it has been run. It is every connection's, because a log
+// filtered by the pane showing it can still say what a connection that has gone once did.
+func (a *QueryAPI) ListHistory() ([]HistoryEntry, error) {
+	entries, err := a.history.List()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return toHistoryDTOs(entries), nil
+}
+
+// ClearHistory forgets every statement. There is no way to forget one: a log is what it is, and a
+// reader who wants it gone wants it gone.
+func (a *QueryAPI) ClearHistory() error {
+	return wrapError(a.history.Clear())
+}
+
+// remember keeps the text the reader executed whatever became of it, a rejected statement being
+// among the likeliest to be wanted back. The outcome recorded is the run's as a whole: the rows the
+// grid ended up with, and the wording of the statement it stopped at.
+//
+// A log that cannot be written is dropped rather than reported. It is not a failure the reader can
+// act on, and it is certainly not one the query they just ran should be reported as; ListHistory is
+// where a broken log says so.
+func (a *QueryAPI) remember(
+	sessionID string,
+	input QueryInput,
+	script ScriptResult,
+	failure error,
+	elapsed time.Duration,
+) {
+	opened, err := a.sessions.Get(sessionID)
+	if err != nil {
+		return
 	}
 
-	outcome.ErrorCode = string(CodeInternal)
-	outcome.Error = err.Error()
-	return outcome
+	entry := domain.HistoryEntry{
+		ProfileID:    opened.Profile.ID,
+		Database:     input.Database,
+		Schema:       input.Schema,
+		SQL:          input.SQL,
+		Rows:         len(script.Rows),
+		RowsAffected: script.RowsAffected,
+		ElapsedMs:    elapsed.Milliseconds(),
+		RanAt:        time.Now(),
+	}
+
+	if failure != nil {
+		entry.ErrorCode, entry.Error = wireFields(failure)
+	} else if stopped, ok := script.stopped(); ok {
+		entry.ErrorCode, entry.Error = stopped.ErrorCode, stopped.Error
+	}
+
+	_ = a.history.Append(entry)
+}
+
+// stopped is the statement a script stopped at, if it stopped at one.
+func (s ScriptResult) stopped() (StatementOutcome, bool) {
+	for _, statement := range s.Statements {
+		if statement.Error != "" {
+			return statement, true
+		}
+	}
+	return StatementOutcome{}, false
 }
 
 // Cancel stops the run with this id. Unknown ids are ignored: the query may have

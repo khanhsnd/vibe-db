@@ -138,7 +138,7 @@ func TestWriteLeavesNoTempFilesBehind(t *testing.T) {
 		t.Fatalf("ReadDir() error = %v", err)
 	}
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), ".connections-") {
+		if strings.HasPrefix(entry.Name(), ".") {
 			t.Errorf("temp file left behind: %s", entry.Name())
 		}
 	}
@@ -150,10 +150,10 @@ func TestWriteLeavesNoTempFilesBehind(t *testing.T) {
 func TestReadRejectsCorruptFileWithoutLosingIt(t *testing.T) {
 	repo, path := newRepo(t)
 
-	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
-	if err := os.WriteFile(path, []byte("{not json"), fileMode); err != nil {
+	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 

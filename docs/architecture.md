@@ -3,7 +3,7 @@
 Ports and adapters, with a strictly one-way dependency rule:
 
 ```
-internal/app  ->  session / profile / secret  ->  internal/driver  ->  internal/domain
+internal/app  ->  session / profile / secret / history  ->  internal/driver  ->  internal/domain
 ```
 
 - **`internal/domain`** — `ConnectionProfile`, `Validate()`, sentinel errors. Pure; imports nothing
@@ -13,6 +13,15 @@ internal/app  ->  session / profile / secret  ->  internal/driver  ->  internal/
 - **`internal/app`** — the Wails boundary and the only package bound to JavaScript. Speaks `dto.go`
   wire types, never domain types, and maps every error to a stable code (see
   [errors.md](errors.md)).
+- **`internal/history`** — the statements the reader has run, so one can be found and run again.
+  A port with `List` / `Append` / `Clear` and a `jsonfile` adapter, exactly as `profile` is. `Append`
+  is its only write besides `Clear`, because what a log holds after one more statement — newest
+  first, one entry per statement, capped — is `domain.Remember`'s rule and not a caller's.
+- **`internal/jsonstore`** — one JSON document on disk: read whole, written whole, and put in place
+  by a rename, so a crash mid-write leaves the document that was there rather than half of a new
+  one. `File[T].Update` does the read-change-write under one lock, and writes nothing if the change
+  fails, which is how a rejected delete leaves the file alone. The connection profiles and the query
+  history are each one of these, which is why neither adapter spells atomic writing out.
 - **`internal/fonts`** — the font families the host machine has, read from the Windows font registry
   (both the machine-wide hive and the reader's own, since a per-user install is registered only
   there). Bound through `SystemAPI`, the one API that answers about the *machine* rather than about a

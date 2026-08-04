@@ -4,4 +4,8 @@ import {app} from '../models';
 
 export function Cancel(arg1:string):Promise<void>;
 
+export function ClearHistory():Promise<void>;
+
+export function ListHistory():Promise<Array<app.HistoryEntry>>;
+
 export function Run(arg1:string,arg2:app.QueryInput):Promise<app.ScriptResult>;

@@ -7,7 +7,8 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/mysql"
 	"github.com/khanhsnd/vibe-db/internal/driver/postgres"
-	"github.com/khanhsnd/vibe-db/internal/profile/jsonfile"
+	historyfile "github.com/khanhsnd/vibe-db/internal/history/jsonfile"
+	profilefile "github.com/khanhsnd/vibe-db/internal/profile/jsonfile"
 	"github.com/khanhsnd/vibe-db/internal/secret/keyring"
 	"github.com/khanhsnd/vibe-db/internal/session"
 )
@@ -21,7 +22,12 @@ type App struct {
 }
 
 func New() (*App, error) {
-	profilePath, err := jsonfile.DefaultPath()
+	profilePath, err := profilefile.DefaultPath()
+	if err != nil {
+		return nil, fmt.Errorf("resolve config path: %w", err)
+	}
+
+	historyPath, err := historyfile.DefaultPath()
 	if err != nil {
 		return nil, fmt.Errorf("resolve config path: %w", err)
 	}
@@ -30,8 +36,8 @@ func New() (*App, error) {
 	sessions := session.NewManager(registry)
 
 	return &App{
-		Connections: NewConnectionAPI(jsonfile.New(profilePath), keyring.New(), sessions),
-		Queries:     NewQueryAPI(sessions),
+		Connections: NewConnectionAPI(profilefile.New(profilePath), keyring.New(), sessions),
+		Queries:     NewQueryAPI(sessions, historyfile.New(historyPath)),
 		System:      NewSystemAPI(),
 		sessions:    sessions,
 	}, nil

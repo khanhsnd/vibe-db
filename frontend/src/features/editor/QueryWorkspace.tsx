@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 
 import { engineInfo, namespaceOf, type TableSchema } from '@/bridge/connections'
+import type { HistoryEntry } from '@/bridge/history'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import { namespaceKey, useConnectionsStore } from '@/stores/connections'
 import { IDLE_RUN, useQueriesStore } from '@/stores/queries'
@@ -85,6 +86,16 @@ export function QueryWorkspace({
     [rerun, tab.id, sessionId],
   )
 
+  /**
+   * A statement picked out of the History pane takes the editor **and the namespace it ran in**: a
+   * statement names tables of one database, and one run against another would fail on names that
+   * are not there. The editor's own undo is what puts back whatever was being typed.
+   */
+  const pickHistory = (entry: HistoryEntry) => {
+    const namespace = namespaceOf(entry.database, entry.schema)
+    editQuery(tab.id, entry.database === '' ? { sql: entry.sql } : { sql: entry.sql, namespace })
+  }
+
   // The shortcut is bound on the window, because F5 reloads the WebView whenever
   // focus sits outside this panel. The ref keeps the listener off the keystroke path.
   const latest = useRef(start)
@@ -148,9 +159,11 @@ export function QueryWorkspace({
           <QueryOutput
             run={run}
             sessionId={sessionId}
+            profileId={tab.profileId}
             onRefresh={refresh}
             onFetch={fetchRows}
             onStop={() => cancel(tab.id)}
+            onPickHistory={pickHistory}
           />
         </SplitPanel>
       </Split>

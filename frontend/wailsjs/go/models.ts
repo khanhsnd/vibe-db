@@ -186,6 +186,38 @@ export namespace app {
 	        this.onDelete = source["onDelete"];
 	    }
 	}
+	export class HistoryEntry {
+	    database: string;
+	    schema: string;
+	    profileId: string;
+	    sql: string;
+	    rows: number;
+	    rowsAffected: number;
+	    elapsedMs: number;
+	    errorCode: string;
+	    error: string;
+	    runs: number;
+	    ranAt: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.profileId = source["profileId"];
+	        this.sql = source["sql"];
+	        this.rows = source["rows"];
+	        this.rowsAffected = source["rowsAffected"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.errorCode = source["errorCode"];
+	        this.error = source["error"];
+	        this.runs = source["runs"];
+	        this.ranAt = source["ranAt"];
+	    }
+	}
 	export class IndexInfo {
 	    name: string;
 	    columns: string[];

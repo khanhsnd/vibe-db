@@ -318,8 +318,8 @@ SELECT * FROM `shop`.`users` ORDER BY `id` LIMIT 100 OFFSET 0  ⧉ │ Record 19
 2. Geometry constants stay at the top of `ResultGrid.tsx`; row height alone is shared, via
    `density.ts`, because the object tree virtualizes on the same number.
 3. New behaviour is added once, in the grid, and this file is updated in the same change. Every call
-   site — `ResultPane`, `TableDataView`, `TableDesigner` and `ObjectListView` — then has it, which
-   is the whole point.
+   site — `ResultPane`, `TableDataView`, `TableDesigner`, `ObjectListView`, `QueryHistory` and
+   `ScriptMessages` — then has it, which is the whole point.
 
 ## Where the two call sites legitimately differ
 
@@ -327,16 +327,18 @@ Not in what an edit means — `useGridEdits` and `GridFooter` make that identica
 surrounds the grid:
 
 - `ResultPane` pages in memory, so it maps the grid's *page-local* row index back to the whole
-  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's rows alike. **It sorts in
-  memory too**, and for the same reason keeps the sort as a list of row numbers (`sortedOrder`)
-  rather than reordered rows: a pending change is keyed by the number a row had when it was read.
-  Draft rows stay pinned after every fetched row, so **Add** still lands on the last page. A sort
-  only reaches the rows already fetched, and it is dropped when the statement changes. **It filters
-  in memory as well**, over that same order and by the same argument — there is no statement of its
-  own to add a `WHERE` to — and a **draft row is never filtered out**, being a row the reader is
-  still filling in. Its value picker asks about the **table the result was traced to**, that being
+  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's rows alike. **It sorts and
+  filters in memory too**, there being no statement of its own to re-order or add a `WHERE` to, and
+  it keeps the outcome as a list of row numbers (`useGridOrder`, over `sortedOrder` and
+  `matchesFilter`) rather than as reordered rows: a pending change is keyed by the number a row had
+  when it was read. Only the rows **fetched** are ordered — a sort reaches no further, and a draft row
+  therefore stays pinned after them, so **Add** still lands on the last page and nothing the reader is
+  filling in is filtered away mid-typing. A sort is dropped when the statement changes.
+  `QueryHistory` is the same arrangement without the drafts or the paging, which is the whole of what
+  `useGridOrder` is for: a surface holding its rows already narrows and orders them one way.
+  `ResultPane`'s value picker asks about the **table the result was traced to**, that being
   the only table a query result knows of; a result the backend could not trace passes no `suggest`
-  at all. Its footer
+  at all, and neither does the history log, whose columns are not a table's. Its footer
   can also **Stop** the run, and **Add** jumps to the last page, which is where a draft row lands.
   Asking for a page past the rows it holds replays the statement for as many as that page needs
   (`reach`), so `All` really does load all; the page number therefore survives a read of the same

@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 
 /**
- * A schema change waiting on one answer from the reader. Each request carries what it needs to be
- * drawn and a closure that performs the change, so the dialogs know nothing about sessions and the
- * tree menu that raised the request stays the one place a statement is decided.
+ * A change waiting on one answer from the reader — a schema change, or the one other thing that
+ * destroys what a reader would miss: the query log being forgotten. Each request carries what it
+ * needs to be drawn and a closure that performs the change, so the dialogs know nothing about
+ * sessions and the menu that raised the request stays the one place a statement is decided.
  *
  * Anything with a *form* in it is not here: a field's shape is edited in the designer tab, which
  * has the room for it. Only a rename, which is one box, a confirmation, which has to be answered

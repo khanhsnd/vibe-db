@@ -10,7 +10,7 @@ import { cn } from '@/lib/cn'
 import { Empty } from '@/shared/ui/Empty'
 import type { QueryRun } from '@/stores/queries'
 
-import { activeFilter, matchesFilter, NO_FILTER, type Group } from './filter'
+import { NO_FILTER, type Group } from './filter'
 import { GridFooter } from './GridFooter'
 import { GridPager } from './GridPager'
 import { GridStatus } from './GridStatus'
@@ -21,14 +21,18 @@ import {
   oneRange,
   rowRange,
   selectedRows,
-  sortedOrder,
+  type ResultColumn,
   type Selection,
   type SortKey,
 } from './resultSet'
 import { useGridEdits, type EditSource } from './useGridEdits'
+import { useGridOrder } from './useGridOrder'
 import { usePageWindow } from './usePageWindow'
 
 const numbers = new Intl.NumberFormat('en-US')
+
+/** The columns of no result at all, held steady so the order below is not rebuilt per render. */
+const NO_COLUMNS: ResultColumn[] = []
 
 /** Stopping a query is a choice, not a failure, so it is reported without alarm. */
 const isCancel = (error: AppError) => error.code === 'QUERY_CANCELLED'
@@ -55,24 +59,17 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
 
   /**
    * The rows are already in memory, so the sort and the filters are too — no statement to
-   * re-order and none to narrow. It is a list of row numbers rather than reordered rows, because
-   * every pending change is keyed by the number a row had when it was read.
-   *
-   * A draft row is never filtered out: it is a row the reader is still filling in, and one that
-   * vanished mid-typing would take what was typed with it. Filters reach only the rows fetched,
-   * for the same reason the sort does.
+   * re-order and none to narrow. Only the rows *fetched* are ordered: a draft row stays after
+   * them, so Add still lands on the last page and nothing the reader is filling in is filtered
+   * away mid-typing.
    */
-  const order = useMemo(() => {
-    const fetched = grid?.rows.length ?? 0
-    const columns = grid?.columns ?? []
-    // Pruned once per read rather than once per row: what is left is exactly the tree a table
-    // read would have put in its `WHERE`.
-    const filter = activeFilter(criteria)
-
-    return sortedOrder(edits.rows, columns, sort, fetched).filter(
-      (row) => row >= fetched || matchesFilter(edits.rows[row] ?? [], columns, filter),
-    )
-  }, [edits.rows, grid, sort, criteria])
+  const order = useGridOrder(
+    edits.rows,
+    grid?.columns ?? NO_COLUMNS,
+    sort,
+    criteria,
+    grid?.rows.length ?? 0,
+  )
   const ordered = useMemo(() => order.map((row) => edits.rows[row] ?? []), [order, edits.rows])
   const paged = usePageWindow(ordered)
 

@@ -6,6 +6,14 @@ export function Cancel(arg1) {
   return window['go']['app']['QueryAPI']['Cancel'](arg1);
 }
 
+export function ClearHistory() {
+  return window['go']['app']['QueryAPI']['ClearHistory']();
+}
+
+export function ListHistory() {
+  return window['go']['app']['QueryAPI']['ListHistory']();
+}
+
 export function Run(arg1, arg2) {
   return window['go']['app']['QueryAPI']['Run'](arg1, arg2);
 }

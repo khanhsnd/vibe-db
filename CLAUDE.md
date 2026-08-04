@@ -14,7 +14,7 @@ vary by engine.
 ## Rules that must not be broken
 
 1. **The dependency rule is one-way:**
-   `internal/app` → `session / profile / secret` → `internal/driver` → `internal/domain`.
+   `internal/app` → `session / profile / secret / history` → `internal/driver` → `internal/domain`.
    Business rules live in `domain`, not in the API layer. `internal/app` speaks `dto.go` wire types,
    never domain types. `frontend/src/bridge` is the only frontend directory allowed to import
    `frontend/wailsjs/**`.
