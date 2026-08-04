@@ -2,9 +2,9 @@
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "vibe-db",
   "outputfilename": "vibe-db",
-  "frontend:install": "pnpm install",
-  "frontend:build": "pnpm run build",
-  "frontend:dev:watcher": "pnpm run dev",
+  "frontend:install": "corepack pnpm@10.34.5 install",
+  "frontend:build": "corepack pnpm@10.34.5 run build",
+  "frontend:dev:watcher": "corepack pnpm@10.34.5 run dev",
   "frontend:dev:serverUrl": "auto",
   "author": {
     "name": "khanh",
