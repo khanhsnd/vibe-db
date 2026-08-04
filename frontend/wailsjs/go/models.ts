@@ -84,6 +84,7 @@ export namespace app {
 	}
 	export class DatabaseSpecInput {
 	    name: string;
+	    firstCollection: string;
 	    owner: string;
 	    template: string;
 	    encoding: string;
@@ -103,6 +104,7 @@ export namespace app {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
+	        this.firstCollection = source["firstCollection"];
 	        this.owner = source["owner"];
 	        this.template = source["template"];
 	        this.encoding = source["encoding"];

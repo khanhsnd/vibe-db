@@ -27,6 +27,7 @@ export const NO_CONNECTION_LIMIT = -1
 export function emptyDatabaseSpec(): DatabaseSpec {
   return {
     name: '',
+    firstCollection: '',
     owner: '',
     template: '',
     encoding: '',

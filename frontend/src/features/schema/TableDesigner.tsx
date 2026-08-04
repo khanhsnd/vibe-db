@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { KeyRound, Plus, RefreshCw, Save, Table2, Trash2 } from 'lucide-react'
 
-import type { Namespace } from '@/bridge/connections'
+import { engineInfo, type Namespace } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
 import { schema } from '@/bridge/schema'
 import type { Cell } from '@/bridge/tables'
@@ -291,19 +291,25 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
                 />
               ),
             },
-            {
-              id: 'keys',
-              label: `Foreign Keys (${draft.keys.length})`,
-              content: (
-                <ResultGrid
-                  result={keyRows(draft.keys)}
-                  selection={selection}
-                  onSelectionChange={setSelection}
-                  onEditCell={editCell}
-                  isDirty={(row) => isStagedEdited(draft.keys[row], stored.keys, sameKey)}
-                />
-              ),
-            },
+            // A pane for a constraint this engine has no concept of would be a pane whose Save
+            // could only fail, so an engine without referential constraints does not get one.
+            ...(engineInfo(engine).hasForeignKeys
+              ? [
+                  {
+                    id: 'keys',
+                    label: `Foreign Keys (${draft.keys.length})`,
+                    content: (
+                      <ResultGrid
+                        result={keyRows(draft.keys)}
+                        selection={selection}
+                        onSelectionChange={setSelection}
+                        onEditCell={editCell}
+                        isDirty={(row) => isStagedEdited(draft.keys[row], stored.keys, sameKey)}
+                      />
+                    ),
+                  },
+                ]
+              : []),
             {
               id: 'changes',
               label: `Changes (${creating ? changes.length + 1 : changes.length})`,

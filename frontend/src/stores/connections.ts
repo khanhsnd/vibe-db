@@ -4,8 +4,10 @@ import { type AppError, toAppError } from '@/bridge/errors'
 import {
   connections,
   engineInfo,
+  engineWords,
   namespaceOf,
   NO_NAMESPACE,
+  type EngineInfo,
   type Namespace,
   type Objects,
   type Profile,
@@ -369,20 +371,20 @@ interface TreeInput {
 
 export function buildTree(input: TreeInput): TreeNode[] {
   return input.profiles.map((profile) => {
-    const { value: engine, hasSchemas } = engineInfo(profile.engine)
+    const info = engineInfo(profile.engine)
 
     return {
       id: connectionNodeId(profile.id),
       kind: 'connection',
       label: profile.name,
       profileId: profile.id,
-      engine,
+      engine: info.value,
       environment: profile.environment,
       status: input.statuses[profile.id] ?? 'idle',
       children: (input.databases[profile.id] ?? []).map((database) =>
-        hasSchemas
-          ? schemaParentNode(input, profile.id, database)
-          : namespaceNode(input, profile.id, 'database', namespaceOf(database), database),
+        info.hasSchemas
+          ? schemaParentNode(input, info, profile.id, database)
+          : namespaceNode(input, info, profile.id, 'database', namespaceOf(database), database),
       ),
     }
   })
@@ -390,7 +392,12 @@ export function buildTree(input: TreeInput): TreeNode[] {
 
 // A PostgreSQL database holds no tables of its own — its schemas do — so it only carries the
 // level below it, and the schema list arrives on first expand.
-function schemaParentNode(input: TreeInput, profileId: string, database: string): TreeNode {
+function schemaParentNode(
+  input: TreeInput,
+  info: EngineInfo,
+  profileId: string,
+  database: string,
+): TreeNode {
   const names = input.schemas[databaseKey(profileId, database)]
 
   return {
@@ -401,16 +408,18 @@ function schemaParentNode(input: TreeInput, profileId: string, database: string)
     namespace: namespaceOf(database),
     ...(names ? { badge: String(names.length) } : {}),
     children: (names ?? []).map((schema) =>
-      namespaceNode(input, profileId, 'schema', namespaceOf(database, schema), schema),
+      namespaceNode(input, info, profileId, 'schema', namespaceOf(database, schema), schema),
     ),
   }
 }
 
-// The node that owns tables, whichever level of the tree that turns out to be. Its three folders
-// are drawn whether or not they have been read: they are what the caret is for, and one read
-// fills all three, so a folder with a badge is a folder whose namespace has been opened.
+// The node that owns tables, whichever level of the tree that turns out to be. Its folders are drawn
+// whether or not they have been read: they are what the caret is for, and one read fills all of
+// them, so a folder with a badge is a folder whose namespace has been opened. A folder for something
+// the engine does not have is not drawn at all — see `hasRoutines`.
 function namespaceNode(
   input: TreeInput,
+  info: EngineInfo,
   profileId: string,
   kind: 'database' | 'schema',
   ns: Namespace,
@@ -448,33 +457,39 @@ function namespaceNode(
     children: [
       folder(
         'tables',
-        'Tables',
-        (held?.tables ?? []).map((table) => tableNode(input, profileId, ns, table)),
+        engineWords(info.value).tables,
+        (held?.tables ?? []).map((table) => tableNode(input, info, profileId, ns, table)),
       ),
       folder(
         'views',
         'Views',
         (held?.views ?? []).map((view) => objectNode('view', view)),
       ),
-      folder(
-        'routines',
-        'Functions',
-        (held?.routines ?? []).map((routine) =>
-          objectNode(routine.procedure ? 'procedure' : 'function', routine.name, {
-            routine,
-            // Two functions of one name differ only in what they take, so the row says which.
-            ...(routine.arguments ? { badge: routine.arguments } : {}),
-          }),
-        ),
-      ),
+      ...(info.hasRoutines
+        ? [
+            folder(
+              'routines',
+              'Functions',
+              (held?.routines ?? []).map((routine) =>
+                objectNode(routine.procedure ? 'procedure' : 'function', routine.name, {
+                  routine,
+                  // Two functions of one name differ only in what they take, so the row says which.
+                  ...(routine.arguments ? { badge: routine.arguments } : {}),
+                }),
+              ),
+            ),
+          ]
+        : []),
     ],
   }
 }
 
-// A table carries the three folders whether or not its shape has been read: they are what the
-// caret is for, and the read happens when one of them is opened.
+// A table carries its folders whether or not its shape has been read: they are what the caret is
+// for, and the read happens when one of them is opened. Foreign Keys is left out for an engine that
+// has no referential constraints of any kind — see `hasForeignKeys`.
 function tableNode(
   input: TreeInput,
+  info: EngineInfo,
   profileId: string,
   ns: Namespace,
   table: string,
@@ -530,24 +545,28 @@ function tableNode(
           badge: index.columns.join(', '),
         })),
       },
-      {
-        id: at('foreignKeys'),
-        kind: 'foreignKeys',
-        label: 'Foreign Keys',
-        profileId,
-        namespace: ns,
-        table,
-        ...(structure ? { badge: String(structure.foreignKeys.length) } : {}),
-        children: (structure?.foreignKeys ?? []).map((key) => ({
-          id: objectNodeId('foreignKey', profileId, ns, table, key.name),
-          kind: 'foreignKey',
-          label: key.name,
-          profileId,
-          namespace: ns,
-          table,
-          badge: `→ ${key.referencedTable}`,
-        })),
-      },
+      ...(info.hasForeignKeys
+        ? [
+            {
+              id: at('foreignKeys'),
+              kind: 'foreignKeys' as NodeKind,
+              label: 'Foreign Keys',
+              profileId,
+              namespace: ns,
+              table,
+              ...(structure ? { badge: String(structure.foreignKeys.length) } : {}),
+              children: (structure?.foreignKeys ?? []).map((key) => ({
+                id: objectNodeId('foreignKey', profileId, ns, table, key.name),
+                kind: 'foreignKey' as NodeKind,
+                label: key.name,
+                profileId,
+                namespace: ns,
+                table,
+                badge: `→ ${key.referencedTable}`,
+              })),
+            },
+          ]
+        : []),
     ],
   }
 }

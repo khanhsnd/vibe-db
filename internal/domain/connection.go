@@ -11,11 +11,13 @@ type Engine string
 const (
 	EngineMySQL    Engine = "mysql"
 	EnginePostgres Engine = "postgres"
+	EngineMongo    Engine = "mongo"
 )
 
 const (
 	DefaultMySQLPort    = 3306
 	DefaultPostgresPort = 5432
+	DefaultMongoPort    = 27017
 	DefaultSSHPort      = 22
 )
 
@@ -24,6 +26,8 @@ func (e Engine) DefaultPort() int {
 	switch e {
 	case EnginePostgres:
 		return DefaultPostgresPort
+	case EngineMongo:
+		return DefaultMongoPort
 	default:
 		return DefaultMySQLPort
 	}
@@ -31,11 +35,19 @@ func (e Engine) DefaultPort() int {
 
 func (e Engine) Valid() bool {
 	switch e {
-	case EngineMySQL, EnginePostgres:
+	case EngineMySQL, EnginePostgres, EngineMongo:
 		return true
 	default:
 		return false
 	}
+}
+
+// Documents says the engine stores documents rather than rows, which is the one fact about an
+// engine the rest of the app has to know without asking a driver: a document has no declared
+// column list, so the fields a collection shows are read off the documents themselves and a
+// profile is not asked for a user name it may not have.
+func (e Engine) Documents() bool {
+	return e == EngineMongo
 }
 
 // Environment is what a server is *for*, and the one fact about a profile that changes how the
@@ -280,11 +292,13 @@ func (p ConnectionProfile) Validate() error {
 	if p.Port < 1 || p.Port > 65535 {
 		return ValidationError{Field: "port", Message: "must be between 1 and 65535"}
 	}
-	if strings.TrimSpace(p.User) == "" {
-		return ValidationError{Field: "user", Message: "is required"}
-	}
 	if !p.Engine.Valid() {
 		return ValidationError{Field: "engine", Message: "is not supported"}
+	}
+	// A MongoDB server started without access control takes no credentials at all, so a user name
+	// is asked for only by an engine that authenticates every connection.
+	if !p.Engine.Documents() && strings.TrimSpace(p.User) == "" {
+		return ValidationError{Field: "user", Message: "is required"}
 	}
 	if !p.Environment.Valid() {
 		return ValidationError{Field: "environment", Message: "is not a known environment"}

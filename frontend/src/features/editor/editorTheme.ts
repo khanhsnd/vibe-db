@@ -84,6 +84,17 @@ const syntax = HighlightStyle.define([
   { tag: tags.special(tags.name), color: 'var(--syn-func)' },
   { tag: [tags.operator, tags.punctuation], color: 'var(--fg-muted)' },
   { tag: [tags.paren, tags.brace, tags.squareBracket], color: 'var(--fg-muted)' },
+
+  // The shell's tokens. A document store writes no keywords, so what carries the colour is the
+  // shape of a command: `db` is the only bare name one ever begins with, a call is a call whether
+  // it is `find(…)` or `ObjectId(…)`, and a document's keys stay the colour of the data they
+  // name — bar the operators among them, which `shellLanguage.ts` marks.
+  { tag: tags.variableName, color: 'var(--syn-keyword)' },
+  {
+    tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.className],
+    color: 'var(--syn-func)',
+  },
+  { tag: tags.regexp, color: 'var(--syn-string)' },
 ])
 
 export const editorTheme: Extension = [layout, syntaxHighlighting(syntax)]

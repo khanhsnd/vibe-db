@@ -1,5 +1,7 @@
 package domain
 
+import "strings"
+
 // Hazard is how much of what a statement does cannot be taken back. It is read off the statement
 // itself and knows nothing about where it is going to run: pairing it with an Environment is
 // Environment.NeedsConfirmation's business, so the same statement can be waved through on a
@@ -58,4 +60,65 @@ func StatementHazard(keyword string, filtered bool) Hazard {
 	default:
 		return hazards[keyword]
 	}
+}
+
+// mongoHazards is the *method* of a shell command against what it will do, which is where a
+// document store keeps the verb SQL keeps in its first word. A method that is not here reads,
+// and so does everything this side cannot tell apart from a read.
+//
+// The names come in two spellings on purpose. A reader writes the shell's — `insertOne`, `drop` —
+// and a reader reaching past it writes the *server's*, which `db.runCommand({ create: … })` carries
+// as the first field of its argument. Both are answered for, because both do the same thing.
+var mongoHazards = map[string]Hazard{
+	"drop":              HazardDestructive,
+	"dropdatabase":      HazardDestructive,
+	"dropindex":         HazardDestructive,
+	"dropindexes":       HazardDestructive,
+	"renamecollection":  HazardDestructive,
+	"converttocapped":   HazardDestructive,
+	"insertone":         HazardWrite,
+	"insertmany":        HazardWrite,
+	"insert":            HazardWrite,
+	"bulkwrite":         HazardWrite,
+	"createcollection":  HazardWrite,
+	"create":            HazardWrite,
+	"createindex":       HazardWrite,
+	"createindexes":     HazardWrite,
+	"createview":        HazardWrite,
+	"collmod":           HazardWrite,
+	"findoneandreplace": HazardWrite,
+	// A command is whatever it is told to be, so it is answered for wherever that matters:
+	// `runCommand` can drop a database as easily as it can read a build's version.
+	"runcommand": HazardWrite,
+}
+
+// mongoFiltered is every method whose reach is its filter's rather than its name's: given an
+// empty filter each of them takes every document in the collection. It is the counterpart of `update`
+// and `delete` being absent from the SQL list above, and it carries the server's own spellings for
+// the same reason mongoHazards does.
+var mongoFiltered = map[string]bool{
+	"updateone":        true,
+	"updatemany":       true,
+	"update":           true,
+	"replaceone":       true,
+	"deleteone":        true,
+	"deletemany":       true,
+	"delete":           true,
+	"findoneandupdate": true,
+	"findoneanddelete": true,
+}
+
+// MongoHazard is StatementHazard for a document store: the method is the verb, and `filtered`
+// says the command narrowed itself to something less than the whole collection. It is the same
+// rule read off a different grammar, which is why it lives here beside the SQL one rather than in
+// the adapter — what is dangerous to run is a domain rule, and only its spelling is the engine's.
+func MongoHazard(method string, filtered bool) Hazard {
+	name := strings.ToLower(method)
+	if mongoFiltered[name] {
+		if filtered {
+			return HazardWrite
+		}
+		return HazardUnfiltered
+	}
+	return mongoHazards[name]
 }

@@ -276,7 +276,10 @@ type TableSpecInput struct {
 // concept of arrives blank rather than being left out of the shape, since one dialog fills it
 // for both and the driver is what decides which parts it reads.
 type DatabaseSpecInput struct {
-	Name             string   `json:"name"`
+	Name string `json:"name"`
+	// FirstCollection is the collection a new MongoDB database is made with, a document store
+	// having no way to hold an empty one. Every other engine leaves it blank and ignores it.
+	FirstCollection  string   `json:"firstCollection"`
 	Owner            string   `json:"owner"`
 	Template         string   `json:"template"`
 	Encoding         string   `json:"encoding"`
@@ -646,6 +649,7 @@ func (in ColumnInput) toDriver() driver.ColumnSpec {
 func (in DatabaseSpecInput) toDriver() driver.DatabaseSpec {
 	return driver.DatabaseSpec{
 		Name:             in.Name,
+		FirstCollection:  in.FirstCollection,
 		Owner:            in.Owner,
 		Template:         in.Template,
 		Encoding:         in.Encoding,
@@ -660,15 +664,25 @@ func (in DatabaseSpecInput) toDriver() driver.DatabaseSpec {
 	}
 }
 
+// toDatabaseOptionsDTO answers with an empty list rather than a null one for every list the engine
+// has no such concept of. A nil slice crosses the wire as `null`, and the dialog narrows one list by
+// another — so a list nobody filled has to arrive as a list nobody filled and not as an absence.
 func toDatabaseOptionsDTO(source driver.DatabaseOptions) DatabaseOptions {
 	return DatabaseOptions{
-		Owners:      source.Owners,
-		Templates:   source.Templates,
-		Encodings:   source.Encodings,
-		Collations:  source.Collations,
-		Tablespaces: source.Tablespaces,
-		Extensions:  source.Extensions,
+		Owners:      names(source.Owners),
+		Templates:   names(source.Templates),
+		Encodings:   names(source.Encodings),
+		Collations:  names(source.Collations),
+		Tablespaces: names(source.Tablespaces),
+		Extensions:  names(source.Extensions),
 	}
+}
+
+func names(list []string) []string {
+	if list == nil {
+		return []string{}
+	}
+	return list
 }
 
 func (in TableSpecInput) toDriver() driver.TableSpec {

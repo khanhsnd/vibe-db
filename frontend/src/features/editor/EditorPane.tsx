@@ -9,7 +9,6 @@ import {
   highlightActiveLineGutter,
   keymap,
   lineNumbers,
-  placeholder,
 } from '@codemirror/view'
 import { useEffect, useImperativeHandle, useRef, type Ref } from 'react'
 
@@ -18,7 +17,7 @@ import { useSettingsStore } from '@/stores/settings'
 
 import { diagnostics, position, showDiagnostics, type Diagnostics } from './diagnostics'
 import { editorTheme } from './editorTheme'
-import { sqlLanguage } from './sqlLanguage'
+import { queryLanguage } from './queryLanguage'
 
 // QueryWorkspace runs the query and lays it out from window listeners, so the editor only has to
 // keep defaultKeymap from inserting a blank line on the same chord.
@@ -35,7 +34,6 @@ const baseExtensions: Extension = [
   closeBrackets(),
   autocompletion(),
   diagnostics,
-  placeholder('SELECT * FROM ...'),
   keymap.of([swallowRunShortcut, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
   editorTheme,
 ]
@@ -105,7 +103,7 @@ export function EditorPane({
         doc: seed.current.value,
         extensions: [
           baseExtensions,
-          language.of(sqlLanguage(seed.current.schema, seed.current.engine)),
+          language.of(queryLanguage(seed.current.schema, seed.current.engine)),
           wrapping.of(lineWrap(seed.current.wordWrap)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) emit.current.onChange(update.state.doc.toString())
@@ -126,7 +124,7 @@ export function EditorPane({
   }, [])
 
   useEffect(() => {
-    view.current?.dispatch({ effects: language.reconfigure(sqlLanguage(schema, engine)) })
+    view.current?.dispatch({ effects: language.reconfigure(queryLanguage(schema, engine)) })
   }, [schema, engine])
 
   useEffect(() => {

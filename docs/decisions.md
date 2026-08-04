@@ -85,6 +85,42 @@
   on Windows the file relies on inherited ACLs, so the file is not a safe place for secrets
   regardless.
 - **Wails v2 is intentional over v3**, which is still alpha.
+- **MongoDB's query tab reads the shell as a query language, not as a language.** A command, its
+  Extended-JSON-ish arguments and the cursor methods bounding it — and no variables, no arithmetic and
+  no control flow. Half a JavaScript is worse than none: a reader could not tell which half they were
+  in, and every answer would carry that doubt. Anything past the list `query.go` understands is
+  `db.runCommand({…})`, which reaches the server verbatim and is a smaller thing to learn than an
+  interpreter's limits.
+- **A MongoDB collection's field list is a sample, and says so.** There is no catalogue to ask, and the
+  alternatives are worse: an aggregation over every document to find every field is a full scan on
+  opening a table, and `$sample` gives a different column list on every refresh. The first few hundred
+  documents in natural order is incomplete but *stable*, and a bounded page fills in what it missed.
+  See [grid.md](grid.md#where-the-columns-come-from).
+- **What an engine has not got is refused here, not by the server.** A foreign key on MongoDB, a
+  primary key other than `_id`, a stored routine: each answers `UNSUPPORTED` from
+  `domain.Unsupported`. Letting the server reject the request would report a design decision as a
+  server failure, and approximating it — a unique index standing in for a primary key — would be
+  worse still: the reader would believe they had something they had not.
+- **MongoDB's `Truncate` is not offered at all**, rather than being made an alias of `Empty`. A
+  collection has no storage to reset, so `deleteMany({})` is the only way to empty one; `drop` and
+  recreate would be faster and would silently lose every index. Two menu items running one command
+  under two names is a lie about what the second does.
+- **A new MongoDB collection gets no `$jsonSchema` validator**, however many fields the designer was
+  given. Building one from them was tried and it is a trap: a validator has to be kept in step by
+  every field change that follows, and the moment one is not — `AlterColumn` converting a field the
+  schema still calls an `int` — the collection starts rejecting the very edits the designer offers. A
+  collection that will not accept its own designer's writes is worse than one that declared nothing,
+  which is what a MongoDB collection normally is. A new collection's fields arrive with its first
+  document, and the Fields grid reads them back off it like every other collection's.
+- **A `system.` collection is not listed.** `system.views` appears the moment a view is made and
+  `system.profile` the moment profiling is turned on. Neither is something the reader created, and a
+  rename or a drop of one is a corrupted database — so the prefix the server reserves is the whole
+  rule, and nothing under it reaches the tree.
+- **A MongoDB field's *type* is changed by converting the documents**, with `onError: "$$REMOVE"`. A
+  value the server cannot convert is removed rather than left wrong, because that is the only outcome
+  in which the collection afterwards holds what the reader declared it holds. It is the one field
+  operation with no SQL-shaped answer, and it is the honest reading of what `ALTER COLUMN … TYPE`
+  means where there is no column.
 - **The clipboard goes through the Wails runtime, not `navigator.clipboard`.** Reading in a WebView2
   wants a `clipboard-read` permission the page has no way to ask for, so `bridge/clipboard.ts` calls
   `ClipboardGetText` / `ClipboardSetText` and keeps the browser API — then a hidden textarea — as

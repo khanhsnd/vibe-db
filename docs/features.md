@@ -33,18 +33,29 @@ existing connection changes engine: editing one opens straight on the form, sinc
 type.
 
 Everything the form defaults to comes from that choice: port 3306 and user `root` for MySQL, 5432
-and `postgres` for PostgreSQL. Going back and choosing another engine rewrites only the fields that
-still hold the old engine's default, so a typed port survives the switch. The editor loads that
-engine's SQL dialect for highlighting and completion.
+and `postgres` for PostgreSQL, 27017 and **no user at all** for MongoDB — a server started without
+access control takes no credentials, and a name filled in for it would be a name the reader had to
+clear. Going back and choosing another engine rewrites only the fields that still hold the old
+engine's default, so a typed port survives the switch. The editor loads that engine's own language
+for highlighting and completion — SQL for two of them, the shell for MongoDB; see
+[editor.md](editor.md).
 
-**Every connection wears its engine's chip** — `M` on teal for MySQL, `P` on blue for PostgreSQL —
-in the tree, in the dialog's header and in the status bar. It replaces the engine badge the tree
-used to carry on the right of a connection row, which is where the **connection status dot** now
-sits: what the connection *is* on the left, how it is *doing* on the right.
+**Every connection wears its engine's chip** — the dolphin on teal for MySQL, the elephant on blue
+for PostgreSQL, the leaf on green for MongoDB — in the tree, in the dialog's header and in the status
+bar. It replaces the engine badge the tree used to carry on the right of a connection row, which is
+where the **connection status dot** now sits: what the connection *is* on the left, how it is *doing*
+on the right.
 
-One field differs rather than just defaulting: **PostgreSQL needs a database**. A session is bound to
-one for life, so that is the database the connection bootstraps from — the one its database list is
-read in. Reaching any other database dials it separately, which the adapter does on first use.
+Two things differ rather than just defaulting:
+
+- **PostgreSQL needs a database.** A session is bound to one for life, so that is the database the
+  connection bootstraps from — the one its database list is read in. Reaching any other database dials
+  it separately, which the adapter does on first use.
+- **MongoDB needs none.** One connection reads every database on the server, so a database named here
+  is a *starting point* and nothing more: it is where a command carrying no namespace goes. TLS is on
+  or it is not — the driver has no opportunistic mode — so `Preferred` connects in the clear, and the
+  two cloud identity methods are refused outright rather than sent as a password no MongoDB
+  authentication mechanism would take.
 
 ## Filling a connection in
 
@@ -147,20 +158,41 @@ for two different reasons:
 
 ## Browsing a schema
 
-The tree has as many levels as the engine does:
+The tree has as many levels, and as many folders, as the engine does:
 
 ```
-MySQL         connection → database →          Tables    → table → Fields       → field
-PostgreSQL    connection → database → schema →  Views     → view          Indexes      → index
-                                                Functions → function      Foreign Keys → foreign key
+MySQL         connection → database →          Tables       → table      → Fields       → field
+PostgreSQL    connection → database → schema →  Views        → view              Indexes      → index
+                                                Functions    → function          Foreign Keys → foreign key
+
+MongoDB       connection → database →          Collections  → collection → Fields  → field
+                                                Views        → view              Indexes → index
 ```
+
+**A folder for something the engine has not got is not drawn.** MongoDB has no stored routines —
+server-side JavaScript was removed from the server — and no referential constraints of any kind, so
+neither folder appears rather than appearing permanently empty. `EngineInfo.hasRoutines` and
+`hasForeignKeys` are what say so, and a component never compares against an engine's name.
+
+**What a thing is called is the engine's too.** A collection is not a table and a document is not a
+row, so `engineWords` supplies the nouns for the tree's folder, the right-click menu, the object list
+and every confirmation. Only the wording changes: a `NodeKind` is still `tables` and the bound method
+is still `DropTable`, so one name means one thing on the wire whatever it says on the screen. The
+warning on **Truncate** is why it matters — on a table store it warns about a foreign key, and a
+document store cannot have one, which is also why MongoDB is offered `Empty` alone: there is no
+storage to reset, so truncating and emptying would be one command under two names.
 
 Each level loads on first expand and is cached until disconnect: a PostgreSQL database loads its
 schemas, whichever node owns the object folders loads **its tables, views and routines in one
 read**, and a table loads its shape — fields, indexes and foreign keys, also in one read. The reason
 is the same both times: expanding any one folder needs every folder's count, so one read answers all
-three. Clicking the node that owns tables — a MySQL database, a PostgreSQL schema — marks it the
-active namespace for that connection, which is what a new query tab inherits.
+three. Clicking the node that owns tables — a MySQL database, a PostgreSQL schema, a MongoDB database
+— marks it the active namespace for that connection, which is what a new query tab inherits.
+
+**A MongoDB field is inferred, not declared.** A collection says nothing about what it holds, so the
+Fields folder is the fields the *documents* were found to carry — a sample of the collection's first
+few hundred, `_id` always among them. What that costs, and where it shows, is in
+[grid.md](grid.md#where-the-columns-come-from).
 
 A **view opens its rows in the same tab a table does**, and lands there read-only: no column of a
 view is a primary key, so no single stored row can be named. A **function or a procedure** carries
@@ -191,11 +223,15 @@ it the same `GridFooter` every grid has, with `Refresh` and the table count.
 - **The columns are the engine's own**, and only the first is promised: the table's name, which is
   what the toolbar acts on. MySQL reports `Auto Increment`, `Modified Date`, `Data Length`,
   `Engine`, `Rows` and `Comment`; PostgreSQL reports `Owner`, `Access Method`, `Data Length`,
-  `Rows` and `Comment` — and **no modified date, because the server keeps none**. Neither side of
-  the wire names or formats a value: a size arrives spelled the way that engine spells it
-  (`1,552 KB` from MySQL's own arithmetic, `1928 kB` from `pg_size_pretty`), because inventing a
-  column an engine cannot fill would say nothing. A row count is the catalogue's **estimate** on
-  both engines, and `(Null)` in PostgreSQL's says nothing has analysed the table yet.
+  `Rows` and `Comment` — and **no modified date, because the server keeps none**; MongoDB reports
+  `Kind`, `Documents`, `Data Size`, `Storage Size`, `Avg Document Size`, `Indexes` and `Index Size`.
+  No side of the wire names or formats a value: a size arrives spelled the way that engine spells it
+  (`1,552 KB` from MySQL's own arithmetic, `1928 kB` from `pg_size_pretty`, `1.5 MB` from MongoDB's
+  own, whose `$collStats` reports bytes), because inventing a column an engine cannot fill would say
+  nothing. A row count is the catalogue's **estimate** on the SQL engines, and `(Null)` in
+  PostgreSQL's says nothing has analysed the table yet; MongoDB's is exact, and a **view** reports no
+  numbers at all — it has no storage of its own, so its row carries its name and its kind and nulls
+  where the numbers would be, rather than a row of zeroes claiming an empty collection.
 - **The toolbar acts on the selected row**, and its four items are the same objects the tree's
   right-click builds from (`tableActions`), so a confirmation is worded once. `Delete Table` asks
   first, and the change re-reads both the tree's names and this list's numbers.
@@ -213,22 +249,30 @@ filled in before it runs. `useTreeMenu` is the single place the items are built,
 | Right-click | Items |
 |---|---|
 | A connection | `Connect` / `Disconnect`, `New Database…` — only once there is a session to make one on — `Edit Connection…`, `Delete Connection` |
-| A database | `New Database…`, `Delete Database`, then what its level owns: `New Table` and `Refresh` on MySQL, `Refresh` alone on PostgreSQL, which holds schemas rather than tables |
+| A database | `New Database…`, `Delete Database`, then what its level owns: `New Table` and `Refresh` on MySQL and MongoDB, `Refresh` alone on PostgreSQL, which holds schemas rather than tables |
 | The node owning tables, or its `Tables` folder | `New Table`, `Refresh` |
-| The `Views` or `Functions` folder | `Refresh` — one read fills all three folders, so it means the same wherever it is asked for |
+| The `Views` or `Functions` folder | `Refresh` — one read fills every folder, so it means the same wherever it is asked for |
 | A table | `Open Table`, `Design Table`, `New Table`, `Rename Table…`, `Empty Table`, `Truncate Table`, `Delete Table`, `Refresh` |
 | A view | `Open View`, `Delete View`, `Refresh` |
 | A function or procedure | `Delete Function` / `Delete Procedure`, `Refresh` |
 | The `Fields` folder | `Add Field`, `Refresh` |
 | A field | `Edit Field`, `Rename Field…`, `Add Field`, `Delete Field`, `Refresh` |
-| An index | `Delete Index`, `Refresh`. Disabled on the index behind a primary key: neither engine will drop the key as an index, so the item says so rather than failing at the server |
+| An index | `Delete Index`, `Refresh`. Disabled on the index behind a primary key: no engine will drop the key as an index, so the item says so rather than failing at the server |
 | A foreign key | `Delete Foreign Key`, `Refresh` |
+
+**Every word above is the engine's** (`engineWords`): a MongoDB connection reads `Open Collection`,
+`Delete Collection`, and `Delete every document of orders?` in the confirmation. And the *items*
+follow the engine too — MongoDB is offered no `Truncate Collection`, no routine rows and no foreign
+key rows, because it has none of the three.
 
 - **Every item carries a glyph**, from `shared/ui/menuIcons.tsx` — one action, one icon, wherever it
   is offered: `Design Table` and `Edit Field` share theirs because both open the designer, and
   anything that destroys carries the bin in the danger colour.
 - **`Empty Table` deletes every row; `Truncate Table` drops them all at once.** Truncate is the
   faster of the two and the one a table under a foreign key will refuse, which is why both are there.
+  **MongoDB is offered `Empty` alone**: a collection has no storage to reset, so the only way to take
+  every document out of one and leave its indexes standing is to delete them — and two menu items
+  running one command under two names would be a lie about what the second does.
 - **A change re-reads what it invalidated, and nothing else**: the namespace's table list, then the
   table's own shape. Which shapes are still worth holding is read off the fresh table list, so a
   dropped or renamed table needs no telling.
@@ -254,10 +298,18 @@ what the server has to offer; and `Comment` is free text. **MySQL's database is 
 character set**, so `General` asks for a name, a Character Set and a Collation — and the other two
 tabs are not drawn, because MySQL has neither.
 
+**MongoDB has no `CREATE DATABASE` at all.** A database exists exactly as long as it holds a
+collection, and no command makes an empty one — so `General` asks for a Database Name and a **First
+Collection**, and creating the database *is* creating that collection. A blank answer takes `data`
+rather than failing: a reader who only wanted the database is better served by a collection they can
+rename than by an error about a field they did not know was required. The preview pane is labelled
+`Command Preview` there, because what it shows is not SQL.
+
 - **Every list is the server's own**, read in one call when the dialog opens: the roles, the
   templates, the encodings, the tablespaces, the available extensions. A blank entry reads
   `Server default` and leaves that clause out of the statement altogether, rather than this side
-  guessing at what the default is.
+  guessing at what the default is. MongoDB answers with no lists at all — a database there is a
+  namespace and nothing more — so the dialog draws none of them.
 - **MySQL's collations narrow to the chosen character set** without a second read, because a MySQL
   collation is named after the set it belongs to — `utf8mb4_general_ci`.
 - **`SQL Preview` asks the driver what it would run.** It is the same list `Create` executes, so the
@@ -293,23 +345,42 @@ fields and the primary key and nothing else.
   of the type and travel as one string — `varchar(255)`, `numeric(10,2)` — and read as `0` when the
   type declares none. A `Default` is an **expression**, which is what a server-side default is:
   `now()`, `'IN_PROGRESS'`, `0`.
-- **`Type` is a list, and the list is the engine's.** Clicking the cell offers MySQL's types or
-  PostgreSQL's — `dataTypes.ts`, read off the connection's own profile — and typing filters them.
-  It still takes **anything typed into it**, because a server also has domains, enums and types
-  that list has never heard of; the options are what a column is usually given.
+- **`Type` is a list, and the list is the engine's.** Clicking the cell offers MySQL's types,
+  PostgreSQL's, or MongoDB's BSON types — `dataTypes.ts`, read off the connection's own profile — and
+  typing filters them. It still takes **anything typed into it**, because a server also has domains,
+  enums and types that list has never heard of; the options are what a column is usually given.
+- **On MongoDB a field is not a column, and the designer says so by what it does.** A collection holds
+  no declaration to change, so a change to a field is a change to the *documents* that carry it:
+  adding one writes it onto the documents that lack it and leaves the rest alone, renaming one is a
+  `$rename`, dropping one is an `$unset`, and altering one converts its values in place — a value the
+  server cannot convert is removed rather than left wrong, which is the only outcome in which the
+  collection afterwards holds what was declared. A **new** collection is the one case with nothing to
+  change: `New Collection` creates it and the fields declared alongside have no documents to be
+  written onto, so the Fields grid comes back holding `_id` alone. That is the truth about a new
+  collection rather than a shortcoming — its fields arrive with its first document. See
+  [architecture.md](architecture.md#the-document-store) and
+  [decisions.md](decisions.md) for why the alternative, a validator built from the declared fields,
+  is worse.
 - **`Not null` is a checkbox and `Key` is the lock**, both flipped by one click. A key field shows
   a gold lock and **which column of the key it is** — the first is `1`, a second field clicked is
   `2` — counted down the fields, so a composite key reads in order. `Primary Key` in the toolbar is
   the same fact for a whole selection at once.
 - `Primary Key` moves the key onto the selected fields, or off them if they all already hold it.
-  Both engines are made to replace a key rather than add a second one, and dropping the key of a
-  table that has none is not an error.
+  Both SQL engines are made to replace a key rather than add a second one, and dropping the key of a
+  table that has none is not an error. **MongoDB answers `UNSUPPORTED`** for anything but `_id`: the
+  server mints it, indexes it and will not let it be changed, so a request naming it is already true
+  and one naming anything else cannot be granted. A reader who wants some other field to be unique
+  wants a unique index, which the Indexes grid makes.
 - **The Indexes grid** is `Name`, `Fields`, `Unique` and `Method`, and **the Foreign Keys grid** is
   `Name`, `Fields`, `Referenced Schema`, `Referenced Table`, `Referenced Fields`, `On Update` and
   `On Delete`. A list of columns is typed as one cell, comma separated, because that is how it
   reads. `Method` offers the engine's access methods and the two action cells offer the five
   referential actions — suggestions, like the type list, since the cell still takes what is typed.
-  A blank `Referenced Schema` means the same namespace the table is in.
+  A blank `Referenced Schema` means the same namespace the table is in. **There is no Foreign Keys
+  pane on MongoDB**, which has no referential constraints of any kind: a pane whose `Save` could only
+  fail is a pane worth leaving out. Its `Method` list is the values a MongoDB index *key* takes —
+  blank for the ordinary ascending index, then `hashed`, `text`, `2dsphere`, `2d` — because that is
+  where MongoDB keeps what SQL puts in a `USING` clause.
 - **An index behind the primary key is not in the Indexes grid.** It is the key, and the Fields grid
   is what moves a key.
 - **Nothing is sent until `Save`.** A pending cell carries the grid's warning ring; a field the
@@ -347,6 +418,12 @@ applied and discarded: it is the same `GridFooter` every grid has, and
 **Filter & Sort** on the left of it — see [filtering and sorting](#filtering-and-sorting) — and before
 that two independent toggles, since they occupy different edges:
 
+**Both panels are dragged, and the size is remembered.** The handle between a panel and the grid is
+the divider itself and lights up `--accent` under the pointer; the bounds stop a drag leaving either
+panel too small to read or the grid with nothing left. A panel's width or height is kept per
+*combination of open panels*, so the list the reader widened is that width the next time they open
+it — see [frontend.md](frontend.md) on `panelIds`.
+
 - **`Cell Editor`** opens a panel under the grid for the selected cell. Discard reverts the draft and
   Apply stages the value on the cell, exactly as opening it in the grid does — the footer's
   ✓ is what writes `UPDATE … WHERE <primary key>` and reloads. A table with no primary key is
@@ -358,6 +435,31 @@ that two independent toggles, since they occupy different edges:
   *visible* columns and the view maps them back to real column indexes. **Right-clicking a column
   header hides or restores columns too**, alongside the copy and paste items every grid's header menu
   has — one hidden set, either way in. [grid.md](grid.md) specifies that menu.
+
+## Every divider in the window is dragged
+
+There are four, and they behave alike: **the sidebar against the work area**, **the editor against
+the output panel** in a query tab, and in a table tab **the column list against the grid** and **the
+grid against the cell editor**. Each is the one-pixel line between the two panels, and it goes
+`--accent` while the pointer is over it or holding it. The pointer is caught within ten pixels of the
+line, so the target is a good deal wider than the line looks.
+
+- **Double-clicking a divider puts it back where it opened**, which is the way out of a drag that
+  went too far without hunting for the size that was there before.
+- **A divider takes the keyboard**: `Tab` reaches it, the arrow keys across its orientation move it,
+  and `Home` / `End` take it to either end.
+- **Dragging the sidebar's divider past its minimum closes the sidebar**, which is the same thing the
+  command bar's toggle does — and the toggle is told, so the next press opens it rather than being the
+  press that appears to do nothing.
+
+**A layout is remembered per window and per combination of panels**, in `localStorage`, and only when
+a *reader* moved it: a panel opening or the window being resized is not a new preference. Every
+divider is bounded so a drag cannot leave a panel too small to read what is in it — the cell editor
+stops at its own chrome plus a line of value, the column list at 420 px, and the grid keeps three
+quarters of the height whatever the editor under it is given.
+
+Column widths inside a grid are dragged too, and are the grid's own business —
+see [grid.md](grid.md).
 
 ## Tabs
 
@@ -381,10 +483,52 @@ on the same connection without treading on each other. The toolbar picks the dat
 
 - The namespace is applied on a connection pinned for that one statement — `USE` on MySQL,
   `SET search_path` on PostgreSQL — so the pool's other connections keep whatever they had. On
-  PostgreSQL the database also decides *which pool* the connection comes from.
+  PostgreSQL the database also decides *which pool* the connection comes from. On MongoDB it is
+  simply the database the command is addressed to; one connection reads them all.
 - A statement that returns rows fills the grid; one that does not reports its affected-row count.
   Which path a statement takes is decided by its leading keyword, read past any leading comments,
-  plus a `RETURNING` clause on PostgreSQL, where that is what makes a write answer with rows.
+  plus a `RETURNING` clause on PostgreSQL, where that is what makes a write answer with rows. On
+  MongoDB it is decided by the *method*: `find` and `aggregate` answer with documents, `insertOne`
+  and `deleteMany` with a count.
+
+### What a MongoDB tab runs
+
+The editor takes the shell's own commands, and the driver reads them whole — the grammar is small
+enough to. `db.<collection>.<method>(…)` for a collection, `db.<method>(…)` for the database, plus the
+cursor methods a read is bounded by:
+
+```javascript
+db.users.find({ tier: "gold" }).sort({ joined: -1 }).limit(20)
+db.users.findOne({ _id: ObjectId("507f1f77bcf86cd799439011") })
+db.orders.aggregate([
+    { $match: { total: { $gt: 100 } } },
+    { $group: { _id: "$customer", spend: { $sum: "$total" } } }
+])
+db.users.updateMany({ tier: "gold" }, { $set: { note: "reviewed" } })
+db.getCollection("audit-log").countDocuments({})
+db.runCommand({ collStats: "users" })
+```
+
+- **The arguments are documents, not text.** A field name and a value reach the server as *values*, so
+  there is nothing to quote and nothing a reader typed can be read as anything else.
+- **The shell's constructors are read as themselves**: `ObjectId`, `ISODate` / `Date`, `NumberLong`,
+  `NumberInt`, `NumberDecimal`, `UUID`, `BinData`, `Timestamp`, `RegExp`, `MinKey`, `MaxKey`, a
+  `/pattern/flags` literal, and `new` in front of any of them. A filter that spelled an ObjectId as a
+  string would match nothing and say nothing about why, which is the whole reason this is a parser and
+  not `JSON.parse`.
+- **It is not JavaScript.** There are no variables, no arithmetic and no control flow, because a client
+  that half-implemented them would be a client whose answers could not be trusted. **Anything beyond
+  the methods this side knows is `db.runCommand({…})`**, which reaches the server verbatim — and the
+  error for an unknown method says so.
+- **A `find` on one collection is writable**, its documents mapping one to one onto stored ones with
+  `_id` addressing them. A projection that leaves `_id` out is read-only, for the same reason an
+  aliased key column makes a SQL result read-only: the row it names can no longer be found.
+- **Explain** works on `find` and `aggregate`, those being the two with a plan; anything else answers
+  `UNSUPPORTED` rather than pretending. The plan arrives as one row whose cells are the plan's own
+  nested documents — **View Value** is where one is read.
+- **`Ctrl`+`Shift`+`F` lays a command out** the way it lays a statement out: a brace holding more than
+  a line comfortably carries goes down the page, and one that does not stays across it. Nothing a
+  server would notice changes.
 
 ### One Execute runs the whole script
 
@@ -397,7 +541,8 @@ the server rejects.
   on PostgreSQL — a `$tag$ … $tag$` body, which is how a function carries semicolons of its own. A
   backslash escapes a quote on MySQL and does not on PostgreSQL, so `'C:\'` is one string there and
   a runaway one here. A chunk with no statement in it — trailing whitespace, the comment a script
-  ends on — is dropped rather than sent.
+  ends on — is dropped rather than sent. MongoDB reads the same semicolons through the same lexer,
+  with `//` opening a comment and both quotes opening a string.
 - **The grid shows the last result set the script produced**, so a script ending in a `SELECT` shows
   it and one ending in an `UPDATE` keeps the last set it did return.
 - **A `Messages` pane appears beside `Result` for a script**, listing every statement with its row
@@ -555,6 +700,12 @@ exists, whether a clause is in the right order, whether a type will take that va
 server's answers to give, and a client that guessed at them would be wrong often enough that a
 reader learned to ignore it, which costs more than the warning saved.
 
+- **On MongoDB it is a parser as well**, that grammar being small enough to read whole: a command this
+  side cannot make sense of will not run either, so it is reported. **A command that is merely
+  unfinished is not.** Half of `db.users.f` is what every command looks like on the way to being
+  written, and a squiggle that sits under the text the whole time it is being typed is one the reader
+  stops seeing. Nothing is lost by keeping quiet, because a command truncated for real is a bracket or
+  a quote with no partner and that is already reported.
 - **The text itself is where a fault is located**: a wavy `--danger` underline under what is wrong,
   and a flat `--warn` one under the **first line** of a statement that will have to be confirmed. A
   twenty-line `DELETE` underlined end to end is a wall of colour that says nothing more and makes
@@ -676,8 +827,10 @@ rather than scrolled, since a table has as many columns as it likes and a column
 its rows.
 
 **A value is picked from the column's own values.** Clicking the value part lists what the column
-actually holds — `LoadColumnValues`, a `SELECT DISTINCT … ORDER BY 1 LIMIT 200` — with a box beside
-it for a value the list has not got. NULL is not offered there: `is NULL` is the way to it. There is
+actually holds — `LoadColumnValues`, a `SELECT DISTINCT … ORDER BY 1 LIMIT 200`, or on MongoDB a
+`$group` / `$sort` / `$limit` pipeline, which is the only spelling whose cap is the server's: `distinct`
+answers with every value there is and would hand back a megabyte to fill a list of two hundred — with
+a box beside it for a value the list has not got. NULL is not offered there: `is NULL` is the way to it. There is
 no OK on the panel: what it changes is the draft, and **Apply Filter & Sort** is the one commit.
 
 **Ticking more than one value makes it `is in list`.** The rows are check boxes, and the operator
@@ -692,17 +845,28 @@ single-pick instead: `> a` and `> b` are one comparison, not both.
 there and the status line's statement shows the clause that ran. A draft row is never filtered away;
 it is a row still being filled in.
 
-The operator crosses the wire as a **token** (`gt`, `contains`, …) and is spelled into SQL by the
-driver, so nothing a reader typed arrives as an operator; a conjunction crosses as `and` or `or` and
-nothing else. The *values* are written into the statement as string literals rather than bound, for
-the same reason the `LIMIT` is: one string is then both
-what ran and what the status line shows and copies — a statement carrying `?` is not one a reader
-could paste into an editor. `sqlkit.Dialect.QuoteString` is what stands between the text and the
-statement, and both engines read a string literal back into a column of any type. Two smaller
-consequences: the six text matches compare the column **as text** (`CAST(… AS CHAR)` / `AS TEXT`), so
-they work on a number or a date as well as a name, and a `%` the reader typed is their own wildcard.
-In memory those matches ignore case; on the server the collation decides, which is MySQL ignoring it
-and PostgreSQL not.
+The operator crosses the wire as a **token** (`gt`, `contains`, …) and is spelled by the driver, so
+nothing a reader typed arrives as an operator; a conjunction crosses as `and` or `or` and nothing
+else. On the SQL engines the *values* are written into the statement as string literals rather than
+bound, for the same reason the `LIMIT` is: one string is then both what ran and what the status line
+shows and copies — a statement carrying `?` is not one a reader could paste into an editor.
+`sqlkit.Dialect.QuoteString` is what stands between the text and the statement, and both engines read
+a string literal back into a column of any type. Two smaller consequences: the six text matches
+compare the column **as text** (`CAST(… AS CHAR)` / `AS TEXT`), so they work on a number or a date as
+well as a name, and a `%` the reader typed is their own wildcard. In memory those matches ignore case;
+on the server the collation decides, which is MySQL ignoring it and PostgreSQL not.
+
+**On MongoDB there is nothing to quote.** The tree becomes a `bson.D` and travels as a *document*, so
+a field name and a value reach the server as values and can only ever be values. Three things follow.
+The reader's text is read into whatever type the sampled field holds, which is what stands where a
+SQL engine's cast stands — a value that will not read as that type stays the text it is, matching
+nothing rather than quietly becoming something else. The six text matches are a `$regex` with the
+value **escaped** and matched case-insensitively: a regular expression has a dozen metacharacters
+where `LIKE` has two, so a `contains` of `a.b` finds `a.b` and not `axb`, and a reader who wants a
+pattern writes one in the query tab. And `is NULL` is `{ field: null }`, which finds a document
+*missing* the field as well as one holding null, because in a document store those are one question.
+The statement shown under the grid is the command that ran, spelled from the same documents that were
+sent: `db.users.find({ age: { $gt: 30 } }).sort({ _id: 1 }).skip(0).limit(100)`.
 
 ## Reading a value whole
 
@@ -713,7 +877,8 @@ GeoJSON shape, a PostgreSQL array, a blob. **View Value** in every grid's cell m
 
 **Which views a value offers is read off the value, not off its column.** The type is not enough and
 never was: a `TEXT` column holds JSON as often as a `JSON` one does, a `JSON` column holds GeoJSON,
-and every value arrives as a string whatever it started as. `features/results/value.ts` is where one
+a MongoDB field holds whatever each document put there, and every value arrives as a string whatever
+it started as. `features/results/value.ts` is where one
 cell is read, and it reads nothing else.
 
 | The value | Views, in the order they open |
@@ -782,7 +947,7 @@ file of that format does.
 |---|---|
 | CSV | An empty field, which is the only thing a CSV has to say "nothing" with |
 | JSON | `null`, which is why a reader who needs to tell it from an empty string wants this one |
-| SQL | The `NULL` keyword. Every other value is written as a literal, which both engines read back into a column of any type. The statements are asked of the driver, so the quoting is the engine's; a result no single table can be traced to is named `exported_rows`, which the reader has to correct — the honest outcome, rather than a file that looks right |
+| SQL | The `NULL` keyword. Every other value is written as a literal, which both SQL engines read back into a column of any type. The statements are asked of the driver, so the quoting is the engine's; a result no single table can be traced to is named `exported_rows`, which the reader has to correct — the honest outcome, rather than a file that looks right. **On MongoDB the format writes commands, not SQL**: one `db.<collection>.insertOne({…})` per document, with an absent value *left out* rather than written as null — a field nobody wrote is not a field holding nothing, and that is the difference a document store keeps. Each value is read back out of the notation the grid drew it in, so a number exports as a number and an `ObjectId` as one |
 
 ### When a result is writable
 

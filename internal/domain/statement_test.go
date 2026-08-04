@@ -76,3 +76,50 @@ func TestOnlyProductionIsGuarded(t *testing.T) {
 		}
 	}
 }
+
+// The same rule read off a different grammar: a document store keeps its verb in the method, and
+// what it reaches keeps depending on whether anything narrowed it.
+func TestMongoHazardReadsTheMethodAndItsFilter(t *testing.T) {
+	tests := []struct {
+		method   string
+		filtered bool
+		want     Hazard
+	}{
+		{"find", false, HazardNone},
+		{"aggregate", false, HazardNone},
+		{"countDocuments", false, HazardNone},
+		{"insertOne", false, HazardWrite},
+		{"createIndex", false, HazardWrite},
+		{"updateOne", true, HazardWrite},
+		{"deleteMany", true, HazardWrite},
+		{"updateMany", false, HazardUnfiltered},
+		{"deleteMany", false, HazardUnfiltered},
+		{"drop", false, HazardDestructive},
+		{"dropDatabase", false, HazardDestructive},
+		{"renameCollection", false, HazardDestructive},
+
+		// The server's own spellings, which is what `db.runCommand({ … })` carries.
+		{"create", false, HazardWrite},
+		{"insert", false, HazardWrite},
+		{"delete", false, HazardUnfiltered},
+		{"ping", false, HazardNone},
+
+		// A method that reads is silent, and so is one this side cannot tell apart from a read.
+		{"frobnicate", false, HazardNone},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method, func(t *testing.T) {
+			if got := MongoHazard(tt.method, tt.filtered); got != tt.want {
+				t.Errorf("MongoHazard(%q, %v) = %q, want %q", tt.method, tt.filtered, got, tt.want)
+			}
+		})
+	}
+}
+
+// The method is named however the reader typed it, so a rule read off it cannot depend on the case.
+func TestMongoHazardIgnoresCase(t *testing.T) {
+	if got := MongoHazard("DROPDATABASE", false); got != HazardDestructive {
+		t.Errorf("MongoHazard() = %q, want %q", got, HazardDestructive)
+	}
+}

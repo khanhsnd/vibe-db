@@ -62,7 +62,9 @@ func (d Dialect) Lex(script string) []Token {
 			tokens = append(tokens, d.lexQuoted(script, at, c, TokenIdent))
 			at = tokens[len(tokens)-1].End
 
-		case strings.HasPrefix(script[at:], "--"), d.HashComments && c == '#':
+		case strings.HasPrefix(script[at:], "--"),
+			d.HashComments && c == '#',
+			d.SlashComments && strings.HasPrefix(script[at:], "//"):
 			end := lineEnd(script, at)
 			tokens = append(tokens, token(TokenComment, script, at, end, false))
 			at = end

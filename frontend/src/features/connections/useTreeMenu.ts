@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 
-import type { Namespace, Profile } from '@/bridge/connections'
+import { engineInfo, engineWords, type EngineWords, type Namespace, type Profile } from '@/bridge/connections'
 import { databases } from '@/bridge/databases'
 import { ICON } from '@/shared/ui/menuIcons'
 import { schema } from '@/bridge/schema'
@@ -50,6 +50,9 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       const profile = profiles.find((p) => p.id === node.profileId)
       if (!profile) return []
 
+      const info = engineInfo(profile.engine)
+      const words = engineWords(profile.engine)
+
       const newDatabase: MenuItem = {
         label: 'New Database…',
         icon: ICON.newDatabase,
@@ -79,11 +82,16 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       const on = tableActions(
         { profileId: node.profileId, namespace: ns, table: node.label },
         { ask, changeSchema, openRows: onOpenRows, design: onDesign },
+        words,
       )
 
       // A new table is designed in a tab like any other, with an empty name: the designer's Save
       // is what creates it, so declaring one and altering one are the same surface.
-      const newTable: MenuItem = { label: 'New Table', icon: ICON.add, onSelect: on.create }
+      const newTable: MenuItem = {
+        label: `New ${words.table}`,
+        icon: ICON.add,
+        onSelect: on.create,
+      }
 
       // One read fills all three folders, so Refresh means the same thing wherever it is asked
       // for under a namespace.
@@ -121,8 +129,8 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
                   kind: 'confirm',
                   title: 'Delete Database',
                   message:
-                    `Drop ${ns.database}? Every table in it, and every row of every table, ` +
-                    `goes with it.`,
+                    `Drop ${ns.database}? Every ${words.table.toLowerCase()} in it, and every ` +
+                    `${words.row} of every one of them, goes with it.`,
                   submitLabel: 'Delete',
                   danger: true,
                   onSubmit: () =>
@@ -143,7 +151,12 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
           return [{ ...refreshObjectList, separatorBefore: false }]
 
         case 'table':
-          return tableItems(on, () => void refreshStructure(node.profileId, ns, node.label))
+          return tableItems(
+            on,
+            () => void refreshStructure(node.profileId, ns, node.label),
+            words,
+            info.hasTruncate,
+          )
 
         case 'view':
           return [
@@ -298,16 +311,29 @@ function connectionItems(
   ]
 }
 
-/** The whole of what a table is offered, in the order the tree lists it. */
-export function tableItems(on: TableActions, refresh: () => void): MenuItem[] {
+/**
+ * The whole of what a table is offered, in the order the tree lists it.
+ *
+ * Truncate is left out where it is not a second thing: on a document store every document has to be
+ * deleted to empty a collection, so Empty and Truncate would be one command under two names — see
+ * `hasTruncate`.
+ */
+export function tableItems(
+  on: TableActions,
+  refresh: () => void,
+  words: EngineWords = engineWords(''),
+  truncates = true,
+): MenuItem[] {
   return [
-    { label: 'Open Table', icon: ICON.open, onSelect: on.open },
-    { label: 'Design Table', icon: ICON.design, onSelect: on.design },
-    { label: 'New Table', icon: ICON.add, separatorBefore: true, onSelect: on.create },
-    { label: 'Rename Table…', icon: ICON.rename, onSelect: on.rename },
-    { label: 'Empty Table', icon: ICON.empty, separatorBefore: true, onSelect: on.empty },
-    { label: 'Truncate Table', icon: ICON.truncate, onSelect: on.truncate },
-    { label: 'Delete Table', icon: ICON.delete, danger: true, onSelect: on.remove },
+    { label: `Open ${words.table}`, icon: ICON.open, onSelect: on.open },
+    { label: `Design ${words.table}`, icon: ICON.design, onSelect: on.design },
+    { label: `New ${words.table}`, icon: ICON.add, separatorBefore: true, onSelect: on.create },
+    { label: `Rename ${words.table}…`, icon: ICON.rename, onSelect: on.rename },
+    { label: `Empty ${words.table}`, icon: ICON.empty, separatorBefore: true, onSelect: on.empty },
+    ...(truncates
+      ? [{ label: `Truncate ${words.table}`, icon: ICON.truncate, onSelect: on.truncate }]
+      : []),
+    { label: `Delete ${words.table}`, icon: ICON.delete, danger: true, onSelect: on.remove },
     { label: 'Refresh', icon: ICON.refresh, separatorBefore: true, onSelect: refresh },
   ]
 }

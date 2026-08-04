@@ -20,6 +20,12 @@ var (
 	ErrStatementFailed   = errors.New("statement rejected by the server")
 	ErrQueryCancelled    = errors.New("query cancelled")
 
+	// ErrUnsupported is a thing this engine has no concept of rather than a thing that went
+	// wrong: a foreign key on MongoDB, a primary key other than `_id`, a stored routine. It is
+	// its own sentinel because a reader answers it by not asking again, and because the alternative
+	// — letting the server reject it — would report a design decision as a server failure.
+	ErrUnsupported = errors.New("this engine does not support that")
+
 	// The three ways a connection through a bastion fails before the database is ever reached.
 	// They are separate sentinels because a reader answers each of them differently: one is a
 	// host that is not there, one is a key or a password the bastion refused, and one is the
@@ -50,6 +56,25 @@ func (e StatementError) Error() string {
 
 func (e StatementError) Unwrap() error {
 	return ErrStatementFailed
+}
+
+// UnsupportedError names the thing this engine has no concept of, so the reader is told which
+// one rather than only that something was refused.
+type UnsupportedError struct {
+	What string
+}
+
+func (e UnsupportedError) Error() string {
+	return e.What + ": not supported by this engine"
+}
+
+func (e UnsupportedError) Unwrap() error {
+	return ErrUnsupported
+}
+
+// Unsupported refuses a request this engine has no concept of: `Unsupported("a foreign key")`.
+func Unsupported(what string) error {
+	return UnsupportedError{What: what}
 }
 
 type ValidationError struct {

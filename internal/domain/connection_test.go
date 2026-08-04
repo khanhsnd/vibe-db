@@ -190,3 +190,65 @@ func TestTargetFallsBackWhenNoDatabase(t *testing.T) {
 		t.Errorf("Target() = %q, want %q", got, want)
 	}
 }
+
+// A MongoDB server started without access control takes no credentials at all, so a profile that
+// names no user is a connection rather than a validation failure.
+func TestValidateDoesNotAskAMongoProfileForAUser(t *testing.T) {
+	profile := ConnectionProfile{
+		Name:   "local documents",
+		Engine: EngineMongo,
+		Host:   "127.0.0.1",
+		Port:   DefaultMongoPort,
+		Auth:   AuthPassword,
+		TLS:    TLSOptions{Mode: TLSPreferred},
+	}
+
+	if err := profile.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want no error", err)
+	}
+}
+
+// Every other engine authenticates every connection, so a blank user is still refused there.
+func TestValidateStillAsksASQLProfileForAUser(t *testing.T) {
+	for _, engine := range []Engine{EngineMySQL, EnginePostgres} {
+		t.Run(string(engine), func(t *testing.T) {
+			profile := ConnectionProfile{
+				Name:     "server",
+				Engine:   engine,
+				Host:     "127.0.0.1",
+				Port:     engine.DefaultPort(),
+				Database: "shop",
+				Auth:     AuthPassword,
+				TLS:      TLSOptions{Mode: TLSPreferred},
+			}
+
+			if err := profile.Validate(); err == nil {
+				t.Error("Validate() = no error, want one about the user")
+			}
+		})
+	}
+}
+
+// A MongoDB session reads every database on the server, so a profile naming none has something to
+// connect to — unlike PostgreSQL's, which is bound to one for its whole life.
+func TestValidateDoesNotAskAMongoProfileForADatabase(t *testing.T) {
+	profile := ConnectionProfile{
+		Name:   "local documents",
+		Engine: EngineMongo,
+		Host:   "127.0.0.1",
+		Port:   DefaultMongoPort,
+		User:   "root",
+		Auth:   AuthPassword,
+		TLS:    TLSOptions{Mode: TLSPreferred},
+	}
+
+	if err := profile.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want no error", err)
+	}
+}
+
+func TestMongoDefaultPort(t *testing.T) {
+	if got := EngineMongo.DefaultPort(); got != DefaultMongoPort {
+		t.Errorf("DefaultPort() = %d, want %d", got, DefaultMongoPort)
+	}
+}

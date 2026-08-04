@@ -100,3 +100,16 @@ func TestWrapErrorFallsBackToInternal(t *testing.T) {
 		t.Errorf("detail = %q, want the original message preserved", got.Detail)
 	}
 }
+
+// A thing an engine has no concept of is not a failure the reader can retry, so it has a code of
+// its own and a message naming which thing.
+func TestWrapErrorNamesWhatAnEngineDoesNotSupport(t *testing.T) {
+	got := decode(t, wrapError(fmt.Errorf("add: %w", domain.Unsupported("a foreign key"))))
+
+	if got.Code != CodeUnsupported {
+		t.Errorf("code = %q, want %q", got.Code, CodeUnsupported)
+	}
+	if got.Message != "This database does not support a foreign key." {
+		t.Errorf("message = %q, want it to name the thing", got.Message)
+	}
+}

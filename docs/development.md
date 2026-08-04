@@ -22,6 +22,7 @@ wails doctor
 | Production build | `wails build` → `build/bin/vibe-db.exe` |
 | Go tests | `go test ./...` |
 | Single Go test | `go test ./internal/driver/postgres -run TestBuildDSNTLSModes -v` |
+| MongoDB against a real server | `VIBE_MONGO_DSN=root:mongodb@127.0.0.1:27017 go test ./internal/driver/mongo -run TestLive -v` |
 | Go vet + format | `go vet ./...` and `gofmt -l internal main.go` |
 | Frontend typecheck | `pnpm typecheck` (in `frontend/`) |
 | Frontend build | `pnpm build` (in `frontend/`) — runs `tsc -b` then `vite build` |
@@ -31,10 +32,33 @@ Testing Library exists — add the dependency first, or verify frontend behaviou
 
 ## Verifying against a real database
 
-Both engines are exercised through the same UI, but each has a failure mode the other cannot show —
-`USE` versus `SET search_path`, an errno versus a SQLSTATE, `LIMIT 1` on an update versus none. A
-change to either adapter deserves a run against both servers, and a PostgreSQL profile needs a
-database name before it will connect at all.
+All three engines are exercised through the same UI, but each has a failure mode the others cannot
+show — `USE` versus `SET search_path` versus neither, an errno versus a SQLSTATE versus a code name,
+`LIMIT 1` on an update versus none versus an `updateOne`. A change to any adapter deserves a run
+against that server; a PostgreSQL profile needs a database name before it will connect at all, and a
+MongoDB one needs neither a database nor a user.
+
+**MongoDB is where a run against a real server matters most**, because the two things that cannot be
+unit-tested are exactly the two that make it different: a field list is inferred from documents, so it
+is only right if real documents say so, and a command is interpreted rather than passed through, so
+only a server can confirm the method did what its name says.
+
+`TestLiveAgainstARealServer` in `internal/driver/mongo` is that run, and it is worth doing before the
+UI: it drives the whole adapter — every catalogue read, every field change, every command the query tab
+understands — against a server, in a database of its own that it drops afterwards. It **skips** unless
+`VIBE_MONGO_DSN` names one, so `go test ./...` stays offline. The user and the password are both
+optional there (`127.0.0.1:27017` alone is a server with no access control).
+
+Then, by hand in the app:
+
+| What | Why it needs a server |
+|---|---|
+| A collection whose documents have **different fields** | The header is a union of a sample; a bounded page must show a field the sample missed, and an `All` read must not claim to |
+| A collection holding **nested documents and arrays** | The grid draws them in the shell's notation, **View Value** reads them whole, and a cell edited in that notation has to go back as the document it showed |
+| An `_id` that is **not** an ObjectId — a string, an int | Editing and deleting address a document by `_id` read into its sampled type |
+| A **view** | `$collStats` refuses one, so its row in the collection list must carry nulls rather than zeroes |
+| `Empty`, then **Add Field** / **Edit Field** / **Delete Field** | Each is an update over the documents, and an empty collection is the case with nothing to update |
+| A **replica set through an SSH tunnel** | The connection is pinned `Direct`, or discovery hands back addresses that resolve only on the far side |
 
 `wails dev` serves the frontend *with* the Wails runtime and bindings on `http://localhost:34115`,
 so `window.go.app.ConnectionAPI` is callable from an ordinary browser. This is the most effective

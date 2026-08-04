@@ -9,9 +9,16 @@ import "strings"
 // Dialect is the lexical difference between engines: the character that quotes an
 // identifier, whether `#` starts a line comment, and which part of a Namespace qualifies a
 // table name.
+//
+// **Lex is not only SQL's.** Where a statement ends, what a string is and what a comment is are
+// the same questions in a document store's shell, so the MongoDB adapter carries a Dialect of its
+// own for the lexer alone — see `Shell` — and nothing else in this file has anything to say to it.
 type Dialect struct {
 	IdentQuote   byte
 	HashComments bool
+	// SlashComments says `//` starts a line comment, which is what a shell script uses and
+	// neither SQL engine has.
+	SlashComments bool
 	// NamespaceIsSchema says a table is qualified by the schema inside its database rather
 	// than by the database itself, which is the one structural difference between the two
 	// engines' names for the same table.
@@ -40,6 +47,11 @@ var (
 		DollarQuotes:      true,
 		TextType:          "TEXT",
 	}
+	// Shell is the lexical half of a document store's own language, and is a Dialect for one
+	// reason: so `Lex` reads it rather than a second scanner being written. `//` opens a comment,
+	// both quotes open a string — there is no identifier quote to take one of them — and nothing
+	// else in this package is meant for it.
+	Shell = Dialect{SlashComments: true}
 )
 
 func (d Dialect) QuoteIdent(name string) string {

@@ -33,11 +33,19 @@ func (d Dialect) Review(script string) driver.Review {
 		})
 	}
 
-	return driver.Review{Statements: statements, Problems: problems(tokens)}
+	return driver.Review{Statements: statements, Problems: Problems(tokens)}
 }
 
-// problems walks the tokens once for the two faults a lexer can be certain of.
-func problems(tokens []Token) []driver.Problem {
+// brackets is every pair a script may nest, and what each opener's partner is. All three are
+// checked whatever the language: SQL writes `{` only inside a string, which is one token and not
+// punctuation, so nothing is reported that was not already unbalanced.
+var brackets = map[string]string{"(": ")", "[": "]", "{": "}"}
+
+// Problems walks the tokens once for the two faults a lexer can be certain of: a quote or a
+// comment the script ends inside of, and a bracket with no partner. It is exported because it is
+// every language's answer and not only SQL's — the MongoDB adapter's Review reports the same two
+// faults, read off the same tokens.
+func Problems(tokens []Token) []driver.Problem {
 	found := []driver.Problem{}
 	open := []Token{}
 
@@ -54,20 +62,25 @@ func problems(tokens []Token) []driver.Problem {
 		if one.Kind != TokenPunct {
 			continue
 		}
-		switch one.Text {
-		case "(":
+		if _, ok := brackets[one.Text]; ok {
 			open = append(open, one)
-		case ")":
-			if len(open) == 0 {
-				found = append(found, driver.Problem{
-					Start:   one.Start,
-					End:     one.End,
-					Message: "This closing bracket has nothing to close.",
-				})
-				continue
-			}
-			open = open[:len(open)-1]
+			continue
 		}
+		if !closes(one.Text) {
+			continue
+		}
+
+		// A closer is matched against the innermost opener, and a mismatched pair is reported as
+		// the closer having nothing to close: `(a]` is one fault and not two.
+		if len(open) == 0 || brackets[open[len(open)-1].Text] != one.Text {
+			found = append(found, driver.Problem{
+				Start:   one.Start,
+				End:     one.End,
+				Message: "This closing bracket has nothing to close.",
+			})
+			continue
+		}
+		open = open[:len(open)-1]
 	}
 
 	// Whatever is still open at the end never closed. They are reported oldest first, because the
@@ -81,6 +94,15 @@ func problems(tokens []Token) []driver.Problem {
 	}
 
 	return found
+}
+
+func closes(text string) bool {
+	for _, closer := range brackets {
+		if text == closer {
+			return true
+		}
+	}
+	return false
 }
 
 func unterminated(one Token) string {

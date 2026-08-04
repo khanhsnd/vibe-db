@@ -5,12 +5,13 @@ import { ENGINE_GLYPHS, GLYPH_BOX } from './engineGlyphs'
 
 /**
  * Which engine a connection speaks, as a chip: the engine's own mark in white on its own colour.
- * A `Database` glyph twice over would say nothing — the dolphin and the elephant are what a reader
- * already knows the two by, and the shape still reads where the colour cannot.
+ * A `Database` glyph three times over would say nothing — the dolphin, the elephant and the leaf
+ * are what a reader already knows the three by, and the shape still reads where the colour cannot.
  */
 const CHIPS: Record<Engine, string> = {
   mysql: 'bg-engine-mysql',
   postgres: 'bg-engine-postgres',
+  mongo: 'bg-engine-mongo',
 }
 
 export function EngineIcon({ engine, className }: { engine: string; className?: string }) {

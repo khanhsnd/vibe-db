@@ -23,14 +23,22 @@ import { Empty } from '@/shared/ui/Empty'
 import { FetchProgress } from '@/shared/ui/FetchProgress'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
+import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 
 import { CellEditor } from './CellEditor'
 import { ColumnPicker } from './ColumnPicker'
 import { TableToolbar, type PanelKind } from './TableToolbar'
 import { useTableData } from './useTableData'
 
+// What each side panel opens at, and how far it may be dragged. Only the size it opens at is a look —
+// the bounds are what stop a drag leaving a panel too small to read or the grid with nothing left. The
+// editor's floor is its own chrome and a line under it: a 32 px header, the viewer's 28 px strip, and
+// enough left to read one line of the value.
 const EDITOR_HEIGHT = 180
+const EDITOR_MIN_HEIGHT = 120
 const PICKER_WIDTH = 168
+const PICKER_MIN_WIDTH = 120
+const PICKER_MAX_WIDTH = 420
 
 interface TableDataViewProps {
   sessionId: string
@@ -193,6 +201,14 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
 
   const failure = edits.error ?? (data ? error : null)
 
+  /**
+   * Which panels are open, named for the splitter. A layout is remembered per *combination*, which
+   * is what `panelIds` is for: the width the reader gave the column list is theirs the next time
+   * they open it, and closing it does not teach the grid a new size.
+   */
+  const rowPanels = useMemo(() => (panels.has('cell') ? ['rows', 'cell'] : ['rows']), [panels])
+  const gridPanels = useMemo(() => (panels.has('column') ? ['picker', 'grid'] : ['grid']), [panels])
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
       <TableToolbar
@@ -204,93 +220,127 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
         onExport={data !== null ? exportRows : undefined}
       />
 
-      <div className="flex min-h-0 flex-1">
-        {panels.has('column') ? (
-          <div className="shrink-0 border-r border-line" style={{ width: PICKER_WIDTH }}>
-            <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleColumn} />
-          </div>
+      {/* Both side panels are dragged rather than fixed, and the handle between them is the only
+          divider — a border of their own beside it would read as two lines. */}
+      <Split
+        id="vibe-db.table.rows"
+        orientation="vertical"
+        panelIds={rowPanels}
+        className="min-h-0 flex-1"
+      >
+        <SplitPanel id="rows" minSize="25%">
+          <Split
+            id="vibe-db.table.columns"
+            orientation="horizontal"
+            panelIds={gridPanels}
+            className="min-h-0"
+          >
+            {panels.has('column') ? (
+              <>
+                <SplitPanel
+                  id="picker"
+                  defaultSize={PICKER_WIDTH}
+                  minSize={PICKER_MIN_WIDTH}
+                  maxSize={PICKER_MAX_WIDTH}
+                >
+                  <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleColumn} />
+                </SplitPanel>
+
+                <SplitHandle orientation="horizontal" />
+              </>
+            ) : null}
+
+            <SplitPanel id="grid" className="relative min-w-0">
+              {/* A read of every row arrives in batches and is watched rather than waited on, so
+                  its count and its Stop sit over whatever the grid already holds. */}
+              {fetch !== null ? <FetchProgress fetched={fetch.fetched} onStop={stopFetch} /> : null}
+
+              {/* Nothing has arrived yet: a grid with no columns is a blank pane, and the first page
+                  of a large table is exactly where the reader waits longest. Once rows are on screen
+                  a re-read leaves them there and the footer's pager says it is working. */}
+              {data === null ? (
+                error ? (
+                  <Empty title={error.message} hint={error.detail} />
+                ) : fetch === null ? (
+                  // A streamed read reports itself, and two spinners over one another say no more.
+                  <Loading label={`Loading ${table}…`} />
+                ) : null
+              ) : (
+                <ResultGrid
+                  result={grid}
+                  selection={selection}
+                  onSelectionChange={setSelection}
+                  onEditCell={
+                    editable
+                      ? (ref: CellRef, value) =>
+                          edits.setCell({ row: ref.row, column: realColumn(ref.column) }, value)
+                      : undefined
+                  }
+                  isDirty={(row, column) => edits.isDirty(row, realColumn(column))}
+                  isDeleted={(row) => edits.deleted.has(row)}
+                  sort={sort}
+                  onSortChange={changeOrder}
+                  // Export and Filter & Sort live in this surface's own toolbar, so the grid draws
+                  // no strip of its own — but the cell menu still reaches the same handlers.
+                  onExport={exportRows}
+                  headStrip={false}
+                  onEditInPanel={editInPanel}
+                  onDeleteRows={editable ? (rows) => edits.deleteRows(rows) : undefined}
+                  onRefresh={refresh}
+                  filtering={{
+                    criteria,
+                    shown: filterShown,
+                    onShownChange: setFilterShown,
+                    onChange: changeConditions,
+                    suggest,
+                  }}
+                  columnMenuItems={(column) => [
+                    {
+                      label: 'Hide column',
+                      icon: ICON.hide,
+                      separatorBefore: true,
+                      disabled: visible.length === 1,
+                      onSelect: () => toggleColumn(column.name),
+                    },
+                    {
+                      label: 'Show all columns',
+                      icon: ICON.show,
+                      disabled: hidden.size === 0,
+                      onSelect: showAllColumns,
+                    },
+                  ]}
+                />
+              )}
+            </SplitPanel>
+          </Split>
+        </SplitPanel>
+
+        {panels.has('cell') ? (
+          <>
+            <SplitHandle orientation="vertical" />
+
+            <SplitPanel
+              id="cell"
+              defaultSize={EDITOR_HEIGHT}
+              minSize={EDITOR_MIN_HEIGHT}
+              maxSize="70%"
+            >
+              {target === null ? (
+                <Empty title="No cell selected" hint="Click a cell in the grid to edit its value." />
+              ) : (
+                <CellEditor
+                  key={`${target.ref.row}:${target.ref.column}`}
+                  column={target.column}
+                  value={target.value}
+                  editable={editable}
+                  busy={edits.saving}
+                  onApply={(value) => edits.setCell(target.ref, value)}
+                />
+              )}
+            </SplitPanel>
+          </>
         ) : null}
-
-        <div className="relative min-w-0 flex-1">
-          {/* A read of every row arrives in batches and is watched rather than waited on, so its
-              count and its Stop sit over whatever the grid already holds. */}
-          {fetch !== null ? <FetchProgress fetched={fetch.fetched} onStop={stopFetch} /> : null}
-
-          {/* Nothing has arrived yet: a grid with no columns is a blank pane, and the first page
-              of a large table is exactly where the reader waits longest. Once rows are on screen
-              a re-read leaves them there and the footer's pager says it is working. */}
-          {data === null ? (
-            error ? (
-              <Empty title={error.message} hint={error.detail} />
-            ) : fetch === null ? (
-              // A streamed read reports itself, and two spinners over one another say no more.
-              <Loading label={`Loading ${table}…`} />
-            ) : null
-          ) : (
-            <ResultGrid
-              result={grid}
-              selection={selection}
-              onSelectionChange={setSelection}
-              onEditCell={
-                editable
-                  ? (ref: CellRef, value) =>
-                      edits.setCell({ row: ref.row, column: realColumn(ref.column) }, value)
-                  : undefined
-              }
-              isDirty={(row, column) => edits.isDirty(row, realColumn(column))}
-              isDeleted={(row) => edits.deleted.has(row)}
-              sort={sort}
-              onSortChange={changeOrder}
-              // Export and Filter & Sort live in this surface's own toolbar, so the grid draws no
-              // strip of its own — but the cell menu still reaches the same handlers.
-              onExport={exportRows}
-              headStrip={false}
-              onEditInPanel={editInPanel}
-              onDeleteRows={editable ? (rows) => edits.deleteRows(rows) : undefined}
-              onRefresh={refresh}
-              filtering={{
-                criteria,
-                shown: filterShown,
-                onShownChange: setFilterShown,
-                onChange: changeConditions,
-                suggest,
-              }}
-              columnMenuItems={(column) => [
-                {
-                  label: 'Hide column',
-                  icon: ICON.hide,
-                  separatorBefore: true,
-                  disabled: visible.length === 1,
-                  onSelect: () => toggleColumn(column.name),
-                },
-                {
-                  label: 'Show all columns',
-                  icon: ICON.show,
-                  disabled: hidden.size === 0,
-                  onSelect: showAllColumns,
-                },
-              ]}
-            />
-          )}
-        </div>
-      </div>
-
-      {panels.has('cell') ? (
-        <div className="shrink-0 border-t border-line" style={{ height: EDITOR_HEIGHT }}>
-          {target === null ? (
-            <Empty title="No cell selected" hint="Click a cell in the grid to edit its value." />
-          ) : (
-            <CellEditor
-              key={`${target.ref.row}:${target.ref.column}`}
-              column={target.column}
-              value={target.value}
-              editable={editable}
-              busy={edits.saving}
-              onApply={(value) => edits.setCell(target.ref, value)}
-            />
-          )}
-        </div>
-      ) : null}
+      </Split>
 
       {failure !== null ? (
         <p className="shrink-0 truncate border-t border-danger/40 bg-danger-subtle px-2 py-1 text-xs text-danger">

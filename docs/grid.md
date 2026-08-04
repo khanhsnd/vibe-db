@@ -23,6 +23,7 @@ keys and its pending changes, and every one of those is a grid — the Fields on
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. The **data font** — the `.data-font` class, which is the family, size and weight the reader picked in Settings, mono 13 px light by default. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
 | Bytes | A value that is not text arrives as `\x…` hex and is drawn as that text, like any other. The grid has no special case for it: **View Value** is where a blob becomes a picture or a dump, and a row of them reads as a row of lengths rather than as replacement characters. Why it arrives that way is in [features.md](features.md#why-bytes-arrive-as-x). |
+| Documents | A nested document or an array arrives as the shell's own notation — `{ city: "Hanoi" }`, `[1, "two"]` — and is drawn as that text. The grid has no special case for it either: **View Value** is where one is read whole, and the notation is the *parser's* own, so a cell edited in it goes back as the document it showed. |
 | Selection | Three depths: cells inside any rectangle get a fill (`--grid-cell-selected`), the **focus** cell — the pointer's last landing, which is the live rectangle's focus — is solid `--accent` with `--fg-on-accent` text, and a row the selection holds *end to end* is banded across its width (`--grid-row-selected`). A row the selection merely touches gets the band and the accent bar **on its gutter alone**, because a selected column touches every row and must not paint the whole grid. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
 | Hover | A row highlight, applied *only* to rows outside the selection. Both are background colours, so a selected row must not also carry `hover:bg-hover` or the tint flickers away under the pointer. |
 | Column editors | A column may say how its cells are drawn and changed, through `ResultColumn.editor`. A **`choice`** cell keeps its text and gains a muted chevron; a **`check`** cell is a centred box — filled `--accent` when on, an outline in `--fg-faint` when off — and never the word it holds; a **`key`** cell is a `--grid-key` lock followed by the cell's own value, which is the field's place in the key, and is empty when it holds nothing. A toggle cell shows **nothing** rather than `(Null)`, a no being a no. |
@@ -325,6 +326,30 @@ SELECT * FROM `shop`.`users` ORDER BY `id` LIMIT 100 OFFSET 0  ⧉ │ Record 19
    site — `ResultPane`, `TableDataView`, `TableDesigner`, `ObjectListView`, `QueryHistory` and
    `ScriptMessages` — then has it, which is the whole point.
 
+## Where the columns come from
+
+On a table store the columns are a fact: the catalogue says what a table has, and every row has all
+of them. **On a document store there is no such fact** — a collection declares nothing, and two
+documents in one collection may share no field at all. The grid is unchanged by that, and does not
+need to be; what changes is only where the header comes from, and that is worth knowing because it is
+the one place the app shows a *sample* rather than an answer.
+
+- **The field list is inferred** from the first `sampleDocs` documents of the collection, `_id` always
+  among them because every document has one. That list is what the tree draws under **Fields**, what a
+  filter's field names are checked against, and what a value the reader typed is read into.
+- **A bounded read shows everything it read.** The page's own documents are merged into that list, so
+  a field the sample missed still gets a column the moment a page returns it.
+- **A streamed read cannot**, and this is the one visible limit. `All` pushes its rows as batches and
+  the header goes over before the first of them, so its columns are the sampled ones — a field outside
+  the sample is not drawn for that read. A bounded page of the same rows shows it.
+- **A nested value is one column**, drawn in the shell's notation. A column per path would give two
+  documents of one collection different columns, which is the one thing a grid cannot draw.
+
+None of this is a special case in `ResultGrid`. It receives `GridData` exactly as every other surface
+does; the difference is entirely `internal/driver/mongo/documents.go`, and it is written down here
+because a reader who does not know the list is a sample would read a missing column as a missing
+field.
+
 ## Where the two call sites legitimately differ
 
 Not in what an edit means — `useGridEdits` and `GridFooter` make that identical — only in what
@@ -357,10 +382,14 @@ surrounds the grid:
   is also the one site that names column editors: `Type` and `Method` are a `choice` over the
   engine's own lists, `On Update` and `On Delete` a `choice` over the referential actions,
   `Not null` and `Unique` a `check`, and `Key` a `key` whose numbers it counts down the draft.
+  It draws **two** grids rather than three on an engine with no referential constraints of any kind:
+  a pane whose Save could only fail is a pane worth leaving out — see `EngineInfo.hasForeignKeys`.
 - `ObjectListView` neither pages, hides nor edits: its rows are one namespace's tables and it maps
   nothing. It is the one site whose rows *stand for* something openable, so it is the one that
   passes `onActivateRow`, and the only read-only site with a toolbar of its own — over the grid,
-  where a surface's controls go, acting on the table the selection names.
+  where a surface's controls go, acting on the table the selection names. Its wording is the
+  engine's (`engineWords`), so a document store's list says Collection throughout; only the wording
+  changes, every button running the same bound method.
 - `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
   index back to the real one on the way in. **It sorts and filters on the server too** — both travel
   in `TablePageRequest` and become the read's `ORDER BY` and `WHERE`, because ordering or narrowing

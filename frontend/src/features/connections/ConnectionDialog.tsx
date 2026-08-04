@@ -228,7 +228,13 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    <Field label="User" error={fieldError('user')}>
+                    {/* A MongoDB server started without access control takes no credentials at
+                        all, so the box says so rather than being refused when it is left empty. */}
+                    <Field
+                      label="User"
+                      hint={engine.documents ? 'Optional' : undefined}
+                      error={fieldError('user')}
+                    >
                       {(id, invalid) => (
                         <TextInput
                           id={id}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/driver/mongo"
 	"github.com/khanhsnd/vibe-db/internal/driver/mysql"
 	"github.com/khanhsnd/vibe-db/internal/driver/postgres"
 	historyfile "github.com/khanhsnd/vibe-db/internal/history/jsonfile"
@@ -32,7 +33,7 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("resolve config path: %w", err)
 	}
 
-	registry := driver.NewRegistry(mysql.New(), postgres.New())
+	registry := driver.NewRegistry(mysql.New(), postgres.New(), mongo.New())
 	sessions := session.NewManager(registry)
 
 	return &App{

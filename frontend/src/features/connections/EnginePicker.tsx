@@ -12,8 +12,9 @@ interface EnginePickerProps {
 
 /**
  * The first screen of a new connection: every engine as a tile, its own mark at a size a reader
- * picks out by shape. A list of two names in a dropdown says less than two marks side by side, and
- * the row of tiles is what grows when a third engine lands.
+ * picks out by shape. A list of names in a dropdown says less than the marks side by side — the
+ * dolphin, the elephant and the leaf are what a reader already knows the three by — and the grid is
+ * what grows when a fourth engine lands.
  */
 export function EnginePicker({ value, onChange, onConfirm }: EnginePickerProps) {
   return (

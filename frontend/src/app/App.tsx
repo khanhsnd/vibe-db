@@ -35,6 +35,7 @@ const SIDEBAR_MAX_WIDTH = 480
 
 export function App() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
+  const sidebarResized = useUIStore((s) => s.sidebarResized)
   const sidebarRef = usePanelRef()
   const openTab = useTabsStore((s) => s.open)
   const openTable = useTabsStore((s) => s.openTable)
@@ -257,6 +258,9 @@ export function App() {
           defaultSize={SIDEBAR_DEFAULT_WIDTH}
           minSize={SIDEBAR_MIN_WIDTH}
           maxSize={SIDEBAR_MAX_WIDTH}
+          // Dragging the divider past the minimum closes the sidebar as well, so the button that
+          // opens it has to hear about it from here — see `sidebarResized`.
+          onResize={(size) => sidebarResized(size.inPixels === 0)}
         >
           <Sidebar
             roots={roots}

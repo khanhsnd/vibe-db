@@ -29,9 +29,10 @@ const PANE_HEIGHT = 320
  *
  * How much of it there is to fill in is the engine's: PostgreSQL's database is an object with an
  * owner, a locale and a connection limit, and can carry extensions and a comment; MySQL's is a
- * namespace with a character set. **What the statement will be is never written here** — the
- * SQL Preview pane asks the driver for the statements it would run, so what is shown and what
- * runs are the same list.
+ * namespace with a character set; MongoDB's is neither, and is made by making its first collection —
+ * a document store has no way to hold an empty database. **What the statement will be is never
+ * written here** — the preview pane asks the driver for the statements it would run, so what is
+ * shown and what runs are the same list.
  */
 export function DatabaseDialog({
   request,
@@ -51,7 +52,11 @@ export function DatabaseDialog({
   const [sql, setSql] = useState<string[]>([])
   const { submit, running, error, fieldError } = useSchemaSubmit(onClose)
 
-  const owned = engineInfo(engine).databaseHasOwner
+  const {
+    databaseHasOwner: owned,
+    databaseNeedsCollection: needsCollection,
+    documents,
+  } = engineInfo(engine)
   const set = <K extends keyof DatabaseSpec>(key: K, value: DatabaseSpec[K]) =>
     setSpec((prev) => ({ ...prev, [key]: value }) as DatabaseSpec)
 
@@ -109,7 +114,24 @@ export function DatabaseDialog({
             )}
           </Field>
 
-          {owned ? (
+          {needsCollection ? (
+            <Field
+              inline
+              label="First Collection"
+              hint="a database exists only while it holds one"
+              error={fieldError('collection')}
+            >
+              {(id, invalid) => (
+                <TextInput
+                  id={id}
+                  invalid={invalid}
+                  value={spec.firstCollection}
+                  placeholder="data"
+                  onChange={(e) => set('firstCollection', e.target.value)}
+                />
+              )}
+            </Field>
+          ) : owned ? (
             <>
               <Choice label="Owner" value={spec.owner} options={options.owners} onChange={(v) => set('owner', v)} />
               <Choice
@@ -224,7 +246,7 @@ export function DatabaseDialog({
 
   panes.push({
     id: 'sql',
-    label: 'SQL Preview',
+    label: documents ? 'Command Preview' : 'SQL Preview',
     content: (
       <div className="scroll-thin h-full overflow-auto py-3">
         {sql.length === 0 ? (

@@ -37,11 +37,22 @@ export function Split({ id, orientation, panelIds, className, children }: SplitP
   )
 }
 
+/**
+ * The line between two panels, and the thing that is dragged.
+ *
+ * **The highlight follows `data-separator`, not `:hover`.** The library grabs the pointer within ten
+ * pixels of a one-pixel line and reports that as a state on the element — so a CSS hover rule would
+ * only fire on the pixel itself, and a reader who is *already dragging* would never have seen the
+ * handle light up. `focus` is the same line under the keyboard, which resizes with the arrow keys.
+ */
 export function SplitHandle({ orientation }: { orientation: 'horizontal' | 'vertical' }) {
   return (
     <Separator
       className={cn(
-        'shrink-0 bg-line transition-colors hover:bg-accent active:bg-accent',
+        'shrink-0 bg-line transition-colors outline-none',
+        'data-[separator=hover]:bg-accent',
+        'data-[separator=active]:bg-accent',
+        'data-[separator=focus]:bg-accent',
         orientation === 'horizontal' ? 'w-px cursor-col-resize' : 'h-px cursor-row-resize',
       )}
     />

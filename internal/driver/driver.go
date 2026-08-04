@@ -270,10 +270,15 @@ type ForeignKeySpec struct {
 }
 
 // DatabaseSpec is a CREATE DATABASE as the dialog declares it. How much of it an engine reads
-// is the engine's own business: MySQL knows only Encoding and Collation, and PostgreSQL knows
-// the rest.
+// is the engine's own business: MySQL knows only Encoding and Collation, PostgreSQL knows most of
+// the rest, and MongoDB knows only the name and the collection.
 type DatabaseSpec struct {
-	Name             string
+	Name string
+	// FirstCollection is the collection a new database is made with, and is MongoDB's alone.
+	// A document store has no CREATE DATABASE: a database exists exactly as long as it holds a
+	// collection, so making one *is* making its first collection — which is why the one engine that
+	// needs this asks for it rather than inventing a name the reader would then have to find.
+	FirstCollection  string
 	Owner            string
 	Template         string
 	Encoding         string

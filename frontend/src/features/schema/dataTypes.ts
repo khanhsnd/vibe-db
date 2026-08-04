@@ -72,10 +72,43 @@ const POSTGRES = [
   'varbit',
 ] as const
 
+/**
+ * The BSON types, which is what a MongoDB field is declared as wherever one is declared at all:
+ * the `bsonType` of a collection's validator, and the `to` of the `$convert` that changes a field's
+ * type across its documents. They are the server's own spellings — `objectId`, not `ObjectId` —
+ * because they reach the command verbatim, exactly as a SQL type does.
+ */
+const MONGO = [
+  'int',
+  'long',
+  'double',
+  'decimal',
+  'bool',
+  'string',
+  'objectId',
+  'date',
+  'timestamp',
+  'object',
+  'array',
+  'binData',
+  'regex',
+  'javascript',
+  'null',
+  'minKey',
+  'maxKey',
+] as const
+
 // The access methods an index is usually built with. Like the type list these are suggestions:
 // the cell still takes anything typed into it, because a server may know methods of its own.
 const MYSQL_INDEX_METHODS = ['BTREE', 'HASH'] as const
 const POSTGRES_INDEX_METHODS = ['btree', 'hash', 'gin', 'gist', 'brin', 'spgist'] as const
+
+/**
+ * MongoDB keeps in an index's *key* what SQL puts in a USING clause, so these are the values a key
+ * may take rather than a clause of their own. The blank one is the ordinary ascending index, which
+ * is what an empty method already means everywhere else.
+ */
+const MONGO_INDEX_METHODS = ['', 'hashed', 'text', '2dsphere', '2d'] as const
 
 /** What a foreign key does to the rows it holds when the row it points at moves or goes. */
 export const REFERENTIAL_ACTIONS = [
@@ -86,12 +119,24 @@ export const REFERENTIAL_ACTIONS = [
   'SET DEFAULT',
 ] as const
 
-const isPostgres = (engine: string) => engineInfo(engine).value === 'postgres'
-
 export function dataTypes(engine: string): readonly string[] {
-  return isPostgres(engine) ? POSTGRES : MYSQL
+  switch (engineInfo(engine).value) {
+    case 'postgres':
+      return POSTGRES
+    case 'mongo':
+      return MONGO
+    default:
+      return MYSQL
+  }
 }
 
 export function indexMethods(engine: string): readonly string[] {
-  return isPostgres(engine) ? POSTGRES_INDEX_METHODS : MYSQL_INDEX_METHODS
+  switch (engineInfo(engine).value) {
+    case 'postgres':
+      return POSTGRES_INDEX_METHODS
+    case 'mongo':
+      return MONGO_INDEX_METHODS
+    default:
+      return MYSQL_INDEX_METHODS
+  }
 }

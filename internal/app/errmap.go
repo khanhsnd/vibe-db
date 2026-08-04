@@ -22,6 +22,10 @@ const (
 	CodeTableNotEditable ErrorCode = "TABLE_NOT_EDITABLE"
 	CodeEmptyStatement   ErrorCode = "EMPTY_STATEMENT"
 	CodeSQLError         ErrorCode = "SQL_ERROR"
+	// CodeUnsupported is a thing this engine has no concept of rather than a thing that went
+	// wrong — a foreign key on MongoDB, a primary key other than `_id`. It is its own code so the
+	// UI can say so plainly instead of drawing it as a failure the reader could retry.
+	CodeUnsupported      ErrorCode = "UNSUPPORTED"
 	CodeQueryCancelled   ErrorCode = "QUERY_CANCELLED"
 	CodeHostUnreachable  ErrorCode = "HOST_UNREACHABLE"
 	CodeTimeout          ErrorCode = "TIMEOUT"
@@ -99,6 +103,16 @@ func wrapError(err error) error {
 			Code:    CodeInvalidName,
 			Message: "A " + nameErr.What + " name is required.",
 			Field:   nameErr.What,
+		}
+	}
+
+	// What an engine has no concept of is named, so the message says which thing rather than only
+	// that something was refused.
+	var unsupportedErr domain.UnsupportedError
+	if errors.As(err, &unsupportedErr) {
+		return wireError{
+			Code:    CodeUnsupported,
+			Message: "This database does not support " + unsupportedErr.What + ".",
 		}
 	}
 

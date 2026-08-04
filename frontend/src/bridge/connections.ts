@@ -186,7 +186,7 @@ export const SSH_AUTHS: ReadonlyArray<{ value: SSHAuth; label: string }> = [
   { value: 'agent', label: 'SSH Agent' },
 ]
 
-export type Engine = 'mysql' | 'postgres'
+export type Engine = 'mysql' | 'postgres' | 'mongo'
 
 export interface EngineInfo {
   value: Engine
@@ -204,6 +204,62 @@ export interface EngineInfo {
   // character set. It is what decides how much of the New Database dialog there is to fill in,
   // and whether that database can carry extensions and a comment.
   databaseHasOwner: boolean
+  // Whether this engine stores documents rather than rows. It is the one engine fact the UI has
+  // to know about without asking a driver, because it changes what the *words* mean: a table is a
+  // collection, a field is not declared anywhere, and the editor is not writing SQL.
+  documents: boolean
+  // Whether a new database of this engine has to be given its first collection. MongoDB has no
+  // CREATE DATABASE — a database exists exactly as long as it holds a collection — so making one
+  // is making that collection, and the dialog asks which.
+  databaseNeedsCollection: boolean
+  // Whether a table of this engine can carry referential constraints. MongoDB has none of any
+  // kind, so the designer does not offer a tab for declaring one it could never enforce.
+  hasForeignKeys: boolean
+  // Whether this engine has stored functions and procedures at all. Server-side JavaScript was
+  // removed from MongoDB, so there is no folder for the tree to draw.
+  hasRoutines: boolean
+  // Whether emptying and truncating are two different things. They are on a table store, where one
+  // deletes the rows and the other resets the storage; a collection has no storage to reset, so
+  // offering both would be offering the same command twice under two names.
+  hasTruncate: boolean
+}
+
+/**
+ * What this engine calls the things the app shows. A collection is not a table and a document is not
+ * a row, and a menu that said otherwise would be telling the reader something untrue about the
+ * server they are looking at — the truncate wording especially, which on a table store warns about
+ * a foreign key that a document store cannot have.
+ *
+ * It is words alone. **Nothing here changes what anything does**: a `NodeKind` is still `tables` and
+ * a bound method is still `DropTable`, so one name means one thing on the wire whatever it is called
+ * on the screen.
+ */
+export interface EngineWords {
+  /** Title case, for a menu item or a dialog's title: `Delete Collection`. */
+  table: string
+  /** Title case and plural, for the tree's own folder. */
+  tables: string
+  /** Lower case, for the middle of a sentence. */
+  row: string
+  rows: string
+}
+
+const SQL_WORDS: EngineWords = {
+  table: 'Table',
+  tables: 'Tables',
+  row: 'row',
+  rows: 'rows',
+}
+
+const DOCUMENT_WORDS: EngineWords = {
+  table: 'Collection',
+  tables: 'Collections',
+  row: 'document',
+  rows: 'documents',
+}
+
+export function engineWords(engine: string): EngineWords {
+  return engineInfo(engine).documents ? DOCUMENT_WORDS : SQL_WORDS
 }
 
 // The order here is the order of the dialog's Engine list, and the first entry is what an
@@ -217,6 +273,11 @@ export const ENGINES = [
     needsDatabase: false,
     hasSchemas: false,
     databaseHasOwner: false,
+    documents: false,
+    databaseNeedsCollection: false,
+    hasForeignKeys: true,
+    hasRoutines: true,
+    hasTruncate: true,
   },
   {
     value: 'postgres',
@@ -226,6 +287,27 @@ export const ENGINES = [
     needsDatabase: true,
     hasSchemas: true,
     databaseHasOwner: true,
+    documents: false,
+    databaseNeedsCollection: false,
+    hasForeignKeys: true,
+    hasRoutines: true,
+    hasTruncate: true,
+  },
+  {
+    // A MongoDB server started without access control takes no credentials at all, which is why
+    // this is the one engine whose default user is blank rather than an administrator's name.
+    value: 'mongo',
+    label: 'MongoDB',
+    port: 27017,
+    user: '',
+    needsDatabase: false,
+    hasSchemas: false,
+    databaseHasOwner: false,
+    documents: true,
+    databaseNeedsCollection: true,
+    hasForeignKeys: false,
+    hasRoutines: false,
+    hasTruncate: false,
   },
 ] as const satisfies readonly EngineInfo[]
 

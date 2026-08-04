@@ -9,7 +9,8 @@ internal/app  ->  session / profile / secret / history  ->  internal/driver  -> 
 - **`internal/domain`** — `ConnectionProfile`, `Validate()`, sentinel errors. Pure; imports nothing
   of ours. Business rules live here, not in the API layer.
 - **`internal/driver`** — the `Driver`/`Session` interfaces plus a `Registry` keyed by engine.
-  `driver/mysql` and `driver/postgres` are the adapters, and `driver/sqlkit` is what they share.
+  `driver/mysql`, `driver/postgres` and `driver/mongo` are the adapters; `driver/sqlkit` is what the
+  two SQL ones share, and `sqlkit.Lex` alone is what all three do.
 - **`internal/app`** — the Wails boundary and the only package bound to JavaScript. Speaks `dto.go`
   wire types, never domain types, and maps every error to a stable code (see
   [errors.md](errors.md)).
@@ -51,6 +52,11 @@ native errors to `domain` sentinels, add the engine to `domain.Engine` and to `E
 `frontend/src/bridge/connections.ts`, and register it in `internal/app/app.go`. Nothing between
 those two ends should need to change — if it does, an abstraction leaked.
 
+**MongoDB is the proof of that.** It is not a `database/sql` adapter, has no SQL, no declared columns
+and no foreign keys, and adding it changed nothing in `app`, `session`, `profile`, `secret`, `history`
+or `jsonstore` beyond one registry line and one new failure code. What it *did* need is set out in
+[a section of its own](#the-document-store) below.
+
 Reach for `internal/driver/sqlkit` before writing anything: row scanning, result-column
 reflection, statement classification, **the lexer** and everything written over it — script
 splitting, **laying a script out**, **reviewing it** — source parsing, identifier and string
@@ -74,6 +80,11 @@ there already, and an engine differs from another only in
 reviewing are all written over its tokens, so what counts as a string, a comment or a `$tag$` body
 is settled once per engine instead of three times — and a fourth thing built on it inherits that for
 free.
+
+It is not only SQL's. `sqlkit.Shell` is a `Dialect` carried by the MongoDB adapter **for the lexer
+alone**: where a command ends, what a string is and what a comment is are the same questions in a
+document store's shell, so they are answered by the same code rather than by a second scanner. Nothing
+else in `sqlkit` is meant for it — see [the document store](#the-document-store).
 
 **`driver.Text` is the half of an engine that needs no connection**: `Split`, `Format`, `Review`.
 It hangs off the `Driver` rather than off a `Session`, because a reader lays out and is warned about
@@ -101,9 +112,56 @@ and what runs cannot drift; a SQL export calls `InsertStatements` for the same r
 statements and some of them — an extension — can only be run inside the database just made.
 
 A table is addressed by a `driver.Namespace` — `(database, schema)` — and how many of its parts an
-engine fills is the one structural difference between the two adapters. MySQL fills `Database`
+engine fills is the one structural difference between the SQL adapters. MySQL fills `Database`
 alone; PostgreSQL fills both and needs a connection pool per database to do it, because a session
-cannot leave the database it was opened with. See [decisions.md](decisions.md).
+cannot leave the database it was opened with. MongoDB fills `Database` alone and needs one pool for
+the *server*, a single connection reading every database on it. See [decisions.md](decisions.md).
+
+## The document store
+
+`internal/driver/mongo` is the first adapter that is not a `database/sql` one. Three things about it
+are genuinely different, and everything else is the same adapter every other engine is.
+
+**A collection declares no fields.** What a catalogue read answers for a table, `fields` infers from
+the documents themselves: the first `sampleDocs` of the collection, unioned, `_id` always among them
+because every document has one. It is a *sample* and says so — a field appearing in none of them is
+not drawn until a read that returns it is. A **bounded** read then merges the documents it actually
+returned into that list, so nothing a page holds goes unshown; a **streamed** read cannot, its header
+having crossed the bridge before its first batch. See `documents.go` and [grid.md](grid.md).
+
+**A filter is a document, not a clause.** `filter.go` builds a `bson.D`, so there is no quoting in the
+package at all: a name and a value reach the server as *values*, and nothing a reader typed can be
+read as anything else. It refuses what `sqlkit.Dialect.Where` refuses and for the same reasons — a
+field the collection has never held, an operator this side does not know, half a `BETWEEN`.
+
+`coerce` is what stands where a SQL engine's own cast stands, and it reads a value three ways in one
+order that matters. The **field's own type** first, so `36` against an `int` is a number and against a
+`string` is the text of one. Then **the shell's grammar**, so a cell the grid drew as `ObjectId("…")`
+can be edited in the notation it was drawn in — without which no document could be addressed by its
+own `_id`. And for a field the sample never saw — the first document of an empty collection — the
+grammar alone, because there is nothing else to go on and `36` there is the number a reader meant.
+
+**The verb is a method, not a first word.** `mql.go` reads a whole command — `db.users.find({…})`,
+its Extended-JSON-ish arguments and the cursor methods bounding it — over the same tokens
+`sqlkit.Lex` produces. It is a *reader of one command* and not an interpreter of a language: there
+are no variables, no arithmetic and no control flow, because a client that half-implemented
+JavaScript would be a client whose answers could not be trusted. Anything beyond the list `query.go`
+understands is written `db.runCommand({…})` and reaches the server verbatim. What a command then
+*does* is still a `domain` rule — `domain.MongoHazard`, beside `StatementHazard`, reading a different
+grammar for the same answer.
+
+| Part | MongoDB |
+|---|---|
+| a DSN | none: `options.go` builds the driver's own options, so nothing is written as text only to be parsed back |
+| a dialler and a TLS configuration | values on those options, so there is no global registration and nothing to release with the session. A tunnelled connection is pinned `Direct`, or topology discovery would hand back addresses that resolve only on the far side of the bastion |
+| `errors.go` | server code → sentinel, the shape MySQL's is in. Plus a text read for a handshake failure, which carries no code — see [errors.md](errors.md) |
+| catalogue reads | the documents themselves, plus `listCollections` and `$collStats`. `TableList` is one read per collection, there being no catalogue table to join against; a `system.` name is the server's own bookkeeping and is not listed |
+| placeholders | none; everything is a value in a document |
+| the lexer's dialect | `sqlkit.Shell`: `//` comments, both quotes open a string, no identifier quote to take one of them |
+| levels above a collection | one pool for the server; a single connection reads every database on it |
+| `ddl.go` | a field is not a column, so a change to one is a change to the documents that carry it: `$set` to add, `$rename`, `$unset`, and a pipeline `$convert` to alter. `CreateTable` creates the collection and *only* the collection — see [decisions.md](decisions.md) for why a `$jsonSchema` validator built from the declared fields is a trap |
+| `database.go` | there is no `CREATE DATABASE`. A database exists exactly as long as it holds a collection, so making one is making its first — which is why `DatabaseSpec.FirstCollection` exists and why the dialog asks |
+| what it has not got | a foreign key, a primary key other than `_id`, a stored routine, a truncate distinct from an empty. Each says so through `domain.Unsupported` rather than being approximated or left to the server to refuse |
 
 ## Two Wails v2 constraints that shaped the design
 

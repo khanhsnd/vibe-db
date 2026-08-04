@@ -1,20 +1,44 @@
 # Editor and completion
 
-The editor is CodeMirror 6 (`@codemirror/lang-sql`): line numbers, syntax highlighting off the same
-`--syn-*` tokens as the rest of the app, bracket matching, undo history and soft wrapping. Each tab
-owns its editor, so the caret and the undo stack do not follow a tab switch.
+The editor is CodeMirror 6: line numbers, syntax highlighting off the same `--syn-*` tokens as the
+rest of the app, bracket matching, undo history and soft wrapping. Each tab owns its editor, so the
+caret and the undo stack do not follow a tab switch.
 
-The dialect follows the connection's engine — `MySQL` or `PostgreSQL` — and rides in the same
-compartment as the schema, so it reconfigures in place rather than rebuilding the editor.
+**The language follows the connection's engine**, through `queryLanguage`, and rides in the same
+compartment as the schema so it reconfigures in place rather than rebuilding the editor. There are
+two of them, because two of the three engines write the same language and the third writes nothing
+like it:
+
+- **SQL** (`sqlLanguage`, `@codemirror/lang-sql`) for MySQL and PostgreSQL, whose dialects differ only
+  in a quoting rule and a keyword list.
+- **The shell** (`shellLanguage`, `@codemirror/lang-javascript`) for MongoDB. JavaScript to
+  *highlight* — a command is `db.users.find({…})` and its argument is a document, so a brace is a
+  brace and a string is a string — and nothing like JavaScript to *run*: the driver reads one command
+  and its arguments, with no variables and no control flow. See
+  [architecture.md](architecture.md#the-document-store).
+
+`queryLanguage` is the whole of what the editor knows about which engine it is in front of, down to
+the empty tab's own prompt — `SELECT * FROM ...` is not what a document store is waiting for.
+
+**A document store has no keywords, so what carries the colour is the shape of a command.** Most of
+it comes off the tags lang-javascript already hands back, resolved against the same `--syn-*` tokens
+SQL uses: `db` is the only bare name a command ever begins with, `find` and `ObjectId` are calls
+whatever they are called on, a string is a string and a number is a number. **An operator is the one
+thing a grammar cannot give** — to JavaScript `$gt` is a key like any other, and to the reader it is
+the whole of what the filter says — so `shellLanguage.ts` marks a `$`-prefixed key as the keyword it
+is. It reads the **parse tree** and never the text, which is what keeps `"$total"` a string and
+`// $set` a comment, and is why it is not a second scanner.
 
 **A selection narrows what runs.** Highlight one statement of a script and Execute sends only that;
 with nothing selected it sends the whole buffer.
 
 ## Laying out and reviewing
 
-Neither is done here. **Format** and **Review** are `QueryAPI` calls onto `sqlkit.Dialect`, for the
-reason splitting always was: where a statement ends and what counts as a quote are lexical and
-therefore the engine's. What this side does is dispatch the result.
+Neither is done here. **Format** and **Review** are `QueryAPI` calls onto the driver's `Text`, for
+the reason splitting always was: where a statement ends and what counts as a quote are lexical and
+therefore the engine's. What this side does is dispatch the result — and it does not care which
+grammar answered, because a hazard, a confirmation and a squiggle are the same three things whether
+the statement was a `DELETE` or a `deleteMany`.
 
 - **`Ctrl`+`Shift`+`F`** formats, bound on the *window* alongside `F5` — the editor does not own the
   keyboard when the reader is in the output pane, and a shortcut that only works with the caret in
@@ -35,7 +59,7 @@ therefore the engine's. What this side does is dispatch the result.
 
 ## Completion
 
-Completion fires as you type and on `Ctrl`+`Space`, over four sources:
+Completion fires as you type and on `Ctrl`+`Space`. On SQL it has four sources:
 
 - **Tables** of the tab's namespace, with their column count as the hint.
 - **Qualified columns**, after `table.` or `alias.` — `FROM orders o … o.` resolves the alias.

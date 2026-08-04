@@ -16,6 +16,17 @@
   the caret's select-then-toggle collapsed what it had just opened. Expansion lives in `toggleNode`
   and nowhere else, and every expand goes through `toggleTreeNode` so the level's children are
   loaded with it.
+- **An engine's differences are `EngineInfo` fields, never its name.** A component that asked
+  `engine === 'mongo'` would be a component that had to be found again for the next engine, so what
+  the UI needs to know is declared once in `bridge/connections.ts` — `needsDatabase`, `hasSchemas`,
+  `databaseHasOwner`, `documents`, `databaseNeedsCollection`, `hasForeignKeys`, `hasRoutines`,
+  `hasTruncate` — and read through `engineInfo`. A capability the UI has to branch on is a new field
+  there, and its comment is where *why* lives.
+- **What a thing is *called* is `engineWords`.** A collection is not a table and a document is not a
+  row, and a menu that said otherwise would tell the reader something untrue about the server in front
+  of them — the truncate warning especially, which on a table store warns about a foreign key that a
+  document store cannot have. It is words alone: a `NodeKind` is still `tables` and the bound method is
+  still `DropTable`, so one name means one thing on the wire whatever it says on the screen.
 - Path aliases: `@/*` → `frontend/src/*`, `@wailsjs/*` → `frontend/wailsjs/*`. Declared in both
   `vite.config.ts` and `tsconfig.app.json`; changing one requires changing the other.
 - **Three surfaces, in order of depth.** `--surface-canvas` is content, `--surface-panel` is the
@@ -47,6 +58,16 @@
 - `shared/ui/Split.tsx` wraps `react-resizable-panels`, which renamed its entire public surface
   between v3 and v4. Import splitters from that wrapper, never from the library directly. Note its
   `Panel` inner div carries `overflow: auto`, which surfaces small child overflows as scrollbars.
+  Two things about it are easy to get wrong and both are load-bearing:
+  - **A handle is styled off its `data-separator` attribute, never `:hover` or `:active`.** The
+    library grabs the pointer within ten pixels of the one-pixel line and reports `hover`, `active`
+    or `focus` on the element; a CSS hover rule fires on the pixel alone, so the handle stays
+    invisible right up to the drag the reader is already performing. `Group` also sets its own
+    `display: flex`, `height: 100%` and `overflow: hidden` — a `flex` or `h-full` class on a `Split`
+    is repeating the library.
+  - **A `Split` whose panels come and go passes the mounted ids as `panelIds`.** The layout is then
+    remembered per *combination*, so opening a side panel does not resize what is beside it with a
+    layout saved when it was absent — `features/table/TableDataView.tsx` is the example.
 - TypeScript runs with `strict`, `noUncheckedIndexedAccess`, and `exactOptionalPropertyTypes`.
   The last one means an optional prop must be typed `foo?: T | undefined` to accept an explicit
   `undefined`.

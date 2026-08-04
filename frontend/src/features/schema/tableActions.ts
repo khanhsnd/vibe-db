@@ -1,3 +1,4 @@
+import { engineWords, type EngineWords } from '@/bridge/connections'
 import { schema } from '@/bridge/schema'
 import type { ChangeSchema, SchemaTarget } from '@/stores/connections'
 import type { SchemaRequest } from '@/stores/schema'
@@ -27,9 +28,18 @@ export interface TableActions {
  * over the table list both build from here, so the wording of a confirmation and the order of a
  * change cannot differ between the two. Nothing runs without being confirmed or filled in first,
  * and whatever asked is where a rejection is shown.
+ *
+ * `words` is what this engine calls a table and its rows. Only the *wording* changes with it — every
+ * one of these calls the same bound method whatever the server is — but the wording is worth getting
+ * right: a warning about a foreign key is a warning about something a document store cannot have.
  */
-export function tableActions(target: TableTarget, deps: TableDeps): TableActions {
+export function tableActions(
+  target: TableTarget,
+  deps: TableDeps,
+  words: EngineWords = engineWords(''),
+): TableActions {
   const { profileId, namespace, table } = target
+  const lower = words.table.toLowerCase()
 
   // Every change is the same shape: run one statement, then re-read what it made stale. The
   // table named is the one whose shape is worth re-reading afterwards — a drop names none.
@@ -44,7 +54,7 @@ export function tableActions(target: TableTarget, deps: TableDeps): TableActions
     rename: () =>
       deps.ask({
         kind: 'prompt',
-        title: 'Rename Table',
+        title: `Rename ${words.table}`,
         label: 'New name',
         value: table,
         submitLabel: 'Rename',
@@ -55,8 +65,10 @@ export function tableActions(target: TableTarget, deps: TableDeps): TableActions
     empty: () =>
       deps.ask({
         kind: 'confirm',
-        title: 'Empty Table',
-        message: `Delete every row of ${table}? The table and its shape stay; the rows do not.`,
+        title: `Empty ${words.table}`,
+        message:
+          `Delete every ${words.row} of ${table}? The ${lower} and its indexes stay; ` +
+          `the ${words.rows} do not.`,
         submitLabel: 'Empty',
         danger: true,
         onSubmit: run((sessionId) => schema.emptyTable(sessionId, namespace, table)),
@@ -65,10 +77,11 @@ export function tableActions(target: TableTarget, deps: TableDeps): TableActions
     truncate: () =>
       deps.ask({
         kind: 'confirm',
-        title: 'Truncate Table',
+        title: `Truncate ${words.table}`,
         message:
-          `Truncate ${table}? Every row goes at once, which is faster than emptying it and ` +
-          `cannot be rolled back per row — and a table another table points at will refuse.`,
+          `Truncate ${table}? Every ${words.row} goes at once, which is faster than emptying it ` +
+          `and cannot be rolled back per ${words.row} — and a table another table points at ` +
+          `will refuse.`,
         submitLabel: 'Truncate',
         danger: true,
         onSubmit: run((sessionId) => schema.truncateTable(sessionId, namespace, table)),
@@ -77,8 +90,10 @@ export function tableActions(target: TableTarget, deps: TableDeps): TableActions
     remove: () =>
       deps.ask({
         kind: 'confirm',
-        title: 'Delete Table',
-        message: `Drop ${table}? The table, its rows and everything indexing them go with it.`,
+        title: `Delete ${words.table}`,
+        message:
+          `Drop ${table}? The ${lower}, its ${words.rows} and everything indexing them ` +
+          `go with it.`,
         submitLabel: 'Delete',
         danger: true,
         onSubmit: run((sessionId) => schema.dropTable(sessionId, namespace, table), ''),
