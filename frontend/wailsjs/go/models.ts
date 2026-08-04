@@ -42,6 +42,24 @@ export namespace app {
 	        this.primaryKey = source["primaryKey"];
 	    }
 	}
+	export class ColumnValuesInput {
+	    database: string;
+	    schema: string;
+	    table: string;
+	    column: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ColumnValuesInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.table = source["table"];
+	        this.column = source["column"];
+	    }
+	}
 	export class DatabaseOptions {
 	    owners: string[];
 	    templates: string[];
@@ -532,21 +550,45 @@ export namespace app {
 	}
 	
 	
-	export class TableFilterInput {
+	export class TableCriterionInput {
+	    kind: string;
 	    column: string;
 	    operator: string;
-	    value: string;
+	    values: string[];
+	    conjunction: string;
+	    children: TableCriterionInput[];
 	
 	    static createFrom(source: any = {}) {
-	        return new TableFilterInput(source);
+	        return new TableCriterionInput(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
 	        this.column = source["column"];
 	        this.operator = source["operator"];
-	        this.value = source["value"];
+	        this.values = source["values"];
+	        this.conjunction = source["conjunction"];
+	        this.children = this.convertValues(source["children"], TableCriterionInput);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class TableList {
 	    columns: TableColumn[];
@@ -601,8 +643,8 @@ export namespace app {
 	    runId: string;
 	    limit: number;
 	    offset: number;
-	    sort: TableSortInput;
-	    filters: TableFilterInput[];
+	    sort: TableSortInput[];
+	    filter: TableCriterionInput;
 	
 	    static createFrom(source: any = {}) {
 	        return new TablePageInput(source);
@@ -617,7 +659,7 @@ export namespace app {
 	        this.limit = source["limit"];
 	        this.offset = source["offset"];
 	        this.sort = this.convertValues(source["sort"], TableSortInput);
-	        this.filters = this.convertValues(source["filters"], TableFilterInput);
+	        this.filter = this.convertValues(source["filter"], TableCriterionInput);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

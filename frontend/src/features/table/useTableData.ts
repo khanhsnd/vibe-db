@@ -4,12 +4,9 @@ import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { ALL_ROWS } from '@/bridge/rows'
 import { onRowsStreamed, tables, type Cell, type TablePage } from '@/bridge/tables'
-import type { Filter } from '@/features/results/filter'
-import type { SortKey } from '@/features/results/resultSet'
+import { activeFilter, NO_FILTER, type Group } from '@/features/results/filter'
+import { NO_SORT, type SortKey } from '@/features/results/resultSet'
 import { useSettingsStore } from '@/stores/settings'
-
-const NO_SORT = { column: '', descending: false }
-const NO_FILTERS: Filter[] = []
 
 /** A read of every row, while it runs: what to stop, and how many rows have arrived so far. */
 export interface RowFetch {
@@ -33,8 +30,8 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
   const [page, setPage] = useState(0)
   // Read once: the preference is where a tab starts, not a limit that follows it around.
   const [limit, setLimit] = useState<number>(() => useSettingsStore.getState().settings.pageSize)
-  const [sort, setSort] = useState<SortKey | null>(null)
-  const [filters, setFilters] = useState<Filter[]>(NO_FILTERS)
+  const [sort, setSort] = useState<readonly SortKey[]>(NO_SORT)
+  const [criteria, setCriteria] = useState<Group>(NO_FILTER)
   const [nonce, setNonce] = useState(0)
   const [data, setData] = useState<TablePage | null>(null)
   const [loadedAt, setLoadedAt] = useState<number | null>(null)
@@ -71,8 +68,10 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
         table,
         limit,
         offset: limit === ALL_ROWS ? 0 : page * limit,
-        sort: sort ?? NO_SORT,
-        filters,
+        sort: [...sort],
+        // Only what actually narrows crosses the wire: an unticked condition and one still short
+        // of a value are the builder's business, not the server's.
+        filter: activeFilter(criteria),
       })
       .then((next) => {
         if (!active) return
@@ -115,7 +114,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
       // must not go on scanning a million rows and emitting them at a listener that has gone.
       if (streamed) void tables.stopRows(runId)
     }
-  }, [sessionId, database, schema, table, limit, page, sort, filters, nonce])
+  }, [sessionId, database, schema, table, limit, page, sort, criteria, nonce])
 
   const refresh = useCallback(() => setNonce((current) => current + 1), [])
 
@@ -127,14 +126,14 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
   }, [])
 
   /** A new order makes the page number meaningless, so the reader goes back to the first. */
-  const changeSort = useCallback((next: SortKey | null) => {
+  const changeSort = useCallback((next: SortKey[]) => {
     setSort(next)
     setPage(0)
   }, [])
 
   /** A narrower table has fewer pages, so the reader goes back to the first of them. */
-  const changeFilters = useCallback((next: Filter[]) => {
-    setFilters(next)
+  const changeCriteria = useCallback((next: Group) => {
+    setCriteria(next)
     setPage(0)
   }, [])
 
@@ -151,11 +150,11 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
     page,
     limit,
     sort,
-    filters,
+    criteria,
     goToPage,
     changeLimit,
     changeSort,
-    changeFilters,
+    changeCriteria,
     refresh,
     stopFetch,
   }

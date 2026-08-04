@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import type { ExportFormat } from '@/bridge/export'
 import { ExportMenu } from '@/features/results/ExportMenu'
+import { FilterSortButton } from '@/features/results/FilterSortButton'
 import { cn } from '@/lib/cn'
 import { Button } from '@/shared/ui/Button'
 
@@ -16,15 +17,27 @@ const ITEMS: ReadonlyArray<{ kind: PanelKind; label: string; icon: ReactNode }> 
 interface TableToolbarProps {
   active: ReadonlySet<PanelKind>
   onToggle: (kind: PanelKind) => void
+  /** Whether the Filter & Sort panel is showing, and how much it is holding — see the button. */
+  filterShown: boolean
+  filterCount: number
+  onFilterToggle: () => void
   /** Left out until there are rows to write, which is what keeps Export off an empty table. */
   onExport?: ((format: ExportFormat) => void) | undefined
 }
 
 /**
- * The one strip over a table's grid: the panels a reader can open on the left, and Export against
- * the right, where every grid keeps it. The grid draws no head strip of its own beneath this one.
+ * The one strip over a table's grid: the panels a reader can open on the left with Filter & Sort
+ * beside them, and Export against the right, where every grid keeps it. The grid draws no head
+ * strip of its own beneath this one — `headStrip={false}` is what says so.
  */
-export function TableToolbar({ active, onToggle, onExport }: TableToolbarProps) {
+export function TableToolbar({
+  active,
+  onToggle,
+  filterShown,
+  filterCount,
+  onFilterToggle,
+  onExport,
+}: TableToolbarProps) {
   return (
     <div
       role="toolbar"
@@ -42,6 +55,8 @@ export function TableToolbar({ active, onToggle, onExport }: TableToolbarProps) 
           {item.label}
         </Button>
       ))}
+
+      <FilterSortButton shown={filterShown} count={filterCount} onToggle={onFilterToggle} />
 
       <div className="min-w-2 flex-1" />
 

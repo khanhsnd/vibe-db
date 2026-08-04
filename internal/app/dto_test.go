@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
+	"github.com/khanhsnd/vibe-db/internal/driver"
 )
 
 func TestProfileInputEngineDecidesTheDefaultPort(t *testing.T) {
@@ -100,5 +101,71 @@ func TestTablePageInputClampsNegativeOffset(t *testing.T) {
 
 	if got.Offset != 0 {
 		t.Errorf("Offset = %d, want 0", got.Offset)
+	}
+}
+
+// The wire carries the condition tree flat, one struct standing for either kind of node, and this
+// is where it becomes the two types the driver switches on.
+func TestTableCriterionInputBecomesATree(t *testing.T) {
+	in := TableCriterionInput{
+		Kind:        criterionGroup,
+		Conjunction: "and",
+		Children: []TableCriterionInput{
+			{Kind: "condition", Column: "email", Operator: "contains", Values: []string{"shop"}},
+			{
+				Kind:        criterionGroup,
+				Conjunction: "or",
+				Children: []TableCriterionInput{
+					{Kind: "condition", Column: "age", Operator: "between", Values: []string{"1", "5"}},
+				},
+			},
+		},
+	}
+
+	root := in.toDriverGroup()
+	if root.Conjunction != driver.ConjunctionAnd || len(root.Children) != 2 {
+		t.Fatalf("root = %+v", root)
+	}
+
+	first, ok := root.Children[0].(driver.TableFilter)
+	if !ok || first.Op != driver.FilterContains || len(first.Values) != 1 {
+		t.Errorf("first child = %+v", root.Children[0])
+	}
+
+	nested, ok := root.Children[1].(driver.TableGroup)
+	if !ok || nested.Conjunction != driver.ConjunctionOr || len(nested.Children) != 1 {
+		t.Fatalf("second child = %+v", root.Children[1])
+	}
+
+	inner, ok := nested.Children[0].(driver.TableFilter)
+	if !ok || inner.Op != driver.FilterBetween || len(inner.Values) != 2 {
+		t.Errorf("nested child = %+v", nested.Children[0])
+	}
+}
+
+// A read that carried no filter carries the zero group, which the driver reads as narrowing
+// nothing — so a wire node this side cannot name must come out that way rather than as a condition
+// on no column.
+func TestTablePageInputWithoutAFilterNarrowsNothing(t *testing.T) {
+	got := TablePageInput{Table: "users", Limit: 100}.toDriver()
+
+	if len(got.Filter.Children) != 0 {
+		t.Errorf("Filter = %+v, want the group of nothing", got.Filter)
+	}
+}
+
+func TestTablePageInputKeepsEverySortKeyInOrder(t *testing.T) {
+	got := TablePageInput{
+		Table: "users",
+		Limit: 100,
+		Sort: []TableSortInput{
+			{Column: "name", Descending: true},
+			{Column: "id"},
+		},
+	}.toDriver()
+
+	want := []driver.TableSort{{Column: "name", Descending: true}, {Column: "id"}}
+	if len(got.Sort) != len(want) || got.Sort[0] != want[0] || got.Sort[1] != want[1] {
+		t.Errorf("Sort = %+v, want %+v", got.Sort, want)
 	}
 }

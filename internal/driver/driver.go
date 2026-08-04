@@ -31,7 +31,7 @@ type Namespace struct {
 	Schema   string
 }
 
-// TableSort orders a table read by one of its columns. An empty Column leaves the primary
+// TableSort orders a table read by one of its columns. A read carrying none leaves the primary
 // key in force, which is what a page is cut from when the reader has chosen nothing.
 type TableSort struct {
 	Column     string
@@ -66,20 +66,65 @@ const (
 	FilterGreaterEqual TableFilterOp = "ge"
 	FilterLess         TableFilterOp = "lt"
 	FilterLessEqual    TableFilterOp = "le"
-	// FilterContains matches a value anywhere in the column, read as text whatever the column's
-	// own type is, so one condition serves a name and a number alike.
-	FilterContains TableFilterOp = "contains"
+
+	// The six text matches read the column as text whatever its own type is, so one condition
+	// serves a name and a number alike, and a wildcard the reader typed is their own.
+	FilterContains    TableFilterOp = "contains"
+	FilterNotContains TableFilterOp = "notcontains"
+	FilterBegins      TableFilterOp = "begins"
+	FilterNotBegins   TableFilterOp = "notbegins"
+	FilterEnds        TableFilterOp = "ends"
+	FilterNotEnds     TableFilterOp = "notends"
+
+	// The four that take no value at all. Empty is the empty string, which is a value a column
+	// holds; Null is the absence of one, and the two are not the same question.
 	FilterNull     TableFilterOp = "isnull"
 	FilterNotNull  TableFilterOp = "notnull"
+	FilterEmpty    TableFilterOp = "empty"
+	FilterNotEmpty TableFilterOp = "notempty"
+
+	// Between takes two values and the list operators take any number above none.
+	FilterBetween    TableFilterOp = "between"
+	FilterNotBetween TableFilterOp = "notbetween"
+	FilterInList     TableFilterOp = "inlist"
+	FilterNotInList  TableFilterOp = "notinlist"
 )
 
-// TableFilter narrows a table read to the rows one column satisfies. Value is the reader's own
-// text, and the two operators that take none ignore it.
+// TableConjunction joins the children of a group. There are two of them, and one this side does
+// not know is refused rather than guessed at.
+type TableConjunction string
+
+const (
+	ConjunctionAnd TableConjunction = "and"
+	ConjunctionOr  TableConjunction = "or"
+)
+
+// TableCriterion is one node of the tree a table read is narrowed by: either a TableFilter on one
+// column or a TableGroup of further nodes. A tree rather than a list because a reader who means
+// `a AND (b OR c)` cannot say it in a list, and those parentheses are the whole point of a group.
+type TableCriterion interface {
+	criterion()
+}
+
+// TableFilter narrows a table read to the rows one column satisfies. Values is what the operator
+// compares against, and how many it takes is the operator's own business: none for IS NULL, one
+// for most, two for BETWEEN, and any number for IN.
 type TableFilter struct {
 	Column string
 	Op     TableFilterOp
-	Value  string
+	Values []string
 }
+
+func (TableFilter) criterion() {}
+
+// TableGroup is the parentheses: its children joined by one conjunction. A group of nothing
+// narrows nothing, which is what an unfiltered read carries.
+type TableGroup struct {
+	Conjunction TableConjunction
+	Children    []TableCriterion
+}
+
+func (TableGroup) criterion() {}
 
 // TablePage is one window onto a table's rows. A Limit of zero or less reads every row and
 // makes Offset meaningless, the same convention as Query.MaxRows.
@@ -87,14 +132,24 @@ type TablePage struct {
 	Namespace
 	Table string
 	Limit int
-	// Filters narrow the read, and narrow its total with it: every one of them holds, so a page
-	// is cut from the rows that satisfy all rather than from the table.
-	Filters []TableFilter
-	Offset  int
-	Sort    TableSort
+	// Filter narrows the read, and narrows its total with it: a page is cut from the rows the
+	// tree admits rather than from the table.
+	Filter TableGroup
+	Offset int
+	// Sort orders the read, the first key deciding and the rest breaking its ties.
+	Sort []TableSort
 	// Stream, when set, takes the rows as they are read and the read then answers with none of
 	// them. A page that leaves it nil is answered whole, which is what every bounded read is.
 	Stream *RowStream
+}
+
+// ColumnPick names the column a filter's value is picked from, rather than typed into. Limit caps
+// the answer, because a column of a million rows is not a list anybody scrolls.
+type ColumnPick struct {
+	Namespace
+	Table  string
+	Column string
+	Limit  int
 }
 
 // TableSchema is the completion-sized view of a table: names only, no types, because
@@ -359,6 +414,10 @@ type Session interface {
 	TableList(ctx context.Context, ns Namespace) (TableList, error)
 	TableSchemas(ctx context.Context, ns Namespace) ([]TableSchema, error)
 	TableRows(ctx context.Context, page TablePage) (TableRows, error)
+	// ColumnValues lists the values one column actually holds, for a reader picking a filter's
+	// value rather than typing it. Deduplicated, ordered and capped, and without NULL — that is
+	// what the IS NULL operator is for.
+	ColumnValues(ctx context.Context, pick ColumnPick) ([]string, error)
 	UpdateCell(ctx context.Context, edit CellEdit) error
 	InsertRow(ctx context.Context, insert RowInsert) error
 	DeleteRow(ctx context.Context, removal RowDelete) error

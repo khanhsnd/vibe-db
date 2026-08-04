@@ -185,6 +185,18 @@ func (m *Manager) TableRows(
 	return s.driverSession.TableRows(ctx, page)
 }
 
+func (m *Manager) ColumnValues(
+	ctx context.Context,
+	id string,
+	pick driver.ColumnPick,
+) ([]string, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return s.driverSession.ColumnValues(ctx, pick)
+}
+
 func (m *Manager) Query(
 	ctx context.Context,
 	id string,

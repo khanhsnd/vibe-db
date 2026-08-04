@@ -29,10 +29,11 @@ import { ICON } from '@/shared/ui/menuIcons'
 import { CellChoice } from './CellChoice'
 import { CellPicker } from './CellPicker'
 import { ExportMenu } from './ExportMenu'
-import { FilterStrip } from './FilterStrip'
+import { FilterSortButton } from './FilterSortButton'
+import { FilterSortPanel } from './FilterSortPanel'
 import { cellMenuItems } from './cellMenu'
 import { ColumnTypeIcon, isNumeric, temporalPicker, type TemporalPicker } from './columnType'
-import type { GridFiltering } from './filter'
+import { countConditions, type GridFiltering } from './filter'
 import { gridFont, headerFont, widestText } from './measureText'
 import {
   boundsOf,
@@ -45,6 +46,7 @@ import {
   oneRange,
   originOf,
   parseCell,
+  NO_SORT,
   rowRange,
   toTSV,
   type Cell,
@@ -125,12 +127,13 @@ interface ResultGridProps {
    * reason `isDirty` is one: a call site that pages answers in its own coordinates. */
   isDeleted?: (row: number) => boolean
   /**
-   * The column the rows arrived in order of, which the header marks. Reordering is the call
-   * site's — a server-paged surface sorts in its statement, an in-memory one sorts its rows —
-   * so the sort items appear on the header menu only where `onSortChange` was passed.
+   * The keys the rows arrived in order of, which the header marks — the first deciding and the
+   * rest breaking its ties, so a header carrying the second key says so with its place. Reordering
+   * is the call site's — a server-paged surface sorts in its statement, an in-memory one sorts its
+   * rows — so the sort items appear on the header menu only where `onSortChange` was passed.
    */
-  sort?: SortKey | null
-  onSortChange?: (sort: SortKey | null) => void
+  sort?: readonly SortKey[]
+  onSortChange?: (sort: SortKey[]) => void
   /**
    * What a double-click on a row opens, where the rows stand for something that can be opened —
    * a table of the table list. Only a read-only grid is offered it: in a writable one a click is
@@ -148,11 +151,12 @@ interface ResultGridProps {
    */
   onExport?: ((format: ExportFormat) => void) | undefined
   /**
-   * Whether the grid draws its own head strip for Export. A surface with a toolbar of its own
-   * puts `ExportMenu` there and passes `false`, so one table never carries two strips — while the
-   * cell menu's **Save Data As** still runs `onExport`, wherever the button lives.
+   * Whether the grid draws its own head strip — the **Filter & Sort** button on the left, Export
+   * against the right. A surface with a toolbar of its own puts both there and passes `false`, so
+   * one table never carries two strips, while the cell menu still reaches the same handlers
+   * wherever the buttons live.
    */
-  exportStrip?: boolean
+  headStrip?: boolean
   /**
    * Opens the surface's own cell editor on a cell — the panel under `TableDataView`. A surface
    * without one leaves this out and the cell menu then offers no such item.
@@ -172,6 +176,10 @@ interface ResultGridProps {
   filtering?: GridFiltering | undefined
 }
 
+/** The head strip has nothing to say for a grid with neither of the two things it carries. */
+const hasHeadStrip = (props: Pick<ResultGridProps, 'onExport' | 'filtering'>) =>
+  props.onExport !== undefined || props.filtering !== undefined
+
 export function ResultGrid({
   result,
   selection,
@@ -179,12 +187,12 @@ export function ResultGrid({
   onEditCell,
   isDirty = NOTHING_DIRTY,
   isDeleted = NOTHING_DELETED,
-  sort = null,
+  sort = NO_SORT,
   onSortChange,
   onActivateRow,
   columnMenuItems,
   onExport,
-  exportStrip = true,
+  headStrip = true,
   onEditInPanel,
   onDeleteRows,
   onRefresh,
@@ -296,23 +304,25 @@ export function ResultGrid({
     const column = result.columns[index]
     if (!column) return []
 
+    // A header sorts by its own column and nothing else: one click means one key, and the panel
+    // is where a second is added under the first.
     const sorting: MenuItem[] = onSortChange
       ? [
           {
             label: 'Sort Ascending',
             icon: ICON.sortAscending,
-            onSelect: () => onSortChange({ column: column.name, descending: false }),
+            onSelect: () => onSortChange([{ column: column.name, descending: false }]),
           },
           {
             label: 'Sort Descending',
             icon: ICON.sortDescending,
-            onSelect: () => onSortChange({ column: column.name, descending: true }),
+            onSelect: () => onSortChange([{ column: column.name, descending: true }]),
           },
           {
             label: 'Remove All Sorts',
             icon: ICON.sortNone,
-            disabled: sort === null,
-            onSelect: () => onSortChange(null),
+            disabled: sort.length === 0,
+            onSelect: () => onSortChange([]),
           },
         ]
       : []
@@ -577,10 +587,17 @@ export function ResultGrid({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {onExport && exportStrip ? <ExportStrip onExport={onExport} /> : null}
+      {headStrip && hasHeadStrip({ onExport, filtering }) ? (
+        <HeadStrip filtering={filtering} sort={sort} onExport={onExport} />
+      ) : null}
 
       {filtering?.shown ? (
-        <FilterStrip filtering={filtering} sort={sort} onSortChange={onSortChange} />
+        <FilterSortPanel
+          columns={result.columns}
+          filtering={filtering}
+          sort={sort}
+          onSortChange={onSortChange}
+        />
       ) : null}
 
       <div
@@ -710,18 +727,38 @@ export function ResultGrid({
 }
 
 /**
- * The strip over the header, where the grid is acted on whole rather than row by row. It sits
- * outside the scroller, so it stays where it is while the columns scroll under it, and it carries
- * the header's own surface, the two together reading as the top of the table. A surface with a
- * toolbar of its own carries Export there instead, and the grid then draws no strip at all.
+ * The strip over the header, where the grid is acted on whole rather than row by row: **Filter &
+ * Sort** on the left, where a reader looks for what narrows the table, and **Export** against the
+ * right, where they look for what to do with it. It sits outside the scroller, so it stays where it
+ * is while the columns scroll under it, and it carries the header's own surface, the two together
+ * reading as the top of the table. A surface with a toolbar of its own carries both buttons there
+ * instead, and the grid then draws no strip at all.
  */
-function ExportStrip({ onExport }: { onExport: (format: ExportFormat) => void }) {
+function HeadStrip({
+  filtering,
+  sort,
+  onExport,
+}: {
+  filtering: GridFiltering | undefined
+  sort: readonly SortKey[]
+  onExport: ((format: ExportFormat) => void) | undefined
+}) {
   return (
     <div
       role="toolbar"
-      className="flex h-8 shrink-0 items-center justify-end border-b border-line bg-bar px-1.5"
+      className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-bar px-1.5"
     >
-      <ExportMenu onExport={onExport} />
+      {filtering ? (
+        <FilterSortButton
+          shown={filtering.shown}
+          count={countConditions(filtering.criteria) + sort.length}
+          onToggle={() => filtering.onShownChange(!filtering.shown)}
+        />
+      ) : null}
+
+      <div className="min-w-2 flex-1" />
+
+      {onExport ? <ExportMenu onExport={onExport} /> : null}
     </div>
   )
 }
@@ -790,7 +827,7 @@ interface HeaderRowProps {
   columns: GridData['columns']
   widths: number[]
   bounds: CellBounds[]
-  sort: SortKey | null
+  sort: readonly SortKey[]
   onResize: (name: string, width: number) => void
   onFit: (index: number) => void
   onSelectColumn: (index: number) => void
@@ -816,7 +853,10 @@ function HeaderRow({
 
       {columns.map((column, i) => {
         const active = columnTouched(bounds, i)
-        const sorted = sort?.column === column.name ? sort : null
+        // Which key this column is, so a header under the *second* key says so rather than
+        // claiming the order for itself.
+        const place = sort.findIndex((key) => key.column === column.name)
+        const sorted = sort[place]
 
         return (
           <ContextMenu key={i} items={menuFor(i)}>
@@ -834,7 +874,12 @@ function HeaderRow({
                 <span className="min-w-0 truncate text-base font-bold tracking-wide text-fg">
                   {column.name}
                 </span>
-                {sorted ? <SortMark descending={sorted.descending} /> : null}
+                {sorted ? (
+                  <SortMark
+                    descending={sorted.descending}
+                    place={sort.length > 1 ? place + 1 : 0}
+                  />
+                ) : null}
               </span>
               <span className="flex items-center gap-1 text-2xs text-muted">
                 <ColumnTypeIcon type={column.type} />
@@ -880,9 +925,16 @@ function openColumnMenu(event: ReactMouseEvent<HTMLButtonElement>) {
   )
 }
 
-function SortMark({ descending }: { descending: boolean }) {
+/** Which way the column runs, and — where a second key is in force — which key this one is. */
+function SortMark({ descending, place }: { descending: boolean; place: number }) {
   const Icon = descending ? ArrowDownNarrowWide : ArrowUpNarrowWide
-  return <Icon size={12} className="shrink-0 text-accent" />
+
+  return (
+    <span className="flex shrink-0 items-center text-accent">
+      <Icon size={12} />
+      {place > 0 ? <span className="font-mono text-2xs">{place}</span> : null}
+    </span>
+  )
 }
 
 interface ResizeHandleProps {

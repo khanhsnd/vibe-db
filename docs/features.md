@@ -230,8 +230,8 @@ from `shared/ui/Loading` — because a grid with no columns yet is a blank pane 
 size can take seconds to answer. Only the *first* read gets it: once rows are on screen a re-read
 leaves them there and the pager alone says it is working, which is what keeps a page turn from
 blinking. A tab loads 100 rows per page by default, ordered by primary key so paging is stable —
-until a header's `⋮` menu sorts it by a column of its own, which travels into the read's `ORDER BY`
-and therefore orders the whole table rather than the page on screen.
+until a header's `⋮` menu, or the Filter & Sort panel, gives it keys of its own; those travel into the
+read's `ORDER BY` and therefore order the whole table rather than the page on screen.
 **Paging lives on the right of the bar under the grid** — first, back, the page typed into a box,
 forward, last — with a **gear** beside it that opens `Limit records` and the count that sizes a page,
 and can lift the bound entirely; see [the row limit](#the-row-limit). **Under that bar is the status
@@ -239,7 +239,8 @@ line**: the read that produced the rows with a copy beside it, where the reader 
 returned, and how long ago it landed. The left of the control bar is where rows are added, deleted,
 applied and discarded: it is the same `GridFooter` every grid has, and
 [grid.md](grid.md) specifies both it and the line under it. Above the grid is one toolbar: **Export** against its right edge,
-and on its left two independent toggles, since they occupy different edges:
+**Filter & Sort** on the left of it — see [filtering and sorting](#filtering-and-sorting) — and before
+that two independent toggles, since they occupy different edges:
 
 - **`Cell Editor`** opens a panel under the grid for the selected cell. Discard reverts the draft and
   Apply stages the value on the cell, exactly as opening it in the grid does — the footer's
@@ -310,9 +311,10 @@ the server rejects.
   limit. Two things follow from the replay: a statement
   with no `ORDER BY` may reshuffle what lands on a page, and the reader keeps their page number
   across a read of the same statement — only a different statement sends them back to page one.
-- **A header's `⋮` menu sorts the result in memory**, since there is no statement to re-order: it
-  reaches the rows fetched so far and no further, so on a truncated read it sorts the prefix rather
-  than the table. Fetching more re-sorts what arrives. A different statement drops the sort.
+- **A header's `⋮` menu, and the Filter & Sort panel, sort the result in memory**, since there is no
+  statement to re-order: they reach the rows fetched so far and no further, so on a truncated read the
+  prefix is sorted rather than the table. Fetching more re-sorts what arrives. A different statement
+  drops the sort.
 - **Errors surface in the output panel below the editor**, with the code, the server's own wording
   and the engine's error code, never as a dialog. A cancel is reported as `QUERY_CANCELLED`, not as
   a failure.
@@ -427,35 +429,58 @@ its right — the qualified table, or why the result is read-only:
 - **`Refresh` and `Apply` replay the statement that produced the rows**, not whatever the editor
   holds now, so editing the SQL after a run cannot make Apply execute something else.
 
-## Filtering and sorting from a cell
+## Filtering and sorting
 
-**Right-clicking a cell is where a grid is acted on.** The menu is one object — [grid.md](grid.md)
-lists every item — and two of its groups are worth knowing outside the grid:
+There are **two ways in**, and they hold the same conditions:
 
-- **Filter ▸** offers `=`, `≠`, `>`, `≥`, `<`, `≤`, `contains`, `is NULL` and `is not NULL` against
-  the value under the pointer, so a condition is *picked* and never typed twice. Each one adds to the
-  conditions already in force, and every one of them holds at once. **Show/Hide Filter & Sort** draws
-  the strip over the header that lists them, a chip apiece, each dropped by its own ✕;
-  **Remove All Filters & Sorts** clears the lot, the sort included. Hiding the strip does not widen
-  the grid — the conditions hold either way.
-- **Where the filtering happens depends on where the rows come from**, exactly as with the sort. A
-  **table** tab filters *on the server*: the conditions travel in `TablePageRequest`, become the
-  read's `WHERE`, and the **total is counted through them too**, so the pager walks the pages that
-  are actually there and the status line's statement shows the clause that ran. A **query result**
-  filters the rows it already holds, since it has no statement of its own to narrow, and so a filter
-  there reaches only what was fetched — the same bound its in-memory sort has. A draft row is never
-  filtered away; it is a row still being filled in.
+- **The Filter & Sort button**, over every grid — its own head strip on a query result, the table
+  view's toolbar beside `Cell Editor` and `Column`. It opens `FilterSortPanel`, which is where a
+  condition is *built*: a tick box, a column, an operator and a value, each of the three parts
+  opening the list of what it may be. `+` adds a condition beside the row and `()+` adds a **group**,
+  which is parentheses joining its children by `and` or by `or` — the word between the rows is a
+  button that flips the whole group, so `a AND (b OR c)` is sayable and not merely wishable.
+  **Sort By** under it is a list of columns and directions, the first deciding and the rest breaking
+  its ties. Nothing narrows anything until **Apply Filter & Sort**; the panel says **Criteria
+  Edited** while the draft differs from what is in force. The whole of it is in
+  [grid.md](grid.md#the-filter--sort-panel).
+- **Right-clicking a cell**, where a condition is *picked* rather than built. The menu is one object —
+  [grid.md](grid.md) lists every item — and **Filter ▸** offers every operator against the value under
+  the pointer, so a condition read off a cell is never typed twice; it applies **at once**, having
+  been picked whole. **Show/Hide Filter & Sort** opens the panel, and **Remove All Filters & Sorts**
+  clears the lot, the sort included. Hiding the panel does not widen the grid — the conditions hold
+  either way, which is what the count on the button is for.
+
+**Twenty operators**: `=`, `≠`, `<`, `≤`, `>`, `≥`, `contains`, `does not contain`, `begins with`,
+`does not begin with`, `ends with`, `does not end with`, `is NULL`, `is not NULL`, `is empty`,
+`is not empty`, `is between`, `is not between`, `is in list`, `is not in list`. How many values one
+takes is its own business — none, one, two, or any number — and a condition short of what its
+operator needs narrows nothing until it is filled in. `is empty` asks about the empty string and
+`is NULL` about the absence of a value; they are different questions.
+
+**A value is picked from the column's own values.** Clicking the value part opens a list of what the
+column actually holds — `LoadColumnValues`, a `SELECT DISTINCT … ORDER BY 1 LIMIT 200` — with a box
+beside it for a value the list has not got, and a search over the list. NULL is not offered there:
+`is NULL` is the way to it.
+
+**Where the filtering happens depends on where the rows come from**, exactly as with the sort. A
+**table** tab filters *on the server*: the tree travels in `TablePageRequest`, becomes the read's
+`WHERE`, and the **total is counted through it too**, so the pager walks the pages that are actually
+there and the status line's statement shows the clause that ran. A **query result** filters the rows
+it already holds, since it has no statement of its own to narrow, and so a filter there reaches only
+what was fetched — the same bound its in-memory sort has. A draft row is never filtered away; it is
+a row still being filled in.
 
 The operator crosses the wire as a **token** (`gt`, `contains`, …) and is spelled into SQL by the
-driver, so nothing a reader typed arrives as an operator. The *value* is written into the statement
-as a string literal rather than bound, for the same reason the `LIMIT` is: one string is then both
+driver, so nothing a reader typed arrives as an operator; a conjunction crosses as `and` or `or` and
+nothing else. The *values* are written into the statement as string literals rather than bound, for
+the same reason the `LIMIT` is: one string is then both
 what ran and what the status line shows and copies — a statement carrying `?` is not one a reader
 could paste into an editor. `sqlkit.Dialect.QuoteString` is what stands between the text and the
 statement, and both engines read a string literal back into a column of any type. Two smaller
-consequences: `contains` compares the column **as text** (`CAST(… AS CHAR)` / `AS TEXT`), so it works
-on a number or a date as well as a name, and a `%` the reader typed is their own wildcard. In memory
-`contains` ignores case; on the server the collation decides, which is MySQL ignoring it and
-PostgreSQL not.
+consequences: the six text matches compare the column **as text** (`CAST(… AS CHAR)` / `AS TEXT`), so
+they work on a number or a date as well as a name, and a `%` the reader typed is their own wildcard.
+In memory those matches ignore case; on the server the collation decides, which is MySQL ignoring it
+and PostgreSQL not.
 
 ## Exporting a grid
 

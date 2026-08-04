@@ -48,6 +48,8 @@ export function ListProfiles():Promise<Array<app.Profile>>;
 
 export function ListSchemas(arg1:string,arg2:string):Promise<Array<string>>;
 
+export function LoadColumnValues(arg1:string,arg2:app.ColumnValuesInput):Promise<Array<string>>;
+
 export function LoadDatabaseOptions(arg1:string):Promise<app.DatabaseOptions>;
 
 export function LoadObjects(arg1:string,arg2:app.Namespace):Promise<app.Objects>;

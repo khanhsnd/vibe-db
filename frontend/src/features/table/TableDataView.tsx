@@ -2,11 +2,11 @@ import { useMemo, useState } from 'react'
 
 import type { Namespace } from '@/bridge/connections'
 import { rowExport, type ExportFormat } from '@/bridge/export'
-import type { TablePage } from '@/bridge/tables'
+import { tables, type TablePage } from '@/bridge/tables'
 import { GridFooter } from '@/features/results/GridFooter'
 import { GridPager } from '@/features/results/GridPager'
 import { GridStatus } from '@/features/results/GridStatus'
-import type { Filter } from '@/features/results/filter'
+import { countConditions, type Group } from '@/features/results/filter'
 import { pageCount } from '@/features/results/paging'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import {
@@ -48,11 +48,11 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
     page,
     limit,
     sort,
-    filters,
+    criteria,
     goToPage,
     changeLimit,
     changeSort,
-    changeFilters,
+    changeCriteria,
     refresh,
     stopFetch,
   } = useTableData(sessionId, namespace, table)
@@ -143,20 +143,35 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
     changeLimit(next)
   }
 
-  const changeOrder = (next: SortKey | null) => {
+  const changeOrder = (next: SortKey[]) => {
     setSelection(null)
     changeSort(next)
   }
 
   /**
    * The conditions travel into the read's own `WHERE`, so a filter narrows the whole table
-   * rather than the page in front — and the strip that lists them opens with the first one.
+   * rather than the page in front — and the panel that spells them opens with the first one.
    */
-  const changeConditions = (next: Filter[]) => {
+  const changeConditions = (next: Group) => {
     setSelection(null)
-    setFilterShown(next.length > 0 || filterShown)
-    changeFilters(next)
+    setFilterShown(next.children.length > 0 || filterShown)
+    changeCriteria(next)
   }
+
+  /**
+   * The values a column holds, for the filter builder's picker. Held steady across renders,
+   * because the picker reads it once per column and one rebuilt every render would never stop.
+   */
+  const suggest = useMemo(
+    () => (column: string) =>
+      tables.columnValues(sessionId, {
+        database: namespace.database,
+        schema: namespace.schema,
+        table,
+        column,
+      }),
+    [sessionId, namespace.database, namespace.schema, table],
+  )
 
   /** The panel edits the focused cell, so the menu's own cell becomes the selection first. */
   const editInPanel = (ref: CellRef) => {
@@ -183,6 +198,9 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
       <TableToolbar
         active={panels}
         onToggle={togglePanel}
+        filterShown={filterShown}
+        filterCount={countConditions(criteria) + sort.length}
+        onFilterToggle={() => setFilterShown(!filterShown)}
         onExport={data !== null ? exportRows : undefined}
       />
 
@@ -223,18 +241,19 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
               isDeleted={(row) => edits.deleted.has(row)}
               sort={sort}
               onSortChange={changeOrder}
-              // Export lives in this surface's own toolbar, so the grid draws no strip of its
-              // own — but the cell menu's Save Data As still writes the same rows.
+              // Export and Filter & Sort live in this surface's own toolbar, so the grid draws no
+              // strip of its own — but the cell menu still reaches the same handlers.
               onExport={exportRows}
-              exportStrip={false}
+              headStrip={false}
               onEditInPanel={editInPanel}
               onDeleteRows={editable ? (rows) => edits.deleteRows(rows) : undefined}
               onRefresh={refresh}
               filtering={{
-                filters,
+                criteria,
                 shown: filterShown,
                 onShownChange: setFilterShown,
                 onChange: changeConditions,
+                suggest,
               }}
               columnMenuItems={(column) => [
                 {

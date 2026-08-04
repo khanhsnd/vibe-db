@@ -212,23 +212,43 @@ func MergeSchema(result, stored []driver.Column, keys []string) bool {
 	return true
 }
 
-// OrderBy renders the ORDER BY clause of a table read, the sort the reader chose taking
-// precedence over the primary key that otherwise makes a page stable. A name the table does
-// not carry is dropped rather than quoted in, so no caller can write the clause itself.
-func (d Dialect) OrderBy(sort driver.TableSort, columns []driver.Column) string {
-	if named(columns, sort.Column) {
-		clause := " ORDER BY " + d.QuoteIdent(sort.Column)
-		if sort.Descending {
-			return clause + " DESC"
+// OrderBy renders the ORDER BY clause of a table read: the keys the reader chose, in the order
+// they were chosen, so the first decides and the rest break its ties. They take precedence over
+// the primary key that otherwise makes a page stable, which is what a read carrying no key of its
+// own falls back to. A name the table does not carry is dropped rather than quoted in, so no
+// caller can write the clause itself.
+func (d Dialect) OrderBy(sort []driver.TableSort, columns []driver.Column) string {
+	keys := make([]string, 0, len(sort))
+	for _, one := range sort {
+		if !named(columns, one.Column) {
+			continue
 		}
-		return clause
+		key := d.QuoteIdent(one.Column)
+		if one.Descending {
+			key += " DESC"
+		}
+		keys = append(keys, key)
 	}
 
-	keys := PrimaryKeyNames(columns)
+	if len(keys) == 0 {
+		keys = d.QuoteAll(PrimaryKeyNames(columns))
+	}
 	if len(keys) == 0 {
 		return ""
 	}
-	return " ORDER BY " + strings.Join(d.QuoteAll(keys), ", ")
+	return " ORDER BY " + strings.Join(keys, ", ")
+}
+
+// FirstColumn flattens a one-column read into the values it returned, dropping a NULL: every read
+// that uses this asks for values a reader picks from, and the absence of a value is not one.
+func FirstColumn(rows [][]*string) []string {
+	values := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if len(row) > 0 && row[0] != nil {
+			values = append(values, *row[0])
+		}
+	}
+	return values
 }
 
 func named(columns []driver.Column, name string) bool {

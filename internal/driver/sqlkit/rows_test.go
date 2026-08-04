@@ -52,19 +52,24 @@ func TestOrderBy(t *testing.T) {
 
 	tests := []struct {
 		name string
-		sort driver.TableSort
+		sort []driver.TableSort
 		want string
 	}{
-		{"no sort falls back to the primary key", driver.TableSort{}, " ORDER BY `id`"},
-		{"ascending", driver.TableSort{Column: "email"}, " ORDER BY `email`"},
+		{"no sort falls back to the primary key", nil, " ORDER BY `id`"},
+		{"ascending", []driver.TableSort{{Column: "email"}}, " ORDER BY `email`"},
 		{
 			"descending",
-			driver.TableSort{Column: "email", Descending: true},
+			[]driver.TableSort{{Column: "email", Descending: true}},
 			" ORDER BY `email` DESC",
 		},
 		{
+			"the first key decides and the rest break its ties",
+			[]driver.TableSort{{Column: "email", Descending: true}, {Column: "id"}},
+			" ORDER BY `email` DESC, `id`",
+		},
+		{
 			"a column the table has not got is dropped",
-			driver.TableSort{Column: "1; DROP TABLE users"},
+			[]driver.TableSort{{Column: "1; DROP TABLE users"}},
 			" ORDER BY `id`",
 		},
 	}
@@ -79,7 +84,7 @@ func TestOrderBy(t *testing.T) {
 }
 
 func TestOrderByWithoutPrimaryKeyOrSortIsEmpty(t *testing.T) {
-	got := MySQL.OrderBy(driver.TableSort{}, []driver.Column{{Name: "email"}})
+	got := MySQL.OrderBy(nil, []driver.Column{{Name: "email"}})
 
 	if got != "" {
 		t.Errorf("OrderBy = %q, want no clause", got)

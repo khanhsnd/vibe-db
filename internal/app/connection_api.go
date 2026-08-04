@@ -244,6 +244,25 @@ func (a *ConnectionAPI) LoadTableRows(sessionID string, page TablePageInput) (Ta
 	return toTableRowsDTO(rows, target), nil
 }
 
+// LoadColumnValues lists the values one column actually holds, which is what the filter builder
+// offers to pick from rather than making the reader type one. NULL is not among them: the
+// `is NULL` operator is how a reader reaches it, and a list cannot say the difference.
+func (a *ConnectionAPI) LoadColumnValues(sessionID string, in ColumnValuesInput) ([]string, error) {
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	values, err := a.sessions.ColumnValues(ctx, sessionID, driver.ColumnPick{
+		Namespace: in.Namespace.toDriver(),
+		Table:     in.Table,
+		Column:    in.Column,
+		Limit:     ColumnValueLimit,
+	})
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return values, nil
+}
+
 // StopTableRows stops the read with this id. An unknown id is ignored: the read may have
 // finished between the click and this call, the same contract QueryAPI.Cancel has.
 func (a *ConnectionAPI) StopTableRows(runID string) {

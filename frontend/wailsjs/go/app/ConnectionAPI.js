@@ -94,6 +94,10 @@ export function ListSchemas(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ListSchemas'](arg1, arg2);
 }
 
+export function LoadColumnValues(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['LoadColumnValues'](arg1, arg2);
+}
+
 export function LoadDatabaseOptions(arg1) {
   return window['go']['app']['ConnectionAPI']['LoadDatabaseOptions'](arg1);
 }

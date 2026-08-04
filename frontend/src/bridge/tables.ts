@@ -23,13 +23,18 @@ export interface TableSortRequest {
 }
 
 /**
- * One condition the read is narrowed by. `operator` is a token the server spells into SQL — see
- * `FilterOp`, which is the same list — so the shape here is `features/results/filter`'s `Filter`.
+ * One node of the tree the read is narrowed by: `kind` tells a condition from a group, and the
+ * fields belonging to the other kind go unread. `operator` is a token the server spells into SQL —
+ * see `FilterOp`, which is the same list — and this is `features/results/filter`'s own `Criterion`,
+ * which is why that module's tree crosses the wire as it stands.
  */
-export interface TableFilterRequest {
-  column: string
-  operator: string
-  value: string
+export interface TableCriterionRequest {
+  kind: string
+  column?: string
+  operator?: string
+  values?: string[]
+  conjunction?: string
+  children?: TableCriterionRequest[]
 }
 
 export interface TablePageRequest {
@@ -43,9 +48,18 @@ export interface TablePageRequest {
   table: string
   limit: number
   offset: number
-  sort: TableSortRequest
-  /** Every condition holds at once, and the total is counted through them as well. */
-  filters: TableFilterRequest[]
+  /** The keys hold in order: the first decides and the rest break its ties. */
+  sort: TableSortRequest[]
+  /** The root of the condition tree. The total is counted through it as well as the rows. */
+  filter: TableCriterionRequest
+}
+
+/** Which column a filter's values are picked from, rather than typed into. */
+export interface ColumnValuesRequest {
+  database: string
+  schema: string
+  table: string
+  column: string
 }
 
 /** A read that asked for `ALL_ROWS` answers with its columns and total, and no rows at all. */
@@ -151,6 +165,15 @@ export const tables = {
 
   /** Stops a read before it answers. An id the backend has forgotten is ignored. */
   stopRows: (runId: string): Promise<void> => call(() => api.StopTableRows(runId)),
+
+  /**
+   * The values one column holds, deduplicated, ordered and capped, for the filter builder's value
+   * picker. NULL is not among them: `is NULL` is how a reader reaches it.
+   */
+  columnValues: (sessionId: string, of: ColumnValuesRequest): Promise<string[]> =>
+    call(() =>
+      api.LoadColumnValues(sessionId, of as unknown as app.ColumnValuesInput),
+    ) as unknown as Promise<string[]>,
 
   loadList: (sessionId: string, ns: Namespace): Promise<TableList> =>
     call(() => api.LoadTableList(sessionId, ns)) as unknown as Promise<TableList>,

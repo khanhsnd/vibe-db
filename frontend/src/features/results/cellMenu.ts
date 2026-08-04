@@ -4,7 +4,15 @@ import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { ICON } from '@/shared/ui/menuIcons'
 
 import { COPY_FORMATS, copyAsText } from './copyAs'
-import { FILTER_OPS, operatorLabel, type Filter, type GridFiltering } from './filter'
+import {
+  arityOf,
+  FILTER_OPS,
+  NO_FILTER,
+  operatorLabel,
+  type Condition,
+  type FilterOp,
+  type GridFiltering,
+} from './filter'
 import {
   cellText,
   selectedCells,
@@ -35,11 +43,11 @@ export interface CellMenuContext {
   at: CellRef
   data: GridData
   selection: Selection
-  sort: SortKey | null
+  sort: readonly SortKey[]
   onEditCell?: ((ref: CellRef, value: Cell) => void) | undefined
   onEditInPanel?: ((ref: CellRef) => void) | undefined
   onDeleteRows?: ((rows: number[]) => void) | undefined
-  onSortChange?: ((sort: SortKey | null) => void) | undefined
+  onSortChange?: ((sort: SortKey[]) => void) | undefined
   onExport?: ((format: ExportFormat) => void) | undefined
   onRefresh?: (() => void) | undefined
   filtering?: GridFiltering | undefined
@@ -178,18 +186,18 @@ function narrowItems(context: CellMenuContext, target: Target): MenuItem[] {
             {
               label: 'Ascending',
               icon: ICON.sortAscending,
-              onSelect: () => onSortChange({ column: target.column, descending: false }),
+              onSelect: () => onSortChange([{ column: target.column, descending: false }]),
             },
             {
               label: 'Descending',
               icon: ICON.sortDescending,
-              onSelect: () => onSortChange({ column: target.column, descending: true }),
+              onSelect: () => onSortChange([{ column: target.column, descending: true }]),
             },
             {
               label: 'Remove Sort',
               icon: ICON.sortNone,
-              disabled: sort === null,
-              onSelect: () => onSortChange(null),
+              disabled: sort.length === 0,
+              onSelect: () => onSortChange([]),
             },
           ],
         },
@@ -197,6 +205,8 @@ function narrowItems(context: CellMenuContext, target: Target): MenuItem[] {
     : []
 
   if (!filtering) return sorting.map(afterSeparator)
+
+  const root = filtering.criteria
 
   return [
     afterSeparator({
@@ -207,19 +217,25 @@ function narrowItems(context: CellMenuContext, target: Target): MenuItem[] {
     {
       label: 'Filter',
       icon: ICON.filter,
+      // A condition picked here lands at the end of the root, joined by whatever the root joins
+      // by, and applies at once — it was picked whole, so there is nothing left to fill in.
       items: FILTER_OPS.map((one) => ({
         label: operatorLabel(one.operator, target.value),
-        onSelect: () => filtering.onChange([...filtering.filters, conditionOn(one.operator, target)]),
+        onSelect: () =>
+          filtering.onChange({
+            ...root,
+            children: [...root.children, conditionOn(one.operator, target)],
+          }),
       })),
     },
     ...sorting,
     {
       label: 'Remove All Filters & Sorts',
       icon: ICON.filterNone,
-      disabled: filtering.filters.length === 0 && sort === null,
+      disabled: root.children.length === 0 && sort.length === 0,
       onSelect: () => {
-        filtering.onChange([])
-        onSortChange?.(null)
+        filtering.onChange(NO_FILTER)
+        onSortChange?.([])
       },
     },
   ]
@@ -231,12 +247,20 @@ function refreshItem({ onRefresh }: CellMenuContext): MenuItem[] {
   return [{ label: 'Refresh', icon: ICON.refresh, separatorBefore: true, onSelect: onRefresh }]
 }
 
-/** A NULL cell filters against nothing: `(Null)` is the grid's word for it, not a value. */
-function conditionOn(operator: Filter['operator'], target: Target): Filter {
+/**
+ * A condition read off one cell. Only an operator taking a single value can be: a NULL cell
+ * compares against nothing — `(Null)` is the grid's word for it, not a value — and a range or a
+ * list cannot be read off one cell at all, so both open in the builder with the value unset.
+ */
+function conditionOn(operator: FilterOp, target: Target): Condition {
+  const one = arityOf(operator) === 1 && target.value !== null
+
   return {
+    kind: 'condition',
     column: target.column,
     operator,
-    value: target.value === null ? '' : cellText(target.value),
+    values: one ? [cellText(target.value)] : [],
+    enabled: true,
   }
 }
 

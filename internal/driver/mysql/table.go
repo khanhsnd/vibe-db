@@ -17,7 +17,7 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 		return driver.TableRows{}, err
 	}
 
-	where, err := dialect.Where(page.Filters, columns)
+	where, err := dialect.Where(page.Filter, columns)
 	if err != nil {
 		return driver.TableRows{}, err
 	}
@@ -45,6 +45,31 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 		Total:     total,
 		Statement: query,
 	}, nil
+}
+
+func (s *session) ColumnValues(ctx context.Context, pick driver.ColumnPick) ([]string, error) {
+	columns, err := s.columns(ctx, pick.Namespace, pick.Table)
+	if err != nil {
+		return nil, err
+	}
+
+	query, err := dialect.DistinctValues(
+		dialect.Qualify(pick.Database, pick.Table),
+		pick.Column,
+		columns,
+		pick.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// The statement's own LIMIT bounds the read, exactly as a page's does, so no cap is applied
+	// here and nothing is streamed: the answer is a list somebody scrolls.
+	result, err := sqlkit.Read(ctx, s.db, query, 0, nil)
+	if err != nil {
+		return nil, translateError(err)
+	}
+	return sqlkit.FirstColumn(result.Rows), nil
 }
 
 func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {

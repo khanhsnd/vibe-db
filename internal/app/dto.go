@@ -11,6 +11,11 @@ const (
 	DefaultPageSize  = 100
 	DefaultQueryRows = 1000
 
+	// ColumnValueLimit caps the values the filter builder offers to pick from. A column of a
+	// million rows is not a list anybody scrolls, and the box beside the list takes whatever the
+	// list does not hold.
+	ColumnValueLimit = 200
+
 	// AllRows asks for every row rather than a page or a capped read. Bounded reads are what
 	// keep the memory numbers honest, so lifting the bound is opt-in from a toolbar and never
 	// a default: a missing or nonsensical count still falls back to the default above, which
@@ -69,13 +74,25 @@ type TableSortInput struct {
 	Descending bool   `json:"descending"`
 }
 
-// TableFilterInput is one condition the reader put on a table read. Operator is a token from a
-// fixed list rather than the operator spelled out — see driver.TableFilterOp — and value is
-// ignored by the two operators that take none.
-type TableFilterInput struct {
-	Column   string `json:"column"`
-	Operator string `json:"operator"`
-	Value    string `json:"value"`
+// criterionGroup is the kind a TableCriterionInput carries when it is parentheses rather than a
+// condition. Anything else is read as a condition, which the driver then refuses if its operator
+// is one no engine knows — so one place says no rather than two.
+const criterionGroup = "group"
+
+// TableCriterionInput is one node of the tree the reader narrowed a read by, flattened for the
+// wire: kind says whether it is a condition on one column or a group of further nodes, and the
+// fields belonging to the other kind go unread. One struct rather than two because JSON carries
+// no union, and the frontend's own Criterion is this same shape.
+//
+// Operator is a token from a fixed list rather than the operator spelled out — see
+// driver.TableFilterOp — and how many values it takes is its own business.
+type TableCriterionInput struct {
+	Kind        string                `json:"kind"`
+	Column      string                `json:"column"`
+	Operator    string                `json:"operator"`
+	Values      []string              `json:"values"`
+	Conjunction string                `json:"conjunction"`
+	Children    []TableCriterionInput `json:"children"`
 }
 
 type TablePageInput struct {
@@ -84,11 +101,20 @@ type TablePageInput struct {
 	// RunID is minted by the caller so that a read can be stopped before it answers, and so the
 	// batches of a streamed read can be told from another tab's. An empty one asks for an
 	// ordinary read, bounded by a deadline and answered whole — see LoadTableRows.
-	RunID   string             `json:"runId"`
-	Limit   int                `json:"limit"`
-	Offset  int                `json:"offset"`
-	Sort    TableSortInput     `json:"sort"`
-	Filters []TableFilterInput `json:"filters"`
+	RunID  string           `json:"runId"`
+	Limit  int              `json:"limit"`
+	Offset int              `json:"offset"`
+	Sort   []TableSortInput `json:"sort"`
+	// Filter is the root of the condition tree, and is therefore always a group.
+	Filter TableCriterionInput `json:"filter"`
+}
+
+// ColumnValuesInput names the column a filter's value is picked from. The cap on the answer is
+// this side's rather than the caller's — see ColumnValueLimit.
+type ColumnValuesInput struct {
+	Namespace
+	Table  string `json:"table"`
+	Column string `json:"column"`
 }
 
 type TableColumn struct {
@@ -326,13 +352,9 @@ func toNamespaceDTO(ns driver.Namespace) Namespace {
 }
 
 func (in TablePageInput) toDriver() driver.TablePage {
-	filters := make([]driver.TableFilter, len(in.Filters))
-	for i, filter := range in.Filters {
-		filters[i] = driver.TableFilter{
-			Column: filter.Column,
-			Op:     driver.TableFilterOp(filter.Operator),
-			Value:  filter.Value,
-		}
+	sort := make([]driver.TableSort, len(in.Sort))
+	for i, key := range in.Sort {
+		sort[i] = driver.TableSort{Column: key.Column, Descending: key.Descending}
 	}
 
 	return driver.TablePage{
@@ -340,9 +362,37 @@ func (in TablePageInput) toDriver() driver.TablePage {
 		Table:     in.Table,
 		Limit:     driverRows(in.Limit, DefaultPageSize),
 		Offset:    max(in.Offset, 0),
-		Sort:      driver.TableSort{Column: in.Sort.Column, Descending: in.Sort.Descending},
-		Filters:   filters,
+		Sort:      sort,
+		Filter:    in.Filter.toDriverGroup(),
 	}
+}
+
+func (in TableCriterionInput) toDriver() driver.TableCriterion {
+	if in.Kind != criterionGroup {
+		return driver.TableFilter{
+			Column: in.Column,
+			Op:     driver.TableFilterOp(in.Operator),
+			Values: in.Values,
+		}
+	}
+
+	children := make([]driver.TableCriterion, len(in.Children))
+	for i, child := range in.Children {
+		children[i] = child.toDriver()
+	}
+
+	return driver.TableGroup{
+		Conjunction: driver.TableConjunction(in.Conjunction),
+		Children:    children,
+	}
+}
+
+// toDriverGroup reads the root of the tree, which is a group by construction — the frontend's own
+// root is one. A node arriving as anything else is read as the group of nothing, which narrows
+// nothing, exactly as a read that carried no filter at all does.
+func (in TableCriterionInput) toDriverGroup() driver.TableGroup {
+	group, _ := in.toDriver().(driver.TableGroup)
+	return group
 }
 
 func (in QueryInput) toDriver() driver.Query {

@@ -40,13 +40,17 @@ export function isToggle(editor: ColumnEditor | undefined): boolean {
 }
 
 /**
- * The one column a grid is sorted by, named rather than numbered: a call site that hides
- * columns reports positions of its own, and a server sorts by name.
+ * One column a grid is sorted by, named rather than numbered: a call site that hides columns
+ * reports positions of its own, and a server sorts by name. A grid carries a **list** of them,
+ * the first deciding and the rest breaking its ties.
  */
 export interface SortKey {
   column: string
   descending: boolean
 }
+
+/** The sort of a grid nobody has ordered, and a referentially stable default for one. */
+export const NO_SORT: SortKey[] = []
 
 export interface CellRef {
   row: number
@@ -104,33 +108,46 @@ export function parseCell(text: string): Cell {
 
 /**
  * The row numbers of `rows` in sorted order, for a surface whose rows are all in memory — a
- * server-paged one sorts in its `ORDER BY` instead. Rows from `pinned` on are the drafts a
- * grid appended: they are not on the server, so they stay where they were added, which is
- * what keeps a paste after an Add landing on the row that was added.
+ * server-paged one sorts in its `ORDER BY` instead. The keys hold in order, the first deciding
+ * and the rest breaking its ties, and one naming a column the result has not got is dropped.
+ * Rows from `pinned` on are the drafts a grid appended: they are not on the server, so they stay
+ * where they were added, which is what keeps a paste after an Add landing on the row that was
+ * added.
  *
- * NULL sorts last either way, rather than following any one engine's rule, because the two
- * engines disagree and a query result belongs to neither.
+ * NULL sorts last **whichever way a key runs**, rather than following any one engine's rule,
+ * because the two engines disagree and a query result belongs to neither.
  */
 export function sortedOrder(
   rows: Cell[][],
   columns: ResultColumn[],
-  sort: SortKey | null,
+  sort: readonly SortKey[],
   pinned = rows.length,
 ): number[] {
   const order = rows.map((_, index) => index)
-  const index = columns.findIndex((column) => column.name === sort?.column)
-  if (!sort || index < 0) return order
 
-  const numeric = isNumeric(columns[index]?.type ?? '')
-  const sign = sort.descending ? -1 : 1
+  const keys = sort.flatMap((key) => {
+    const index = columns.findIndex((column) => column.name === key.column)
+    if (index < 0) return []
+
+    return [{ index, numeric: isNumeric(columns[index]?.type ?? ''), sign: key.descending ? -1 : 1 }]
+  })
+  if (keys.length === 0) return order
 
   return [
     ...order.slice(0, pinned).sort((a, b) => {
-      const left = rows[a]?.[index] ?? null
-      const right = rows[b]?.[index] ?? null
+      for (const key of keys) {
+        const left = rows[a]?.[key.index] ?? null
+        const right = rows[b]?.[key.index] ?? null
 
-      if (left === null || right === null) return left === right ? 0 : left === null ? 1 : -1
-      return sign * (numeric ? Number(left) - Number(right) : left.localeCompare(right))
+        if (left === null || right === null) {
+          if (left === right) continue
+          return left === null ? 1 : -1
+        }
+
+        const outcome = key.numeric ? Number(left) - Number(right) : left.localeCompare(right)
+        if (outcome !== 0) return key.sign * outcome
+      }
+      return 0
     }),
     ...order.slice(pinned),
   ]
