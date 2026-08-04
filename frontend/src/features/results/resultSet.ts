@@ -101,6 +101,23 @@ export function cellText(value: Cell): string {
   return value === null ? NULL_TEXT : value
 }
 
+/**
+ * How much of a value is drawn where it is only being *shown*: a cell a couple of hundred pixels
+ * wide, or a menu label. Past this the reader sees nothing while the browser still shapes every
+ * character to find where the ellipsis goes, so two columns of JSON documents freeze the window on
+ * layout alone. A fit is capped far below this, so measuring a preview measures the same width.
+ */
+export const PREVIEW_LIMIT = 200
+
+/**
+ * As much of a cell as is worth drawing. What is *acted on* is never clipped — a copy, an export
+ * and a filter's own condition all carry the whole value, and **View Value** reads it whole.
+ */
+export function cellPreview(value: Cell, limit = PREVIEW_LIMIT): string {
+  const text = cellText(value)
+  return text.length <= limit ? text : `${text.slice(0, limit)}…`
+}
+
 /** The inverse of `cellText`, so what a copy wrote means the same when it is pasted back. */
 export function parseCell(text: string): Cell {
   return text === NULL_TEXT ? null : text

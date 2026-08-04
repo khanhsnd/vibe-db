@@ -11,9 +11,18 @@ interface CellEditorProps {
   busy: boolean
   /** Stages the value on the cell, exactly as the grid's own editor does. */
   onApply: (value: Cell) => void
+  /** The engine's own layout, for a value that is not JSON — see `ValueViewer.formatValue`. */
+  formatValue?: ((value: string) => Promise<string>) | undefined
 }
 
-export function CellEditor({ column, value, editable, busy, onApply }: CellEditorProps) {
+export function CellEditor({
+  column,
+  value,
+  editable,
+  busy,
+  onApply,
+  formatValue,
+}: CellEditorProps) {
   const [draft, setDraft] = useState(value ?? '')
   const [isNull, setIsNull] = useState(value === null)
 
@@ -71,6 +80,7 @@ export function CellEditor({ column, value, editable, busy, onApply }: CellEdito
         value={isNull ? null : draft}
         columnType={column.fullType || column.type}
         onChange={editable && !isNull ? setDraft : undefined}
+        formatValue={formatValue}
       />
 
       {editable ? null : (

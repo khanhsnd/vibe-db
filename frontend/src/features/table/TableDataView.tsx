@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 
 import type { Namespace } from '@/bridge/connections'
 import { rowExport, type ExportFormat } from '@/bridge/export'
+import { queries } from '@/bridge/query'
 import { tables, type TablePage } from '@/bridge/tables'
 import { GridFooter } from '@/features/results/GridFooter'
 import { GridPager } from '@/features/results/GridPager'
@@ -181,6 +182,17 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
     [sessionId, namespace.database, namespace.schema, table],
   )
 
+  /**
+   * Lays a value out for the value viewer — the engine's own `Format`, since a document store's
+   * documents are its own notation and not JSON. Held steady across renders for the reason
+   * `suggest` is: the viewer calls it from an effect, and one rebuilt every render would never
+   * settle. A SQL engine never types a column `object`, so on one it is simply never called.
+   */
+  const formatValue = useMemo(
+    () => (value: string) => queries.format(sessionId, value),
+    [sessionId],
+  )
+
   /** The panel edits the focused cell, so the menu's own cell becomes the selection first. */
   const editInPanel = (ref: CellRef) => {
     setSelection(oneRange({ anchor: ref, focus: ref }))
@@ -287,6 +299,7 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
                   onEditInPanel={editInPanel}
                   onDeleteRows={editable ? (rows) => edits.deleteRows(rows) : undefined}
                   onRefresh={refresh}
+                  formatValue={formatValue}
                   filtering={{
                     criteria,
                     shown: filterShown,
@@ -335,6 +348,7 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
                   editable={editable}
                   busy={edits.saving}
                   onApply={(value) => edits.setCell(target.ref, value)}
+                  formatValue={formatValue}
                 />
               )}
             </SplitPanel>

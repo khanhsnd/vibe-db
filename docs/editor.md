@@ -101,3 +101,16 @@ the schema rather than trusting the parser's token types, and it reads both quot
   loses the cascade and the library's default lavender wins in both themes.
 - `--line-highlight` (the active line) **must stay translucent**. The selection layer sits at
   `z-index: -2`, behind the lines, so an opaque active-line background paints over the selection.
+
+**`editorTheme` has a second reader.** The value viewer's laid-out view is CodeMirror too —
+`DocumentView`, see [features.md](features.md#reading-a-value-whole) — and wears this same theme, so
+one editor and one laid-out document cannot drift apart. Its own token, `propertyName`, is the one
+the shared syntax style deliberately leaves unset: the shell's documents keep their keys the colour
+of the data they name, while a document being *read* is nothing but keys and values.
+
+That view reads a document store's notation with **this same JavaScript parser under its
+`SingleExpression` top rule**, and the difference is worth knowing. In the editor a document is
+always inside a call — `find({ … })` — so its brace is an object in expression position. On its own
+it is not: read as a script, a bare `{ a: 1, b: 2 }` is a *block*, `a` is a label and everything
+after the first comma is a syntax error. `SingleExpression` is the parser's own top rule for exactly
+this case.

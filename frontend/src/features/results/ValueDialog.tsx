@@ -21,11 +21,14 @@ const HEIGHT = 380
 export function ValueDialog({
   at,
   data,
+  formatValue,
   onClose,
 }: {
   /** The cell being read, or null when nothing is. */
   at: CellRef | null
   data: GridData
+  /** The engine's own layout, for a value that is not JSON — see `ValueViewer.formatValue`. */
+  formatValue?: ((value: string) => Promise<string>) | undefined
   onClose: () => void
 }) {
   const column = at ? data.columns[at.column] : undefined
@@ -56,6 +59,7 @@ export function ValueDialog({
           className="h-full"
           value={value}
           columnType={column?.fullType || column?.type}
+          formatValue={formatValue}
         />
       </div>
     </Dialog>

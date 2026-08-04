@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, CircleSlash, Terminal } from 'lucide-react
 
 import type { AppError } from '@/bridge/errors'
 import { rowExport, type ExportFormat } from '@/bridge/export'
-import type { QueryResult } from '@/bridge/query'
+import { queries, type QueryResult } from '@/bridge/query'
 import { ALL_ROWS } from '@/bridge/rows'
 import { cn } from '@/lib/cn'
 import { Empty } from '@/shared/ui/Empty'
@@ -61,6 +61,16 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
   const order = useGridOrder(edits.rows, grid?.columns ?? NO_COLUMNS, sort, grid?.rows.length ?? 0)
   const ordered = useMemo(() => order.map((row) => edits.rows[row] ?? []), [order, edits.rows])
   const paged = usePageWindow(ordered)
+
+  /**
+   * Lays a value out for the value viewer — the engine's own `Format`, since a document store's
+   * documents are its own notation and not JSON. Held steady across renders because the viewer
+   * calls it from an effect; a result read with no session left cannot be laid out at all.
+   */
+  const formatValue = useMemo(
+    () => (sessionId === null ? undefined : (value: string) => queries.format(sessionId, value)),
+    [sessionId],
+  )
 
   // A selection names rows of the result that produced it, so it never survives a new one.
   useEffect(() => setSelection(null), [grid])
@@ -167,6 +177,7 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
             onExport={sessionId !== null ? exportRows : undefined}
             onDeleteRows={editable ? deleteRows : undefined}
             onRefresh={onRefresh}
+            formatValue={formatValue}
           />
         ) : result !== null ? (
           <SuccessPanel rowsAffected={result.rowsAffected} />

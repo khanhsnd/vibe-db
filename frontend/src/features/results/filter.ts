@@ -1,6 +1,13 @@
 import type { Cell } from '@/bridge/tables'
 
-import { cellText } from './resultSet'
+import { cellPreview } from './resultSet'
+
+/**
+ * How much of a value a *label* carries — a menu item, a picker's trigger. A label is not the
+ * condition: the whole value still travels into the `WHERE`, but a JSON document spelled out in a
+ * menu item pushes the menu off the screen and costs a text layout on every render of the grid.
+ */
+const LABEL_LIMIT = 40
 
 /**
  * The comparisons a filter may make, named by the token the server reads rather than by the
@@ -148,7 +155,7 @@ export function valueLabel(condition: Condition): string {
     case 'list':
       return `(${condition.values.join(', ')})`
     default:
-      return condition.values[0] ?? ''
+      return cellPreview(condition.values[0] ?? '', LABEL_LIMIT)
   }
 }
 
@@ -168,7 +175,7 @@ export function operatorLabel(operator: FilterOp, value: Cell): string {
   // the builder is where they are filled in.
   if (arity !== 1) return `${symbolOf(operator)} ${VALUE_PLACEHOLDER}`
 
-  return `${symbolOf(operator)} ${cellText(value)}`
+  return `${symbolOf(operator)} ${cellPreview(value, LABEL_LIMIT)}`
 }
 
 /**

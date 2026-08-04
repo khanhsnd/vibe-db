@@ -38,7 +38,7 @@ import { countConditions, type GridFiltering } from './filter'
 import { gridFont, headerFont, widestText } from './measureText'
 import {
   boundsOf,
-  cellText,
+  cellPreview,
   checked,
   CHECK_ON,
   columnRange,
@@ -175,6 +175,13 @@ interface ResultGridProps {
    * puts them in its `WHERE`, a query result applies them to the rows it already holds.
    */
   filtering?: GridFiltering | undefined
+  /**
+   * Lays a value out for the value viewer, in the engine's own notation — the driver's `Format`,
+   * because **how text is laid out is the engine's** and a document store's documents are not JSON.
+   * A surface with a session passes it; one without leaves it out, and a document then reads in
+   * `Raw` alone. See `ValueViewer.formatValue`, which requires it to be referentially stable.
+   */
+  formatValue?: ((value: string) => Promise<string>) | undefined
 }
 
 /** The head strip has nothing to say for a grid with neither of the two things it carries. */
@@ -198,6 +205,7 @@ export function ResultGrid({
   onDeleteRows,
   onRefresh,
   filtering,
+  formatValue,
 }: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -273,7 +281,7 @@ export function ResultGrid({
     if (!column) return
 
     const font = gridFont()
-    const cells = result.rows.slice(0, FIT_SAMPLE).map((row) => cellText(row[index] ?? null))
+    const cells = result.rows.slice(0, FIT_SAMPLE).map((row) => cellPreview(row[index] ?? null))
     const content = Math.max(
       widestText(cells, font),
       widestText([column.name], headerFont()) + MENU_WIDTH,
@@ -735,6 +743,7 @@ export function ResultGrid({
       <ValueDialog
         at={viewing}
         data={result}
+        formatValue={formatValue}
         onClose={() => setViewing(null)}
       />
     </div>
@@ -1033,7 +1042,7 @@ function CellView({ value, editor, numeric, width, inRange, focused, edited }: C
         <KeyMark position={value} tone={tone} />
       ) : (
         <>
-          <span className={cn('min-w-0 truncate', tone)}>{cellText(value)}</span>
+          <span className={cn('min-w-0 truncate', tone)}>{cellPreview(value)}</span>
           {editor?.kind === 'choice' ? (
             <ChevronDown
               size={12}

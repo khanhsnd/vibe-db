@@ -884,6 +884,8 @@ cell is read, and it reads nothing else.
 | The value | Views, in the order they open |
 |---|---|
 | JSON — an object or an array that parses | **JSON** laid out, then **Raw**. Only a leading `{` or `[` is tried, or every number in the grid would be handed to `JSON.parse`, which happily accepts `42` and calls it a document |
+| A **document store's document or array** — a field the engine types `object` or `array` | **Document**, then **Raw**. This is checked *before* JSON, so an array of scalars that happens to parse still reads in the notation the grid drew it in and the parser reads back |
+| **The laid-out view itself** | `DocumentView` — numbered lines, a **fold arrow beside every object and array**, and the editor's own syntax colours with the keys apart from the values they name. It is CodeMirror, the SQL editor's own engine, for two reasons: a document worth opening whole is often far larger than a screen and CodeMirror lays out only the lines in view, where a `<pre>` of a megabyte freezes the window; and the grammar is the library's, so nothing here is a second scanner. JSON is read by `@codemirror/lang-json`; a document store's notation by the JavaScript parser under its **`SingleExpression`** top rule, because read as a *script* a bare `{ … }` is a block, its first field a label and every field after it a syntax error |
 | **GeoJSON** — a `type` from the GeoJSON set *and* the member that type is defined by | **Shape**, then **JSON**, then **Raw**. A `{"type": "Point"}` with no coordinates is malformed, and drawing nothing says more than drawing the origin |
 | A **PostgreSQL array** — `{a,"b,c",NULL}` | **Items**, then **Raw**. Read as an array only where the column says it is one, since `{a,b}` is also perfectly good text. An unquoted `NULL` inside one is the absence of a value and is drawn in the grid's own NULL colour; a nested `{…}` is kept whole, because a two-dimensional array is a list of lists |
 | **Bytes** — a `\x…` value | **Image**, then **Hex**, then **Raw**. A reader who opened a blob wants to know whether it is a picture before they want its bytes |
@@ -893,6 +895,20 @@ cell is read, and it reads nothing else.
   detection is there is one view that cannot be wrong. It is also the **only** editable one: a
   laid-out document, a hex dump and a drawing are renderings, and writing one back would write the
   rendering.
+- **The viewer is where a long value is read, and the grid is not.** A cell draws a clipped preview
+  of it — see [grid.md](grid.md) — because a cell is one line a couple of hundred pixels wide. This
+  is the whole of what **View Value** is for.
+- **A document is laid out by the engine that wrote it, never here.** JSON is laid out by
+  `JSON.stringify`, which is the platform's; a document store's own notation — bare keys,
+  `ObjectId(…)`, `ISODate(…)` — is laid out by **`driver.Text.Format`**, over the same tokens that
+  engine's editor and its `Review` read, because how text is laid out is lexical and therefore the
+  engine's. It reaches the viewer as `ValueViewer.formatValue`, which `ResultGrid` and the Cell
+  Editor panel forward from a surface that has a session. **A surface with no session offers `Raw`
+  alone** rather than a layout it cannot vouch for, and the value goes up unformatted first so the
+  pane is never blank and a format that cannot run leaves the document readable.
+- A document therefore breaks by **the engine's own rule** — `mongo.breakItems`, the same rule the
+  editor's formatter uses, so a brace a line comfortably carries stays on it. Formatting the value
+  twice is formatting it once.
 - **A shape is a plain SVG and deliberately not a map.** A basemap means tiles, and this app has no
   business sending the coordinates in a reader's database to a tile server to find out where they
   are. What the shape *is* — a ring, a route, a scatter — is readable without one, and the numbers

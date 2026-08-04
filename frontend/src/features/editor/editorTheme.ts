@@ -28,6 +28,13 @@ const layout = EditorView.theme({
     backgroundColor: 'var(--surface-hover)',
     color: 'var(--fg-muted)',
   },
+  // What a folded object or array collapses to in the JSON view. CodeMirror's own placeholder is a
+  // light-grey chip, which reads as a hole punched in the line under a dark theme.
+  '.cm-foldPlaceholder': {
+    backgroundColor: 'var(--surface-hover)',
+    border: '1px solid var(--line)',
+    color: 'var(--fg-muted)',
+  },
 
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
 

@@ -276,3 +276,45 @@ func TestFormatLeavesAnUnterminatedScriptAlone(t *testing.T) {
 		t.Errorf("Format() = %q, want the script untouched", got)
 	}
 }
+
+// Format lays out a *value* and not only a command, because the value viewer shows one field of one
+// document and asks this side to lay it out: a bare key, an `ObjectId(…)` and where a line breaks
+// are this grammar's, and there is no second formatter on the frontend. See docs/features.md.
+func TestFormatLaysOutABareValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{
+			name:  "a document breaks one field to a line",
+			value: `{ id: "d42", status: "completed", at: ISODate("2026-01-01T00:00:00Z"), score: 0.68 }`,
+			want: "{\n" +
+				"\tid: \"d42\",\n" +
+				"\tstatus: \"completed\",\n" +
+				"\tat: ISODate(\"2026-01-01T00:00:00Z\"),\n" +
+				"\tscore: 0.68\n" +
+				"}",
+		},
+		// The same rule the editor is laid out by: a brace a line carries stays on it, so formatting
+		// a small document twice is formatting it once.
+		{
+			name:  "one a line carries stays on it",
+			value: `{ a: 1, b: 2 }`,
+			want:  `{ a: 1, b: 2 }`,
+		},
+		{
+			name:  "an array breaks like a document",
+			value: `[1, "two", 3, 4]`,
+			want:  "[\n\t1,\n\t\"two\",\n\t3,\n\t4\n]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (text{}).Format(tt.value); got != tt.want {
+				t.Errorf("Format() =\n%s\n\nwant\n%s", got, tt.want)
+			}
+		})
+	}
+}

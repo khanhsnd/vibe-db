@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { cn } from '@/lib/cn'
 
+import { DocumentView } from './DocumentView'
 import { GeoShape } from './GeoShape'
 import {
   decodeBinary,
@@ -31,15 +32,28 @@ export function ValueViewer({
   columnType,
   /** Absent for a read-only surface, exactly as `ResultGrid.onEditCell` is. */
   onChange,
+  formatValue,
   className,
 }: {
   value: string | null
   columnType?: string | undefined
   onChange?: ((next: string) => void) | undefined
+  /**
+   * Lays a value out in the engine's own notation — the driver's `Format`, since **how text is laid
+   * out is lexical and therefore the engine's** and a document store's documents are not JSON. A
+   * surface that cannot reach a session leaves it out, and a document then offers `Raw` alone.
+   *
+   * It must be **referentially stable**: the document view calls it from an effect, and one rebuilt
+   * every render would never settle.
+   */
+  formatValue?: ((value: string) => Promise<string>) | undefined
   className?: string | undefined
 }) {
   const found = useMemo(() => detect(value, columnType), [value, columnType])
-  const views = useMemo(() => viewsFor(found.kind), [found.kind])
+  // The *presence* of a formatter decides the views, never its identity: an unstable one would
+  // otherwise rebuild the list every render and knock the reader back to the first tab.
+  const laidOut = formatValue !== undefined
+  const views = useMemo(() => viewsFor(found.kind, laidOut), [found.kind, laidOut])
 
   const [view, setView] = useState(views[0] ?? 'raw')
   // A different cell is a different value, and the view it was last read in may not exist here.
@@ -69,16 +83,17 @@ export function ValueViewer({
         <span className="shrink-0 font-mono text-2xs text-faint">{found.label}</span>
       </div>
 
-      <View view={view} value={value} onChange={onChange} />
+      <View view={view} value={value} onChange={onChange} formatValue={formatValue} />
     </div>
   )
 }
 
-type ViewKind = 'raw' | 'json' | 'map' | 'list' | 'hex' | 'image'
+type ViewKind = 'raw' | 'json' | 'document' | 'map' | 'list' | 'hex' | 'image'
 
 const VIEW_LABEL: Record<ViewKind, string> = {
   raw: 'Raw',
   json: 'JSON',
+  document: 'Document',
   map: 'Shape',
   list: 'Items',
   hex: 'Hex',
@@ -89,13 +104,18 @@ const VIEW_LABEL: Record<ViewKind, string> = {
  * Which views a value offers, most useful first — that first one is what opens. The order is the
  * point: a reader who opened a GeoJSON cell wants to see the shape, and one who opened a blob
  * wants to know whether it is a picture before they want its bytes.
+ *
+ * A **document** is the one view a value can be denied: laying it out is the driver's, so a surface
+ * with no session to ask has nothing to lay it out with and offers what cannot be wrong instead.
  */
-function viewsFor(kind: ReturnType<typeof detect>['kind']): ViewKind[] {
+function viewsFor(kind: ReturnType<typeof detect>['kind'], laidOut: boolean): ViewKind[] {
   switch (kind) {
     case 'geojson':
       return ['map', 'json', 'raw']
     case 'json':
       return ['json', 'raw']
+    case 'document':
+      return laidOut ? ['document', 'raw'] : ['raw']
     case 'array':
       return ['list', 'raw']
     case 'binary':
@@ -109,10 +129,12 @@ function View({
   view,
   value,
   onChange,
+  formatValue,
 }: {
   view: ViewKind
   value: string | null
   onChange?: ((next: string) => void) | undefined
+  formatValue?: ((value: string) => Promise<string>) | undefined
 }) {
   if (value === null) {
     return <Note>This cell holds NULL.</Note>
@@ -120,7 +142,10 @@ function View({
 
   switch (view) {
     case 'json':
-      return <Monospace text={prettyJSON(value)} />
+      return <DocumentView text={prettyJSON(value)} notation="json" />
+
+    case 'document':
+      return <Document text={value} formatValue={formatValue} />
 
     case 'map':
       return <GeoShape shape={JSON.parse(value) as GeoJSON} />
@@ -145,6 +170,43 @@ function View({
         />
       )
   }
+}
+
+/**
+ * A document store's own document, laid out by the engine that wrote it — `driver.Text.Format`, over
+ * the same tokens its editor and its `Review` read. There is no second formatter on this side: a
+ * bare key, an `ObjectId(…)` and where a line breaks are all that engine's grammar.
+ *
+ * It goes up **unformatted first** and is replaced when the layout arrives, so the pane is never
+ * blank and a format that cannot run leaves the document readable rather than gone.
+ */
+function Document({
+  text,
+  formatValue,
+}: {
+  text: string
+  formatValue?: ((value: string) => Promise<string>) | undefined
+}) {
+  const [laid, setLaid] = useState(text)
+
+  useEffect(() => {
+    setLaid(text)
+    if (!formatValue) return
+
+    let live = true
+    void formatValue(text).then(
+      (next) => {
+        if (live) setLaid(next)
+      },
+      // A layout is a convenience, not the value: the text above already says what the cell holds.
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [text, formatValue])
+
+  return <DocumentView text={laid} notation="shell" />
 }
 
 function Monospace({ text }: { text: string }) {

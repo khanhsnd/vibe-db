@@ -10,7 +10,26 @@
 /** The bytes marker the driver writes for a value that is not text — `sqlkit.BinaryPrefix`. */
 const BINARY = /^\\x([0-9a-f]{2})*$/i
 
-export type ValueKind = 'null' | 'empty' | 'binary' | 'geojson' | 'json' | 'array' | 'text'
+export type ValueKind =
+  | 'null'
+  | 'empty'
+  | 'binary'
+  | 'geojson'
+  | 'json'
+  | 'document'
+  | 'array'
+  | 'text'
+
+/**
+ * The types a document store gives a field that holds a document or an array — `mongo.typeNames`,
+ * and the only engine that says either. A value under one of those is written in **that engine's own
+ * notation**: bare keys, `ObjectId(…)`, `ISODate(…)`. It is not JSON and `{ a: 1 }` will never parse
+ * as any, which is why a document used to reach the viewer with no view but `Raw`.
+ *
+ * **Laying one out is the driver's** — how text is laid out is lexical and therefore the engine's,
+ * so it arrives through `ValueViewer.formatValue` and nothing here writes a second formatter.
+ */
+const DOCUMENT_TYPES = new Set(['object', 'array'])
 
 export interface DetectedValue {
   kind: ValueKind
@@ -41,6 +60,10 @@ export function detect(value: string | null, columnType = ''): DetectedValue {
   if (BINARY.test(value)) {
     return { kind: 'binary', label: `${(value.length - 2) / 2} bytes` }
   }
+
+  // Before JSON, so a document store's array of scalars — `[1, "two"]`, which happens to parse —
+  // still reads in the notation the grid drew it in and its own parser reads back.
+  if (DOCUMENT_TYPES.has(columnType)) return { kind: 'document', label: columnType }
 
   const parsed = parseJSON(value)
   if (parsed !== undefined) {
