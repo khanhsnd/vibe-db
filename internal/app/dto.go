@@ -69,16 +69,26 @@ type TableSortInput struct {
 	Descending bool   `json:"descending"`
 }
 
+// TableFilterInput is one condition the reader put on a table read. Operator is a token from a
+// fixed list rather than the operator spelled out — see driver.TableFilterOp — and value is
+// ignored by the two operators that take none.
+type TableFilterInput struct {
+	Column   string `json:"column"`
+	Operator string `json:"operator"`
+	Value    string `json:"value"`
+}
+
 type TablePageInput struct {
 	Namespace
 	Table string `json:"table"`
 	// RunID is minted by the caller so that a read can be stopped before it answers, and so the
 	// batches of a streamed read can be told from another tab's. An empty one asks for an
 	// ordinary read, bounded by a deadline and answered whole — see LoadTableRows.
-	RunID  string         `json:"runId"`
-	Limit  int            `json:"limit"`
-	Offset int            `json:"offset"`
-	Sort   TableSortInput `json:"sort"`
+	RunID   string             `json:"runId"`
+	Limit   int                `json:"limit"`
+	Offset  int                `json:"offset"`
+	Sort    TableSortInput     `json:"sort"`
+	Filters []TableFilterInput `json:"filters"`
 }
 
 type TableColumn struct {
@@ -316,12 +326,22 @@ func toNamespaceDTO(ns driver.Namespace) Namespace {
 }
 
 func (in TablePageInput) toDriver() driver.TablePage {
+	filters := make([]driver.TableFilter, len(in.Filters))
+	for i, filter := range in.Filters {
+		filters[i] = driver.TableFilter{
+			Column: filter.Column,
+			Op:     driver.TableFilterOp(filter.Operator),
+			Value:  filter.Value,
+		}
+	}
+
 	return driver.TablePage{
 		Namespace: in.Namespace.toDriver(),
 		Table:     in.Table,
 		Limit:     driverRows(in.Limit, DefaultPageSize),
 		Offset:    max(in.Offset, 0),
 		Sort:      driver.TableSort{Column: in.Sort.Column, Descending: in.Sort.Descending},
+		Filters:   filters,
 	}
 }
 

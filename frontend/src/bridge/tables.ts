@@ -22,6 +22,16 @@ export interface TableSortRequest {
   descending: boolean
 }
 
+/**
+ * One condition the read is narrowed by. `operator` is a token the server spells into SQL — see
+ * `FilterOp`, which is the same list — so the shape here is `features/results/filter`'s `Filter`.
+ */
+export interface TableFilterRequest {
+  column: string
+  operator: string
+  value: string
+}
+
 export interface TablePageRequest {
   /**
    * Minted per read, so it can be stopped before it answers and so the batches of a streamed
@@ -34,6 +44,8 @@ export interface TablePageRequest {
   limit: number
   offset: number
   sort: TableSortRequest
+  /** Every condition holds at once, and the total is counted through them as well. */
+  filters: TableFilterRequest[]
 }
 
 /** A read that asked for `ALL_ROWS` answers with its columns and total, and no rows at all. */

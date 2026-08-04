@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn'
 import { Empty } from '@/shared/ui/Empty'
 import type { QueryRun } from '@/stores/queries'
 
+import { matchesFilters, type Filter } from './filter'
 import { GridFooter } from './GridFooter'
 import { GridPager } from './GridPager'
 import { GridStatus } from './GridStatus'
@@ -42,6 +43,8 @@ interface ResultPaneProps {
 export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: ResultPaneProps) {
   const [selection, setSelection] = useState<Selection | null>(null)
   const [sort, setSort] = useState<SortKey | null>(null)
+  const [filters, setFilters] = useState<Filter[]>([])
+  const [filterShown, setFilterShown] = useState(false)
   const { running, result, error } = run
 
   const grid = result !== null && result.columns.length > 0 ? result : null
@@ -49,26 +52,35 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
   const edits = useGridEdits(sourceOf(grid), sessionId, onRefresh)
 
   /**
-   * The rows are already in memory, so the sort is too — no statement to re-order. It is a
-   * list of row numbers rather than reordered rows, because every pending change is keyed by
-   * the number a row had when it was read.
+   * The rows are already in memory, so the sort and the filters are too — no statement to
+   * re-order and none to narrow. It is a list of row numbers rather than reordered rows, because
+   * every pending change is keyed by the number a row had when it was read.
+   *
+   * A draft row is never filtered out: it is a row the reader is still filling in, and one that
+   * vanished mid-typing would take what was typed with it. Filters reach only the rows fetched,
+   * for the same reason the sort does.
    */
-  const order = useMemo(
-    () => sortedOrder(edits.rows, grid?.columns ?? [], sort, grid?.rows.length ?? 0),
-    [edits.rows, grid, sort],
-  )
+  const order = useMemo(() => {
+    const fetched = grid?.rows.length ?? 0
+    const columns = grid?.columns ?? []
+
+    return sortedOrder(edits.rows, columns, sort, fetched).filter(
+      (row) => row >= fetched || matchesFilters(edits.rows[row] ?? [], columns, filters),
+    )
+  }, [edits.rows, grid, sort, filters])
   const ordered = useMemo(() => order.map((row) => edits.rows[row] ?? []), [order, edits.rows])
   const paged = usePageWindow(ordered)
 
   // A selection names rows of the result that produced it, so it never survives a new one.
   useEffect(() => setSelection(null), [grid])
 
-  // The page number and the sort survive a read of the same statement — growing the fetch, or
-  // reloading after an edit, must leave the reader where they were — but not a different one,
-  // whose columns the sort may not even name.
+  // The page number, the sort and the filters survive a read of the same statement — growing the
+  // fetch, or reloading after an edit, must leave the reader where they were — but not a
+  // different one, whose columns neither the sort nor a filter may even name.
   const statement = run.request?.sql ?? ''
   useEffect(() => {
     setSort(null)
+    setFilters([])
     paged.goToPage(0)
   }, [statement, paged.goToPage])
 
@@ -112,6 +124,14 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
     paged.goToPage(0)
   }
 
+  /** Narrowing drops rows out of every page, so it sends the reader back to the first as well. */
+  const changeFilters = (next: Filter[]) => {
+    setSelection(null)
+    setFilters(next)
+    setFilterShown(next.length > 0 || filterShown)
+    paged.goToPage(0)
+  }
+
   /**
    * A draft row lands after every fetched row, so the page holding it is the one to show — and
    * it becomes the selection, because a paste that follows the add means that row.
@@ -124,7 +144,8 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
     setSelection(oneRange(rowRange(at.row, grid?.columns.length ?? 0)))
   }
 
-  const deleteRows = () => edits.deleteRows(selectedRows(selection).map(absolute))
+  /** Rows arrive in the grid's own numbers, which is what `absolute` is for. */
+  const deleteRows = (rows: number[]) => edits.deleteRows(rows.map(absolute))
 
   /**
    * Every row the grid holds, in the order it draws them — the whole result rather than the page
@@ -162,6 +183,14 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
             sort={sort}
             onSortChange={changeSort}
             onExport={sessionId !== null ? exportRows : undefined}
+            onDeleteRows={editable ? deleteRows : undefined}
+            onRefresh={onRefresh}
+            filtering={{
+              filters,
+              shown: filterShown,
+              onShownChange: setFilterShown,
+              onChange: changeFilters,
+            }}
           />
         ) : result !== null ? (
           <SuccessPanel rowsAffected={result.rowsAffected} />
@@ -186,7 +215,7 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
         pending={edits.pending}
         busy={edits.saving || running}
         onAddRow={addRow}
-        onDeleteRow={deleteRows}
+        onDeleteRow={() => deleteRows(selectedRows(selection))}
         onApply={() => void edits.apply()}
         onDiscard={edits.discard}
         onRefresh={onRefresh}

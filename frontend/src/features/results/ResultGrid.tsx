@@ -29,7 +29,10 @@ import { ICON } from '@/shared/ui/menuIcons'
 import { CellChoice } from './CellChoice'
 import { CellPicker } from './CellPicker'
 import { ExportMenu } from './ExportMenu'
+import { FilterStrip } from './FilterStrip'
+import { cellMenuItems } from './cellMenu'
 import { ColumnTypeIcon, isNumeric, temporalPicker, type TemporalPicker } from './columnType'
+import type { GridFiltering } from './filter'
 import { gridFont, headerFont, widestText } from './measureText'
 import {
   boundsOf,
@@ -42,6 +45,7 @@ import {
   oneRange,
   originOf,
   parseCell,
+  rowRange,
   toTSV,
   type Cell,
   type CellBounds,
@@ -143,6 +147,29 @@ interface ResultGridProps {
    * to write leaves this out, which is what keeps the button off an empty result.
    */
   onExport?: ((format: ExportFormat) => void) | undefined
+  /**
+   * Whether the grid draws its own head strip for Export. A surface with a toolbar of its own
+   * puts `ExportMenu` there and passes `false`, so one table never carries two strips — while the
+   * cell menu's **Save Data As** still runs `onExport`, wherever the button lives.
+   */
+  exportStrip?: boolean
+  /**
+   * Opens the surface's own cell editor on a cell — the panel under `TableDataView`. A surface
+   * without one leaves this out and the cell menu then offers no such item.
+   */
+  onEditInPanel?: ((ref: CellRef) => void) | undefined
+  /**
+   * Marks rows for deletion: the same call the footer's Delete makes, from the cell menu instead.
+   * Rows are the grid's own numbers, as every other callback reports them.
+   */
+  onDeleteRows?: ((rows: number[]) => void) | undefined
+  /** Reads the rows again — the footer's Refresh, offered on the cell menu too. */
+  onRefresh?: (() => void) | undefined
+  /**
+   * The conditions the rows are narrowed by, where the surface can narrow them: a table read
+   * puts them in its `WHERE`, a query result applies them to the rows it already holds.
+   */
+  filtering?: GridFiltering | undefined
 }
 
 export function ResultGrid({
@@ -157,6 +184,11 @@ export function ResultGrid({
   onActivateRow,
   columnMenuItems,
   onExport,
+  exportStrip = true,
+  onEditInPanel,
+  onDeleteRows,
+  onRefresh,
+  filtering,
 }: ResultGridProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -167,6 +199,8 @@ export function ResultGrid({
   const [resized, setResized] = useState<Record<string, number>>({})
   const [ownSelection, setOwnSelection] = useState<Selection | null>(null)
   const [editing, setEditing] = useState<CellRef | null>(null)
+  /** The cell the last right-click landed on, which the menu names — see `onCellContextMenu`. */
+  const [menuCell, setMenuCell] = useState<CellRef | null>(null)
 
   const current = selection === undefined ? ownSelection : selection
 
@@ -306,6 +340,50 @@ export function ResultGrid({
         : []),
       ...(columnMenuItems?.(column) ?? []),
     ]
+  }
+
+  /**
+   * A right-click raises the grid's own menu, never the WebView's, and names the cell under the
+   * pointer. A press **outside** the selection replaces it with that one cell; one **inside** it
+   * leaves every rectangle standing, so a range the reader picked can be acted on whole. A press
+   * in the row gutter takes the whole row, exactly as a press there does with the left button.
+   */
+  const onCellContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (result.rows.length === 0) return
+
+    const ref = cellAt(event.clientX, event.clientY, false)
+    setMenuCell(ref)
+
+    if (within(bounds, ref.row, ref.column)) return
+    select(
+      inGutter(event.target)
+        ? oneRange(rowRange(ref.row, result.columns.length))
+        : oneRange({ anchor: ref, focus: ref }),
+    )
+  }
+
+  /**
+   * The cell menu is built from the cell the right-click named, falling back to the focus so the
+   * menu exists before the first one — an item list that was empty would leave no trigger for
+   * Radix to open, and the first right-click would raise the WebView's menu instead of this.
+   */
+  const cellMenu = (): MenuItem[] => {
+    const at = menuCell ?? focus ?? { row: 0, column: 0 }
+
+    return cellMenuItems({
+      at,
+      data: result,
+      selection: current ?? oneRange({ anchor: at, focus: at }),
+      sort,
+      onEditCell,
+      onEditInPanel,
+      onDeleteRows,
+      onSortChange,
+      onExport,
+      onRefresh,
+      filtering,
+      onPaste: (origin) => void paste(origin),
+    })
   }
 
   /** Reads a cell straight off the pointer, so a drag needs no per-cell handlers. */
@@ -499,7 +577,11 @@ export function ResultGrid({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {onExport ? <ExportStrip onExport={onExport} /> : null}
+      {onExport && exportStrip ? <ExportStrip onExport={onExport} /> : null}
+
+      {filtering?.shown ? (
+        <FilterStrip filtering={filtering} sort={sort} onSortChange={onSortChange} />
+      ) : null}
 
       <div
         ref={scrollRef}
@@ -519,105 +601,108 @@ export function ResultGrid({
             menuFor={columnMenu}
           />
 
-          <div
-            ref={bodyRef}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={endDrag}
-            onLostPointerCapture={endDrag}
-            onClick={onClick}
-            onDoubleClick={onDoubleClick}
-            className="relative"
-            style={{ height: virtualizer.getTotalSize() }}
-          >
-            {virtualizer.getVirtualItems().map((item) => {
-              const row = result.rows[item.index]
-              if (!row) return null
+          <ContextMenu items={cellMenu()}>
+            <div
+              ref={bodyRef}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={endDrag}
+              onLostPointerCapture={endDrag}
+              onClick={onClick}
+              onDoubleClick={onDoubleClick}
+              onContextMenu={onCellContextMenu}
+              className="relative"
+              style={{ height: virtualizer.getTotalSize() }}
+            >
+              {virtualizer.getVirtualItems().map((item) => {
+                const row = result.rows[item.index]
+                if (!row) return null
 
-              // A row is banded across its width only when the selection covers the whole of it;
-              // a column selection touches every row and must not paint the grid over.
-              const banded = rowCovered(bounds, item.index, lastColumn)
-              const touched = rowTouched(bounds, item.index)
-              // A row on its way out reads as struck through whatever the selection says,
-              // because the strike is inherited by every cell below it.
-              const removed = isDeleted(item.index)
+                // A row is banded across its width only when the selection covers the whole of it;
+                // a column selection touches every row and must not paint the grid over.
+                const banded = rowCovered(bounds, item.index, lastColumn)
+                const touched = rowTouched(bounds, item.index)
+                // A row on its way out reads as struck through whatever the selection says,
+                // because the strike is inherited by every cell below it.
+                const removed = isDeleted(item.index)
 
-              return (
-                <div
-                  key={item.key}
-                  className={cn(
-                    'absolute top-0 left-0 flex w-full border-b border-line/60',
-                    removed
-                      ? 'bg-grid-row-deleted line-through'
-                      : banded
-                        ? 'bg-grid-row-selected'
-                        : 'hover:bg-hover',
-                  )}
-                  style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
-                >
+                return (
                   <div
-                    data-gutter=""
+                    key={item.key}
                     className={cn(
-                      'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
+                      'absolute top-0 left-0 flex w-full border-b border-line/60',
                       removed
-                        ? 'bg-grid-row-deleted text-danger'
-                        : touched
-                          ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
-                          : 'bg-panel text-faint',
+                        ? 'bg-grid-row-deleted line-through'
+                        : banded
+                          ? 'bg-grid-row-selected'
+                          : 'hover:bg-hover',
                     )}
-                    style={{ width: GUTTER_WIDTH }}
+                    style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
                   >
-                    {item.index + 1}
-                  </div>
+                    <div
+                      data-gutter=""
+                      className={cn(
+                        'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
+                        removed
+                          ? 'bg-grid-row-deleted text-danger'
+                          : touched
+                            ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
+                            : 'bg-panel text-faint',
+                      )}
+                      style={{ width: GUTTER_WIDTH }}
+                    >
+                      {item.index + 1}
+                    </div>
 
-                  {result.columns.map((column, i) => {
-                    const width = widths[i] ?? DEFAULT_COLUMN_WIDTH
+                    {result.columns.map((column, i) => {
+                      const width = widths[i] ?? DEFAULT_COLUMN_WIDTH
 
-                    if (onEditCell && editing?.row === item.index && editing.column === i) {
-                      const commit = (value: Cell) => {
-                        onEditCell({ row: item.index, column: i }, value)
-                        setEditing(null)
+                      if (onEditCell && editing?.row === item.index && editing.column === i) {
+                        const commit = (value: Cell) => {
+                          onEditCell({ row: item.index, column: i }, value)
+                          setEditing(null)
+                        }
+                        const cancel = () => setEditing(null)
+
+                        return column.editor?.kind === 'choice' ? (
+                          <CellChoice
+                            key={i}
+                            value={row[i] ?? null}
+                            options={column.editor.options}
+                            width={width}
+                            onCommit={commit}
+                            onCancel={cancel}
+                          />
+                        ) : (
+                          <CellInput
+                            key={i}
+                            value={row[i] ?? null}
+                            picker={temporalPicker(column.type)}
+                            width={width}
+                            onCommit={commit}
+                            onCancel={cancel}
+                          />
+                        )
                       }
-                      const cancel = () => setEditing(null)
 
-                      return column.editor?.kind === 'choice' ? (
-                        <CellChoice
+                      return (
+                        <CellView
                           key={i}
                           value={row[i] ?? null}
-                          options={column.editor.options}
+                          editor={column.editor}
+                          numeric={isNumeric(column.type)}
                           width={width}
-                          onCommit={commit}
-                          onCancel={cancel}
-                        />
-                      ) : (
-                        <CellInput
-                          key={i}
-                          value={row[i] ?? null}
-                          picker={temporalPicker(column.type)}
-                          width={width}
-                          onCommit={commit}
-                          onCancel={cancel}
+                          inRange={within(bounds, item.index, i)}
+                          focused={focus?.row === item.index && focus.column === i}
+                          edited={isDirty(item.index, i)}
                         />
                       )
-                    }
-
-                    return (
-                      <CellView
-                        key={i}
-                        value={row[i] ?? null}
-                        editor={column.editor}
-                        numeric={isNumeric(column.type)}
-                        width={width}
-                        inRange={within(bounds, item.index, i)}
-                        focused={focus?.row === item.index && focus.column === i}
-                        edited={isDirty(item.index, i)}
-                      />
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+          </ContextMenu>
         </div>
       </div>
     </div>

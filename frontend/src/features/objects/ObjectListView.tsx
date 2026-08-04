@@ -105,6 +105,7 @@ export function ObjectListView({ sessionId, profileId, namespace }: ObjectListVi
             selection={selection}
             onSelectionChange={setSelection}
             onActivateRow={openRow}
+            onRefresh={refresh}
           />
         )}
       </div>

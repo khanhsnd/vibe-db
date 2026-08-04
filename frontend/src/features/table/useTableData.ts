@@ -4,9 +4,11 @@ import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { ALL_ROWS, DEFAULT_PAGE_SIZE } from '@/bridge/rows'
 import { onRowsStreamed, tables, type Cell, type TablePage } from '@/bridge/tables'
+import type { Filter } from '@/features/results/filter'
 import type { SortKey } from '@/features/results/resultSet'
 
 const NO_SORT = { column: '', descending: false }
+const NO_FILTERS: Filter[] = []
 
 /** A read of every row, while it runs: what to stop, and how many rows have arrived so far. */
 export interface RowFetch {
@@ -15,8 +17,8 @@ export interface RowFetch {
 }
 
 /**
- * The rows are paged on the server, so the sort has to be too: ordering the page in hand
- * would only shuffle the hundred rows the reader can already see.
+ * The rows are paged on the server, so the sort and the filters have to be too: ordering or
+ * narrowing the page in hand would only shuffle the hundred rows the reader can already see.
  *
  * `All` is the one read that cannot be answered in one piece — a million rows would have to cross
  * the bridge as a single JavaScript string — so it is **streamed**: the rows arrive in batches
@@ -30,6 +32,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
   const [page, setPage] = useState(0)
   const [limit, setLimit] = useState<number>(DEFAULT_PAGE_SIZE)
   const [sort, setSort] = useState<SortKey | null>(null)
+  const [filters, setFilters] = useState<Filter[]>(NO_FILTERS)
   const [nonce, setNonce] = useState(0)
   const [data, setData] = useState<TablePage | null>(null)
   const [loadedAt, setLoadedAt] = useState<number | null>(null)
@@ -67,6 +70,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
         limit,
         offset: limit === ALL_ROWS ? 0 : page * limit,
         sort: sort ?? NO_SORT,
+        filters,
       })
       .then((next) => {
         if (!active) return
@@ -109,7 +113,7 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
       // must not go on scanning a million rows and emitting them at a listener that has gone.
       if (streamed) void tables.stopRows(runId)
     }
-  }, [sessionId, database, schema, table, limit, page, sort, nonce])
+  }, [sessionId, database, schema, table, limit, page, sort, filters, nonce])
 
   const refresh = useCallback(() => setNonce((current) => current + 1), [])
 
@@ -126,6 +130,12 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
     setPage(0)
   }, [])
 
+  /** A narrower table has fewer pages, so the reader goes back to the first of them. */
+  const changeFilters = useCallback((next: Filter[]) => {
+    setFilters(next)
+    setPage(0)
+  }, [])
+
   const stopFetch = useCallback(() => {
     if (fetch !== null) void tables.stopRows(fetch.runId)
   }, [fetch])
@@ -139,9 +149,11 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
     page,
     limit,
     sort,
+    filters,
     goToPage,
     changeLimit,
     changeSort,
+    changeFilters,
     refresh,
     stopFetch,
   }

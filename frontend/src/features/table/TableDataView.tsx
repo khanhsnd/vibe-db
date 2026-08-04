@@ -6,6 +6,7 @@ import type { TablePage } from '@/bridge/tables'
 import { GridFooter } from '@/features/results/GridFooter'
 import { GridPager } from '@/features/results/GridPager'
 import { GridStatus } from '@/features/results/GridStatus'
+import type { Filter } from '@/features/results/filter'
 import { pageCount } from '@/features/results/paging'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import {
@@ -47,9 +48,11 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
     page,
     limit,
     sort,
+    filters,
     goToPage,
     changeLimit,
     changeSort,
+    changeFilters,
     refresh,
     stopFetch,
   } = useTableData(sessionId, namespace, table)
@@ -57,6 +60,7 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
   const [panels, setPanels] = useState<ReadonlySet<PanelKind>>(new Set())
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
   const [selection, setSelection] = useState<Selection | null>(null)
+  const [filterShown, setFilterShown] = useState(false)
 
   const columns = data?.columns ?? []
   const editable = columns.some((column) => column.primaryKey)
@@ -145,6 +149,22 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
   }
 
   /**
+   * The conditions travel into the read's own `WHERE`, so a filter narrows the whole table
+   * rather than the page in front — and the strip that lists them opens with the first one.
+   */
+  const changeConditions = (next: Filter[]) => {
+    setSelection(null)
+    setFilterShown(next.length > 0 || filterShown)
+    changeFilters(next)
+  }
+
+  /** The panel edits the focused cell, so the menu's own cell becomes the selection first. */
+  const editInPanel = (ref: CellRef) => {
+    setSelection(oneRange({ anchor: ref, focus: ref }))
+    setPanels((current) => new Set(current).add('cell'))
+  }
+
+  /**
    * The page in front, with the columns that are showing — a table's rows are paged by the
    * server, so what the grid holds *is* the page, and a hidden column is one nobody asked for.
    */
@@ -203,6 +223,19 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
               isDeleted={(row) => edits.deleted.has(row)}
               sort={sort}
               onSortChange={changeOrder}
+              // Export lives in this surface's own toolbar, so the grid draws no strip of its
+              // own — but the cell menu's Save Data As still writes the same rows.
+              onExport={exportRows}
+              exportStrip={false}
+              onEditInPanel={editInPanel}
+              onDeleteRows={editable ? (rows) => edits.deleteRows(rows) : undefined}
+              onRefresh={refresh}
+              filtering={{
+                filters,
+                shown: filterShown,
+                onShownChange: setFilterShown,
+                onChange: changeConditions,
+              }}
               columnMenuItems={(column) => [
                 {
                   label: 'Hide column',

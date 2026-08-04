@@ -532,6 +532,22 @@ export namespace app {
 	}
 	
 	
+	export class TableFilterInput {
+	    column: string;
+	    operator: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TableFilterInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.column = source["column"];
+	        this.operator = source["operator"];
+	        this.value = source["value"];
+	    }
+	}
 	export class TableList {
 	    columns: TableColumn[];
 	    rows: string[][];
@@ -586,6 +602,7 @@ export namespace app {
 	    limit: number;
 	    offset: number;
 	    sort: TableSortInput;
+	    filters: TableFilterInput[];
 	
 	    static createFrom(source: any = {}) {
 	        return new TablePageInput(source);
@@ -600,6 +617,7 @@ export namespace app {
 	        this.limit = source["limit"];
 	        this.offset = source["offset"];
 	        this.sort = this.convertValues(source["sort"], TableSortInput);
+	        this.filters = this.convertValues(source["filters"], TableFilterInput);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

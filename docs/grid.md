@@ -16,7 +16,8 @@ keys and its pending changes, and every one of those is a grid — the Fields on
 
 | Part | Rule |
 |---|---|
-| Head strip | 32 px above the header, on the header's own surface — the two read as one head — holding what acts on the grid *whole* rather than row by row, today the **Export** button alone against the right edge: a labelled `Button` with an accent-coloured glyph, not a bare icon, because it has the room to say what it is. It sits outside the scroller, so it stays put while the columns scroll under it, and the grid draws it **only where the call site passed `onExport`** — a surface with a toolbar of its own puts the same `ExportMenu` in that toolbar instead and passes nothing, because one table must never carry two strips. |
+| Head strip | 32 px above the header, on the header's own surface — the two read as one head — holding what acts on the grid *whole* rather than row by row, today the **Export** button alone against the right edge: a labelled `Button` with an accent-coloured glyph, not a bare icon, because it has the room to say what it is. It sits outside the scroller, so it stays put while the columns scroll under it, and the grid draws it **only where the call site passed `onExport` and did not pass `exportStrip={false}`** — a surface with a toolbar of its own puts the same `ExportMenu` in that toolbar and turns the strip off, because one table must never carry two strips. It still passes `onExport`, which is what the cell menu's **Save Data As** runs. |
+| Filter & Sort strip | 32 px, under the head strip and over the header, drawn only where the call site passed `filtering` and the reader asked for it — the cell menu's **Show/Hide Filter & Sort**. One chip per filter and one for the sort, each dropped by its own ✕, and a ✕ at the right that hides the strip. The conditions hold whether it is showing or not: hiding the strip is not widening the grid. Conditions are added from the cell menu rather than typed here, a filter meaning the value the reader is already pointing at. |
 | Header | Two lines, 40 px on `--surface-bar`, so the shade alone says where the data starts. The column **name** on top in the **UI font**, bold 14 px — the one place the grid is not mono, a size above its cells and three weights clear of their regular, so a name reads as a label and not as the data beneath it — and its **type** below in muted mono 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx`. Never uppercased — the server's own casing stands. On the right of every header sits the **`⋮` options button**, and beside the name of the sorted column an arrow saying which way. |
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. Mono 13 px. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
@@ -108,6 +109,32 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   `TableDataView` does, with **Hide column** and **Show all columns**, because hiding is its state
   and not the grid's. Every item carries a glyph from `shared/ui/menuIcons.tsx`, which is where the
   icon for an action lives so the same action wears the same one in every menu.
+- **Right-clicking a *cell* opens the cell menu**, which is the longest menu in the app and lives in
+  `cellMenu.ts` rather than in the grid — the grid is large enough, and every item there acts through
+  a prop the grid was handed, so nothing in it knows a call site. A press **outside** the selection
+  replaces it with the cell under the pointer; one **inside** leaves every rectangle standing, so a
+  range the reader picked can be acted on whole. A press in the row gutter takes the whole row, as a
+  left one does. The cell is remembered (`menuCell`) rather than read off the focus, because a
+  right-click inside a selection must not move it.
+  | Group | Items |
+  |---|---|
+  | Writing, where `onEditCell` was passed | **Set to Empty String**, **Set to NULL**, **Generate UUID** ▸ (lowercase, uppercase, without hyphens) — each acting on **every cell of the selection**, and the UUID minting a fresh one per cell so a range of rows gets a range of ids |
+  | **Edit in Cell Editor**, where `onEditInPanel` was passed | Opens the surface's own editor panel on that cell, which `TableDataView` does by selecting the cell and showing the panel |
+  | **Delete Record**, where `onDeleteRows` was passed | The same call the footer's Delete makes, on the rows the selection touches; it says *Delete 3 Records* when it means three, and it is the one item drawn `danger` |
+  | Clipboard | **Copy** (the `Ctrl`+`C` text), **Copy Field Name**, **Copy As** ▸ (tab-separated with field names, CSV, JSON — `copyAs.ts`, treating a NULL exactly as the file export does), **Paste** where `onEditCell` was passed, and **Save Data As** ▸ (the `ExportMenu` formats) where `onExport` was |
+  | Narrowing | **Show/Hide Filter & Sort**, **Filter** ▸ and **Remove All Filters & Sorts** where `filtering` was passed, and **Sort** ▸ (ascending, descending, remove) where `onSortChange` was |
+  | **Refresh**, where `onRefresh` was passed | Reads the rows again — the footer's own Refresh, reachable without travelling to the bar |
+  An absent handler leaves its item **off** rather than showing it dead, which is the rule
+  `onEditCell` already set for the whole grid; a grid with **no rows** offers `Refresh` alone,
+  because every other item would name a row that is not there.
+- **A filter is a column, an operator and a value** (`filter.ts`), and the operators are `=`, `≠`,
+  `>`, `≥`, `<`, `≤`, `contains`, `is NULL` and `is not NULL`. The menu offers them against the value
+  under the pointer — `= 30`, `contains shop` — so a condition is picked rather than typed, and a
+  NULL cell filters against nothing because `(Null)` is the grid's word and not a value. The
+  operator travels as a **token**, never as the operator's own spelling: what turns `gt` into `>` is
+  the driver, so nothing a reader typed reaches a statement as SQL. Every filter holds at once.
+  **Who applies them is the call site**, exactly as with the sort: `TableDataView` puts them in the
+  read's `WHERE` and counts its total through them, `ResultPane` matches the rows it already holds.
 - **The grid never reorders its own rows.** It reports the column and direction through
   `onSortChange` and marks the header from `sort`; who sorts is the call site, because only it knows
   where the rows come from. One column at a time — hence *Remove All Sorts* clearing the one there
@@ -229,7 +256,10 @@ surrounds the grid:
   memory too**, and for the same reason keeps the sort as a list of row numbers (`sortedOrder`)
   rather than reordered rows: a pending change is keyed by the number a row had when it was read.
   Draft rows stay pinned after every fetched row, so **Add** still lands on the last page. A sort
-  only reaches the rows already fetched, and it is dropped when the statement changes. Its footer
+  only reaches the rows already fetched, and it is dropped when the statement changes. **It filters
+  in memory as well**, over that same order and by the same argument — there is no statement of its
+  own to add a `WHERE` to — and a **draft row is never filtered out**, being a row the reader is
+  still filling in. Its footer
   can also **Stop** the run, and **Add** jumps to the last page, which is where a draft row lands.
   Asking for a page past the rows it holds replays the statement for as many as that page needs
   (`reach`), so `All` really does load all; the page number therefore survives a read of the same
@@ -251,11 +281,16 @@ surrounds the grid:
   passes `onActivateRow`, and the only read-only site with a toolbar of its own — over the grid,
   where a surface's controls go, acting on the table the selection names.
 - `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
-  index back to the real one on the way in. **It sorts on the server too** — the sort travels in
-  `TablePageRequest` and becomes the read's `ORDER BY`, because ordering the hundred rows in hand
-  would only shuffle what the reader can already see. Its Cell Editor panel stages a value on the focused cell
-  exactly as the grid's own inline editor does; the footer still commits. It is also the only site
-  that adds to the header menu, since `ColumnPicker` and that menu toggle one set of hidden names.
+  index back to the real one on the way in. **It sorts and filters on the server too** — both travel
+  in `TablePageRequest` and become the read's `ORDER BY` and `WHERE`, because ordering or narrowing
+  the hundred rows in hand would only shuffle what the reader can already see, and the total is
+  counted through the same conditions or the pager would walk pages that are no longer there. Its
+  Cell Editor panel stages a value on the focused cell
+  exactly as the grid's own inline editor does; the footer still commits, and the cell menu's **Edit
+  in Cell Editor** is what opens that panel from the grid. It is also the only site
+  that adds to the header menu, since `ColumnPicker` and that menu toggle one set of hidden names,
+  and the only one that turns the head strip off (`exportStrip={false}`), its own toolbar already
+  carrying Export.
 
 Both mappings exist because the grid always reports the coordinates it drew, never the ones the
 server knows. Neither one lets the *other* axis drift: a paged surface leaves columns alone and a

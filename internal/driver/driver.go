@@ -54,14 +54,44 @@ type RowStream struct {
 	Counted func(fetched int)
 }
 
+// TableFilterOp is one comparison a filter makes, named by a fixed token rather than spelled
+// as the operator itself: nothing a reader typed then reaches the statement as SQL, and an
+// operator this side does not know is refused instead of pasted in.
+type TableFilterOp string
+
+const (
+	FilterEqual        TableFilterOp = "eq"
+	FilterNotEqual     TableFilterOp = "ne"
+	FilterGreater      TableFilterOp = "gt"
+	FilterGreaterEqual TableFilterOp = "ge"
+	FilterLess         TableFilterOp = "lt"
+	FilterLessEqual    TableFilterOp = "le"
+	// FilterContains matches a value anywhere in the column, read as text whatever the column's
+	// own type is, so one condition serves a name and a number alike.
+	FilterContains TableFilterOp = "contains"
+	FilterNull     TableFilterOp = "isnull"
+	FilterNotNull  TableFilterOp = "notnull"
+)
+
+// TableFilter narrows a table read to the rows one column satisfies. Value is the reader's own
+// text, and the two operators that take none ignore it.
+type TableFilter struct {
+	Column string
+	Op     TableFilterOp
+	Value  string
+}
+
 // TablePage is one window onto a table's rows. A Limit of zero or less reads every row and
 // makes Offset meaningless, the same convention as Query.MaxRows.
 type TablePage struct {
 	Namespace
-	Table  string
-	Limit  int
-	Offset int
-	Sort   TableSort
+	Table string
+	Limit int
+	// Filters narrow the read, and narrow its total with it: every one of them holds, so a page
+	// is cut from the rows that satisfy all rather than from the table.
+	Filters []TableFilter
+	Offset  int
+	Sort    TableSort
 	// Stream, when set, takes the rows as they are read and the read then answers with none of
 	// them. A page that leaves it nil is answered whole, which is what every bounded read is.
 	Stream *RowStream

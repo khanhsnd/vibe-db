@@ -17,7 +17,14 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 		return driver.TableRows{}, err
 	}
 
-	total, err := s.countRows(ctx, page.Namespace, page.Table)
+	where, err := dialect.Where(page.Filters, columns)
+	if err != nil {
+		return driver.TableRows{}, err
+	}
+
+	// The total is counted through the same filters the rows are read through, or the pager
+	// would walk pages of a table the reader has narrowed away.
+	total, err := s.countRows(ctx, page.Namespace, page.Table, where)
 	if err != nil {
 		return driver.TableRows{}, err
 	}
@@ -27,7 +34,7 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 		return driver.TableRows{}, err
 	}
 
-	query := buildSelect(page, columns)
+	query := buildSelect(page, columns, where)
 
 	// The statement itself bounds the read — either through its LIMIT clause or because the
 	// caller asked for every row — so no cap is applied here. A page carrying a stream takes its
@@ -178,6 +185,7 @@ func (s *session) countRows(
 	ctx context.Context,
 	ns driver.Namespace,
 	table string,
+	where string,
 ) (int64, error) {
 	db, err := s.pool(ns.Database)
 	if err != nil {
@@ -185,7 +193,7 @@ func (s *session) countRows(
 	}
 
 	var total int64
-	query := "SELECT COUNT(*) FROM " + dialect.Qualify(ns.Schema, table)
+	query := "SELECT COUNT(*) FROM " + dialect.Qualify(ns.Schema, table) + where
 
 	if err := db.QueryRowContext(ctx, query).Scan(&total); err != nil {
 		return 0, translateError(err)
@@ -197,7 +205,8 @@ func (s *session) countRows(
 // offset are numbers this side counts, never anything a reader typed, so one string is both what
 // runs and what the reader is shown — the only arrangement in which the two cannot drift apart.
 // A page that asks for every row carries no LIMIT clause at all, which makes its offset moot.
-func buildSelect(page driver.TablePage, columns []driver.Column) string {
+// The WHERE clause is built by the caller, which needs the same one for the count.
+func buildSelect(page driver.TablePage, columns []driver.Column, where string) string {
 	names := make([]string, len(columns))
 	for i, column := range columns {
 		names[i] = dialect.QuoteIdent(column.Name)
@@ -205,6 +214,7 @@ func buildSelect(page driver.TablePage, columns []driver.Column) string {
 
 	query := "SELECT " + strings.Join(names, ", ") +
 		" FROM " + dialect.Qualify(page.Schema, page.Table) +
+		where +
 		dialect.OrderBy(page.Sort, columns)
 
 	if page.Limit <= 0 {

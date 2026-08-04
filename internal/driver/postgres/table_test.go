@@ -18,7 +18,7 @@ func TestBuildSelectOrdersByPrimaryKey(t *testing.T) {
 		Offset:    200,
 	}
 
-	got := buildSelect(page, columns)
+	got := buildSelect(page, columns, "")
 	want := `SELECT "id", "email" FROM "public"."users" ORDER BY "id" LIMIT 100 OFFSET 200`
 
 	if got != want {
@@ -34,7 +34,7 @@ func TestBuildSelectWithoutPrimaryKeyHasNoOrderBy(t *testing.T) {
 		Limit:     100,
 	}
 
-	got := buildSelect(page, columns)
+	got := buildSelect(page, columns, "")
 	want := `SELECT "email" FROM "public"."log" LIMIT 100 OFFSET 0`
 
 	if got != want {
@@ -50,8 +50,24 @@ func TestBuildSelectWithoutLimitReadsEveryRow(t *testing.T) {
 		Offset:    200,
 	}
 
-	got := buildSelect(page, columns)
+	got := buildSelect(page, columns, "")
 	want := `SELECT "id" FROM "public"."users" ORDER BY "id"`
+
+	if got != want {
+		t.Errorf("buildSelect =\n%s\nwant\n%s", got, want)
+	}
+}
+
+func TestBuildSelectFiltersBeforeItOrders(t *testing.T) {
+	columns := []driver.Column{{Name: "id", PrimaryKey: true}}
+	page := driver.TablePage{
+		Namespace: driver.Namespace{Database: "shop", Schema: "public"},
+		Table:     "users",
+		Limit:     100,
+	}
+
+	got := buildSelect(page, columns, ` WHERE "id" > '7'`)
+	want := `SELECT "id" FROM "public"."users" WHERE "id" > '7' ORDER BY "id" LIMIT 100 OFFSET 0`
 
 	if got != want {
 		t.Errorf("buildSelect =\n%s\nwant\n%s", got, want)

@@ -427,6 +427,36 @@ its right — the qualified table, or why the result is read-only:
 - **`Refresh` and `Apply` replay the statement that produced the rows**, not whatever the editor
   holds now, so editing the SQL after a run cannot make Apply execute something else.
 
+## Filtering and sorting from a cell
+
+**Right-clicking a cell is where a grid is acted on.** The menu is one object — [grid.md](grid.md)
+lists every item — and two of its groups are worth knowing outside the grid:
+
+- **Filter ▸** offers `=`, `≠`, `>`, `≥`, `<`, `≤`, `contains`, `is NULL` and `is not NULL` against
+  the value under the pointer, so a condition is *picked* and never typed twice. Each one adds to the
+  conditions already in force, and every one of them holds at once. **Show/Hide Filter & Sort** draws
+  the strip over the header that lists them, a chip apiece, each dropped by its own ✕;
+  **Remove All Filters & Sorts** clears the lot, the sort included. Hiding the strip does not widen
+  the grid — the conditions hold either way.
+- **Where the filtering happens depends on where the rows come from**, exactly as with the sort. A
+  **table** tab filters *on the server*: the conditions travel in `TablePageRequest`, become the
+  read's `WHERE`, and the **total is counted through them too**, so the pager walks the pages that
+  are actually there and the status line's statement shows the clause that ran. A **query result**
+  filters the rows it already holds, since it has no statement of its own to narrow, and so a filter
+  there reaches only what was fetched — the same bound its in-memory sort has. A draft row is never
+  filtered away; it is a row still being filled in.
+
+The operator crosses the wire as a **token** (`gt`, `contains`, …) and is spelled into SQL by the
+driver, so nothing a reader typed arrives as an operator. The *value* is written into the statement
+as a string literal rather than bound, for the same reason the `LIMIT` is: one string is then both
+what ran and what the status line shows and copies — a statement carrying `?` is not one a reader
+could paste into an editor. `sqlkit.Dialect.QuoteString` is what stands between the text and the
+statement, and both engines read a string literal back into a column of any type. Two smaller
+consequences: `contains` compares the column **as text** (`CAST(… AS CHAR)` / `AS TEXT`), so it works
+on a number or a date as well as a name, and a `%` the reader typed is their own wildcard. In memory
+`contains` ignores case; on the server the collation decides, which is MySQL ignoring it and
+PostgreSQL not.
+
 ## Exporting a grid
 
 An **Export** button sits **in the strip over every grid, against its right edge** — its own head
@@ -441,6 +471,11 @@ footer acts on a row.
 whole result rather than the page in front, since a reader who paged still means the result; a table
 tab exports the page, because a table's rows are paged by the *server* and the page is all the grid
 has. A hidden column is not exported: it is one nobody asked for.
+
+**The cell menu's Save Data As ▸ is the same three formats**, so a reader who is already in the menu
+need not travel to the button; **Copy As ▸** beside it puts the selection on the clipboard in the
+clipboard's own shapes — tab-separated with field names, CSV, JSON — and treats a `NULL` the way the
+file of that format does.
 
 | Format | What it does with a `NULL` |
 |---|---|

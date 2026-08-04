@@ -22,11 +22,24 @@ type Dialect struct {
 	// DollarQuotes says `$tag$ … $tag$` is a string, which is how a PostgreSQL function body
 	// carries semicolons without ending the statement that declares it.
 	DollarQuotes bool
+	// TextType is what this engine calls text in a CAST, which is how a column of any type is
+	// compared as text — see Where's `contains`.
+	TextType string
 }
 
 var (
-	MySQL    = Dialect{IdentQuote: '`', HashComments: true, BackslashEscapes: true}
-	Postgres = Dialect{IdentQuote: '"', NamespaceIsSchema: true, DollarQuotes: true}
+	MySQL = Dialect{
+		IdentQuote:       '`',
+		HashComments:     true,
+		BackslashEscapes: true,
+		TextType:         "CHAR",
+	}
+	Postgres = Dialect{
+		IdentQuote:        '"',
+		NamespaceIsSchema: true,
+		DollarQuotes:      true,
+		TextType:          "TEXT",
+	}
 )
 
 func (d Dialect) QuoteIdent(name string) string {

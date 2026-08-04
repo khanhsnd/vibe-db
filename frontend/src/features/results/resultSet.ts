@@ -180,6 +180,39 @@ export function originOf(selection: Selection | null): CellRef | null {
   return { row: rowStart, column: columnStart }
 }
 
+/**
+ * Every cell the selection covers, once each and in reading order, which is what a write over a
+ * range acts on — `Set to NULL` over three rows is three writes and not one.
+ */
+export function selectedCells(
+  selection: Selection | null,
+  rowCount: number,
+  columnCount: number,
+): CellRef[] {
+  const seen = new Set<string>()
+  const cells: CellRef[] = []
+
+  for (const range of selection?.ranges ?? []) {
+    const bounds = boundsOf(range)
+
+    for (let row = Math.max(bounds.rowStart, 0); row <= Math.min(bounds.rowEnd, rowCount - 1); row++) {
+      for (
+        let column = Math.max(bounds.columnStart, 0);
+        column <= Math.min(bounds.columnEnd, columnCount - 1);
+        column++
+      ) {
+        const key = cellKey(row, column)
+        if (seen.has(key)) continue
+
+        seen.add(key)
+        cells.push({ row, column })
+      }
+    }
+  }
+
+  return cells
+}
+
 /** Every row the selection touches, once each and in order, which is what a delete acts on. */
 export function selectedRows(selection: Selection | null): number[] {
   const rows = new Set<number>()
@@ -192,28 +225,48 @@ export function selectedRows(selection: Selection | null): number[] {
   return [...rows].sort((a, b) => a - b)
 }
 
-/** Rectangles top to bottom, so rows picked in any order still copy in the order they read. */
-export function toTSV(selection: Selection, data: GridData): string {
+/** One rectangle of the selection: its cells, and the names of the columns they sit under. */
+export interface CellBlock {
+  columns: string[]
+  rows: Cell[][]
+}
+
+/**
+ * The selection as rectangles of values, top to bottom, so rows picked in any order still read
+ * in the order they are drawn. Every format a copy writes is built from these — the names are
+ * carried because a CSV and a JSON object need them and a plain copy does not.
+ */
+export function selectedBlocks(selection: Selection, data: GridData): CellBlock[] {
   return selection.ranges
     .map(boundsOf)
     .sort((a, b) => a.rowStart - b.rowStart || a.columnStart - b.columnStart)
     .map((bounds) => block(bounds, data))
+}
+
+export function toTSV(selection: Selection, data: GridData): string {
+  return selectedBlocks(selection, data)
+    .map((one) => one.rows.map((row) => row.map(cellText).join('\t')).join('\n'))
     .join('\n')
 }
 
-function block(bounds: CellBounds, data: GridData): string {
-  const lines: string[] = []
+function block(bounds: CellBounds, data: GridData): CellBlock {
+  const columns: string[] = []
+  for (let column = bounds.columnStart; column <= bounds.columnEnd; column++) {
+    const name = data.columns[column]?.name
+    if (name !== undefined) columns.push(name)
+  }
 
+  const rows: Cell[][] = []
   for (let row = bounds.rowStart; row <= bounds.rowEnd; row++) {
     const source = data.rows[row]
     if (!source) continue
 
-    const cells: string[] = []
+    const cells: Cell[] = []
     for (let column = bounds.columnStart; column <= bounds.columnEnd; column++) {
-      cells.push(cellText(source[column] ?? null))
+      cells.push(source[column] ?? null)
     }
-    lines.push(cells.join('\t'))
+    rows.push(cells)
   }
 
-  return lines.join('\n')
+  return { columns, rows }
 }
