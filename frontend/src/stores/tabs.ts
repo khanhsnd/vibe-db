@@ -2,9 +2,11 @@ import { create } from 'zustand'
 
 import type { Namespace } from '@/bridge/connections'
 
+import { useConsoleStore } from './console'
 import { useQueriesStore } from './queries'
+import { useTableViewsStore } from './tableViews'
 
-export type TabKind = 'query' | 'table' | 'design' | 'objects'
+export type TabKind = 'query' | 'table' | 'design' | 'objects' | 'console'
 
 interface TabBase {
   id: string
@@ -41,12 +43,22 @@ export interface ObjectsTab extends TabBase {
   kind: 'objects'
 }
 
-export type Tab = QueryTab | TableTab | DesignTab | ObjectsTab
+/**
+ * One statement at a time against a connection, with everything already sent kept above the
+ * prompt — what Console opens. It holds no text of its own: what was typed has either been sent,
+ * and is in the transcript, or is still in the prompt.
+ */
+export interface ConsoleTab extends TabBase {
+  kind: 'console'
+}
+
+export type Tab = QueryTab | TableTab | DesignTab | ObjectsTab | ConsoleTab
 export type NewTab =
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
   | Omit<DesignTab, 'id'>
   | Omit<ObjectsTab, 'id'>
+  | Omit<ConsoleTab, 'id'>
 
 /** What names a table wherever one is opened: which connection, which namespace, which table. */
 export interface TableTarget {
@@ -55,7 +67,7 @@ export interface TableTarget {
   table: string
 }
 
-type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'namespace' | 'rowLimit'>>
+type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'rowLimit'>>
 
 interface TabsState {
   tabs: Tab[]
@@ -67,8 +79,12 @@ interface TabsState {
   openDesign: (target: TableTarget) => string
   /** Every table of a namespace, with what the catalogue keeps about each. */
   openTables: (profileId: string, namespace: Namespace) => string
+  /** A console on one connection. One per connection and namespace, like every other tab. */
+  openConsole: (profileId: string, namespace: Namespace) => string
   close: (id: string) => void
   activate: (id: string) => void
+  /** Points a tab at another namespace, which is what the picker on its own strip does. */
+  retarget: (id: string, namespace: Namespace) => void
   editQuery: (id: string, edit: QueryEdit) => void
   designed: (id: string, table: string) => void
 }
@@ -107,6 +123,11 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
     const id = nextId()
     set((s) => ({ tabs: [...s.tabs, { ...tab, id }], activeId: id }))
+
+    // A table tab is given its view here rather than by whatever opened it, so a tab cannot exist
+    // without one. What the reader does to a table outlives the tab being looked away from — see
+    // `stores/tableViews.ts` — and a tab being reused above keeps the view it already has.
+    if (tab.kind === 'table') useTableViewsStore.getState().start(id)
     return id
   },
 
@@ -127,8 +148,13 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   openTables: (profileId, namespace) =>
     get().open({ kind: 'objects', title: 'Tables', profileId, namespace }),
 
+  openConsole: (profileId, namespace) =>
+    get().open({ kind: 'console', title: 'Console', profileId, namespace }),
+
   close: (id) => {
     useQueriesStore.getState().discard(id)
+    useTableViewsStore.getState().discard(id)
+    useConsoleStore.getState().discard(id)
 
     set((s) => {
       const index = s.tabs.findIndex((t) => t.id === id)
@@ -143,6 +169,9 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   },
 
   activate: (id) => set({ activeId: id }),
+
+  retarget: (id, namespace) =>
+    set((s) => ({ tabs: s.tabs.map((tab) => (tab.id === id ? { ...tab, namespace } : tab)) })),
 
   // A design tab whose Save has just created its table is no longer designing a new one: it now
   // designs that table, and pressing Save again alters it rather than creating it twice.

@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'TABLE_NOT_EDITABLE'
   | 'EMPTY_STATEMENT'
   | 'SQL_ERROR'
+  | 'FILE_UNREADABLE'
   | 'QUERY_CANCELLED'
   | 'HOST_UNREACHABLE'
   | 'TIMEOUT'

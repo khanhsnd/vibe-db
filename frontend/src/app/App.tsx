@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   authInfo,
   namespaceLabel,
+  namespaceOf,
   NO_NAMESPACE,
   toProfileInput,
   type Profile,
   type ProfileInput,
 } from '@/bridge/connections'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
+import { ExecuteFileDialog } from '@/features/connections/ExecuteFileDialog'
 import { PasswordPrompt } from '@/features/connections/PasswordPrompt'
 import {
   hasRows,
@@ -43,6 +45,7 @@ export function App() {
   const openTable = useTabsStore((s) => s.openTable)
   const openDesign = useTabsStore((s) => s.openDesign)
   const openTables = useTabsStore((s) => s.openTables)
+  const openConsole = useTabsStore((s) => s.openConsole)
   const activeTab = useTabsStore((s) => s.tabs.find((t) => t.id === s.activeId) ?? null)
 
   const profiles = useConnectionsStore((s) => s.profiles)
@@ -92,6 +95,8 @@ export function App() {
   const [dialogProfile, setDialogProfile] = useState<ProfileInput | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [promptFor, setPromptFor] = useState<Profile | null>(null)
+  /** The connection a file is being run against, and non-null exactly while that dialog is up. */
+  const [fileFor, setFileFor] = useState<Profile | null>(null)
 
   useEffect(() => {
     void loadProfiles()
@@ -175,9 +180,20 @@ export function App() {
     [openTable],
   )
 
+  // A console opens where the reader already is on that connection: the namespace the tree has
+  // selected, or the one the profile connects to, so the first statement typed has somewhere to run.
+  const openConnectionConsole = useCallback(
+    (profile: Profile) => {
+      openConsole(profile.id, activeNamespace[profile.id] ?? namespaceOf(profile.database))
+    },
+    [openConsole, activeNamespace],
+  )
+
   const menuItemsFor = useTreeMenu({
     onConnect: startConnect,
     onEditConnection: openEditConnection,
+    onConsole: openConnectionConsole,
+    onExecuteFile: setFileFor,
     onOpenRows: openTable,
     onDesign: openDesign,
   })
@@ -310,6 +326,13 @@ export function App() {
       <StatusBar {...status} />
 
       <ConnectionDialog open={dialogOpen} initial={dialogProfile} onOpenChange={setDialogOpen} />
+
+      <ExecuteFileDialog
+        profile={fileFor}
+        onOpenChange={(open) => {
+          if (!open) setFileFor(null)
+        }}
+      />
 
       <SchemaDialogs />
 

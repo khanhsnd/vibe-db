@@ -142,6 +142,48 @@ export function needsConfirming(review: ScriptReview): StatementReview[] {
   return review.statements.filter((statement) => statement.confirm)
 }
 
+/**
+ * A file of statements and where to run it. The path is one the reader picked in the host's own
+ * dialog — see `queries.chooseFile` — and the encoding is how its bytes are read as text.
+ */
+export interface ScriptFileRequest {
+  runId: string
+  database: string
+  schema: string
+  path: string
+  encoding: string
+  /** Whether the rest of the file still runs after a statement the server refuses. */
+  continueOnError: boolean
+}
+
+/** What a file did, one entry per statement in the order they ran. No rows are kept — see `RunFile`. */
+export interface ScriptFileResult {
+  statements: StatementOutcome[]
+  failed: number
+  elapsedMs: number
+}
+
+export interface EncodingInfo {
+  value: string
+  label: string
+}
+
+/**
+ * How a file's bytes are read as text. The list mirrors the Go side's exactly — a name that is not
+ * here is refused there rather than guessed at — and UTF-8 strips a byte order mark, which nearly
+ * every file written by a Windows tool carries.
+ */
+export const SCRIPT_ENCODINGS: readonly EncodingInfo[] = [
+  { value: 'utf-8', label: 'UTF-8' },
+  { value: 'utf-16le', label: 'UTF-16 LE' },
+  { value: 'utf-16be', label: 'UTF-16 BE' },
+  { value: 'windows-1252', label: 'Windows-1252 (Western European)' },
+  { value: 'windows-1258', label: 'Windows-1258 (Vietnamese)' },
+  { value: 'iso-8859-1', label: 'ISO-8859-1 (Latin 1)' },
+]
+
+export const DEFAULT_ENCODING = 'utf-8'
+
 export const queries = {
   run: (sessionId: string, request: QueryRequest): Promise<QueryResult> =>
     call(() =>
@@ -155,4 +197,12 @@ export const queries = {
 
   format: (sessionId: string, sql: string): Promise<string> =>
     call(() => api.Format(sessionId, sql)),
+
+  /** Raises the host's file picker. An empty path is a dismissed dialog, not a failure. */
+  chooseFile: (): Promise<string> => call(() => api.ChooseScriptFile()),
+
+  runFile: (sessionId: string, request: ScriptFileRequest): Promise<ScriptFileResult> =>
+    call(() =>
+      api.RunFile(sessionId, request as unknown as app.ScriptFileInput),
+    ) as unknown as Promise<ScriptFileResult>,
 }

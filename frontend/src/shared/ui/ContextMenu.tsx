@@ -29,11 +29,16 @@ export const MENU_SURFACE =
  * The look of a menu, in one place, so a menu raised by a right-click and one raised by a button
  * are the same object — see `MenuButton`, which draws the other half.
  */
-export const MENU_CONTENT = `${MENU_SURFACE} min-w-[168px] py-1`
+export const MENU_CONTENT = `${MENU_SURFACE} min-w-[164px] py-1`
 
+/**
+ * A menu row is deliberately tighter than a form's: a right-click menu is read by scanning a
+ * column of short labels, and a list of fourteen of them at a form's spacing is a list that runs
+ * off the window and has to be scrolled to be read.
+ */
 export const menuItemClass = (danger: boolean | undefined) =>
   cn(
-    'mx-1 flex cursor-default items-center gap-2 rounded px-2 py-1.5 text-sm outline-none',
+    'mx-1 flex cursor-default items-center gap-2 rounded px-2 py-1 text-xs outline-none',
     'data-[disabled]:pointer-events-none data-[disabled]:opacity-40',
     danger ? 'text-danger data-[highlighted]:bg-danger-subtle' : 'text-fg data-[highlighted]:bg-hover',
   )
@@ -46,7 +51,7 @@ export function MenuGlyph({ item, iconic }: { item: MenuItem; iconic: boolean })
   if (!iconic) return null
 
   return (
-    <span className={cn('grid h-3.5 w-3.5 shrink-0 place-items-center', !item.danger && 'text-faint')}>
+    <span className={cn('grid h-3.5 w-3.5 shrink-0 place-items-center', !item.danger && 'text-muted')}>
       {item.icon}
     </span>
   )
@@ -87,7 +92,7 @@ export function MenuItems({ parts, items }: { parts: MenuParts; items: MenuItem[
     <>
       {items.map((item) => (
         <div key={item.label}>
-          {item.separatorBefore ? <parts.Separator className="my-1 h-px bg-line" /> : null}
+          {item.separatorBefore ? <parts.Separator className="my-0.5 h-px bg-line" /> : null}
 
           {item.items ? (
             <parts.Sub>
@@ -97,7 +102,7 @@ export function MenuItems({ parts, items }: { parts: MenuParts; items: MenuItem[
               >
                 <MenuGlyph item={item} iconic={iconic} />
                 {item.label}
-                <ChevronRight size={13} className="ml-auto shrink-0 text-faint" />
+                <ChevronRight size={12} className="ml-auto shrink-0 text-faint" />
               </parts.SubTrigger>
               <parts.Portal>
                 <parts.SubContent sideOffset={2} className={MENU_CONTENT}>

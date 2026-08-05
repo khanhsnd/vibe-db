@@ -22,6 +22,9 @@ const (
 	CodeTableNotEditable ErrorCode = "TABLE_NOT_EDITABLE"
 	CodeEmptyStatement   ErrorCode = "EMPTY_STATEMENT"
 	CodeSQLError         ErrorCode = "SQL_ERROR"
+	// CodeFileUnreadable is a file on this machine, not an answer from a server — see
+	// domain.ErrFileUnreadable.
+	CodeFileUnreadable ErrorCode = "FILE_UNREADABLE"
 	// CodeUnsupported is a thing this engine has no concept of rather than a thing that went
 	// wrong — a foreign key on MongoDB, a primary key other than `_id`. It is its own code so the
 	// UI can say so plainly instead of drawing it as a failure the reader could retry.
@@ -70,6 +73,7 @@ var sentinelToWire = []struct {
 	{domain.ErrTableNotEditable, CodeTableNotEditable, "This table has no primary key, so a single row cannot be identified for editing."},
 	{domain.ErrEmptyStatement, CodeEmptyStatement, "There is no statement to run."},
 	{domain.ErrQueryCancelled, CodeQueryCancelled, "The query was cancelled."},
+	{domain.ErrFileUnreadable, CodeFileUnreadable, "That file could not be read. Check it is still there and that this account can open it."},
 	{domain.ErrHostUnreachable, CodeHostUnreachable, "Could not reach the server. Check the host and port."},
 	{domain.ErrConnectionTimeout, CodeTimeout, "The server did not respond in time."},
 	{domain.ErrTLSUnsupported, CodeTLSUnsupported, "The server does not support TLS. Try a lower TLS mode."},

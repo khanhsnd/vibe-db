@@ -41,6 +41,11 @@ export interface TreeNode {
    * everything under it belongs to that connection and inherits the warning by being under it.
    */
   environment?: string
+  /**
+   * The colour the reader marked this connection with. Only a connection has one, and everything
+   * under it is washed with it by being under it — see `flatten`.
+   */
+  colour?: string
   status?: ConnectionStatus
   active?: boolean
   badge?: string
@@ -55,6 +60,8 @@ export interface FlatNode {
   depth: number
   expanded: boolean
   expandable: boolean
+  /** The colour of the connection this row belongs to, inherited from the root of its branch. */
+  colour: string
 }
 
 export function isExpandable(node: TreeNode): boolean {
@@ -139,15 +146,18 @@ export function searchTree(roots: TreeNode[], query: string): TreeSearch | null 
 export function flatten(roots: TreeNode[], expanded: ReadonlySet<string>): FlatNode[] {
   const visible: FlatNode[] = []
 
-  const walk = (nodes: TreeNode[], depth: number) => {
+  // A colour is set on a connection and inherited by everything under it, which is the whole of
+  // what "this connection is the blue one" means: a database of it is that connection's database.
+  const walk = (nodes: TreeNode[], depth: number, colour: string) => {
     for (const node of nodes) {
       const expandable = isExpandable(node)
       const isOpen = expandable && expanded.has(node.id)
-      visible.push({ node, depth, expanded: isOpen, expandable })
-      if (isOpen && node.children?.length) walk(node.children, depth + 1)
+      const own = node.colour ?? colour
+      visible.push({ node, depth, expanded: isOpen, expandable, colour: own })
+      if (isOpen && node.children?.length) walk(node.children, depth + 1, own)
     }
   }
 
-  walk(roots, 0)
+  walk(roots, 0, '')
   return visible
 }

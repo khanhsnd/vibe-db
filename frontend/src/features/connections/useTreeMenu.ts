@@ -1,6 +1,13 @@
 import { useCallback } from 'react'
 
-import { engineInfo, engineWords, type EngineWords, type Namespace, type Profile } from '@/bridge/connections'
+import {
+  CONNECTION_COLOURS,
+  engineInfo,
+  engineWords,
+  type EngineWords,
+  type Namespace,
+  type Profile,
+} from '@/bridge/connections'
 import { databases } from '@/bridge/databases'
 import { ICON } from '@/shared/ui/menuIcons'
 import { schema } from '@/bridge/schema'
@@ -12,11 +19,16 @@ import { tableKey, useConnectionsStore, type ChangeSchema } from '@/stores/conne
 import { useSchemaStore, type SchemaRequest } from '@/stores/schema'
 import type { TableTarget } from '@/stores/tabs'
 
+import { colourSwatch } from './ConnectionColour'
 import { ownsObjects, type TreeNode } from './tree'
 
 interface TreeMenuActions {
   onConnect: (profile: Profile) => void
   onEditConnection: (profile: Profile) => void
+  /** Opens a console on this connection, at whichever namespace it is pointed at. */
+  onConsole: (profile: Profile) => void
+  /** Raises the dialog that runs a file of statements against this connection. */
+  onExecuteFile: (profile: Profile) => void
   /** Opens a data tab on whatever has rows: a table, or a view, which reads the same way. */
   onOpenRows: (target: TableTarget) => void
   /** Opens the designer on a table, or on a new one when the table is empty. */
@@ -38,12 +50,14 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
   const refreshObjects = useConnectionsStore((s) => s.refreshObjects)
   const refreshSchemas = useConnectionsStore((s) => s.refreshSchemas)
   const refreshStructure = useConnectionsStore((s) => s.refreshStructure)
+  const refreshDatabases = useConnectionsStore((s) => s.refreshDatabases)
+  const setColour = useConnectionsStore((s) => s.setColour)
   const changeSchema = useConnectionsStore((s) => s.changeSchema)
   const changeDatabases = useConnectionsStore((s) => s.changeDatabases)
   const ask = useSchemaStore((s) => s.ask)
   const askAddField = useSchemaStore((s) => s.askAddField)
 
-  const { onConnect, onEditConnection, onOpenRows, onDesign } = actions
+  const { onConnect, onEditConnection, onConsole, onExecuteFile, onOpenRows, onDesign } = actions
 
   return useCallback(
     (node: TreeNode): MenuItem[] => {
@@ -60,12 +74,16 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       }
 
       if (node.kind === 'connection') {
-        return connectionItems(node, profile, Boolean(sessions[node.profileId]), {
+        return connectionItems(profile, words, Boolean(sessions[node.profileId]), {
           newDatabase,
           onConnect,
           onEditConnection,
+          onConsole,
+          onExecuteFile,
           disconnect,
           deleteProfile,
+          setColour,
+          refreshDatabases,
         })
       }
 
@@ -224,12 +242,16 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       refreshObjects,
       refreshSchemas,
       refreshStructure,
+      refreshDatabases,
+      setColour,
       changeSchema,
       changeDatabases,
       ask,
       askAddField,
       onConnect,
       onEditConnection,
+      onConsole,
+      onExecuteFile,
       onOpenRows,
       onDesign,
     ],
@@ -273,29 +295,71 @@ function routineItems(
   ]
 }
 
+/**
+ * Everything a connection is offered, in three groups: what it *is* — open or shut, and the
+ * database list it holds — then what can be *run* on it, then what the connection itself is.
+ * Anything needing a live server is left out rather than greyed out while it is shut, because a
+ * closed connection cannot be asked anything at all and a column of dead items says only that.
+ */
 function connectionItems(
-  node: TreeNode,
   profile: Profile,
+  words: EngineWords,
   connected: boolean,
   on: {
     newDatabase: MenuItem
     onConnect: (profile: Profile) => void
     onEditConnection: (profile: Profile) => void
+    onConsole: (profile: Profile) => void
+    onExecuteFile: (profile: Profile) => void
     disconnect: (profileId: string) => Promise<void>
     deleteProfile: (profileId: string) => Promise<void>
+    setColour: (profileId: string, colour: string) => Promise<void>
+    refreshDatabases: (profileId: string) => Promise<void>
   },
 ): MenuItem[] {
+  const live: MenuItem[] = connected
+    ? [
+        {
+          label: 'Refresh',
+          icon: ICON.refresh,
+          onSelect: () => void on.refreshDatabases(profile.id),
+        },
+        {
+          label: 'Console',
+          icon: ICON.console,
+          separatorBefore: true,
+          onSelect: () => on.onConsole(profile),
+        },
+        {
+          label: `Execute ${words.scriptFile}…`,
+          icon: ICON.executeFile,
+          onSelect: () => on.onExecuteFile(profile),
+        },
+        on.newDatabase,
+      ]
+    : []
+
   return [
     connected
       ? {
           label: 'Disconnect',
           icon: ICON.disconnect,
-          onSelect: () => void on.disconnect(node.profileId),
+          onSelect: () => void on.disconnect(profile.id),
         }
       : { label: 'Connect', icon: ICON.connect, onSelect: () => on.onConnect(profile) },
-    // A database is made on a server, so the item is only there once there is a session to make
-    // it on: offering it on a closed connection would be an error waiting to be raised.
-    ...(connected ? [{ ...on.newDatabase, separatorBefore: true }] : []),
+    ...live,
+    {
+      label: 'Colour',
+      icon: ICON.colour,
+      separatorBefore: true,
+      // The palette is the submenu rather than nine items on the menu itself: a colour is picked
+      // rarely and would otherwise be most of what a right-click shows.
+      items: CONNECTION_COLOURS.map((info) => ({
+        label: info.label,
+        icon: colourSwatch(info.value, info.value === profile.colour),
+        onSelect: () => void on.setColour(profile.id, info.value),
+      })),
+    },
     {
       label: 'Edit Connection…',
       icon: ICON.editConnection,
@@ -306,7 +370,7 @@ function connectionItems(
       icon: ICON.delete,
       danger: true,
       separatorBefore: true,
-      onSelect: () => void on.deleteProfile(node.profileId),
+      onSelect: () => void on.deleteProfile(profile.id),
     },
   ]
 }

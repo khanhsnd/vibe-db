@@ -46,6 +46,14 @@
   the indexes under it read as one thing — and it is drawn as a folder, open or shut, never as the
   thing it holds: a `Tables` folder wearing a table would be the same row as the tables beneath it.
   A new kind is a token and a row in the `COLOURS` map beside `ICONS`, never a colour in a component.
+- **A connection's colour is inherited, not repeated.** `buildTree` puts it on the connection node
+  alone and `flatten` carries it down every branch, so a `FlatNode` knows which connection's colour
+  its row is under without every node builder having to be told. The wash itself is mixed in
+  `features/connections/ConnectionColour.tsx` from one token — `--conn-tint` — over the `--conn-*`
+  palette, and it is drawn as a `-z-10` overlay inside the row rather than as the row's background:
+  a background set inline would beat the `hover:` and `bg-selected` classes and the row would stop
+  responding to the pointer. The same file draws the swatch the menu is picked from, as a *function*
+  returning an element, because `useTreeMenu` builds its items in a `.ts` file.
 - **A tree badge is a count or a fact, and it is drawn as whichever it is.** A count — how many
   tables, how many fields — is a pill; a fact about the row itself — a field's type, an index's
   columns, the server a connection points at — is faint mono text. `isCount` tells them apart by the
@@ -70,6 +78,19 @@
   `s.settings.<field>`; `useTheme` is a thin hook over the same store. What a *new* tab starts with is
   read with `getState()` in a `useState` initialiser rather than subscribed to, because a default that
   followed an open tab around would not be a default.
+- **State that must outlive a tab being looked away from belongs in a store keyed by the tab id**,
+  never in the component: `WorkArea` mounts the tab in front and no other, so a component's own state
+  goes down with it. `stores/queries.ts` keeps a query tab's rows that way and `stores/tableViews.ts`
+  keeps a table tab's — the panels it has open, the columns it hides, and what its read was asked for.
+  Both are dropped by `tabs.close`, which is the one place a tab's belongings are let go, and a table
+  tab's view is started by `tabs.open` so a tab cannot exist without one. What each kind of tab keeps,
+  and why the two differ, is in [features.md](features.md#tabs).
+- **A new kind of tab adds state, not a second way of running things.** `stores/console.ts` keeps a
+  console's transcript and nothing else: the run goes through `stores/queries.ts` under the same tab
+  id, which is why a console's rows are paged, exported, edited and stopped by the code that already
+  does it for a query tab. Where a tab *points* is `tabs.retarget`, one action for every kind, so the
+  namespace picker on a strip is one component (`features/connections/NamespacePicker.tsx`) rather
+  than one per tab that has one.
 - Row height is shared between the object tree and the result grid via `shared/theme/density.ts`
   (the virtualizers need it as a number).
 - `shared/ui/Split.tsx` wraps `react-resizable-panels`, which renamed its entire public surface
@@ -104,6 +125,13 @@
   knows the two by, and the shape still reads where the colour cannot. The marks are two vendored
   path strings in `engineGlyphs.ts` (Devicon, MIT) rather than an icon-set dependency; the
   elephant's eyes and tusks are subpaths filled `evenodd`, so they are holes onto the chip.
+- **Nothing is selectable, and every failure is.** `body` carries `user-select: none` because this
+  is a client and not a document, so text is opted back in with `.selectable` — and anything
+  reporting a failure always opts in: `ErrorStrip` (the one-line strip four surfaces used to
+  hand-roll), `ResultPane`'s error panel, `Empty` (whose hint is often a server's own wording),
+  `Banner`, `Field`'s error note, the console transcript and the status bar's facts. The panel adds
+  `shared/ui/CopyButton` — the same tick-on-copy control the grid's status line uses — because the
+  code, the message and the engine's detail are one answer and are wanted as one paste.
 - **A read the reader waits on is `shared/ui/Loading`**, which fills its pane the way `Empty` does:
   the two make the same claim about the same area — nothing to show, or nothing *yet*. A surface
   draws it only while it has no rows at all; once rows are on screen a re-read leaves them there.

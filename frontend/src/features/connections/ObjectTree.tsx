@@ -22,6 +22,7 @@ import { cn } from '@/lib/cn'
 import { TREE_ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 
+import { colourTint } from './ConnectionColour'
 import { EngineIcon } from './EngineIcon'
 import { EnvironmentStripe } from './EnvironmentDot'
 import { StatusDot } from './StatusDot'
@@ -120,8 +121,9 @@ export function ObjectTree({
           const row = rows[item.index]
           if (!row) return null
 
-          const { node, depth, expanded: isOpen, expandable } = row
+          const { node, depth, expanded: isOpen, expandable, colour } = row
           const folder = isFolder(node)
+          const tint = colourTint(colour)
           // A field of the primary key is drawn with a key rather than a column, which is the
           // one place the icon says something the label does not. A folder is drawn open once it
           // is, which is the one place the icon says what the caret beside it already said —
@@ -159,6 +161,17 @@ export function ObjectTree({
                   paddingLeft: BASE_INDENT + depth * INDENT_PER_DEPTH,
                 }}
               >
+                {/* The connection's own colour, washed over the row. It sits behind the row's
+                    text and in front of its background, so hovering and selecting still read
+                    through it rather than being painted out by it. */}
+                {tint ? (
+                  <span
+                    aria-hidden
+                    style={{ background: tint }}
+                    className="pointer-events-none absolute inset-0 -z-10"
+                  />
+                ) : null}
+
                 {/* Only a connection carries one, and everything under it inherits the warning
                     by being under it — see EnvironmentStripe. */}
                 <EnvironmentStripe environment={node.environment ?? ''} />

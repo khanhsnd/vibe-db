@@ -7,6 +7,7 @@ import { NO_SORT, type Cell, type GridData, type SortKey } from '@/features/resu
 import { useGridOrder } from '@/features/results/useGridOrder'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
+import { ErrorStrip } from '@/shared/ui/ErrorStrip'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
 import { useSchemaStore } from '@/stores/schema'
@@ -98,11 +99,7 @@ export function QueryHistory({ profileId, onPick }: QueryHistoryProps) {
 
       {/* A failed read leaves whatever is drawn where it is and says so under it, exactly as the
           table list does with the same failure. */}
-      {entries !== null && error !== null ? (
-        <p className="shrink-0 truncate border-t border-danger/40 bg-danger-subtle px-2 py-1 text-xs text-danger">
-          {error.message}
-        </p>
-      ) : null}
+      {entries !== null && error !== null ? <ErrorStrip error={error} /> : null}
 
       <GridFooter editable={false} busy={loading} onRefresh={refresh}>
         <span>{log.length} statements</span>

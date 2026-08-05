@@ -51,12 +51,15 @@ type Profile struct {
 	Name        string `json:"name"`
 	Engine      string `json:"engine"`
 	Environment string `json:"environment"`
-	Host        string `json:"host"`
-	Port        int    `json:"port"`
-	User        string `json:"user"`
-	Database    string `json:"database"`
-	Auth        string `json:"auth"`
-	Region      string `json:"region"`
+	// Colour is the tint the sidebar draws this connection and everything under it in. It is the
+	// one field of a profile no server hears about — see domain.Colour.
+	Colour   string `json:"colour"`
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	User     string `json:"user"`
+	Database string `json:"database"`
+	Auth     string `json:"auth"`
+	Region   string `json:"region"`
 
 	TLS TLSSettings `json:"tls"`
 	SSH SSHSettings `json:"ssh"`
@@ -73,6 +76,7 @@ type ProfileInput struct {
 	Name        string `json:"name"`
 	Engine      string `json:"engine"`
 	Environment string `json:"environment"`
+	Colour      string `json:"colour"`
 	Host        string `json:"host"`
 	Port        int    `json:"port"`
 	User        string `json:"user"`
@@ -463,6 +467,7 @@ func toProfileDTO(profile domain.ConnectionProfile, hasPassword, hasSSHSecret bo
 		Name:        profile.Name,
 		Engine:      string(profile.Engine),
 		Environment: string(profile.Environment),
+		Colour:      string(profile.Colour),
 		Host:        profile.Host,
 		Port:        profile.Port,
 		User:        profile.User,
@@ -901,6 +906,7 @@ func (in ProfileInput) toDomain() domain.ConnectionProfile {
 		Name:        in.Name,
 		Engine:      engine,
 		Environment: domain.Environment(in.Environment),
+		Colour:      domain.Colour(in.Colour),
 		Host:        in.Host,
 		Port:        port,
 		User:        in.User,

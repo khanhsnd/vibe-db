@@ -91,12 +91,16 @@ interface FactProps {
   children: ReactNode
 }
 
-/** One fact of the bar: a glyph, its value, and the rule that divides it from the last. */
+/**
+ * One fact of the bar: a glyph, its value, and the rule that divides it from the last. The value is
+ * selectable — a host, a version, and, when nothing is connected, the wording of the failure that
+ * is standing where the server should be.
+ */
 function Fact({ icon, tint, bright = false, children }: FactProps) {
   return (
     <span className="flex min-w-0 items-center gap-1 border-l border-line pl-2">
       {icon ? <span className={cn('shrink-0', tint)}>{icon}</span> : null}
-      <span className={cn('truncate font-mono', bright && 'text-fg')}>{children}</span>
+      <span className={cn('selectable truncate font-mono', bright && 'text-fg')}>{children}</span>
     </span>
   )
 }

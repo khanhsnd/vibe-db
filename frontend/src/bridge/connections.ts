@@ -33,6 +33,8 @@ export interface Profile {
   name: string
   engine: string
   environment: string
+  /** The tint the sidebar washes this connection and everything under it with. */
+  colour: string
   host: string
   port: number
   user: string
@@ -52,6 +54,7 @@ export interface ProfileInput {
   name: string
   engine: string
   environment: string
+  colour: string
   host: string
   port: number
   user: string
@@ -135,6 +138,48 @@ export const ENVIRONMENTS = [
 
 export function environmentInfo(environment: string): EnvironmentInfo {
   return ENVIRONMENTS.find((info) => info.value === environment) ?? ENVIRONMENTS[0]
+}
+
+/**
+ * The colour a connection is marked with, which is the one thing on a profile no server ever hears
+ * about: it is how a reader tells two connections apart when the names are alike and the
+ * environments are the same. The palette is closed — see `domain.Colour`, which this mirrors —
+ * because a colour picked off a wheel is a colour that reads on one theme and vanishes on the other.
+ *
+ * `''` is a connection that has not picked one, and it wears the sidebar's own background.
+ */
+export type ConnectionColour =
+  | ''
+  | 'red'
+  | 'orange'
+  | 'yellow'
+  | 'green'
+  | 'teal'
+  | 'blue'
+  | 'purple'
+  | 'pink'
+
+export interface ColourInfo {
+  value: ConnectionColour
+  label: string
+  /** The token behind the colour, and `''` for none. Never a hex — see `shared/theme/tokens.css`. */
+  colour: string
+}
+
+export const CONNECTION_COLOURS = [
+  { value: '', label: 'No Colour', colour: '' },
+  { value: 'red', label: 'Red', colour: 'var(--conn-red)' },
+  { value: 'orange', label: 'Orange', colour: 'var(--conn-orange)' },
+  { value: 'yellow', label: 'Yellow', colour: 'var(--conn-yellow)' },
+  { value: 'green', label: 'Green', colour: 'var(--conn-green)' },
+  { value: 'teal', label: 'Teal', colour: 'var(--conn-teal)' },
+  { value: 'blue', label: 'Blue', colour: 'var(--conn-blue)' },
+  { value: 'purple', label: 'Purple', colour: 'var(--conn-purple)' },
+  { value: 'pink', label: 'Pink', colour: 'var(--conn-pink)' },
+] as const satisfies readonly ColourInfo[]
+
+export function colourInfo(colour: string): ColourInfo {
+  return CONNECTION_COLOURS.find((info) => info.value === colour) ?? CONNECTION_COLOURS[0]
 }
 
 /**
@@ -242,6 +287,8 @@ export interface EngineWords {
   /** Lower case, for the middle of a sentence. */
   row: string
   rows: string
+  /** A file of statements, for the item that runs one: a document store holds no SQL. */
+  scriptFile: string
 }
 
 const SQL_WORDS: EngineWords = {
@@ -249,6 +296,7 @@ const SQL_WORDS: EngineWords = {
   tables: 'Tables',
   row: 'row',
   rows: 'rows',
+  scriptFile: 'SQL File',
 }
 
 const DOCUMENT_WORDS: EngineWords = {
@@ -256,6 +304,7 @@ const DOCUMENT_WORDS: EngineWords = {
   tables: 'Collections',
   row: 'document',
   rows: 'documents',
+  scriptFile: 'Script File',
 }
 
 export function engineWords(engine: string): EngineWords {
@@ -337,6 +386,7 @@ export function emptyProfileInput(): ProfileInput {
     name: '',
     engine: value,
     environment: '',
+    colour: '',
     host: '127.0.0.1',
     port,
     user,
@@ -368,6 +418,7 @@ export function toProfileInput(profile: Profile): ProfileInput {
     name: profile.name,
     engine: profile.engine,
     environment: profile.environment,
+    colour: profile.colour,
     host: profile.host,
     port: profile.port,
     user: profile.user,

@@ -4,6 +4,8 @@ import {app} from '../models';
 
 export function Cancel(arg1:string):Promise<void>;
 
+export function ChooseScriptFile():Promise<string>;
+
 export function ClearHistory():Promise<void>;
 
 export function Format(arg1:string,arg2:string):Promise<string>;
@@ -13,3 +15,5 @@ export function ListHistory():Promise<Array<app.HistoryEntry>>;
 export function Review(arg1:string,arg2:string):Promise<app.ScriptReview>;
 
 export function Run(arg1:string,arg2:app.QueryInput):Promise<app.ScriptResult>;
+
+export function RunFile(arg1:string,arg2:app.ScriptFileInput):Promise<app.ScriptFileResult>;

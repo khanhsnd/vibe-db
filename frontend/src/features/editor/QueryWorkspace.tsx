@@ -37,6 +37,7 @@ export function QueryWorkspace({
   const rerun = useQueriesStore((s) => s.rerun)
   const cancel = useQueriesStore((s) => s.cancel)
   const editQuery = useTabsStore((s) => s.editQuery)
+  const retarget = useTabsStore((s) => s.retarget)
 
   const { hasSchemas } = engineInfo(engine)
   const { database, schema } = tab.namespace
@@ -163,8 +164,8 @@ export function QueryWorkspace({
    * are not there. The editor's own undo is what puts back whatever was being typed.
    */
   const pickHistory = (entry: HistoryEntry) => {
-    const namespace = namespaceOf(entry.database, entry.schema)
-    editQuery(tab.id, entry.database === '' ? { sql: entry.sql } : { sql: entry.sql, namespace })
+    editQuery(tab.id, { sql: entry.sql })
+    if (entry.database !== '') retarget(tab.id, namespaceOf(entry.database, entry.schema))
   }
 
   // Both shortcuts are bound on the window, because F5 reloads the WebView whenever focus sits
@@ -201,10 +202,7 @@ export function QueryWorkspace({
         rowLimit={tab.rowLimit}
         running={run.running}
         canRun={canRun}
-        // Changing database drops the schema with it, since a schema of one database names
-        // nothing in another.
-        onDatabaseChange={(next) => editQuery(tab.id, { namespace: namespaceOf(next) })}
-        onSchemaChange={(next) => editQuery(tab.id, { namespace: namespaceOf(database, next) })}
+        onNamespaceChange={(namespace) => retarget(tab.id, namespace)}
         onRowLimitChange={(rowLimit) => editQuery(tab.id, { rowLimit })}
         onExecute={() => start(false)}
         onExplain={() => start(true)}

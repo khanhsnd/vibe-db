@@ -6,6 +6,7 @@ import {
   engineInfo,
   engineWords,
   namespaceOf,
+  toProfileInput,
   NO_NAMESPACE,
   type EngineInfo,
   type Namespace,
@@ -52,6 +53,8 @@ interface ConnectionsState {
 
   loadProfiles: () => Promise<void>
   saveProfile: (input: ProfileInput) => Promise<Profile>
+  /** Marks a connection with a colour, or clears it. Nothing else about the profile changes. */
+  setColour: (profileId: string, colour: string) => Promise<void>
   deleteProfile: (profileId: string) => Promise<void>
   connect: (profileId: string, password: string) => Promise<void>
   disconnect: (profileId: string) => Promise<void>
@@ -121,6 +124,15 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     const saved = await connections.saveProfile(input)
     await get().loadProfiles()
     return saved
+  },
+
+  // A blank password in a saved profile keeps the stored one, so re-saving the profile it was
+  // read from is the whole of what marking one costs — see ConnectionAPI.SaveProfile.
+  setColour: async (profileId, colour) => {
+    const profile = get().profiles.find((one) => one.id === profileId)
+    if (!profile) return
+
+    await get().saveProfile({ ...toProfileInput(profile), colour })
   },
 
   deleteProfile: async (profileId) => {
@@ -380,6 +392,7 @@ export function buildTree(input: TreeInput): TreeNode[] {
       profileId: profile.id,
       engine: info.value,
       environment: profile.environment,
+      colour: profile.colour,
       status: input.statuses[profile.id] ?? 'idle',
       // Two connections to one server differ only in their name, and two connections *named*
       // alike differ only in their server — so the row that carries the name carries the server

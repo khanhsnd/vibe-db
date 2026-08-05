@@ -33,10 +33,12 @@ import {
 } from '@/features/results/resultSet'
 import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
 import { Empty } from '@/shared/ui/Empty'
+import { ErrorStrip } from '@/shared/ui/ErrorStrip'
 import { FetchProgress } from '@/shared/ui/FetchProgress'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
+import { IDLE_VIEW, useTableViewsStore } from '@/stores/tableViews'
 
 import { ColumnPicker } from './ColumnPicker'
 import { TableToolbar, type PanelKind } from './TableToolbar'
@@ -55,9 +57,17 @@ interface TableDataViewProps {
   profileId: string
   namespace: Namespace
   table: string
+  /** Which tab this is, and so which view is the reader's — see `stores/tableViews.ts`. */
+  tabId: string
 }
 
-export function TableDataView({ sessionId, profileId, namespace, table }: TableDataViewProps) {
+export function TableDataView({
+  sessionId,
+  profileId,
+  namespace,
+  table,
+  tabId,
+}: TableDataViewProps) {
   const {
     data,
     loadedAt,
@@ -74,17 +84,20 @@ export function TableDataView({ sessionId, profileId, namespace, table }: TableD
     changeCriteria,
     refresh,
     stopFetch,
-  } = useTableData(sessionId, namespace, table)
+  } = useTableData(sessionId, namespace, table, tabId)
 
   // A table outlives the app, so the order its columns were dragged into is stored under it. The
   // tab is keyed on its own target, so the key is read once and never changes under the component.
   const orderKey = columnOrderKey(profileId, namespace, table)
   const [order, setOrder] = useState(() => loadColumnOrder(orderKey))
 
-  const [panels, setPanels] = useState<ReadonlySet<PanelKind>>(new Set())
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
+  // How the tab was set up is the tab's and survives it being looked away from; the selection is
+  // not — it names rows of a read this mount is about to make again.
+  const { panels, hidden, filterShown } = useTableViewsStore((s) => s.views[tabId] ?? IDLE_VIEW)
+  const change = useTableViewsStore((s) => s.change)
   const [selection, setSelection] = useState<Selection | null>(null)
-  const [filterShown, setFilterShown] = useState(false)
+
+  const setFilterShown = (shown: boolean) => change(tabId, { filterShown: shown })
 
   const columns = data?.columns ?? []
   const editable = columns.some((column) => column.primaryKey)
@@ -131,22 +144,11 @@ export function TableDataView({ sessionId, profileId, namespace, table }: TableD
    */
   const record = data === null ? 0 : data.offset + (focusOf(selection)?.row ?? 0) + 1
 
-  const togglePanel = (kind: PanelKind) =>
-    setPanels((current) => {
-      const next = new Set(current)
-      if (next.has(kind)) next.delete(kind)
-      else next.add(kind)
-      return next
-    })
+  const togglePanel = (kind: PanelKind) => change(tabId, { panels: toggled(panels, kind) })
 
   const toggleColumn = (name: string) => {
     setSelection(null)
-    setHidden((current) => {
-      const next = new Set(current)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
+    change(tabId, { hidden: toggled(hidden, name) })
   }
 
   /** The draft lands after every fetched row, and is selected so a paste that follows means it. */
@@ -157,7 +159,7 @@ export function TableDataView({ sessionId, profileId, namespace, table }: TableD
 
   const showAllColumns = () => {
     setSelection(null)
-    setHidden(new Set())
+    change(tabId, { hidden: new Set() })
   }
 
   /**
@@ -234,7 +236,7 @@ export function TableDataView({ sessionId, profileId, namespace, table }: TableD
   /** The panel edits the focused cell, so the menu's own cell becomes the selection first. */
   const editInPanel = (ref: CellRef) => {
     setSelection(oneRange({ anchor: ref, focus: ref }))
-    setPanels((current) => new Set(current).add('cell'))
+    change(tabId, { panels: new Set(panels).add('cell') })
   }
 
   /**
@@ -403,11 +405,7 @@ export function TableDataView({ sessionId, profileId, namespace, table }: TableD
         ) : null}
       </Split>
 
-      {failure !== null ? (
-        <p className="shrink-0 truncate border-t border-danger/40 bg-danger-subtle px-2 py-1 text-xs text-danger">
-          {failure.message}
-        </p>
-      ) : null}
+      {failure !== null ? <ErrorStrip error={failure} /> : null}
 
       <GridFooter
         editable={editable}
@@ -440,6 +438,13 @@ export function TableDataView({ sessionId, profileId, namespace, table }: TableD
       />
     </div>
   )
+}
+
+/** The same set with one member in or out, which is what every toggle in this view means. */
+function toggled<T>(members: ReadonlySet<T>, one: T): ReadonlySet<T> {
+  const next = new Set(members)
+  if (!next.delete(one)) next.add(one)
+  return next
 }
 
 function sourceOf(data: TablePage | null, namespace: Namespace, table: string): EditSource | null {

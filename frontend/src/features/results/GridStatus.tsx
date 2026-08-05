@@ -1,15 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy } from 'lucide-react'
 
-import { copyText } from '@/bridge/clipboard'
-import { IconButton } from '@/shared/ui/IconButton'
+import { CopyButton } from '@/shared/ui/CopyButton'
 
 const numbers = new Intl.NumberFormat('en-US')
 
 const MORE_ON_SERVER = 'The read stopped at its row limit, so the server has more rows than this.'
-
-/** Long enough for the tick to be seen, short enough that the bar is not left saying it. */
-const COPIED_MS = 1200
 
 /** The age is read in whole seconds at finest, so a second is as often as it can change. */
 const AGE_TICK_MS = 1000
@@ -68,7 +63,7 @@ export function GridStatus({
             {tail === '' ? null : <span className="ml-1 shrink-0">{tail}</span>}
           </span>
         )}
-        <CopyStatement statement={statement} />
+        <CopyButton text={statement} label="Copy statement" />
       </div>
 
       <span className="flex shrink-0 items-center border-l border-line px-2">
@@ -96,29 +91,6 @@ function splitStatement(statement: string) {
 
   const at = words.length - PINNED_WORDS
   return { head: words.slice(0, at).join(' '), tail: words.slice(at).join(' ') }
-}
-
-/** Copying is confirmed on the icon itself, there being no room here for a message. */
-function CopyStatement({ statement }: { statement: string }) {
-  const [copied, setCopied] = useState(false)
-
-  useEffect(() => {
-    if (!copied) return
-    const clear = setTimeout(() => setCopied(false), COPIED_MS)
-    return () => clearTimeout(clear)
-  }, [copied])
-
-  return (
-    <IconButton
-      label="Copy statement"
-      icon={copied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
-      disabled={statement === ''}
-      onClick={() => {
-        void copyText(statement)
-        setCopied(true)
-      }}
-    />
-  )
 }
 
 /**

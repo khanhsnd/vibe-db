@@ -6,6 +6,10 @@ export function Cancel(arg1) {
   return window['go']['app']['QueryAPI']['Cancel'](arg1);
 }
 
+export function ChooseScriptFile() {
+  return window['go']['app']['QueryAPI']['ChooseScriptFile']();
+}
+
 export function ClearHistory() {
   return window['go']['app']['QueryAPI']['ClearHistory']();
 }
@@ -24,4 +28,8 @@ export function Review(arg1, arg2) {
 
 export function Run(arg1, arg2) {
   return window['go']['app']['QueryAPI']['Run'](arg1, arg2);
+}
+
+export function RunFile(arg1, arg2) {
+  return window['go']['app']['QueryAPI']['RunFile'](arg1, arg2);
 }

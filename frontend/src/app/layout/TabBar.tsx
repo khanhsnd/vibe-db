@@ -1,4 +1,13 @@
-import { Columns3, List, Plus, Table2, Terminal, X, type LucideIcon } from 'lucide-react'
+import {
+  Columns3,
+  List,
+  Plus,
+  SquareTerminal,
+  Table2,
+  Terminal,
+  X,
+  type LucideIcon,
+} from 'lucide-react'
 
 import { environmentInfo, namespaceLabel, type Profile } from '@/bridge/connections'
 import { EnvironmentStripe } from '@/features/connections/EnvironmentDot'
@@ -19,6 +28,7 @@ const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: string }> 
   table: { label: 'Table', icon: Table2, tint: 'text-kind-table' },
   design: { label: 'Design', icon: Columns3, tint: 'text-kind-field' },
   objects: { label: 'Tables', icon: List, tint: 'text-kind-database' },
+  console: { label: 'Console', icon: SquareTerminal, tint: 'text-kind-routine' },
 }
 
 export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {

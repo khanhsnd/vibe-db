@@ -52,6 +52,22 @@
   --env-production: #f85149;
   --env-none: #767f8f;
 
+  /** One per colour a connection may be marked with. They say nothing — that is the point: an
+      environment means something everywhere, and this means only "this one, not that one", which
+      is what a reader holding eight connections to servers of the same name needs. */
+  --conn-red: #f85149;
+  --conn-orange: #f0883e;
+  --conn-yellow: #e3b341;
+  --conn-green: #3fb950;
+  --conn-teal: #2dc3d4;
+  --conn-blue: #58a6ff;
+  --conn-purple: #a371f7;
+  --conn-pink: #f778ba;
+
+  /** How much of that colour the rows under a connection are washed with: light enough to read a
+      name through, strong enough to tell two connections apart without reading either. */
+  --conn-tint: 15%;
+
   /** One per kind of thing the catalogue holds, so a sidebar six levels deep reads as colours
       before it is read as words. There is no colour for a folder: a folder wears the colour of
       what is *inside* it, the reader being after the contents and a shut folder the only thing
@@ -138,6 +154,18 @@
   --env-staging: #9a6700;
   --env-production: #cf222e;
   --env-none: #79818d;
+
+  --conn-red: #cf222e;
+  --conn-orange: #bc4c00;
+  --conn-yellow: #9a6700;
+  --conn-green: #1a7f37;
+  --conn-teal: #0f7c8a;
+  --conn-blue: #0969da;
+  --conn-purple: #8250df;
+  --conn-pink: #bf3989;
+
+  /** Lighter than the dark theme's: the same wash over white reads as a stronger colour. */
+  --conn-tint: 11%;
 
   --kind-database: #0969da;
   --kind-schema: #6639ba;

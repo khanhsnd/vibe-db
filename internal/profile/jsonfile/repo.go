@@ -23,6 +23,7 @@ type record struct {
 	Name        string `json:"name"`
 	Engine      string `json:"engine"`
 	Environment string `json:"environment,omitempty"`
+	Colour      string `json:"colour,omitempty"`
 	Host        string `json:"host"`
 	Port        int    `json:"port"`
 	User        string `json:"user"`
@@ -141,6 +142,7 @@ func toDomain(rec record) domain.ConnectionProfile {
 		Name:        rec.Name,
 		Engine:      domain.Engine(rec.Engine),
 		Environment: domain.Environment(rec.Environment),
+		Colour:      domain.Colour(rec.Colour),
 		Host:        rec.Host,
 		Port:        rec.Port,
 		User:        rec.User,
@@ -174,6 +176,7 @@ func fromDomain(profile domain.ConnectionProfile) record {
 		Name:        profile.Name,
 		Engine:      string(profile.Engine),
 		Environment: string(profile.Environment),
+		Colour:      string(profile.Colour),
 		Host:        profile.Host,
 		Port:        profile.Port,
 		User:        profile.User,

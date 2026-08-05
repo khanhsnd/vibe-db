@@ -92,6 +92,37 @@ func (e Environment) NeedsConfirmation(h Hazard) bool {
 	return e.Guarded() || h == HazardUnfiltered
 }
 
+// Colour is the tint a connection wears down the sidebar, and is the only thing a profile carries
+// that no server ever hears about: it is how a reader tells two connections apart when the names
+// are alike and the environments are the same. The palette is closed on purpose — a colour picked
+// from a wheel would be a colour that reads on one theme and disappears on the other.
+//
+// ColourNone is a connection that has not picked one, which is every connection saved before this
+// existed, and it wears the sidebar's own background.
+type Colour string
+
+const (
+	ColourNone   Colour = ""
+	ColourRed    Colour = "red"
+	ColourOrange Colour = "orange"
+	ColourYellow Colour = "yellow"
+	ColourGreen  Colour = "green"
+	ColourTeal   Colour = "teal"
+	ColourBlue   Colour = "blue"
+	ColourPurple Colour = "purple"
+	ColourPink   Colour = "pink"
+)
+
+func (c Colour) Valid() bool {
+	switch c {
+	case ColourNone, ColourRed, ColourOrange, ColourYellow, ColourGreen,
+		ColourTeal, ColourBlue, ColourPurple, ColourPink:
+		return true
+	default:
+		return false
+	}
+}
+
 type TLSMode string
 
 const (
@@ -269,6 +300,7 @@ type ConnectionProfile struct {
 	Name        string
 	Engine      Engine
 	Environment Environment
+	Colour      Colour
 	Host        string
 	Port        int
 	User        string
@@ -302,6 +334,9 @@ func (p ConnectionProfile) Validate() error {
 	}
 	if !p.Environment.Valid() {
 		return ValidationError{Field: "environment", Message: "is not a known environment"}
+	}
+	if !p.Colour.Valid() {
+		return ValidationError{Field: "colour", Message: "is not a known colour"}
 	}
 	// A PostgreSQL session is bound to one database for its whole life and cannot cross to
 	// another, so a profile that names none has nothing to connect to.

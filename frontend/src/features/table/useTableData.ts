@@ -4,9 +4,9 @@ import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { ALL_ROWS } from '@/bridge/rows'
 import { onRowsStreamed, tables, type Cell, type TablePage } from '@/bridge/tables'
-import { activeFilter, NO_FILTER, type Group } from '@/features/results/filter'
-import { NO_SORT, type SortKey } from '@/features/results/resultSet'
-import { useSettingsStore } from '@/stores/settings'
+import { activeFilter, type Group } from '@/features/results/filter'
+import type { SortKey } from '@/features/results/resultSet'
+import { IDLE_VIEW, useTableViewsStore } from '@/stores/tableViews'
 
 /** A read of every row, while it runs: what to stop, and how many rows have arrived so far. */
 export interface RowFetch {
@@ -24,14 +24,20 @@ export interface RowFetch {
  * the reader can watch it and stop it. Such a read has no deadline; stopping is what bounds it,
  * and what did arrive before the stop is kept.
  */
-export function useTableData(sessionId: string, namespace: Namespace, table: string) {
+export function useTableData(
+  sessionId: string,
+  namespace: Namespace,
+  table: string,
+  tabId: string,
+) {
   const { database, schema } = namespace
 
-  const [page, setPage] = useState(0)
-  // Read once: the preference is where a tab starts, not a limit that follows it around.
-  const [limit, setLimit] = useState<number>(() => useSettingsStore.getState().settings.pageSize)
-  const [sort, setSort] = useState<readonly SortKey[]>(NO_SORT)
-  const [criteria, setCriteria] = useState<Group>(NO_FILTER)
+  // What was asked for is the tab's and outlives it being looked away from; what came back is this
+  // hook's, and is read again on the way in — see `stores/tableViews.ts`.
+  const view = useTableViewsStore((s) => s.views[tabId] ?? IDLE_VIEW)
+  const change = useTableViewsStore((s) => s.change)
+  const { page, limit, sort, criteria } = view
+
   const [nonce, setNonce] = useState(0)
   const [data, setData] = useState<TablePage | null>(null)
   const [loadedAt, setLoadedAt] = useState<number | null>(null)
@@ -118,24 +124,27 @@ export function useTableData(sessionId: string, namespace: Namespace, table: str
 
   const refresh = useCallback(() => setNonce((current) => current + 1), [])
 
-  const goToPage = useCallback((next: number) => setPage(Math.max(0, next)), [])
+  const goToPage = useCallback(
+    (next: number) => change(tabId, { page: Math.max(0, next) }),
+    [change, tabId],
+  )
 
-  const changeLimit = useCallback((next: number) => {
-    setLimit(next)
-    setPage(0)
-  }, [])
+  const changeLimit = useCallback(
+    (next: number) => change(tabId, { limit: next, page: 0 }),
+    [change, tabId],
+  )
 
   /** A new order makes the page number meaningless, so the reader goes back to the first. */
-  const changeSort = useCallback((next: SortKey[]) => {
-    setSort(next)
-    setPage(0)
-  }, [])
+  const changeSort = useCallback(
+    (next: SortKey[]) => change(tabId, { sort: next, page: 0 }),
+    [change, tabId],
+  )
 
   /** A narrower table has fewer pages, so the reader goes back to the first of them. */
-  const changeCriteria = useCallback((next: Group) => {
-    setCriteria(next)
-    setPage(0)
-  }, [])
+  const changeCriteria = useCallback(
+    (next: Group) => change(tabId, { criteria: next, page: 0 }),
+    [change, tabId],
+  )
 
   const stopFetch = useCallback(() => {
     if (fetch !== null) void tables.stopRows(fetch.runId)

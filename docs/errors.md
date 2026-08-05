@@ -56,6 +56,7 @@ layer, and the three transport rows are mapped once in `sqlkit.TransportError`.
 |---|---|
 | `TABLE_NOT_EDITABLE` | Cell edit or row delete attempted on a table with no primary key, or with only part of one supplied — `sqlkit.EditableKeys` refuses both, MongoDB included, where the key is always `_id` |
 | `EMPTY_STATEMENT` | Run requested with nothing the splitter could find a statement in — whitespace, semicolons, or comments alone |
+| `FILE_UNREADABLE` | A file on *this* machine could not be read: Execute SQL File pointed at a path that has gone, one this account may not open, or one whose bytes are not the encoding it was read as. Nothing was sent to a server, and it is answered in the dialog that picked it — see [features.md](features.md#execute-sql-file) |
 | `HOST_UNREACHABLE` | Dial failed (refused / no route). On MongoDB it is also every way the driver fails to *select* a server — a replica set with no primary, a name that does not resolve — which is one answer because a reader fixes all of them in the same box |
 | `TIMEOUT` | Dial or context deadline exceeded |
 | `TLS_NOT_VERIFIED` | Certificate chain or hostname did not verify |

@@ -7,6 +7,7 @@ import { focusOf, type Selection } from '@/features/results/resultSet'
 import { tableActions } from '@/features/schema/tableActions'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
+import { ErrorStrip } from '@/shared/ui/ErrorStrip'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
 import { useConnectionsStore } from '@/stores/connections'
@@ -121,11 +122,7 @@ export function ObjectListView({ sessionId, profileId, namespace }: ObjectListVi
 
       {/* A failed re-read leaves the list already drawn where it is and says so under it, which
           is what the table view does with the same failure. */}
-      {data !== null && error !== null ? (
-        <p className="shrink-0 truncate border-t border-danger/40 bg-danger-subtle px-2 py-1 text-xs text-danger">
-          {error.message}
-        </p>
-      ) : null}
+      {data !== null && error !== null ? <ErrorStrip error={error} /> : null}
 
       <GridFooter editable={false} busy={loading} onRefresh={refresh}>
         <span>

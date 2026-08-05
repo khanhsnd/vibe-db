@@ -41,8 +41,9 @@ export function Field({ label, hint, error, inline = false, children }: FieldPro
   const controlId = useId()
   const invalid = Boolean(error)
 
+  // Selectable, because a rejection under a box is a rejection the reader may want to quote.
   const note = error ? (
-    <span className="text-xs text-danger">{error}</span>
+    <span className="selectable text-xs text-danger">{error}</span>
   ) : hint ? (
     <span className="text-xs text-faint">{hint}</span>
   ) : null

@@ -7,7 +7,9 @@ import { queries, type QueryResult } from '@/bridge/query'
 import { ALL_ROWS } from '@/bridge/rows'
 import type { TableColumn } from '@/bridge/tables'
 import { cn } from '@/lib/cn'
+import { CopyButton } from '@/shared/ui/CopyButton'
 import { Empty } from '@/shared/ui/Empty'
+import { ErrorStrip } from '@/shared/ui/ErrorStrip'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import type { QueryRun } from '@/stores/queries'
 
@@ -310,11 +312,7 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
         ) : null}
       </Split>
 
-      {edits.error !== null ? (
-        <p className="shrink-0 truncate border-t border-danger/40 bg-danger-subtle px-2 py-1 text-xs text-danger">
-          {edits.error.message}
-        </p>
-      ) : null}
+      {edits.error !== null ? <ErrorStrip error={edits.error} /> : null}
 
       <GridFooter
         editable={editable}
@@ -374,8 +372,16 @@ function sourceOf(grid: QueryResult | null): EditSource | null {
   }
 }
 
+/**
+ * A failure where the rows would have been. Everything it says is **selectable, and copyable in one
+ * click**: what a reader does with a server's rejection is take it somewhere else — a colleague, a
+ * search, an issue — and dragging across three lines in a pane that may be forty pixels tall is not
+ * how anybody wants to do that. Copy takes the code, the wording and the engine's own detail
+ * together, since the three are one answer.
+ */
 function ErrorPanel({ error }: { error: AppError }) {
   const cancelled = isCancel(error)
+  const whole = [error.code, error.message, error.detail].filter(Boolean).join('\n')
 
   return (
     <div className="scroll-thin h-full overflow-auto p-3">
@@ -391,7 +397,7 @@ function ErrorPanel({ error }: { error: AppError }) {
           <AlertTriangle size={15} className="mt-0.5 shrink-0 text-danger" />
         )}
 
-        <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="selectable flex min-w-0 flex-1 flex-col gap-1.5">
           <span
             className={cn(
               'font-mono text-2xs tracking-wide uppercase',
@@ -407,6 +413,8 @@ function ErrorPanel({ error }: { error: AppError }) {
             </p>
           ) : null}
         </div>
+
+        <CopyButton text={whole} label="Copy the error" />
       </div>
     </div>
   )

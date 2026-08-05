@@ -13,8 +13,10 @@ the tree and in a designer tab**, **schema changes from the tree's context menu*
 empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index or a
 foreign key, drop a view or a routine — table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
-or SQL**, query tabs with completion that **run a whole script**, **a history of every statement run,
-kept on disk and put back in the editor by a double-click**, passwords in Windows Credential
+or SQL**, query tabs with completion that **run a whole script**, **a console that runs one statement
+at a time and keeps the transcript**, **running a file of statements against a connection**,
+**marking a connection with a colour that washes down the sidebar**, **a history of every statement
+run, kept on disk and put back in the editor by a double-click**, passwords in Windows Credential
 Manager, and the full layout shell with dark and light themes and a **data font the reader picks**.
 
 Not there yet: a **materialised view** is not listed, because it is dropped by a statement of its
@@ -232,6 +234,48 @@ and **opens every folder above a hit** so the hit is on the screen rather than b
 - **Only what has been read is searched**, the tree being filled a level at a time. A namespace
   nobody has opened holds no names yet, so nothing in it can be found; the empty state says exactly
   that rather than claiming the table does not exist.
+
+## What a right-click on a connection offers
+
+The connection's own menu is the one place everything about a *server* is asked for, and it is
+ordered by what a reader is there to do rather than by what the app can do:
+
+| | |
+|---|---|
+| `Connect` / `Disconnect` | Whichever it is not already. |
+| `Refresh` | Re-reads the database list, and forgets everything under a database the server no longer carries — schemas, tables, shapes. |
+| `Console` | A [console](#the-console) on this connection. |
+| `Execute SQL File…` | [Runs a file](#execute-sql-file) of statements against it. |
+| `New Database…` | The same dialog the database level offers. |
+| `Colour` ▸ | Marks the connection — see below. |
+| `Edit Connection…` | The profile dialog, opened on the form rather than the engine grid. |
+| `Delete Connection` | The profile and both of its secrets. |
+
+**Everything needing a live server is left out while the connection is shut**, not greyed out: a
+closed connection cannot be asked anything at all, and a column of dead items says only that. So a
+shut connection offers four items and an open one eight.
+
+The rows themselves are tighter than a form's — 12 px labels, one line of padding — because a menu
+is read by scanning a column of short labels, and fourteen of them at a dialog's spacing runs off
+the bottom of the window.
+
+### Marking a connection with a colour
+
+**`Colour` washes the connection and everything under it** in one of eight, and the whole subtree
+takes it: a database of the blue connection is the blue connection's database. It is what tells two
+connections apart when the names are alike and the environments are the same — a staging replica and
+the staging primary, four copies of one schema on one host.
+
+- It is a **submenu of swatches**, and the one in force wears a ring. `No Colour` is drawn as an
+  empty ring rather than a grey dot, which would read as a ninth colour.
+- **It means nothing.** That is the difference between it and the environment stripe beside it: an
+  environment is a fact the app acts on — production guards what runs on it — and a colour is the
+  reader's own filing. Nothing behaves differently because of one.
+- The wash sits **behind the row's text and in front of its background**, so hovering and selecting
+  still read through it. How strong it is comes from one token, `--conn-tint`, and it is lighter on
+  the light theme, where the same wash over white reads as a stronger colour.
+- It is saved on the profile like any other field — `colour` in `connections.json` — so it survives
+  a restart, and it is the one field of a profile no server ever hears about.
 
 ## The table list
 
@@ -509,6 +553,18 @@ tooltip is where that is settled. It is lines rather than a sentence because a r
 one of those facts, not reading prose, and it is the platform's own tooltip rather than a component,
 which is what makes it appear over a tab the pointer merely passes.
 
+**Only the tab in front is mounted**, so anything a tab is holding in component state is taken down
+with it the moment the reader looks at another one. What each kind of tab keeps across that is
+therefore a deliberate list, kept in a store under the tab's id and dropped when the tab closes:
+
+- A **table tab** keeps *what was asked of it* (`stores/tableViews.ts`): the panels open — Cell
+  Editor, Column, Filter & Sort — the columns hidden, the page and its size, the order and the
+  conditions. It does **not** keep the answer: the rows are read again on the way back, so a table
+  something else has changed under it reads fresh rather than stale, and the status line says when.
+  The column *order* is remembered against the table itself and outlives the tab entirely.
+- A **query tab** is the other way round and keeps its rows (`stores/queries.ts`), because a
+  statement cannot be re-run behind the reader's back: it may write, and it may be expensive.
+
 **The wheel closes a tab**, as it does in every strip of tabs there is, and the `✕` that appears
 under the pointer is the other way. The press itself is refused: Chromium's middle-click autoscroll
 starts there and swallows the click that would follow, and the strip scrolls the moment it holds
@@ -665,6 +721,71 @@ the server rejects.
   strip of their own under the panel. There was one, and it said `325 rows · 5,077 ms` directly
   beneath a line already reading `Record 1 of 325`: two accounts of one read, a row apart. The
   elapsed time went with it, `ElapsedMs` still crossing the wire for whatever wants it next.
+
+## The console
+
+**`Console` on a connection opens a tab that is driven one statement at a time.** It is the prompt a
+reader reaches for when they know what they want to type: a transcript of everything already sent, a
+prompt under it, and — below both, behind a divider — the rows of the last statement that returned
+any, in the same `ResultPane` a query tab shows.
+
+- **Enter sends. Shift+Enter takes a new line.** That single difference is the whole reason the
+  console is not the SQL editor, where `Enter` is a newline and `F5` runs.
+- **The caret is already in the prompt** when the console opens, and goes back there the moment a
+  statement finishes — the box is disabled while one is in flight, and a reader who has to click
+  back into it between lines is not at a console. It opens **four lines tall and grows to twelve**
+  with what is typed, then scrolls rather than eating the transcript above it.
+- **The arrows walk back through what has been sent**, from the ends of the prompt only, so they
+  still move the caret through a line written over several. The transcript *is* that history —
+  nothing is kept twice — and a recalled line that has been edited stays edited.
+- **The transcript is one line per statement**, not a grid: how many rows it returned, or how many
+  it changed, and how long it took — or the server's own refusal, in the danger colour. The rows
+  themselves are in the grid below, which is the one thing in this app that draws rows and columns.
+- **It runs through the same store a query tab does**, so a console's rows are paged, sorted,
+  exported, edited and stopped exactly as any other result is, and `Stop` is the same button. A line
+  reads as many rows as a fresh query tab would — the Options row limit — because a prompt has no
+  toolbar to put a Limit control on.
+- The **database picker on its strip** is the query tab's, so a console can be pointed elsewhere
+  without being reopened; picking a database drops the schema with it, as everywhere else.
+- It has **no editor**: no completion, no formatting, no review of a whole script before it runs. A
+  reader with a script to think about wants a query tab, and the two are one keystroke apart.
+- `Clear` empties the transcript. It is one console per connection *and namespace*, like every other
+  tab, so asking for one twice reveals the one already open.
+
+## Execute SQL File
+
+**`Execute SQL File…` runs a file of statements against the connection and says what each of them
+did.** A dump of a hundred thousand statements is not something to open in a buffer, review and
+format — it is something to point at a database and watch — so this is a dialog rather than a tab,
+and **no rows come back at all**. On MongoDB it is `Execute Script File…`, a document store holding
+no SQL: the noun is `engineWords.scriptFile`, like every other word the engine owns.
+
+The dialog asks four things and reports one:
+
+- **Database** (and schema, where the engine has them), which the namespace the tree has selected on
+  that connection is what it opens on.
+- **File**, picked in the host's own dialog through `Browse`, or typed.
+- **Encoding**, which is how the file's bytes are read as text: UTF-8, UTF-16 in either byte order,
+  Windows-1252, Windows-1258 and ISO-8859-1. UTF-8 **strips a byte order mark**, which nearly every
+  file written by a Windows tool carries and which would otherwise become part of the first
+  statement's first keyword. A file that is not the encoding it was read as fails as
+  `FILE_UNREADABLE` rather than running mangled statements.
+- **Continue on error**, on by default: the rest of the file still runs after a statement the server
+  refuses. Turned off, the run stops where it stopped, which is what a file whose statements depend
+  on each other wants. Either way **the reader's own `Stop` ends it** — that is about the run and not
+  about a statement, so `Continue on error` does not override it.
+
+The **message log** is one row per statement in the order they ran, with what it changed, how long
+it took and either `OK` or the server's own wording; the footer counts them and says how many
+failed. There is no `Rows` column: a file run keeps no rows, so a number there would be a fact about
+the cap rather than about the statement.
+
+Two things Navicat's dialog has are deliberately not here. **Batching several statements per
+round-trip** is not, because where a statement ends is the driver's answer and the app runs them one
+at a time by that answer; and **`SET AUTOCOMMIT=0`** is not, because nothing below this layer opens a
+transaction yet — a checkbox that did nothing would be worse than its absence. Nothing a file runs
+reaches the history log either: a log holds statements a reader can put back in an editor, and a file
+of ten thousand of them is a file, which is where it already is.
 
 ## The row limit
 
@@ -841,6 +962,14 @@ status line under its grid, so `QueryOutput` is the tabs and nothing else.
 wherever the reader had got to, and otherwise the strip stays where they left it. `Messages` is
 there only for a script, so a single statement run while it was in front puts the reader back on
 `Result` rather than on a pane that has gone.
+
+**A failure can be taken away with the reader.** The app selects nothing by dragging — it is a
+desktop client, not a document — but *every surface that reports a failure is an exception*: the
+error panel, the one-line strip under a grid that could not save, an empty pane whose hint is the
+server's wording, the console's transcript, the note under a box a dialog refused, and the status
+bar. The error panel also carries a **copy button**, which takes the code, the wording and the
+engine's own detail together, since dragging across three lines in a pane forty pixels tall is not
+how anybody wants to quote an error.
 
 ### The history pane
 
