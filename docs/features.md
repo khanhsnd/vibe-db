@@ -187,8 +187,11 @@ Each level loads on first expand and is cached until disconnect: a PostgreSQL da
 schemas, whichever node owns the object folders loads **its tables, views and routines in one
 read**, and a table loads its shape — fields, indexes and foreign keys, also in one read. The reason
 is the same both times: expanding any one folder needs every folder's count, so one read answers all
-three. Clicking the node that owns tables — a MySQL database, a PostgreSQL schema, a MongoDB database
-— marks it the active namespace for that connection, which is what a new query tab inherits.
+three — which is why that read happens on **the namespace's own expand** and not on its folders':
+the three folders arrive with their counts already on them, and there is no second click that only
+fills in numbers. Clicking the node that owns tables — a MySQL database, a PostgreSQL schema, a
+MongoDB database — marks it the active namespace for that connection, which is what a new query tab
+inherits, and the row is drawn in the success colour to say so.
 
 **A MongoDB field is inferred, not declared.** A collection says nothing about what it holds, so the
 Fields folder is the fields the *documents* were found to carry — a sample of the collection's first
@@ -213,6 +216,22 @@ whole of it is in the row's tooltip, and in the designer.
 | Click the caret | Selects the node **and** opens or closes it, loading that level on first open. |
 | Double-click a row | The same open — except on a **table**, which opens a data tab. A table has folders under it now, but double-clicking one has always meant "show me the rows", and the caret is what expands. |
 | Open a closed connection | Dials it, whichever gesture asked. A disconnected connection node still carries an empty child list, so expanding it would otherwise spin the caret over nothing. The store expands the node when the session lands, and a failed connect leaves the caret shut. |
+
+### Filtering the tree
+
+**Filter objects** narrows the tree to the rows whose name holds what was typed, case-insensitively,
+and **opens every folder above a hit** so the hit is on the screen rather than behind a caret.
+`searchTree` is the whole of it, and three things follow from where it sits:
+
+- **A folder never matches.** `Tables` is under every namespace, so a filter that matched it would
+  answer every query with the whole tree. Only objects match — a connection, a database, a schema, a
+  table, a view, a routine, a field, an index, a foreign key.
+- **A hit keeps its own children shut.** The reader asked for that row, not for everything under it.
+  Their own expansion is untouched by the search and is what is left when the box is emptied —
+  `Escape`, or the cross in the box, empties it.
+- **Only what has been read is searched**, the tree being filled a level at a time. A namespace
+  nobody has opened holds no names yet, so nothing in it can be found; the empty state says exactly
+  that rather than claiming the table does not exist.
 
 ## The table list
 

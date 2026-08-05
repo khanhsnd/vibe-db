@@ -61,15 +61,6 @@ export function isExpandable(node: TreeNode): boolean {
   return node.children !== undefined
 }
 
-/**
- * Whether this node is the one that holds the object folders, and so the one whose namespace
- * addresses tables. A MySQL database is that node; a PostgreSQL database is not, because its
- * children are schemas and they hold the folders.
- */
-export function ownsObjects(node: TreeNode): boolean {
-  return node.children?.[0]?.kind === 'tables'
-}
-
 const OBJECT_FOLDERS: ReadonlySet<NodeKind> = new Set(['tables', 'views', 'routines'])
 
 /**
@@ -80,9 +71,60 @@ export function isObjectFolder(node: TreeNode): boolean {
   return OBJECT_FOLDERS.has(node.kind)
 }
 
+/**
+ * Whether this node is the one that holds the object folders, and so the one whose namespace
+ * addresses tables. A MySQL database is that node; a PostgreSQL database is not, because its
+ * children are schemas and they hold the folders. It is *any* folder and not the first one,
+ * because a search hands back a namespace narrowed to whichever of its folders held a hit.
+ */
+export function ownsObjects(node: TreeNode): boolean {
+  return node.children?.some(isObjectFolder) ?? false
+}
+
 /** Whether this node's rows can be opened in a data tab: a table, or a view, which reads alike. */
 export function hasRows(node: TreeNode): boolean {
   return node.kind === 'table' || node.kind === 'view'
+}
+
+const FOLDERS: ReadonlySet<NodeKind> = new Set([
+  'tables',
+  'views',
+  'routines',
+  'fields',
+  'indexes',
+  'foreignKeys',
+])
+
+export interface TreeSearch {
+  roots: TreeNode[]
+  /** The folders above a hit, which are opened whatever the reader had left open. */
+  expanded: ReadonlySet<string>
+}
+
+/**
+ * The tree narrowed to the rows whose name holds `query`, and `null` when nothing was typed. A
+ * folder never matches — `Tables` sits under every namespace, so matching it would say nothing —
+ * and a hit keeps its own children shut, the reader having asked for that row rather than for
+ * everything under it. Only what has been read is searched: the tree fills a level at a time, so a
+ * namespace nobody has opened holds no names to find.
+ */
+export function searchTree(roots: TreeNode[], query: string): TreeSearch | null {
+  const needle = query.trim().toLowerCase()
+  if (needle === '') return null
+
+  const expanded = new Set<string>()
+
+  const keep = (node: TreeNode): TreeNode | null => {
+    if (!FOLDERS.has(node.kind) && node.label.toLowerCase().includes(needle)) return node
+
+    const children = (node.children ?? []).map(keep).filter((child) => child !== null)
+    if (children.length === 0) return null
+
+    expanded.add(node.id)
+    return { ...node, children }
+  }
+
+  return { roots: roots.map(keep).filter((root) => root !== null), expanded }
 }
 
 export function flatten(roots: TreeNode[], expanded: ReadonlySet<string>): FlatNode[] {

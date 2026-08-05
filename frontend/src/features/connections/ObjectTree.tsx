@@ -5,7 +5,6 @@ import {
   Boxes,
   ChevronDown,
   ChevronRight,
-  CircleCheck,
   Columns3,
   Database,
   Eye,
@@ -19,7 +18,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
-import { ROW_HEIGHT } from '@/shared/theme/density'
+import { TREE_ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 
 import { EngineIcon } from './EngineIcon'
@@ -46,8 +45,8 @@ const ICONS: Record<NodeKind, typeof Table2> = {
   foreignKey: Link,
 }
 
-const INDENT_PER_DEPTH = 16
-const BASE_INDENT = 8
+const INDENT_PER_DEPTH = 12
+const BASE_INDENT = 6
 
 interface ObjectTreeProps {
   roots: TreeNode[]
@@ -74,7 +73,7 @@ export function ObjectTree({
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => TREE_ROW_HEIGHT,
     overscan: 12,
   })
 
@@ -106,12 +105,12 @@ export function ObjectTree({
                 // not draw is still readable by hovering it.
                 title={node.badge ? `${node.label} — ${node.badge}` : node.label}
                 className={cn(
-                  'absolute top-0 left-0 flex w-full items-center gap-1.5 pr-2',
-                  'cursor-default text-sm whitespace-nowrap',
+                  'absolute top-0 left-0 flex w-full items-center gap-1 pr-1.5',
+                  'cursor-default text-xs whitespace-nowrap',
                   selected ? 'bg-selected text-fg' : 'text-fg hover:bg-hover',
                 )}
                 style={{
-                  height: ROW_HEIGHT,
+                  height: TREE_ROW_HEIGHT,
                   transform: `translateY(${item.start}px)`,
                   paddingLeft: BASE_INDENT + depth * INDENT_PER_DEPTH,
                 }}
@@ -130,19 +129,19 @@ export function ObjectTree({
                       onToggle(node)
                     }}
                     onDoubleClick={(e) => e.stopPropagation()}
-                    className="grid h-4 w-4 shrink-0 place-items-center text-muted hover:text-fg"
+                    className="grid h-4 w-3.5 shrink-0 place-items-center text-muted hover:text-fg"
                   >
-                    {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                   </button>
                 ) : (
-                  <span className="w-4 shrink-0" />
+                  <span className="w-3.5 shrink-0" />
                 )}
 
                 {node.engine ? (
                   <EngineIcon engine={node.engine} />
                 ) : (
                   <Icon
-                    size={14}
+                    size={13}
                     className={cn(
                       'shrink-0',
                       node.primaryKey === true
@@ -158,12 +157,10 @@ export function ObjectTree({
                   {node.label}
                 </span>
 
-                {active ? <CircleCheck size={13} className="shrink-0 text-success" /> : null}
-
                 {node.status ? <StatusDot status={node.status} className="ml-auto" /> : null}
 
                 {node.badge ? (
-                  <span className="ml-auto max-w-[45%] shrink-0 truncate pl-2 font-mono text-2xs text-faint">
+                  <span className="ml-auto max-w-[45%] shrink-0 truncate pl-1.5 font-mono text-2xs text-faint">
                     {node.badge}
                   </span>
                 ) : null}

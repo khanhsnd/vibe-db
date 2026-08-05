@@ -14,6 +14,7 @@ import {
   isExpandable,
   isObjectFolder,
   ownsObjects,
+  searchTree,
   type TreeNode,
 } from '@/features/connections/tree'
 import { useTreeMenu } from '@/features/connections/useTreeMenu'
@@ -76,6 +77,16 @@ export function App() {
 
   const [selected, setSelected] = useState<TreeNode | null>(null)
   const [filter, setFilter] = useState('')
+
+  // Searching narrows the tree it is looking at and opens what it had to open to show a hit, so the
+  // reader's own expansion survives the search and is what is left when the box is emptied.
+  const search = useMemo(() => searchTree(roots, filter), [roots, filter])
+  const shownRoots = search?.roots ?? roots
+  const shownExpanded = useMemo(
+    () => (search ? new Set([...expanded, ...search.expanded]) : expanded),
+    [search, expanded],
+  )
+
   const [dialogProfile, setDialogProfile] = useState<ProfileInput | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [promptFor, setPromptFor] = useState<Profile | null>(null)
@@ -129,7 +140,7 @@ export function App() {
       if (node.kind === 'database' && !ownsObjects(node)) {
         void loadSchemas(node.profileId, ns.database)
       }
-      if (isObjectFolder(node)) void loadObjects(node.profileId, ns)
+      if (ownsObjects(node) || isObjectFolder(node)) void loadObjects(node.profileId, ns)
       if (node.table !== undefined) void loadStructure(node.profileId, ns, node.table)
     },
     [loadSchemas, loadObjects, loadStructure],
@@ -263,8 +274,8 @@ export function App() {
           onResize={(size) => sidebarResized(size.inPixels === 0)}
         >
           <Sidebar
-            roots={roots}
-            expanded={expanded}
+            roots={shownRoots}
+            expanded={shownExpanded}
             selectedId={selected?.id ?? null}
             filter={filter}
             onFilterChange={setFilter}

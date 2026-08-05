@@ -1,4 +1,4 @@
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, X } from 'lucide-react'
 
 import { ObjectTree } from '@/features/connections/ObjectTree'
 import type { TreeNode } from '@/features/connections/tree'
@@ -33,35 +33,38 @@ export function Sidebar({
 }: SidebarProps) {
   return (
     <aside className="flex h-full min-h-0 flex-col bg-panel">
-      {/* The title and the filter are one block on the bar surface, so the tree below them reads
-          as the panel's content rather than as more of its chrome. */}
-      <div className="shrink-0 border-b border-line bg-bar pb-2">
-        <div className="flex h-8 items-center gap-1 pr-1 pl-2.5">
-          <span className="text-2xs font-semibold tracking-[0.08em] text-muted uppercase">
-            Connections
-          </span>
-          <div className="flex-1" />
-          <IconButton label="New connection" icon={<Plus size={14} />} onClick={onNewConnection} />
+      {/* The filter is the whole of the panel's chrome: a title over a tree of servers would say
+          what the tree already says, and the sidebar is 240 px of height worth spending on names. */}
+      <div className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-bar pr-1 pl-1.5">
+        <div className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded border border-line bg-canvas px-1.5 focus-within:border-accent">
+          <Search size={12} className="shrink-0 text-faint" />
+          <input
+            value={filter}
+            onChange={(e) => onFilterChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') onFilterChange('')
+            }}
+            placeholder="Filter objects"
+            spellCheck={false}
+            className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-faint"
+          />
+          {filter ? (
+            <button
+              type="button"
+              aria-label="Clear filter"
+              onClick={() => onFilterChange('')}
+              className="grid shrink-0 place-items-center text-faint hover:text-fg"
+            >
+              <X size={12} />
+            </button>
+          ) : null}
         </div>
 
-        <div className="px-2">
-          <div className="flex h-8 items-center gap-1.5 rounded-md border border-line bg-canvas px-2 focus-within:border-accent">
-            <Search size={13} className="shrink-0 text-faint" />
-            <input
-              value={filter}
-              onChange={(e) => onFilterChange(e.target.value)}
-              placeholder="Filter objects"
-              spellCheck={false}
-              className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-faint"
-            />
-          </div>
-        </div>
+        <IconButton label="New connection" icon={<Plus size={14} />} onClick={onNewConnection} />
       </div>
 
       <div className="min-h-0 flex-1">
-        {roots.length === 0 ? (
-          <Empty title="No connections yet" hint="Create one to get started." />
-        ) : (
+        {roots.length > 0 ? (
           <ObjectTree
             roots={roots}
             expanded={expanded}
@@ -71,6 +74,13 @@ export function Sidebar({
             onActivate={onActivate}
             menuItemsFor={menuItemsFor}
           />
+        ) : filter ? (
+          <Empty
+            title={`Nothing matches “${filter}”`}
+            hint="Only names already read are searched — a database nobody has opened has none yet."
+          />
+        ) : (
+          <Empty title="No connections yet" hint="Create one to get started." />
         )}
       </div>
     </aside>
