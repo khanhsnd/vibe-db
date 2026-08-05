@@ -28,9 +28,31 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 		return driver.QueryResult{}, err
 	}
 
+	// A plan is read **before** the command runs, and that order is the whole of what keeps it safe: a
+	// command with no plan says so — `UNSUPPORTED` — while it has still changed nothing, and what a
+	// write was going to do is not what the server would say once it has done it.
+	var plan *driver.Plan
 	if query.Explain {
-		return s.explain(ctx, query.Namespace, one)
+		if plan, err = s.explainPlan(ctx, query.Namespace, one); err != nil {
+			return driver.QueryResult{}, err
+		}
 	}
+
+	result, err := s.execute(ctx, query, one)
+	if err != nil {
+		return driver.QueryResult{}, err
+	}
+
+	result.Plan = plan
+	return result, nil
+}
+
+// execute runs the command against whichever of the two it addresses.
+func (s *session) execute(
+	ctx context.Context,
+	query driver.Query,
+	one statement,
+) (driver.QueryResult, error) {
 	if one.Collection == "" {
 		return s.onDatabase(ctx, query, one)
 	}
@@ -560,16 +582,20 @@ func counted(total int64, err error) (driver.QueryResult, error) {
 	}, nil
 }
 
-// explain asks the server what it would do. Only the two reads can be explained, because only they
-// have a plan: everything else either writes or is a command whose plan is itself.
-func (s *session) explain(
+// explainPlan asks the server what it would do. Only the two reads can be explained, because only
+// they have a plan: everything else either writes or is a command whose plan is itself, and that is
+// `UNSUPPORTED` rather than a plan invented here.
+//
+// The plan's own rows are the answer as one document — the same one row the grid drew when Explain
+// was all this did — and the rest is that document read as stages; see readPlan.
+func (s *session) explainPlan(
 	ctx context.Context,
 	ns driver.Namespace,
 	one statement,
-) (driver.QueryResult, error) {
+) (*driver.Plan, error) {
 	read, err := bounds(one)
 	if err != nil {
-		return driver.QueryResult{}, err
+		return nil, err
 	}
 
 	inner := bson.D{}
@@ -592,7 +618,7 @@ func (s *session) explain(
 	case "aggregate":
 		pipeline, err := stages(one.Arg(0))
 		if err != nil {
-			return driver.QueryResult{}, err
+			return nil, err
 		}
 		inner = bson.D{
 			{Key: "aggregate", Value: one.Collection},
@@ -601,7 +627,7 @@ func (s *session) explain(
 		}
 
 	default:
-		return driver.QueryResult{}, domain.Unsupported("explaining " + one.Method)
+		return nil, domain.Unsupported("explaining " + one.Method)
 	}
 
 	raw, err := s.runCommand(ctx, ns, bson.D{
@@ -609,9 +635,17 @@ func (s *session) explain(
 		{Key: "verbosity", Value: "queryPlanner"},
 	})
 	if err != nil {
-		return driver.QueryResult{}, err
+		return nil, err
 	}
-	return oneDocument(raw), nil
+
+	plan := readPlan(raw)
+	if plan == nil {
+		plan = sqlkit.EmptyPlan()
+	}
+
+	document := oneDocument(raw)
+	plan.Columns, plan.Rows = document.Columns, document.Rows
+	return plan, nil
 }
 
 // stages reads a list of documents — a pipeline, or the documents of an `insertMany`. A single

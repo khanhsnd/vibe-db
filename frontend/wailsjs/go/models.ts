@@ -615,6 +615,82 @@ export namespace app {
 	        this.errorCode = source["errorCode"];
 	    }
 	}
+	export class PlanFact {
+	    label: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PlanFact(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label = source["label"];
+	        this.value = source["value"];
+	    }
+	}
+	export class PlanNode {
+	    type: string;
+	    detail: string;
+	    depth: number;
+	    rows: number;
+	    cost: number;
+	    selfCost: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PlanNode(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.detail = source["detail"];
+	        this.depth = source["depth"];
+	        this.rows = source["rows"];
+	        this.cost = source["cost"];
+	        this.selfCost = source["selfCost"];
+	    }
+	}
+	export class QueryPlan {
+	    columns: TableColumn[];
+	    rows: string[][];
+	    nodes: PlanNode[];
+	    summary: PlanFact[];
+	    json: string;
+	    costed: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new QueryPlan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = this.convertValues(source["columns"], TableColumn);
+	        this.rows = source["rows"];
+	        this.nodes = this.convertValues(source["nodes"], PlanNode);
+	        this.summary = this.convertValues(source["summary"], PlanFact);
+	        this.json = source["json"];
+	        this.costed = source["costed"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class TableColumn {
 	    name: string;
 	    type: string;
@@ -646,6 +722,8 @@ export namespace app {
 	    truncated: boolean;
 	    elapsedMs: number;
 	    table: string;
+	    // Go type: QueryPlan
+	    plan?: any;
 	    statements: StatementOutcome[];
 	
 	    static createFrom(source: any = {}) {
@@ -662,6 +740,7 @@ export namespace app {
 	        this.truncated = source["truncated"];
 	        this.elapsedMs = source["elapsedMs"];
 	        this.table = source["table"];
+	        this.plan = this.convertValues(source["plan"], null);
 	        this.statements = this.convertValues(source["statements"], StatementOutcome);
 	    }
 	

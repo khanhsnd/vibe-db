@@ -30,9 +30,6 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 	if statement == "" {
 		return driver.QueryResult{}, domain.ErrEmptyStatement
 	}
-	if query.Explain {
-		statement = "EXPLAIN " + statement
-	}
 
 	// A pooled connection is pinned for the call so USE applies to the statement.
 	conn, err := s.pinned(ctx, query.Namespace)
@@ -41,6 +38,31 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 	}
 	defer conn.Close()
 
+	// A plan is read **before** the statement runs. Asking afterwards would ask about a server the
+	// statement has already changed: what `DELETE FROM t` was going to do is not what the optimizer
+	// says it would do once the rows are gone.
+	var plan *driver.Plan
+	if query.Explain {
+		plan = explainPlan(ctx, conn, statement)
+	}
+
+	result, err := s.execute(ctx, conn, query, statement)
+	if err != nil {
+		return driver.QueryResult{}, err
+	}
+
+	result.Plan = plan
+	return result, nil
+}
+
+// execute runs the statement down whichever of the two paths it belongs on: the one that answers
+// with rows, or the one that answers with a count.
+func (s *session) execute(
+	ctx context.Context,
+	conn *sql.Conn,
+	query driver.Query,
+	statement string,
+) (driver.QueryResult, error) {
 	if !rowReturning[sqlkit.LeadingKeyword(statement)] {
 		result, err := sqlkit.Exec(ctx, conn, statement)
 		if err != nil {

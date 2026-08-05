@@ -45,6 +45,47 @@ export interface QueryResult {
   schema: string
   table: string
   statements: StatementOutcome[]
+  /**
+   * What the server said it would do, filled only by a run that asked to be explained and null for
+   * every other. Explain runs the statement like any other and asks about it as well, so the `rows`
+   * above are the statement's own and the plan is *about* that run rather than instead of it.
+   */
+  plan: QueryPlan | null
+}
+
+/**
+ * One step of a plan. `depth` is how deep in the plan's tree it sits and the steps arrive in the
+ * order the tree reads, so the list is the whole tree — which is what draws it, `ResultGrid` having
+ * rows and not branches. `type` is the engine's own name for the step and is never translated.
+ */
+export interface PlanNode {
+  type: string
+  detail: string
+  depth: number
+  rows: number
+  cost: number
+  selfCost: number
+}
+
+/** One thing the engine said about the plan as a whole, in its own wording. */
+export interface PlanFact {
+  label: string
+  value: string
+}
+
+/**
+ * A plan in the forms it is read in, the first of them being the engine's own: `columns` and `rows`
+ * are what an EXPLAIN typed by hand answers with, and everything else is read out of that same
+ * answer. `costed` says the engine puts numbers on a step at all — a document store does not, so its
+ * plan is drawn without those columns rather than with columns full of zeroes.
+ */
+export interface QueryPlan {
+  columns: TableColumn[]
+  rows: Cell[][]
+  nodes: PlanNode[]
+  summary: PlanFact[]
+  json: string
+  costed: boolean
 }
 
 /** The statement a script stopped at, if it stopped at one. */

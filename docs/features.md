@@ -149,8 +149,9 @@ for two different reasons:
 - **What is asked about is reviewed at the moment Execute is pressed**, not read off the strip above
   the editor — the strip follows the whole buffer on a debounce, and what runs may be a selection
   made since.
-- **Explain is never guarded.** It runs a plan and changes nothing, whatever the statement under it
-  would have done.
+- **Explain is guarded exactly as Execute is**, because Explain *runs* the statement and reads a plan
+  about it — a `DELETE` explained is a `DELETE` done. The guard is what says so before it happens, and
+  what is confirmed is the text that was reviewed, however the selection has moved since.
 - A review that cannot be had is not a reason to refuse to run. The reader asked, and the server is
   still what decides; it is the guard that is missing, not the query.
 - The confirming button is drawn `danger` rather than `primary`. The accent button is the one a
@@ -491,6 +492,45 @@ on the same connection without treading on each other. The toolbar picks the dat
   MongoDB it is decided by the *method*: `find` and `aggregate` answer with documents, `insertOne`
   and `deleteMany` with a count.
 
+### What Explain shows
+
+**Explain runs the statement and asks about it as well.** `Result` therefore holds the statement's own
+rows — the same rows Execute would have put there, writable on the same terms — and two more panes
+appear beside it, `Summary` and `Explain`, holding what the server said it was going to do. It is
+guarded like Execute for exactly that reason; see
+[What gets confirmed before it runs](#what-gets-confirmed-before-it-runs).
+
+- **The plan is read before the statement runs**, and that order is the whole of what makes it worth
+  reading: asking afterwards would ask about a server the statement has already changed, and what
+  `DELETE FROM t` was going to do is not what the planner says once the rows are gone. On MongoDB it
+  also means a command with no plan answers `UNSUPPORTED` while it has still changed nothing.
+- **The plan is read by the driver, never by the frontend.** Each engine asks in two forms — the
+  `EXPLAIN` a reader would have typed, and the JSON form that carries a number per step — and both
+  land in `driver.Plan`. **Neither is ever the `ANALYZE` form**: the statement runs once, on the path
+  every statement takes, and the plan alongside it is an estimate.
+- **Either form may fail on its own and the other is still shown.** A plan that cannot be had at all
+  is no plan rather than a failure: the statement has run, its rows are in hand, and the two extra
+  panes simply do not appear.
+- `Summary` is what the plan says about itself, in the engine's own wording: a total cost and a
+  startup cost on PostgreSQL, a query cost and a table count on MySQL, the winning stage and how many
+  plans lost on MongoDB. It is a list of pairs rather than a fixed set of fields, because a field for
+  a fact an engine has not got would only be filled with a zero that read as an answer.
+- **`Explain` holds three tabs**, and they are three because they answer different questions:
+  - **`Grid`** — the engine's own EXPLAIN, exactly as it answered: MySQL's grid of access types,
+    PostgreSQL's plan text down one column, MongoDB's one document. Nothing is normalised, reordered
+    or renamed — a reader who reaches for Explain knows these words, and rewriting them would put this
+    client between them and their server.
+  - **`JSON`** — the plan document as the server wrote it, laid out, with numbered lines and folds.
+    It is where a step's cost and the shape of the tree actually live, and it is the answer to "but
+    what did the server *say*", which no reading of it can be.
+  - **`Statistics`** — one row per kind of step: how many there are, what they cost between them, and
+    what share of the plan that is, dearest first. It counts a step's **own** cost, meaning what it
+    adds beyond what it reads, so the shares add up to the plan rather than to several times it.
+- **A step the engine did not price is left blank, not zeroed.** MySQL prices reading a table and
+  evaluating its rows; it does not price the sort or the grouping above them, and a `0.00` there would
+  read as free rather than as unpriced. A document store prices nothing at all, so its statistics carry
+  no cost columns — `Costed` says so, and the grid is not left to infer it from a column of zeroes.
+
 ### What a MongoDB tab runs
 
 The editor takes the shell's own commands, and the driver reads them whole — the grammar is small
@@ -524,8 +564,13 @@ db.runCommand({ collStats: "users" })
   `_id` addressing them. A projection that leaves `_id` out is read-only, for the same reason an
   aliased key column makes a SQL result read-only: the row it names can no longer be found.
 - **Explain** works on `find` and `aggregate`, those being the two with a plan; anything else answers
-  `UNSUPPORTED` rather than pretending. The plan arrives as one row whose cells are the plan's own
-  nested documents — **View Value** is where one is read.
+  `UNSUPPORTED` rather than pretending — and it answers **before the command runs**, so explaining an
+  `insertOne` inserts nothing. `Explain` → `Grid` holds the plan as one row whose cells are the plan's
+  own nested documents, **View Value** being where one is read, and `Statistics` holds the same answer
+  as its stages: `FETCH`, `IXSCAN`, or the `$cursor` that feeds a pipeline and the plan under *it*.
+  There is no cost and no row estimate, a document store pricing nothing, so those columns are not
+  drawn; see [What Explain shows](#what-explain-shows). A server on the slot-based engine reports its
+  plan twice — as stages and as the slots it compiled them into — and it is the stages that are read.
 - **`Ctrl`+`Shift`+`F` lays a command out** the way it lays a statement out: a brace holding more than
   a line comfortably carries goes down the page, and one that does not stays across it. Nothing a
   server would notice changes.

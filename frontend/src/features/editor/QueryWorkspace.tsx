@@ -73,8 +73,17 @@ export function QueryWorkspace({
   // the reader is warned about a statement before they think to select it.
   const review = useScriptReview(sessionId, tab.sql)
 
-  /** Non-null exactly while the guard is asking about a run that has not started. */
-  const [asking, setAsking] = useState<ScriptReview | null>(null)
+  /**
+   * The run the guard is asking about, and non-null exactly while it is asking. It carries the text
+   * it reviewed, so what the reader confirms is what was put in front of them however the selection
+   * has moved since — and whether a plan was asked for, since **Explain runs the statement too** and
+   * must therefore be confirmed like any other run.
+   */
+  const [asking, setAsking] = useState<{
+    review: ScriptReview
+    sql: string
+    explain: boolean
+  } | null>(null)
 
   const send = (sql: string, explain: boolean) => {
     if (sessionId === null) return
@@ -88,37 +97,37 @@ export function QueryWorkspace({
   }
 
   /**
-   * Execute, with the one question that stands between the reader and a statement they cannot take
-   * back. What is asked about is reviewed **here and now** rather than read off the strip: the
-   * strip follows the whole buffer on a debounce, and what runs may be a *selection* made since.
+   * Execute or Explain, with the one question that stands between the reader and a statement they
+   * cannot take back. Both go through it: Explain reads a plan **and runs the statement**, so a
+   * `DELETE` explained is a `DELETE` done, and the guard is what says so first.
+   *
+   * What is asked about is reviewed **here and now** rather than read off the strip: the strip
+   * follows the whole buffer on a debounce, and what runs may be a *selection* made since.
    */
   const start = (explain: boolean) => {
     if (!canRun || sessionId === null) return
 
     const sql = selection.current.trim() || tab.sql
-    // Explain runs a plan and changes nothing, whatever the statement under it would have done.
-    if (explain) {
-      send(sql, true)
-      return
-    }
 
     void queries
       .review(sessionId, sql)
-      .then((read) => {
-        if (needsConfirming(read).length === 0) {
-          send(sql, false)
+      .then((review) => {
+        if (needsConfirming(review).length === 0) {
+          send(sql, explain)
           return
         }
-        setAsking(read)
+        setAsking({ review, sql, explain })
       })
       // A review that cannot be had is not a reason to refuse to run: the reader asked, and the
       // server is still the thing that decides. It is the guard that is missing, not the query.
-      .catch(() => send(sql, false))
+      .catch(() => send(sql, explain))
   }
 
   const confirmRun = () => {
+    if (asking === null) return
+
+    send(asking.sql, asking.explain)
     setAsking(null)
-    send(selection.current.trim() || tab.sql, false)
   }
 
   /**
@@ -240,7 +249,11 @@ export function QueryWorkspace({
         </SplitPanel>
       </Split>
 
-      <RunGuard review={asking} onCancel={() => setAsking(null)} onConfirm={confirmRun} />
+      <RunGuard
+        review={asking?.review ?? null}
+        onCancel={() => setAsking(null)}
+        onConfirm={confirmRun}
+      />
     </div>
   )
 }

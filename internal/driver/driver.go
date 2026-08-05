@@ -336,6 +336,51 @@ type QueryResult struct {
 	RowsAffected int64
 	Truncated    bool
 	Table        string
+	// Plan is what the server said it would do, and is filled only for a Query that asked to be
+	// explained. Explain runs the statement like any other and asks about it as well, so the Rows
+	// above are the statement's own and the plan is *about* that run rather than instead of it.
+	Plan *Plan
+}
+
+// PlanNode is one step of a plan. Depth is how deep in the plan's tree the step sits and the steps
+// arrive in the order the tree reads, so a flat list is the whole tree — which is what the grid that
+// draws it needs, a grid having rows and not branches.
+type PlanNode struct {
+	// Type is the engine's own name for the step: `Seq Scan`, `ref`, `IXSCAN`. It is never
+	// translated, because a reader who knows their engine knows these words and a reader who does
+	// not would search for them.
+	Type string
+	// Detail is what the step works on, in one line: the relation, the index, the condition.
+	Detail   string
+	Depth    int
+	Rows     float64
+	Cost     float64
+	SelfCost float64
+}
+
+// PlanFact is one thing the engine said about the plan as a whole. A list of pairs rather than a
+// struct of fields because what a plan reports is the engine's own: PostgreSQL prices a plan,
+// MySQL prices a query block, and a document store prices nothing at all — a field for a fact one
+// engine has not got would only be filled with a zero that reads as an answer.
+type PlanFact struct {
+	Label string
+	Value string
+}
+
+// Plan is a plan in the forms it is read in, and the first of them is the engine's own: Columns and
+// Rows are exactly what an `EXPLAIN` typed by hand answers with — MySQL's grid of access types,
+// PostgreSQL's plan text, MongoDB's one document. Everything else here is read out of that same
+// answer, and a reader who knows their engine wants the answer itself.
+type Plan struct {
+	Columns []Column
+	Rows    [][]*string
+	Nodes   []PlanNode
+	Summary []PlanFact
+	JSON    string
+	// Costed says the engine puts numbers on a step at all — a cost, and the rows it expects the step
+	// to produce. A document store does neither, so its plan is drawn without those columns rather
+	// than with columns full of zeroes.
+	Costed bool
 }
 
 type CellEdit struct {

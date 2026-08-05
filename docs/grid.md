@@ -324,8 +324,9 @@ SELECT * FROM `shop`.`users` ORDER BY `id` LIMIT 100 OFFSET 0  ⧉ │ Record 19
 2. Geometry constants stay at the top of `ResultGrid.tsx`; row height alone is shared, via
    `density.ts`, because the object tree virtualizes on the same number.
 3. New behaviour is added once, in the grid, and this file is updated in the same change. Every call
-   site — `ResultPane`, `TableDataView`, `TableDesigner`, `ObjectListView`, `QueryHistory` and
-   `ScriptMessages` — then has it, which is the whole point.
+   site — `ResultPane`, `TableDataView`, `TableDesigner`, `ObjectListView`, `QueryHistory`,
+   `ScriptMessages` and the three plan surfaces (`Summary`, and `Grid` and `Statistics` inside
+   `ExplainPane`) — then has it, which is the whole point.
 
 ## Where the columns come from
 
@@ -403,6 +404,14 @@ surrounds the grid:
   and the only one that turns the head strip off (`headStrip={false}`), its own toolbar already
   carrying both **Filter & Sort** and **Export**. Its value picker asks about the table it is
   showing, which is the one table it could possibly mean.
+
+- The three **plan** surfaces — `Summary`, and `Grid` and `Statistics` inside `ExplainPane` — are the
+  plainest sites there are: a `GridData` built by `features/results/plan.ts` from `QueryResult.plan`,
+  and nothing else. No paging, no hiding, no editing, so nothing to map. `Grid` does not even build
+  one: the plan carries the engine's own EXPLAIN as columns and rows, and they are handed over as they
+  arrived. The one thing worth knowing is that **a cell is left empty where the engine gave no
+  number** — a step it does not price, a share of nothing — since `0.00` reads as free where blank
+  reads as unpriced.
 
 Both mappings exist because the grid always reports the coordinates it drew, never the ones the
 server knows. Neither one lets the *other* axis drift: a paged surface leaves columns alone and a

@@ -324,6 +324,43 @@ type QueryResult struct {
 	Truncated    bool          `json:"truncated"`
 	ElapsedMs    int64         `json:"elapsedMs"`
 	Table        string        `json:"table"`
+	// Plan is filled only by a run that asked to be explained, and is null for every other. Explain
+	// runs the statement like any other and asks about it as well, so the Rows above are the
+	// statement's own and the plan is *about* that run rather than instead of it.
+	Plan *QueryPlan `json:"plan"`
+}
+
+// PlanNode is one step of a plan. `depth` is how deep in the plan's tree it sits and the steps
+// arrive in the order the tree reads, so the list is the whole tree — which is what the grid drawing
+// it needs, a grid having rows and not branches.
+type PlanNode struct {
+	Type     string  `json:"type"`
+	Detail   string  `json:"detail"`
+	Depth    int     `json:"depth"`
+	Rows     float64 `json:"rows"`
+	Cost     float64 `json:"cost"`
+	SelfCost float64 `json:"selfCost"`
+}
+
+// PlanFact is one thing the engine said about the plan as a whole, in its own wording. Pairs rather
+// than fields because what a plan reports is the engine's own — see driver.PlanFact.
+type PlanFact struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// QueryPlan is a plan in the forms the reader reads it in, and the first is the engine's own:
+// `columns` and `rows` are what an EXPLAIN typed by hand answers with, and everything else is read
+// out of that same answer. `costed` says the engine puts numbers on a step at all — a cost, and a row
+// estimate — so a plan from an engine that does not is drawn without those columns rather than with
+// columns of zeroes.
+type QueryPlan struct {
+	Columns []TableColumn `json:"columns"`
+	Rows    [][]*string   `json:"rows"`
+	Nodes   []PlanNode    `json:"nodes"`
+	Summary []PlanFact    `json:"summary"`
+	JSON    string        `json:"json"`
+	Costed  bool          `json:"costed"`
 }
 
 // StatementOutcome is what one statement of a script did. `error` is the server's own wording
@@ -582,6 +619,41 @@ func toQueryResultDTO(result driver.QueryResult, elapsed time.Duration) QueryRes
 		Truncated:    result.Truncated,
 		ElapsedMs:    elapsed.Milliseconds(),
 		Table:        result.Table,
+		Plan:         toPlanDTO(result.Plan),
+	}
+}
+
+// toPlanDTO carries a plan across as it was read. A run that asked for no plan, or an engine that
+// could not give one, has none — and the absence is the answer, not an empty plan.
+func toPlanDTO(plan *driver.Plan) *QueryPlan {
+	if plan == nil {
+		return nil
+	}
+
+	nodes := make([]PlanNode, 0, len(plan.Nodes))
+	for _, node := range plan.Nodes {
+		nodes = append(nodes, PlanNode{
+			Type:     node.Type,
+			Detail:   node.Detail,
+			Depth:    node.Depth,
+			Rows:     node.Rows,
+			Cost:     node.Cost,
+			SelfCost: node.SelfCost,
+		})
+	}
+
+	facts := make([]PlanFact, 0, len(plan.Summary))
+	for _, fact := range plan.Summary {
+		facts = append(facts, PlanFact{Label: fact.Label, Value: fact.Value})
+	}
+
+	return &QueryPlan{
+		Columns: toColumnDTOs(plan.Columns),
+		Rows:    plan.Rows,
+		Nodes:   nodes,
+		Summary: facts,
+		JSON:    plan.JSON,
+		Costed:  plan.Costed,
 	}
 }
 
