@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, Parentheses, Plus, X } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
@@ -32,11 +32,27 @@ const INDENT = 20
 /** The label column both sections share, so `Filter` and `Sort By` line their rows up. */
 const LABEL_WIDTH = 56
 
+/**
+ * A field a header's `⋮` asked to filter on. An object rather than a bare name so that asking
+ * twice for the same field is two asks, each adding its own row.
+ */
+export interface FilterAsk {
+  column: string
+}
+
 interface FilterSortPanelProps {
   columns: ResultColumn[]
   filtering: GridFiltering
   sort: readonly SortKey[]
   onSortChange?: ((sort: SortKey[]) => void) | undefined
+  /**
+   * The field a header asked to filter on, or null. It lands in the **draft** as a fresh condition:
+   * a header knows the field and not the value, so what it adds was not picked whole and is
+   * therefore not the cell menu's exception — nothing narrows until Apply.
+   */
+  ask?: FilterAsk | null
+  /** Clears that ask, so a panel closed and opened again does not add the same row twice. */
+  onAskTaken?: (() => void) | undefined
 }
 
 /**
@@ -54,14 +70,36 @@ export function FilterSortPanel({
   filtering,
   sort,
   onSortChange,
+  ask = null,
+  onAskTaken,
 }: FilterSortPanelProps) {
   const [criteria, setCriteria] = useState(filtering.criteria)
   const [keys, setKeys] = useState<readonly SortKey[]>(sort)
+  const taken = useRef<FilterAsk | null>(null)
+  const inForce = useRef(filtering.criteria)
 
-  // The draft follows what is in force, so a condition added from the cell menu or a sort taken
-  // off a header lands in the builder rather than being overwritten by the draft beside it.
-  useEffect(() => setCriteria(filtering.criteria), [filtering.criteria])
+  // The draft follows what is in force **as that changes**, so a condition added from the cell menu
+  // or a sort taken off a header lands in the builder rather than being overwritten by the draft
+  // beside it. The tree last seen is remembered rather than simply assigned, because an effect run
+  // again for a tree that never changed would undo the row an ask below has just added to the draft.
+  useEffect(() => {
+    if (inForce.current === filtering.criteria) return
+
+    inForce.current = filtering.criteria
+    setCriteria(filtering.criteria)
+  }, [filtering.criteria])
   useEffect(() => setKeys(sort), [sort])
+
+  // A header's Add Filter appends its field to the draft — at the end of the root, where the cell
+  // menu's own conditions land. The ask is taken **once**: React runs an effect twice for a single
+  // commit in development, and one click would otherwise add two rows.
+  useEffect(() => {
+    if (ask === null || taken.current === ask) return
+
+    taken.current = ask
+    setCriteria((current) => appendTo(current, [], newCondition(ask.column)))
+    onAskTaken?.()
+  }, [ask, onAskTaken])
 
   const names = useMemo(() => columns.map((column) => column.name), [columns])
   const firstColumn = names[0] ?? ''

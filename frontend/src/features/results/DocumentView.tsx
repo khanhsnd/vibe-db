@@ -1,8 +1,9 @@
 import { javascriptLanguage } from '@codemirror/lang-javascript'
 import { json } from '@codemirror/lang-json'
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { foldGutter, HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorState, type Extension } from '@codemirror/state'
-import { EditorView, lineNumbers } from '@codemirror/view'
+import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { useEffect, useRef } from 'react'
 
@@ -33,40 +34,81 @@ const GRAMMARS: Record<Notation, Extension> = {
  */
 const keyStyle = HighlightStyle.define([{ tag: tags.propertyName, color: 'var(--syn-func)' }])
 
-const extensions = (notation: Notation): Extension => [
-  EditorState.readOnly.of(true),
-  EditorView.editable.of(false),
+const extensions = (notation: Notation, editable: boolean): Extension => [
   lineNumbers(),
   foldGutter(),
   GRAMMARS[notation],
   editorTheme,
   syntaxHighlighting(keyStyle),
+  editable
+    ? [history(), keymap.of([...defaultKeymap, ...historyKeymap])]
+    : [EditorState.readOnly.of(true), EditorView.editable.of(false)],
 ]
 
 /**
- * A document read as one: numbered lines, a fold arrow beside every object and array, and the
- * editor's own colours. It is the SQL editor's engine rather than a `<pre>` because a document worth
- * opening is often far larger than a screen, and CodeMirror lays out the lines in view and none of
- * the rest — a `<pre>` of a megabyte freezes the window.
+ * A document read as one, and typed back in the notation it was read in: numbered lines, a fold
+ * arrow beside every object and array, and the editor's own colours. It is the SQL editor's engine
+ * rather than a `<pre>` because a document worth opening is often far larger than a screen, and
+ * CodeMirror lays out the lines in view and none of the rest — a `<pre>` of a megabyte freezes the
+ * window.
  *
- * Read-only, as every rendering in the viewer is — see `ValueViewer`. The text is still selectable,
- * so a document can be copied out of it.
+ * **Editable wherever the value can be written back**, which is what `onChange` says; without one
+ * it is read-only. The text is selectable either way — `selectable`, because `user-select: none` is
+ * global and a document nobody can select is a document nobody can copy.
  */
-export function DocumentView({ text, notation }: { text: string; notation: Notation }) {
+export function DocumentView({
+  text,
+  notation,
+  onChange,
+}: {
+  text: string
+  notation: Notation
+  /** Absent for a read-only surface, exactly as `ValueViewer.onChange` is. */
+  onChange?: ((next: string) => void) | undefined
+}) {
   const host = useRef<HTMLDivElement>(null)
+  const view = useRef<EditorView | null>(null)
+  const editable = onChange !== undefined
+
+  // Held in refs for the reason `EditorPane` holds its own: the view is built once and must not be
+  // rebuilt to learn a new handler or a new line of text.
+  const emit = useRef(onChange)
+  emit.current = onChange
+  const seed = useRef(text)
+  seed.current = text
 
   useEffect(() => {
     const parent = host.current
     if (!parent) return
 
-    // A different value is a different document with no caret of its own to keep, so it is a fresh
-    // view rather than a dispatched change.
-    const view = new EditorView({
+    const instance = new EditorView({
       parent,
-      state: EditorState.create({ doc: text, extensions: extensions(notation) }),
+      state: EditorState.create({
+        doc: seed.current,
+        extensions: [
+          extensions(notation, editable),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) emit.current?.(update.state.doc.toString())
+          }),
+        ],
+      }),
     })
-    return () => view.destroy()
-  }, [text, notation])
 
-  return <div ref={host} className="data-font scroll-thin min-h-0 flex-1" />
+    view.current = instance
+    return () => {
+      instance.destroy()
+      view.current = null
+    }
+  }, [notation, editable])
+
+  // The viewer owns the value, but echoing our own keystroke back into the document would reset
+  // the caret on every character typed, so only a genuine divergence is written in.
+  useEffect(() => {
+    const instance = view.current
+    if (!instance || instance.state.doc.toString() === text) return
+
+    instance.dispatch({ changes: { from: 0, to: instance.state.doc.length, insert: text } })
+  }, [text])
+
+  return <div ref={host} className="data-font scroll-thin selectable min-h-0 flex-1" />
 }

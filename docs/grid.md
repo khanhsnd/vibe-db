@@ -16,15 +16,15 @@ keys and its pending changes, and every one of those is a grid — the Fields on
 
 | Part | Rule |
 |---|---|
-| Head strip | 32 px above the header, on the header's own surface — the two read as one head — holding what acts on the grid *whole* rather than row by row: **Filter & Sort** on the left, where a reader looks for what narrows the table, and **Export** against the right, where they look for what to *do with* it. Both are labelled `Button`s with an accent-coloured glyph, not bare icons, because the strip has the room to say what they are. It sits outside the scroller, so it stays put while the columns scroll under it, and the grid draws it **where the call site passed `onExport` or `filtering` and did not pass `headStrip={false}`** — a surface with a toolbar of its own puts both buttons in that toolbar and turns the strip off, because one table must never carry two strips. It still passes the handlers, which is what the cell menu's own items run. Today the one surface that filters is the table view, and its own toolbar carries that button, so the strip the grid draws for itself holds **Export** alone. |
-| Filter & Sort panel | Under the head strip and over the header, drawn only where the call site passed `filtering` and the reader asked for it — the **Filter & Sort** button, or the cell menu's **Show/Hide Filter & Sort**. It is `FilterSortPanel`, and it is the whole of what the section below describes. The conditions hold whether it is showing or not: hiding the panel is not widening the grid, which is why the button carries a **count** of the conditions and sort keys in force. |
+| Head strip | 32 px above the header, on the header's own surface — the two read as one head — holding what acts on the grid *whole* rather than row by row: **Filter & Sort** on the left, where a reader looks for what narrows the table, and against the right **Cell Editor** then **Export**, where they look for what to *do with* it. All three are labelled `Button`s with an accent-coloured glyph, not bare icons, because the strip has the room to say what they are. It sits outside the scroller, so it stays put while the columns scroll under it, and the grid draws it **where the call site passed `onExport`, `filtering` or `cellPanel` and did not pass `headStrip={false}`** — a surface with a toolbar of its own puts the same buttons in that toolbar and turns the strip off, because one table must never carry two strips. It still passes the handlers, which is what the cell menu's own items run. Today the one surface that filters is the table view, and its own toolbar carries all three, so the strip the grid draws for itself is a query result's: **Cell Editor** and **Export**. |
+| Filter & Sort panel | Under the head strip and over the header, drawn only where the call site passed `filtering` and the reader asked for it — the **Filter & Sort** button, the cell menu's **Show/Hide Filter & Sort**, or a header menu's **Add Filter**. It is `FilterSortPanel`, and it is the whole of what the section below describes. The conditions hold whether it is showing or not: hiding the panel is not widening the grid, which is why the button carries a **count** of the conditions and sort keys in force. |
 | Header | Two lines, 40 px on `--surface-bar`, so the shade alone says where the data starts. The column **name** on top in the **UI font**, bold 14 px — the one place the grid is neither mono nor the reader's own font, a size above its cells and weights clear of their light, so a name reads as a label and not as the data beneath it — and its **type** below in muted mono 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx` and is drawn in **that class's own colour** (`--type-*`), so a wide header is read as shapes and colours rather than by spelling out seven type names. Never uppercased — the server's own casing stands. A column that is part of the **primary key** carries the tree's own `--grid-key` lock ahead of its name, from `ResultColumn.primaryKey`, so a result the driver could not trace back to a table simply has none. **Nullability is not drawn here**, and must not be: a driver that cannot report it says `false`, which the grid cannot tell from a column the server really will not take NULL for — the designer reads the catalogue and can. On the right of every header sits the **`⋮` options button**, and beside the name of a sorted column an arrow saying which way — followed by **which key it is** where more than one is in force, so the header under the second key does not claim the order for itself. |
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. The **data font** — the `.data-font` class, which is the family, size and weight the reader picked in Settings, mono 13 px light by default. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
 | Long values | A cell draws at most `PREVIEW_LIMIT` characters and then an ellipsis — `cellPreview`. A cell is a couple of hundred pixels wide, so the rest was never readable, and the browser still shapes every character of it to find where the ellipsis goes: **two columns of JSON documents made a 200-row table lag on text layout alone.** Nothing that *acts* on a value is clipped — a copy, an export, a filter's own condition and **View Value** all carry the whole of it — and a fit measures the preview because `MAX_FIT_WIDTH` caps a column far below that many characters anyway. |
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
 | Bytes | A value that is not text arrives as `\x…` hex and is drawn as that text, like any other. The grid has no special case for it: **View Value** is where a blob becomes a picture or a dump, and a row of them reads as a row of lengths rather than as replacement characters. Why it arrives that way is in [features.md](features.md#why-bytes-arrive-as-x). |
-| Documents | A nested document or an array arrives as the shell's own notation — `{ city: "Hanoi" }`, `[1, "two"]` — and is drawn as that text. The grid has no special case for it either: **View Value** is where one is read whole, in the **Document** view, and the notation is the *parser's* own, so a cell edited in it goes back as the document it showed. Laying it out is the **engine's**, through the `formatValue` a call site with a session passes; a grid with none offers `Raw` alone rather than a layout it cannot vouch for. See [features.md](features.md#reading-a-value-whole). |
+| Documents | A nested document or an array arrives as the shell's own notation — `{ city: "Hanoi" }`, `[1, "two"]` — and is drawn as that text. The grid has no special case for it either: **View Value** is where one is read whole, in the **Document** view, and the **Cell Editor** panel is where one is *changed* in that same view — the notation is the parser's own, so a cell typed into it goes back as the document it showed, and nobody is sent to `Raw` to edit what `Raw` does not lay out. Laying it out is the **engine's**, through the `formatValue` a call site with a session passes; a grid with none offers `Raw` alone rather than a layout it cannot vouch for. See [features.md](features.md#reading-a-value-whole). |
 | Selection | Three depths: cells inside any rectangle get a fill (`--grid-cell-selected`), the **focus** cell — the pointer's last landing, which is the live rectangle's focus — is solid `--accent` with `--fg-on-accent` text, and a row the selection holds *end to end* is banded across its width (`--grid-row-selected`). A row the selection merely touches gets the band and the accent bar **on its gutter alone**, because a selected column touches every row and must not paint the whole grid. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
 | Hover | A row highlight, applied *only* to rows outside the selection. Both are background colours, so a selected row must not also carry `hover:bg-hover` or the tint flickers away under the pointer. |
 | Column editors | A column may say how its cells are drawn and changed, through `ResultColumn.editor`. A **`choice`** cell keeps its text and gains a muted chevron; a **`check`** cell is a centred box — filled `--accent` when on, an outline in `--fg-faint` when off — and never the word it holds; a **`key`** cell is a `--grid-key` lock followed by the cell's own value, which is the field's place in the key, and is empty when it holds nothing. A toggle cell shows **nothing** rather than `(Null)`, a no being a no. |
@@ -105,7 +105,9 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   WebView's. **The `⋮` button on the header opens that same menu** from a left click, by dispatching
   the `contextmenu` event Radix already listens for — one menu with two ways in, rather than a second
   menu that drifts from the first. The menu carries **Sort Ascending**, **Sort Descending** and
-  **Remove All Sorts** where `onSortChange` was passed, then **Copy column** (the column's cells as
+  **Remove All Sorts** where `onSortChange` was passed, **Add Filter** where `filtering` was — it
+  opens the Filter & Sort panel with a condition on that field in its draft, a header knowing the
+  field and not the value — then **Copy column** (the column's cells as
   one line each, the same text a `Ctrl`+`C` over that range would write), **Copy field name**, and —
   only where `onEditCell` was passed — **Paste**, which is the paste below with the column's first
   row as its origin. A call site appends its own items through `columnMenuItems`; today only
@@ -121,9 +123,9 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   right-click inside a selection must not move it.
   | Group | Items |
   |---|---|
-  | **View Value**, always | Opens `ValueDialog` on the cell under the pointer — the same `ValueViewer` the table tab's Cell Editor panel draws, read-only. It is first in the menu and is the one item **every** grid offers: it reads the cell and changes nothing, and a query result or a history entry has no cell-editor panel to put it in. What a value is read *as* — JSON, a document, GeoJSON, an array, bytes — is decided by the value and its **type**, never by an engine's name; see [features.md](features.md#reading-a-value-whole) |
+  | **View Value**, always | Opens `ValueDialog` on the cell under the pointer — the same `ValueViewer` a Cell Editor panel draws, read-only. It is first in the menu and is the one item **every** grid offers: it reads the cell and changes nothing, and the designer, the table list and the history log have no cell-editor panel to put it in. What a value is read *as* — JSON, a document, GeoJSON, an array, bytes — is decided by the value and its **type**, never by an engine's name; see [features.md](features.md#reading-a-value-whole) |
   | Writing, where `onEditCell` was passed | **Set to Empty String**, **Set to NULL**, **Generate UUID** ▸ (lowercase, uppercase, without hyphens) — each acting on **every cell of the selection**, and the UUID minting a fresh one per cell so a range of rows gets a range of ids |
-  | **Edit in Cell Editor**, where `onEditInPanel` was passed | Opens the surface's own editor panel on that cell, which `TableDataView` does by selecting the cell and showing the panel |
+  | **Edit in Cell Editor**, where `onEditInPanel` was passed | Opens the surface's own editor panel on that cell, which both writable surfaces do by selecting the cell and showing the panel |
   | **Delete Record**, where `onDeleteRows` was passed | The same call the footer's Delete makes, on the rows the selection touches; it says *Delete 3 Records* when it means three, and it is the one item drawn `danger` |
   | Clipboard | **Copy** (the `Ctrl`+`C` text), **Copy Field Name**, **Copy As** ▸ (tab-separated with field names, CSV, JSON — `copyAs.ts`, treating a NULL exactly as the file export does), **Paste** where `onEditCell` was passed, and **Save Data As** ▸ (the `ExportMenu` formats) where `onExport` was |
   | Narrowing | **Show/Hide Filter & Sort**, **Filter** ▸ and **Remove All Filters & Sorts** where `filtering` was passed, and **Sort** ▸ (ascending, descending, remove) where `onSortChange` was. **Filter** ▸ offers every operator against the value under the pointer — `= 30`, `contains shop` — and the condition it adds **applies at once**, having been picked whole rather than spelled; it lands at the end of the root. An operator taking two values or a list cannot be read off one cell, so it arrives with its value unset and the panel opens on it. The **label** is clipped where the value is long — a JSON document spelled out in a menu item pushes the menu off the screen — but the condition itself carries the whole value |
@@ -147,6 +149,18 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   A **list** of keys, the first deciding and the rest breaking its ties — the panel is where a second
   is added, while a header's own menu means one key and replaces whatever was there. A sort always
   sends the reader back to page one, and always drops the selection.
+- **Columns are dragged into place by their headers**, where the call site passed `onMoveColumn`.
+  Pressing anywhere on a header that is not the resize edge or its `⋮` picks the column up — the
+  header dims, and an accent line shows the boundary it would land on, the boundary being read like
+  a caret: past a column's half-way line is the place *after* it. Dropping it back where it came
+  from, either side of itself, is not a move. The grid reports the drop in the positions it **drew**
+  — `from`, and the place it landed *before* — and **who keeps the order is the call site**, because
+  only it knows whether the order outlives the grid: `TableDataView` stores one against the table
+  and `ResultPane` holds one for as long as its statement stands. Neither reorders a row: the order
+  is a list of column *names* (`columnOrder.ts`), every column keeps the place it holds in a row,
+  and both surfaces map the grid's column back through it exactly as one maps a hidden column. A
+  drag does not scroll the grid, so a column is carried among the headers on screen — twice for
+  further.
 - **Columns resize** by dragging the right edge of the header, and **double-clicking that edge fits
   the column** to the widest of its name — plus the lock, on a key column — its type line and its
   cells, capped at 520 px and measured on a canvas against the tokens each is drawn with — `--font-ui` / `--text-base` for the name, and
@@ -167,6 +181,10 @@ keys and its pending changes, and every one of those is a grid — the Fields on
   `FilterSortButton` is the same arrangement on the other side of the strip. What each
   format does with a `NULL`, and which rows a surface counts as "what the grid holds", are in
   [features.md](features.md#exporting-a-grid).
+- **`CellEditorButton` is that same arrangement for the cell-editor panel**: one button, in the head
+  strip through `cellPanel` or in the surface's own toolbar, and it opens the one `CellEditor` both
+  writable surfaces draw. The panel itself is not the grid's — it is the surface's, beside it — but
+  the *toggle* is, so a grid that has one never has to be asked twice where the button goes.
 
 ## The Filter & Sort panel
 
@@ -181,6 +199,13 @@ narrowing a table is nearly always about to order it too, and two panels would b
   menu** is the exception and applies at once: its condition was picked whole.
 - **The draft follows what is in force.** A condition added from the cell menu, or a sort taken off a
   header's menu, appears in the panel rather than being overwritten by the draft beside it.
+- **A header's Add Filter adds to the draft, not to what is in force.** It is the one addition that
+  is *not* picked whole — a header knows the field and not the value — so it opens the panel and
+  lands at the end of the root with its value unset, and Apply is still what narrows the rows. That
+  is also what keeps it cheap: no read is made for a condition nobody has spelled yet, and a draft
+  the reader was half-way through is added to rather than replaced. The ask travels as `FilterAsk`,
+  a fresh object per click so that asking twice for one field adds two rows, and the panel clears it
+  once taken — an effect that runs twice for one commit must not add two.
 - **A condition is three parts, and each opens what it may be** — the column, the operator, and the
   value. The column and the value open a **small panel hung under the part itself** (`PickerPanel`,
   a popover) rather than a dialog over the grid: what is being changed is three words on a row, and
@@ -358,15 +383,21 @@ Not in what an edit means — `useGridEdits` and `GridFooter` make that identica
 surrounds the grid:
 
 - `ResultPane` pages in memory, so it maps the grid's *page-local* row index back to the whole
-  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's rows alike. **It sorts in
+  result's on the way in — for edits, `isDirty`, `isDeleted` and a delete's rows alike — and it maps
+  the column too, its reader being free to arrange the headers. **It sorts in
   memory**, there being no statement of its own to re-order, and it keeps the outcome as a list of
   row numbers (`useGridOrder`, over `sortedOrder`) rather than as reordered rows: a pending change is
   keyed by the number a row had when it was read. Only the rows **fetched** are ordered — a sort
   reaches no further, and a draft row therefore stays pinned after them, so **Add** still lands on
-  the last page. A sort is dropped when the statement changes. **It does not filter**: it passes no
+  the last page. A sort is dropped when the statement changes, and so is the column order: there is
+  no stored table under a result to remember one against. **It does not filter**: it passes no
   `filtering`, so it carries neither the button nor the panel, and its cell menu offers no condition
-  — a header's own menu, which sorts, is the whole of what acts on a result in hand.
-  `QueryHistory` is the same arrangement without the drafts or the paging, which is the whole of what
+  — a header's own menu, which sorts, is the whole of what acts on a result in hand. It draws the
+  **Cell Editor** panel under its grid, `CellEditor` and its two bounds being the same on both
+  writable surfaces; the panel is closed with the grid, since the button that opens it lives on that
+  grid's head strip and a run that answered with an error would otherwise strand it open.
+  `QueryHistory` is the same arrangement without the drafts, the paging, the panel or the arranging,
+  which is the whole of what
   `useGridOrder` is for. Its footer
   can also **Stop** the run, and **Add** jumps to the last page, which is where a draft row lands.
   Asking for a page past the rows it holds replays the statement for as many as that page needs
@@ -392,8 +423,11 @@ surrounds the grid:
   where a surface's controls go, acting on the table the selection names. Its wording is the
   engine's (`engineWords`), so a document store's list says Collection throughout; only the wording
   changes, every button running the same bound method.
-- `TableDataView` pages on the server, and can hide columns, so it maps the grid's *visible* column
-  index back to the real one on the way in. **It sorts and filters on the server too** — both travel
+- `TableDataView` pages on the server, and can hide columns and arrange them, so it maps the grid's
+  *visible* column index back to the real one on the way in — `arrange` first, then the hidden names
+  out of what is left, and one list answers for both. **It is the site that stores an order**, under
+  the connection, namespace and table (`columnOrderKey`), because a table is a thing that outlives
+  the app. **It sorts and filters on the server too** — both travel
   in `TablePageRequest` and become the read's `ORDER BY` and `WHERE`, because ordering or narrowing
   the hundred rows in hand would only shuffle what the reader can already see, and the total is
   counted through the same conditions or the pager would walk pages that are no longer there. Its

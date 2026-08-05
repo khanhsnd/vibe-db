@@ -29,6 +29,14 @@ type Dialect struct {
 	// DollarQuotes says `$tag$ … $tag$` is a string, which is how a PostgreSQL function body
 	// carries semicolons without ending the statement that declares it.
 	DollarQuotes bool
+	// LikeInColumnList says a table copied from another declares the copy inside its column
+	// list — `CREATE TABLE new (LIKE old INCLUDING ALL)` — rather than as a clause after the
+	// name, and has to be asked for the defaults and indexes the other engine's LIKE takes
+	// unbidden. See CopyTable.
+	LikeInColumnList bool
+	// OverridesIdentity says a write has to declare it is supplying a value for an identity
+	// column, which PostgreSQL refuses the row without and MySQL has no clause for. See CopyRows.
+	OverridesIdentity bool
 	// TextType is what this engine calls text in a CAST, which is how a column of any type is
 	// compared as text — see Where's `contains`.
 	TextType string
@@ -45,6 +53,8 @@ var (
 		IdentQuote:        '"',
 		NamespaceIsSchema: true,
 		DollarQuotes:      true,
+		LikeInColumnList:  true,
+		OverridesIdentity: true,
 		TextType:          "TEXT",
 	}
 	// Shell is the lexical half of a document store's own language, and is a Dialect for one

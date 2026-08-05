@@ -329,6 +329,16 @@ export function tableItems(
     { label: `Design ${words.table}`, icon: ICON.design, onSelect: on.design },
     { label: `New ${words.table}`, icon: ICON.add, separatorBefore: true, onSelect: on.create },
     { label: `Rename ${words.table}…`, icon: ICON.rename, onSelect: on.rename },
+    {
+      label: `Duplicate ${words.table}`,
+      icon: ICON.duplicate,
+      // The copy is one action asked in two ways, so the submenu is where the reader says which
+      // — and both still ask for the name, as everything that makes an object here does.
+      items: [
+        { label: 'Structure Only…', onSelect: () => on.duplicate(false) },
+        { label: 'Structure and Data…', onSelect: () => on.duplicate(true) },
+      ],
+    },
     { label: `Empty ${words.table}`, icon: ICON.empty, separatorBefore: true, onSelect: on.empty },
     ...(truncates
       ? [{ label: `Truncate ${words.table}`, icon: ICON.truncate, onSelect: on.truncate }]

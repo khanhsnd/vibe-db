@@ -524,6 +524,68 @@ func TestLiveAgainstARealServer(t *testing.T) {
 		}
 	})
 
+	// A copy is a second collection, and the two ways of asking for one differ only in whether the
+	// documents come with it. The indexes come either way.
+	t.Run("DuplicateTable", func(t *testing.T) {
+		ctx := context.Background()
+
+		spec := driver.IndexSpec{Name: "name_1", Columns: []string{"name"}}
+		if err := live.CreateIndex(ctx, ns, "people", spec); err != nil {
+			t.Fatalf("CreateIndex() error = %v", err)
+		}
+
+		source, err := live.TableRows(ctx, driver.TablePage{Namespace: ns, Table: "people"})
+		if err != nil {
+			t.Fatalf("TableRows() error = %v", err)
+		}
+
+		copies := []struct {
+			name     string
+			withRows bool
+			want     int64
+		}{
+			{"people_shape", false, 0},
+			{"people_copy", true, source.Total},
+		}
+
+		for _, one := range copies {
+			if err := live.DuplicateTable(ctx, ns, "people", one.name, one.withRows); err != nil {
+				t.Fatalf("DuplicateTable(%s) error = %v", one.name, err)
+			}
+
+			rows, err := live.TableRows(ctx, driver.TablePage{Namespace: ns, Table: one.name})
+			if err != nil {
+				t.Fatalf("TableRows(%s) error = %v", one.name, err)
+			}
+			if rows.Total != one.want {
+				t.Errorf("%s holds %d documents, want %d", one.name, rows.Total, one.want)
+			}
+
+			// Both indexes, which is what `$out` would have left behind had it run last.
+			structure, err := live.TableStructure(ctx, ns, one.name)
+			if err != nil {
+				t.Fatalf("TableStructure(%s) error = %v", one.name, err)
+			}
+			if len(structure.Indexes) != 2 {
+				t.Errorf("%s has %d indexes, want _id_ and name_1", one.name, len(structure.Indexes))
+			}
+
+			if err := live.DropTable(ctx, ns, one.name); err != nil {
+				t.Fatalf("DropTable(%s) error = %v", one.name, err)
+			}
+		}
+
+		// A name already taken is refused rather than written over, which is what making the copy
+		// before filling it is for.
+		if err := live.DuplicateTable(ctx, ns, "people", "people", true); err == nil {
+			t.Error("DuplicateTable() over an existing collection was allowed")
+		}
+
+		if err := live.DropIndex(ctx, ns, "people", "name_1"); err != nil {
+			t.Fatalf("DropIndex() error = %v", err)
+		}
+	})
+
 	t.Run("Empty, Rename and Drop", func(t *testing.T) {
 		ctx := context.Background()
 

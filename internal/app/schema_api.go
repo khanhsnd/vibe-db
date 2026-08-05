@@ -120,6 +120,22 @@ func (a *ConnectionAPI) RenameTable(sessionID string, ns Namespace, table, name 
 	})
 }
 
+// DuplicateTable copies a table under a new name, with its rows or with its shape alone.
+func (a *ConnectionAPI) DuplicateTable(
+	sessionID string,
+	ns Namespace,
+	table, name string,
+	withRows bool,
+) error {
+	if err := domain.RequireNames("table", table, "new table", name); err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.DuplicateTable(ctx, ns.toDriver(), table, name, withRows)
+	})
+}
+
 func (a *ConnectionAPI) DropTable(sessionID string, ns Namespace, table string) error {
 	if err := domain.RequireName("table", table); err != nil {
 		return wrapError(err)

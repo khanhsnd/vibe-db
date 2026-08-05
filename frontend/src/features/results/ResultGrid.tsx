@@ -27,10 +27,11 @@ import { IconButton } from '@/shared/ui/IconButton'
 import { ICON } from '@/shared/ui/menuIcons'
 
 import { CellChoice } from './CellChoice'
+import { CellEditorButton } from './CellEditorButton'
 import { CellPicker } from './CellPicker'
 import { ExportMenu } from './ExportMenu'
 import { FilterSortButton } from './FilterSortButton'
-import { FilterSortPanel } from './FilterSortPanel'
+import { FilterSortPanel, type FilterAsk } from './FilterSortPanel'
 import { cellMenuItems } from './cellMenu'
 import { ValueDialog } from './ValueDialog'
 import { ColumnTypeIcon, isNumeric, temporalPicker, type TemporalPicker } from './columnType'
@@ -149,6 +150,14 @@ interface ResultGridProps {
    */
   columnMenuItems?: (column: ResultColumn) => MenuItem[]
   /**
+   * Moves a column, where the surface lets its reader arrange them: a header is dragged and this
+   * says where it was dropped — `from` is the column being carried and `to` is the place it landed
+   * **before**, `columns.length` meaning past the last one. Both are the grid's own positions, as
+   * every other callback reports them, and **who keeps the order is the call site**: only it knows
+   * whether the order outlives the grid. Its absence leaves the headers unmovable.
+   */
+  onMoveColumn?: ((from: number, to: number) => void) | undefined
+  /**
    * Writes every row the grid holds to a file, in the order it draws them. A grid with nothing
    * to write leaves this out, which is what keeps the button off an empty result.
    */
@@ -165,6 +174,12 @@ interface ResultGridProps {
    * without one leaves this out and the cell menu then offers no such item.
    */
   onEditInPanel?: ((ref: CellRef) => void) | undefined
+  /**
+   * That same panel's toggle, for the head strip to carry beside Export — whether it is open, and
+   * what opens it. A surface with a toolbar of its own draws the same button there instead and
+   * passes `headStrip={false}`, so one table never carries two of them.
+   */
+  cellPanel?: { shown: boolean; onToggle: () => void } | undefined
   /**
    * Marks rows for deletion: the same call the footer's Delete makes, from the cell menu instead.
    * Rows are the grid's own numbers, as every other callback reports them.
@@ -186,9 +201,9 @@ interface ResultGridProps {
   formatValue?: ((value: string) => Promise<string>) | undefined
 }
 
-/** The head strip has nothing to say for a grid with neither of the two things it carries. */
-const hasHeadStrip = (props: Pick<ResultGridProps, 'onExport' | 'filtering'>) =>
-  props.onExport !== undefined || props.filtering !== undefined
+/** The head strip has nothing to say for a grid with none of the things it carries. */
+const hasHeadStrip = (props: Pick<ResultGridProps, 'onExport' | 'filtering' | 'cellPanel'>) =>
+  props.onExport !== undefined || props.filtering !== undefined || props.cellPanel !== undefined
 
 export function ResultGrid({
   result,
@@ -201,9 +216,11 @@ export function ResultGrid({
   onSortChange,
   onActivateRow,
   columnMenuItems,
+  onMoveColumn,
   onExport,
   headStrip = true,
   onEditInPanel,
+  cellPanel,
   onDeleteRows,
   onRefresh,
   filtering,
@@ -220,6 +237,8 @@ export function ResultGrid({
   const [editing, setEditing] = useState<CellRef | null>(null)
   /** The cell the last right-click landed on, which the menu names — see `onCellContextMenu`. */
   const [menuCell, setMenuCell] = useState<CellRef | null>(null)
+  /** The field a header's **Add Filter** asked for, which the panel takes into its draft. */
+  const [filterAsk, setFilterAsk] = useState<FilterAsk | null>(null)
 
   /**
    * The cell open in the value viewer, or null. It is the grid's own rather than a call site's
@@ -346,12 +365,28 @@ export function ResultGrid({
         ]
       : []
 
+    // A header knows the field and not the value, so what it adds is unspelled: it opens the panel
+    // and lands in its draft, where the value is picked and Apply is what narrows the rows.
+    const narrowing: MenuItem[] = filtering
+      ? [
+          {
+            label: 'Add Filter',
+            icon: ICON.filter,
+            onSelect: () => {
+              filtering.onShownChange(true)
+              setFilterAsk({ column: column.name })
+            },
+          },
+        ]
+      : []
+
     return [
       ...sorting,
+      ...narrowing,
       {
         label: 'Copy column',
         icon: ICON.copy,
-        separatorBefore: sorting.length > 0,
+        separatorBefore: sorting.length + narrowing.length > 0,
         disabled: result.rows.length === 0,
         onSelect: () =>
           void copyText(toTSV(oneRange(columnRange(index, result.rows.length)), result)),
@@ -436,7 +471,7 @@ export function ResultGrid({
     if (!scroller) return
 
     const top = ref.row * ROW_HEIGHT
-    const left = GUTTER_WIDTH + widths.slice(0, ref.column).reduce((sum, w) => sum + w, 0)
+    const left = edgeOf(widths, ref.column)
 
     scroller.scrollTo({
       top: keepWithin(
@@ -607,8 +642,13 @@ export function ResultGrid({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {headStrip && hasHeadStrip({ onExport, filtering }) ? (
-        <HeadStrip filtering={filtering} sort={sort} onExport={onExport} />
+      {headStrip && hasHeadStrip({ onExport, filtering, cellPanel }) ? (
+        <HeadStrip
+          filtering={filtering}
+          sort={sort}
+          cellPanel={cellPanel}
+          onExport={onExport}
+        />
       ) : null}
 
       {filtering?.shown ? (
@@ -617,6 +657,8 @@ export function ResultGrid({
           filtering={filtering}
           sort={sort}
           onSortChange={onSortChange}
+          ask={filterAsk}
+          onAskTaken={() => setFilterAsk(null)}
         />
       ) : null}
 
@@ -635,6 +677,7 @@ export function ResultGrid({
             onResize={setWidth}
             onFit={fitColumn}
             onSelectColumn={selectColumn}
+            onMoveColumn={onMoveColumn}
             menuFor={columnMenu}
           />
 
@@ -755,19 +798,21 @@ export function ResultGrid({
 
 /**
  * The strip over the header, where the grid is acted on whole rather than row by row: **Filter &
- * Sort** on the left, where a reader looks for what narrows the table, and **Export** against the
- * right, where they look for what to do with it. It sits outside the scroller, so it stays where it
- * is while the columns scroll under it, and it carries the header's own surface, the two together
- * reading as the top of the table. A surface with a toolbar of its own carries both buttons there
- * instead, and the grid then draws no strip at all.
+ * Sort** on the left, where a reader looks for what narrows the table, and against the right
+ * **Cell Editor** and **Export**, where they look for what to do with it. It sits outside the
+ * scroller, so it stays where it is while the columns scroll under it, and it carries the header's
+ * own surface, the two together reading as the top of the table. A surface with a toolbar of its
+ * own carries the same buttons there instead, and the grid then draws no strip at all.
  */
 function HeadStrip({
   filtering,
   sort,
+  cellPanel,
   onExport,
 }: {
   filtering: GridFiltering | undefined
   sort: readonly SortKey[]
+  cellPanel: { shown: boolean; onToggle: () => void } | undefined
   onExport: ((format: ExportFormat) => void) | undefined
 }) {
   return (
@@ -785,6 +830,9 @@ function HeadStrip({
 
       <div className="min-w-2 flex-1" />
 
+      {cellPanel ? (
+        <CellEditorButton shown={cellPanel.shown} onToggle={cellPanel.onToggle} />
+      ) : null}
       {onExport ? <ExportMenu onExport={onExport} /> : null}
     </div>
   )
@@ -800,6 +848,11 @@ const clamp = (value: number, highest: number) => Math.min(Math.max(value, 0), M
 /** Moves a scroll offset the least it can to satisfy both edges, and not at all where it already does. */
 const keepWithin = (value: number, lowest: number, highest: number) =>
   Math.min(Math.max(value, lowest), highest)
+
+/** Where a column's left edge sits across the grid's whole width, the row gutter included. */
+function edgeOf(widths: number[], index: number): number {
+  return GUTTER_WIDTH + widths.slice(0, index).reduce((sum, width) => sum + width, 0)
+}
 
 function columnAt(widths: number[], x: number): number {
   let edge = 0
@@ -858,8 +911,18 @@ interface HeaderRowProps {
   onResize: (name: string, width: number) => void
   onFit: (index: number) => void
   onSelectColumn: (index: number) => void
+  onMoveColumn: ((from: number, to: number) => void) | undefined
   menuFor: (index: number) => MenuItem[]
 }
+
+/** A header being carried, and the boundary between two columns it would be dropped on. */
+interface ColumnDrag {
+  from: number
+  to: number
+}
+
+/** Whether a drop would land the column anywhere but back where it came from. */
+const moves = (drag: ColumnDrag) => drag.to !== drag.from && drag.to !== drag.from + 1
 
 function HeaderRow({
   columns,
@@ -869,14 +932,67 @@ function HeaderRow({
   onResize,
   onFit,
   onSelectColumn,
+  onMoveColumn,
   menuFor,
 }: HeaderRowProps) {
+  const strip = useRef<HTMLDivElement>(null)
+  const [drag, setDrag] = useState<ColumnDrag | null>(null)
+
+  /**
+   * The boundary the pointer is nearest, counted like a caret between characters: past a column's
+   * half-way line is the boundary *after* it, which is how a drop reads. The row scrolls with the
+   * columns, so it is measured from the row's own left edge exactly as a cell is.
+   */
+  const boundaryAt = (clientX: number): number => {
+    const x = clientX - (strip.current?.getBoundingClientRect().left ?? 0) - GUTTER_WIDTH
+
+    let edge = 0
+    for (let i = 0; i < widths.length; i++) {
+      const width = widths[i] ?? 0
+      if (x < edge + width / 2) return i
+      edge += width
+    }
+    return widths.length
+  }
+
+  const startDrag = (event: ReactPointerEvent<HTMLDivElement>, index: number) => {
+    // The resize handle stops its own press; a button in the header is pressed, never gripped.
+    if (!onMoveColumn || event.button !== 0) return
+    if (event.target instanceof Element && event.target.closest('button')) return
+
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setDrag({ from: index, to: index })
+  }
+
+  const carry = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!drag) return
+
+    const to = boundaryAt(event.clientX)
+    if (to !== drag.to) setDrag({ ...drag, to })
+  }
+
+  const drop = () => {
+    if (!drag) return
+
+    setDrag(null)
+    if (moves(drag)) onMoveColumn?.(drag.from, drag.to)
+  }
+
   return (
-    <div className="sticky top-0 z-2 flex border-b border-line-strong bg-bar">
+    <div ref={strip} className="sticky top-0 z-2 flex border-b border-line-strong bg-bar">
       <div
         className="sticky left-0 z-1 shrink-0 border-r border-line bg-bar"
         style={{ width: GUTTER_WIDTH, height: HEADER_HEIGHT }}
       />
+
+      {/* Where the column would land. It is drawn over the headers rather than between them, the
+          row being one flex line and a line of its own would widen it. */}
+      {drag && moves(drag) ? (
+        <span
+          className="pointer-events-none absolute top-0 z-2 w-0.5 bg-accent"
+          style={{ left: edgeOf(widths, drag.to), height: HEADER_HEIGHT }}
+        />
+      ) : null}
 
       {columns.map((column, i) => {
         const active = columnTouched(bounds, i)
@@ -889,9 +1005,15 @@ function HeaderRow({
           <ContextMenu key={i} items={menuFor(i)}>
             <div
               onContextMenu={() => onSelectColumn(i)}
+              onPointerDown={(event) => startDrag(event, i)}
+              onPointerMove={carry}
+              onPointerUp={drop}
+              onLostPointerCapture={drop}
               className={cn(
                 'relative flex shrink-0 flex-col justify-center border-r border-line pr-7 pl-2',
                 active ? 'bg-grid-cell-selected' : 'bg-bar',
+                onMoveColumn && 'cursor-grab',
+                drag?.from === i && 'opacity-50',
               )}
               style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: HEADER_HEIGHT }}
             >

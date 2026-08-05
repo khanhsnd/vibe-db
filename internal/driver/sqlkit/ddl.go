@@ -39,6 +39,24 @@ func (x DDL) DropDatabase(ctx context.Context, name string) error {
 	return x.Run(ctx, "", "DROP DATABASE "+x.Dialect.QuoteIdent(name))
 }
 
+// DuplicateTable declares the copy and then fills it, which is two statements because neither
+// engine has one that does both: a table declared LIKE another takes its shape and none of its
+// rows. Structure only stops after the first, so the two the menu offers are one method.
+func (x DDL) DuplicateTable(
+	ctx context.Context,
+	ns driver.Namespace,
+	table, name string,
+	withRows bool,
+) error {
+	if err := x.Run(ctx, ns.Database, x.Dialect.CopyTable(ns, table, name)); err != nil {
+		return err
+	}
+	if !withRows {
+		return nil
+	}
+	return x.Run(ctx, ns.Database, x.Dialect.CopyRows(ns, table, name))
+}
+
 func (x DDL) DropTable(ctx context.Context, ns driver.Namespace, table string) error {
 	return x.Run(ctx, ns.Database, "DROP TABLE "+x.Dialect.Table(ns, table))
 }
@@ -225,6 +243,32 @@ func (d Dialect) CreateTable(spec driver.TableSpec) string {
 
 	return "CREATE TABLE " + d.Table(spec.Namespace, spec.Table) +
 		" (\n  " + strings.Join(clauses, ",\n  ") + "\n)"
+}
+
+// CopyTable declares a table shaped like another one. MySQL's LIKE is a clause of its own and
+// brings the defaults and the indexes with it; PostgreSQL's stands where a column would and
+// brings the columns alone until INCLUDING ALL asks for the rest.
+func (d Dialect) CopyTable(ns driver.Namespace, table, name string) string {
+	source := d.Table(ns, table)
+	statement := "CREATE TABLE " + d.Table(ns, name)
+
+	if d.LikeInColumnList {
+		return statement + " (LIKE " + source + " INCLUDING ALL)"
+	}
+	return statement + " LIKE " + source
+}
+
+// CopyRows is every row of a table on its way into a copy of it. PostgreSQL's copy took the
+// original's identity column with it and then refuses a value for that column, so the write says
+// out loud that it is overriding one — a table with no identity column takes the same clause
+// without complaint, which is what keeps this from needing to read the table first. A *generated*
+// column is the one thing neither engine will be written, and says so itself.
+func (d Dialect) CopyRows(ns driver.Namespace, table, name string) string {
+	statement := "INSERT INTO " + d.Table(ns, name)
+	if d.OverridesIdentity {
+		statement += " OVERRIDING SYSTEM VALUE"
+	}
+	return statement + " SELECT * FROM " + d.Table(ns, table)
 }
 
 // ColumnClause is a column as it reads inside CREATE TABLE or ADD COLUMN. A column that is

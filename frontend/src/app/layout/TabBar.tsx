@@ -96,6 +96,13 @@ function TabItem({ tab, active, environment, tooltip, onSelect, onClose }: TabIt
       aria-selected={active}
       title={tooltip}
       onClick={onSelect}
+      // The wheel closes the tab, which is what it does to a tab everywhere. Chromium's own
+      // middle-click autoscroll starts on the *press* and swallows the `auxclick` that would
+      // follow, and this strip scrolls the moment it holds more tabs than it can draw — so
+      // refusing the press is the whole of what keeps the gesture ours.
+      onMouseDown={(e) => {
+        if (e.button === MIDDLE_BUTTON) e.preventDefault()
+      }}
       onAuxClick={(e) => {
         if (e.button === MIDDLE_BUTTON) onClose()
       }}

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/lib/cn'
 
-import { DocumentView } from './DocumentView'
+import { DocumentView, type Notation } from './DocumentView'
 import { GeoShape } from './GeoShape'
 import {
   decodeBinary,
@@ -18,14 +18,22 @@ import {
 const HEX_LIMIT = 4096
 
 /**
+ * JSON laid out, in the shape a layout arrives in. It is the platform's `JSON.stringify` where a
+ * document store's own notation is the *engine's* `Format`, and both reach the same view.
+ */
+const layJSON = (value: string) => Promise.resolve(prettyJSON(value))
+
+/**
  * One cell's value, shown as the thing it *is*. Which views a value offers is read off the value
  * rather than off its column — see `value.ts` — because every value crosses the wire as text and a
  * `TEXT` column holds JSON as often as a `JSON` one does.
  *
- * `Raw` is always among them and is always exactly what the cell holds, so however clever the
- * detection is there is one view that cannot be wrong. It is also the only one that is editable:
- * a laid-out document, a hex dump and a drawing are all *renderings*, and writing one back would
- * write the rendering.
+ * **A value is written back in whichever view it is read in**, where the surface can write at all:
+ * `Raw`, the laid-out `JSON` and the laid-out `Document` are all typed into, because a document is
+ * the thing a reader most often opens the viewer to change and sending them to `Raw` to change it
+ * is sending them to the one view that does not lay it out. The rest — a hex dump, a drawing, a
+ * list of items — are renderings of bytes and shapes rather than of text, and writing one back
+ * would write the rendering; `Raw` is beside them for that.
  */
 export function ValueViewer({
   value,
@@ -49,7 +57,9 @@ export function ValueViewer({
   formatValue?: ((value: string) => Promise<string>) | undefined
   className?: string | undefined
 }) {
-  const found = useMemo(() => detect(value, columnType), [value, columnType])
+  const { arrived, reread, write } = useArrived(value, onChange)
+
+  const found = useMemo(() => detect(arrived, columnType), [arrived, columnType])
   // The *presence* of a formatter decides the views, never its identity: an unstable one would
   // otherwise rebuild the list every render and knock the reader back to the first tab.
   const laidOut = formatValue !== undefined
@@ -61,6 +71,15 @@ export function ValueViewer({
     setView(views[0] ?? 'raw')
   }, [views])
 
+  /**
+   * Opening another view reads the value again as it now stands, so an edit typed into `Raw` is
+   * what the Document view lays out — and a value edited into something else is read as that.
+   */
+  const show = (one: ViewKind) => {
+    setView(one)
+    reread()
+  }
+
   return (
     <div className={cn('flex min-h-0 flex-col', className)}>
       <div className="flex h-7 shrink-0 items-center gap-1 border-b border-line bg-bar px-1.5">
@@ -69,7 +88,7 @@ export function ValueViewer({
             key={one}
             type="button"
             aria-pressed={one === view}
-            onClick={() => setView(one)}
+            onClick={() => show(one)}
             className={cn(
               'h-5 rounded px-1.5 text-2xs font-medium transition-colors',
               one === view ? 'bg-accent-subtle text-accent' : 'text-muted hover:bg-hover',
@@ -83,9 +102,42 @@ export function ValueViewer({
         <span className="shrink-0 font-mono text-2xs text-faint">{found.label}</span>
       </div>
 
-      <View view={view} value={value} onChange={onChange} formatValue={formatValue} />
+      <View
+        view={view}
+        value={value}
+        opened={arrived}
+        onChange={write}
+        formatValue={formatValue}
+      />
     </div>
   )
+}
+
+/**
+ * The value as it last **arrived** — the cell the viewer opened on, a Discard, a NULL ticked —
+ * rather than as it is being typed. What a reader types comes straight back here as the same prop,
+ * and reading a keystroke as a new value would take a half-typed document for plain text and pull
+ * its own tab out from under the reader, and lay the line out again around the caret.
+ *
+ * `write` is what a view changes the value through, and `reread` is how opening another view takes
+ * what is there now.
+ */
+function useArrived(value: string | null, onChange?: (next: string) => void) {
+  const typed = useRef<string | null>(null)
+  const [arrived, setArrived] = useState(value)
+
+  if (value !== arrived && value !== typed.current) setArrived(value)
+
+  return {
+    arrived,
+    reread: () => setArrived(value),
+    write:
+      onChange &&
+      ((next: string) => {
+        typed.current = next
+        onChange(next)
+      }),
+  }
 }
 
 type ViewKind = 'raw' | 'json' | 'document' | 'map' | 'list' | 'hex' | 'image'
@@ -128,36 +180,40 @@ function viewsFor(kind: ReturnType<typeof detect>['kind'], laidOut: boolean): Vi
 function View({
   view,
   value,
+  opened,
   onChange,
   formatValue,
 }: {
-  view: ViewKind
+  /** What the cell holds now, which is what `Raw` shows and what typing into it changes. */
   value: string | null
+  /** That same value as this view opened on it — every laid-out view reads this one. */
+  opened: string | null
+  view: ViewKind
   onChange?: ((next: string) => void) | undefined
   formatValue?: ((value: string) => Promise<string>) | undefined
 }) {
-  if (value === null) {
+  if (value === null || opened === null) {
     return <Note>This cell holds NULL.</Note>
   }
 
   switch (view) {
     case 'json':
-      return <DocumentView text={prettyJSON(value)} notation="json" />
+      return <Laid text={opened} notation="json" lay={layJSON} onChange={onChange} />
 
     case 'document':
-      return <Document text={value} formatValue={formatValue} />
+      return <Laid text={opened} notation="shell" lay={formatValue} onChange={onChange} />
 
     case 'map':
-      return <GeoShape shape={JSON.parse(value) as GeoJSON} />
+      return <GeoShape shape={JSON.parse(opened) as GeoJSON} />
 
     case 'list':
-      return <Items items={parseArray(value) ?? []} />
+      return <Items items={parseArray(opened) ?? []} />
 
     case 'hex':
-      return <Binary value={value} />
+      return <Binary value={opened} />
 
     case 'image':
-      return <Picture value={value} />
+      return <Picture value={opened} />
 
     default:
       return (
@@ -173,28 +229,34 @@ function View({
 }
 
 /**
- * A document store's own document, laid out by the engine that wrote it — `driver.Text.Format`, over
- * the same tokens its editor and its `Review` read. There is no second formatter on this side: a
- * bare key, an `ObjectId(…)` and where a line breaks are all that engine's grammar.
+ * A value laid out for reading and typed back in the notation it was laid out in. JSON is laid out
+ * by the platform; a document store's own notation — bare keys, `ObjectId(…)`, `ISODate(…)` — by
+ * `driver.Text.Format`, over the same tokens its editor and its `Review` read. There is no second
+ * formatter on this side: a bare key and where a line breaks are that engine's grammar.
  *
  * It goes up **unformatted first** and is replaced when the layout arrives, so the pane is never
- * blank and a format that cannot run leaves the document readable rather than gone.
+ * blank and a format that cannot run leaves the value readable rather than gone. What is typed into
+ * it goes back as the notation it was shown in, which is the notation that engine's parser reads.
  */
-function Document({
+function Laid({
   text,
-  formatValue,
+  notation,
+  lay,
+  onChange,
 }: {
   text: string
-  formatValue?: ((value: string) => Promise<string>) | undefined
+  notation: Notation
+  lay?: ((value: string) => Promise<string>) | undefined
+  onChange?: ((next: string) => void) | undefined
 }) {
   const [laid, setLaid] = useState(text)
 
   useEffect(() => {
     setLaid(text)
-    if (!formatValue) return
+    if (!lay) return
 
     let live = true
-    void formatValue(text).then(
+    void lay(text).then(
       (next) => {
         if (live) setLaid(next)
       },
@@ -204,9 +266,9 @@ function Document({
     return () => {
       live = false
     }
-  }, [text, formatValue])
+  }, [text, lay])
 
-  return <DocumentView text={laid} notation="shell" />
+  return <DocumentView text={laid} notation={notation} onChange={onChange} />
 }
 
 function Monospace({ text }: { text: string }) {

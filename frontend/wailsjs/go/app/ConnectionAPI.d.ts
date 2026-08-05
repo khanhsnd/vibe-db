@@ -36,6 +36,8 @@ export function DropTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<vo
 
 export function DropView(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
 
+export function DuplicateTable(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:boolean):Promise<void>;
+
 export function EmptyTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
 
 export function ExportRows(arg1:string,arg2:app.ExportInput):Promise<string>;

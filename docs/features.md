@@ -272,7 +272,7 @@ filled in before it runs. `useTreeMenu` is the single place the items are built,
 | A database | `New Database…`, `Delete Database`, then what its level owns: `New Table` and `Refresh` on MySQL and MongoDB, `Refresh` alone on PostgreSQL, which holds schemas rather than tables |
 | The node owning tables, or its `Tables` folder | `New Table`, `Refresh` |
 | The `Views` or `Functions` folder | `Refresh` — one read fills every folder, so it means the same wherever it is asked for |
-| A table | `Open Table`, `Design Table`, `New Table`, `Rename Table…`, `Empty Table`, `Truncate Table`, `Delete Table`, `Refresh` |
+| A table | `Open Table`, `Design Table`, `New Table`, `Rename Table…`, `Duplicate Table ▸`, `Empty Table`, `Truncate Table`, `Delete Table`, `Refresh` |
 | A view | `Open View`, `Delete View`, `Refresh` |
 | A function or procedure | `Delete Function` / `Delete Procedure`, `Refresh` |
 | The `Fields` folder | `Add Field`, `Refresh` |
@@ -293,6 +293,14 @@ key rows, because it has none of the three.
   **MongoDB is offered `Empty` alone**: a collection has no storage to reset, so the only way to take
   every document out of one and leave its indexes standing is to delete them — and two menu items
   running one command under two names would be a lie about what the second does.
+- **`Duplicate Table` is one action asked in two ways**, so it is the one item with a submenu:
+  `Structure Only` and `Structure and Data` are the same bound method and differ by a flag. Both ask
+  for the copy's name — nothing here makes an object without being told what to call it — and the
+  copy is then the table whose shape is re-read. What travels is the table's own: its columns, their
+  defaults and its indexes, and **never a foreign key**, which names two tables and is neither
+  engine's to copy. **A name already taken is refused** — on the SQL engines by the server, and on
+  MongoDB by the adapter, because that server accepts `create` for a collection it already has and
+  `$out` writes straight over one.
 - **A change re-reads what it invalidated, and nothing else**: the namespace's table list, then the
   table's own shape. Which shapes are still worth holding is read off the fresh table list, so a
   dropped or renamed table needs no telling.
@@ -449,18 +457,29 @@ it — see [frontend.md](frontend.md) on `panelIds`.
   ✓ is what writes `UPDATE … WHERE <primary key>` and reloads. A table with no primary key is
   read-only, because no single row can be identified. MySQL adds a `LIMIT 1` belt to the braces;
   PostgreSQL has no such clause and does not need one, since the key already names one row.
+  **A query result has the same panel**, from the button on its own head strip beside Export: it is
+  one `CellEditor` on both surfaces, and the line under it says why a value cannot be written back
+  where it cannot — a table with no primary key here, a result no `UPDATE` can name there.
 - **`Column`** opens a checkbox list to the left of the grid that picks which columns show.
   Unchecking the last visible column is blocked, so the grid can never go blank. Selection is
   cleared on a change, because the cell coordinates the grid reports are positions among the
   *visible* columns and the view maps them back to real column indexes. **Right-clicking a column
   header hides or restores columns too**, alongside the copy and paste items every grid's header menu
   has — one hidden set, either way in. [grid.md](grid.md) specifies that menu.
+- **A column is dragged into place by its header**, and where a table's columns were put is
+  **remembered against that table** — which connection, which namespace, which table — so opening it
+  again next week, or after the app has been closed, opens it arranged. A query result is arranged
+  the same way but remembers nothing: there is no stored table under it to remember one against, and
+  its order goes with its statement, exactly as its sort does. The order is kept by column *name*,
+  so a column added to the table since, or one dropped from it, moves nothing else.
+  [grid.md](grid.md) specifies the drag.
 
 ## Every divider in the window is dragged
 
-There are four, and they behave alike: **the sidebar against the work area**, **the editor against
-the output panel** in a query tab, and in a table tab **the column list against the grid** and **the
-grid against the cell editor**. Each is the one-pixel line between the two panels, and it goes
+There are five, and they behave alike: **the sidebar against the work area**, **the editor against
+the output panel** in a query tab, in a table tab **the column list against the grid**, and **the
+grid against the cell editor** wherever there is one — a table tab and a query result both. Each is
+the one-pixel line between the two panels, and it goes
 `--accent` while the pointer is over it or holding it. The pointer is caught within ten pixels of the
 line, so the target is a good deal wider than the line looks.
 
@@ -489,6 +508,12 @@ name at 220 px, and two tabs called `users` on two connections are otherwise the
 tooltip is where that is settled. It is lines rather than a sentence because a reader is looking for
 one of those facts, not reading prose, and it is the platform's own tooltip rather than a component,
 which is what makes it appear over a tab the pointer merely passes.
+
+**The wheel closes a tab**, as it does in every strip of tabs there is, and the `✕` that appears
+under the pointer is the other way. The press itself is refused: Chromium's middle-click autoscroll
+starts there and swallows the click that would follow, and the strip scrolls the moment it holds
+more tabs than it can draw — so without that the gesture worked on a short strip and quietly stopped
+working on a full one.
 
 ## Query tabs
 
@@ -859,7 +884,7 @@ its right — the qualified table, or why the result is read-only:
 side writes and can therefore narrow. A query result and the history log hold their rows already and
 are only ever *sorted* — by a header's `⋮` menu, in memory. What follows is the table tab.
 
-There are **two ways in**, and they hold the same conditions:
+There are **three ways in**, and they hold the same conditions:
 
 - **The Filter & Sort button** in the table view's toolbar, beside `Cell Editor` and `Column`. It
   opens `FilterSortPanel`, which is where a
@@ -871,6 +896,11 @@ There are **two ways in**, and they hold the same conditions:
   its ties. Nothing narrows anything until **Apply Filter & Sort**; the panel says **Criteria
   Edited** while the draft differs from what is in force. The whole of it is in
   [grid.md](grid.md#the-filter--sort-panel).
+- **A header's `⋮` menu**, where the reader already knows which field they mean: **Add Filter** opens
+  the panel and puts a condition on *that* field in it, at the end of the root. A header knows the
+  field and not the value, so what it adds is unspelled — it lands in the **draft**, narrowing
+  nothing until the value is picked and **Apply Filter & Sort** is pressed. It is the shortest way
+  from a column the reader is looking at to a condition on it.
 - **Right-clicking a cell**, where a condition is *picked* rather than built. The menu is one object —
   [grid.md](grid.md) lists every item — and **Filter ▸** offers every operator against the value under
   the pointer, so a condition read off a cell is never typed twice; it applies **at once**, having
@@ -936,8 +966,8 @@ sent: `db.users.find({ age: { $gt: 30 } }).sort({ _id: 1 }).skip(0).limit(100)`.
 
 A cell is a line in a grid, and plenty of what a database holds is not one line: a JSON document, a
 GeoJSON shape, a PostgreSQL array, a blob. **View Value** in every grid's cell menu opens
-`ValueDialog` on the cell under the pointer, and the table tab's **Cell Editor** panel shows the same
-`ValueViewer` on the cell it is editing.
+`ValueDialog` on the cell under the pointer, read-only; the **Cell Editor** panel — a table tab's and
+a query result's alike — shows the same `ValueViewer` on the cell it is editing, and writes.
 
 **Which views a value offers is read off the value, not off its column.** The type is not enough and
 never was: a `TEXT` column holds JSON as often as a `JSON` one does, a `JSON` column holds GeoJSON,
@@ -949,16 +979,28 @@ cell is read, and it reads nothing else.
 |---|---|
 | JSON — an object or an array that parses | **JSON** laid out, then **Raw**. Only a leading `{` or `[` is tried, or every number in the grid would be handed to `JSON.parse`, which happily accepts `42` and calls it a document |
 | A **document store's document or array** — a field the engine types `object` or `array` | **Document**, then **Raw**. This is checked *before* JSON, so an array of scalars that happens to parse still reads in the notation the grid drew it in and the parser reads back |
-| **The laid-out view itself** | `DocumentView` — numbered lines, a **fold arrow beside every object and array**, and the editor's own syntax colours with the keys apart from the values they name. It is CodeMirror, the SQL editor's own engine, for two reasons: a document worth opening whole is often far larger than a screen and CodeMirror lays out only the lines in view, where a `<pre>` of a megabyte freezes the window; and the grammar is the library's, so nothing here is a second scanner. JSON is read by `@codemirror/lang-json`; a document store's notation by the JavaScript parser under its **`SingleExpression`** top rule, because read as a *script* a bare `{ … }` is a block, its first field a label and every field after it a syntax error |
+| **The laid-out view itself** | `DocumentView` — numbered lines, a **fold arrow beside every object and array**, and the editor's own syntax colours with the keys apart from the values they name. It is CodeMirror, the SQL editor's own engine, for two reasons: a document worth opening whole is often far larger than a screen and CodeMirror lays out only the lines in view, where a `<pre>` of a megabyte freezes the window; and the grammar is the library's, so nothing here is a second scanner. JSON is read by `@codemirror/lang-json`; a document store's notation by the JavaScript parser under its **`SingleExpression`** top rule, because read as a *script* a bare `{ … }` is a block, its first field a label and every field after it a syntax error. It is **editable wherever the surface can write**, with the editor's own history under it, and read-only where it cannot |
 | **GeoJSON** — a `type` from the GeoJSON set *and* the member that type is defined by | **Shape**, then **JSON**, then **Raw**. A `{"type": "Point"}` with no coordinates is malformed, and drawing nothing says more than drawing the origin |
 | A **PostgreSQL array** — `{a,"b,c",NULL}` | **Items**, then **Raw**. Read as an array only where the column says it is one, since `{a,b}` is also perfectly good text. An unquoted `NULL` inside one is the absence of a value and is drawn in the grid's own NULL colour; a nested `{…}` is kept whole, because a two-dimensional array is a list of lists |
 | **Bytes** — a `\x…` value | **Image**, then **Hex**, then **Raw**. A reader who opened a blob wants to know whether it is a picture before they want its bytes |
 | Anything else | **Raw** alone |
 
 - **`Raw` is always there and is always exactly what the cell holds**, so however clever the
-  detection is there is one view that cannot be wrong. It is also the **only** editable one: a
-  laid-out document, a hex dump and a drawing are renderings, and writing one back would write the
-  rendering.
+  detection is there is one view that cannot be wrong.
+- **A value is written back in whichever view it is read in**, wherever the surface can write at
+  all: `Raw`, the laid-out `JSON` and the laid-out `Document` are all typed straight into, because a
+  document is the thing a reader most often opens the viewer to *change* and sending them to `Raw`
+  to change it is sending them to the one view that does not lay it out. What is typed goes back in
+  the notation it was shown in, which is the notation that engine's own parser reads. The rest —
+  **Shape**, **Items**, **Hex**, **Image** — are renderings of a shape or of bytes rather than of
+  text, and writing one back would write the rendering; `Raw` is beside them for that.
+- **What a value *is* is read when it arrives, not while it is typed.** The tab strip follows the
+  cell the viewer opened on, a Discard or a NULL ticked — never a keystroke, or half a typed
+  document would count as plain text and take its own tab away mid-word. Opening another view reads
+  the value again as it now stands, so an edit made in `Raw` is what the Document view lays out.
+- **Every view is selectable, laid-out ones included.** `user-select: none` is global — see
+  [frontend.md](frontend.md) — so a rendering that did not opt back in was a document nobody could
+  copy out of.
 - **The viewer is where a long value is read, and the grid is not.** A cell draws a clipped preview
   of it — see [grid.md](grid.md) — because a cell is one line a couple of hundred pixels wide. This
   is the whole of what **View Value** is for.
@@ -1005,8 +1047,9 @@ about a `TEXT` column an engine happens to report as a `BLOB`.
 
 ## Exporting a grid
 
-An **Export** button sits **in the strip over every grid, against its right edge** — its own head
-strip on a query result, and the table view's toolbar beside `Cell Editor` and `Column`, one strip
+An **Export** button sits **in the strip over every grid, against its right edge**, with the
+`Cell Editor` toggle beside it — its own head strip on a query result, and the table view's toolbar
+where `Cell Editor` and `Column` already are, one strip
 over a table rather than two — and opens **CSV**, **JSON**
 and **SQL**; each writes to a file picked in the system's own save dialog — so the file lands where the
 reader put it, named after the table, and nothing is written if the dialog is dismissed. It is above

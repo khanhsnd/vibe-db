@@ -61,6 +61,84 @@ func (s *session) RenameTable(ctx context.Context, ns driver.Namespace, table, n
 	return err
 }
 
+// DuplicateTable copies a collection, with its documents or with its indexes alone. There is no
+// command that does it: `$out` writes an aggregation's documents into a collection and makes one
+// where there is none — even out of a source holding nothing — but it copies no index, and the
+// indexes are therefore built afterwards on whichever collection is by then there.
+//
+// **The name is checked here rather than left to the server.** `create` answers `ok` for a
+// collection it already has and `$out` writes straight over one, so between them nothing would
+// stop a copy destroying a collection the reader meant to keep — which is not what the same item
+// does on an engine where `CREATE TABLE` refuses a name that is taken.
+func (s *session) DuplicateTable(
+	ctx context.Context,
+	ns driver.Namespace,
+	table, name string,
+	withRows bool,
+) error {
+	if err := domain.RequireNames("collection", table, "collection", name); err != nil {
+		return err
+	}
+
+	taken, err := s.database(ns).ListCollectionNames(ctx, bson.D{{Key: "name", Value: name}})
+	if err != nil {
+		return translateError(err)
+	}
+	if len(taken) > 0 {
+		return domain.ValidationError{Field: "collection", Message: "already exists"}
+	}
+
+	if withRows {
+		cursor, err := s.collection(ns, table).
+			Aggregate(ctx, []bson.D{{{Key: "$out", Value: name}}})
+		if err != nil {
+			return translateError(err)
+		}
+		// The write is the aggregation's own and is done by the time the command answers; the
+		// cursor it answers with carries no documents and is closed rather than read.
+		if err := cursor.Close(ctx); err != nil {
+			return translateError(err)
+		}
+	} else if err := s.database(ns).CreateCollection(ctx, name); err != nil {
+		return translateError(err)
+	}
+
+	return s.copyIndexes(ctx, ns, table, name)
+}
+
+// copyIndexes builds on the copy every index the original keeps, `_id_` excepted: the server makes
+// that one itself. The keys document travels verbatim, so a descending, compound or special index
+// is copied as what it is rather than as what a read of it could describe.
+func (s *session) copyIndexes(
+	ctx context.Context,
+	ns driver.Namespace,
+	table, name string,
+) error {
+	found, err := s.collection(ns, table).Indexes().ListSpecifications(ctx)
+	if err != nil {
+		return translateError(err)
+	}
+
+	models := []mgo.IndexModel{}
+	for _, one := range found {
+		if one.Name == idIndex {
+			continue
+		}
+
+		opts := options.Index().SetName(one.Name)
+		if one.Unique != nil {
+			opts.SetUnique(*one.Unique)
+		}
+		models = append(models, mgo.IndexModel{Keys: one.KeysDocument, Options: opts})
+	}
+	if len(models) == 0 {
+		return nil
+	}
+
+	_, err = s.collection(ns, name).Indexes().CreateMany(ctx, models)
+	return translateError(err)
+}
+
 func (s *session) DropTable(ctx context.Context, ns driver.Namespace, table string) error {
 	if err := domain.RequireName("collection", table); err != nil {
 		return err

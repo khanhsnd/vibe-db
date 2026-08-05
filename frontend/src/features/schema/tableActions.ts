@@ -18,6 +18,8 @@ export interface TableActions {
   /** The designer with no table behind it yet, which is what New Table is. */
   create: () => void
   rename: () => void
+  /** A copy under a name the reader gives, with the rows or with the shape alone. */
+  duplicate: (withRows: boolean) => void
   empty: () => void
   truncate: () => void
   remove: () => void
@@ -60,6 +62,20 @@ export function tableActions(
         submitLabel: 'Rename',
         onSubmit: (name) =>
           run((sessionId) => schema.renameTable(sessionId, namespace, table, name), name)(),
+      }),
+
+    duplicate: (withRows) =>
+      deps.ask({
+        kind: 'prompt',
+        title: `Duplicate ${words.table}`,
+        label: 'New name',
+        value: `${table}_copy`,
+        submitLabel: 'Duplicate',
+        onSubmit: (name) =>
+          run(
+            (sessionId) => schema.duplicateTable(sessionId, namespace, table, name, withRows),
+            name,
+          )(),
       }),
 
     empty: () =>

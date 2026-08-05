@@ -96,6 +96,15 @@ export const schema = {
   renameTable: (sessionId: string, ns: Namespace, table: string, name: string) =>
     call(() => api.RenameTable(sessionId, ns, table, name)),
 
+  /** A second table shaped like this one, holding its rows only when asked. */
+  duplicateTable: (
+    sessionId: string,
+    ns: Namespace,
+    table: string,
+    name: string,
+    withRows: boolean,
+  ) => call(() => api.DuplicateTable(sessionId, ns, table, name, withRows)),
+
   dropTable: (sessionId: string, ns: Namespace, table: string) =>
     call(() => api.DropTable(sessionId, ns, table)),
 

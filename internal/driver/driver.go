@@ -481,6 +481,10 @@ type Schema interface {
 	DatabaseOptions(ctx context.Context) (DatabaseOptions, error)
 	CreateTable(ctx context.Context, spec TableSpec) error
 	RenameTable(ctx context.Context, ns Namespace, table, name string) error
+	// DuplicateTable makes a second table shaped like the first, holding its rows only when
+	// asked. What is copied is the table's own — its columns, their defaults and its indexes —
+	// and never a foreign key: a constraint names two tables and neither engine copies one.
+	DuplicateTable(ctx context.Context, ns Namespace, table, name string, withRows bool) error
 	DropTable(ctx context.Context, ns Namespace, table string) error
 	// TruncateTable drops every row at once; EmptyTable deletes them, which is the only one
 	// of the two a table under a foreign key will accept.

@@ -4,9 +4,21 @@ import type { Namespace } from '@/bridge/connections'
 import { rowExport, type ExportFormat } from '@/bridge/export'
 import { queries } from '@/bridge/query'
 import { tables, type TablePage } from '@/bridge/tables'
+import {
+  CellEditor,
+  EDITOR_HEIGHT,
+  EDITOR_MIN_HEIGHT,
+} from '@/features/results/CellEditor'
 import { GridFooter } from '@/features/results/GridFooter'
 import { GridPager } from '@/features/results/GridPager'
 import { GridStatus } from '@/features/results/GridStatus'
+import {
+  arrange,
+  columnOrderKey,
+  loadColumnOrder,
+  moveName,
+  saveColumnOrder,
+} from '@/features/results/columnOrder'
 import { countConditions, type Group } from '@/features/results/filter'
 import { pageCount } from '@/features/results/paging'
 import { ResultGrid } from '@/features/results/ResultGrid'
@@ -26,28 +38,26 @@ import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 
-import { CellEditor } from './CellEditor'
 import { ColumnPicker } from './ColumnPicker'
 import { TableToolbar, type PanelKind } from './TableToolbar'
 import { useTableData } from './useTableData'
 
-// What each side panel opens at, and how far it may be dragged. Only the size it opens at is a look —
-// the bounds are what stop a drag leaving a panel too small to read or the grid with nothing left. The
-// editor's floor is its own chrome and a line under it: a 32 px header, the viewer's 28 px strip, and
-// enough left to read one line of the value.
-const EDITOR_HEIGHT = 180
-const EDITOR_MIN_HEIGHT = 120
+// What the column list opens at, and how far it may be dragged. Only the size it opens at is a look —
+// the bounds are what stop a drag leaving a panel too small to read or the grid with nothing left.
+// The cell editor's own three are `CellEditor`'s, being the same panel on two surfaces.
 const PICKER_WIDTH = 168
 const PICKER_MIN_WIDTH = 120
 const PICKER_MAX_WIDTH = 420
 
 interface TableDataViewProps {
   sessionId: string
+  /** Which connection this table is on — half of what names the column order it remembers. */
+  profileId: string
   namespace: Namespace
   table: string
 }
 
-export function TableDataView({ sessionId, namespace, table }: TableDataViewProps) {
+export function TableDataView({ sessionId, profileId, namespace, table }: TableDataViewProps) {
   const {
     data,
     loadedAt,
@@ -66,6 +76,11 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
     stopFetch,
   } = useTableData(sessionId, namespace, table)
 
+  // A table outlives the app, so the order its columns were dragged into is stored under it. The
+  // tab is keyed on its own target, so the key is read once and never changes under the component.
+  const orderKey = columnOrderKey(profileId, namespace, table)
+  const [order, setOrder] = useState(() => loadColumnOrder(orderKey))
+
   const [panels, setPanels] = useState<ReadonlySet<PanelKind>>(new Set())
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
   const [selection, setSelection] = useState<Selection | null>(null)
@@ -75,9 +90,12 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
   const editable = columns.some((column) => column.primaryKey)
   const edits = useGridEdits(sourceOf(data, namespace, table), sessionId, refresh)
 
+  /** The columns in the reader's own order, each keeping the place it holds in a row. */
+  const arranged = useMemo(() => arrange(columns, order), [columns, order])
+
   const visible = useMemo(
-    () => columns.flatMap((column, index) => (hidden.has(column.name) ? [] : [{ column, index }])),
-    [columns, hidden],
+    () => arranged.filter(({ column }) => !hidden.has(column.name)),
+    [arranged, hidden],
   )
 
   const grid = useMemo(
@@ -140,6 +158,26 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
   const showAllColumns = () => {
     setSelection(null)
     setHidden(new Set())
+  }
+
+  /**
+   * The grid reports where a column was dropped among the columns it *drew*, so the name it landed
+   * before is what places it among them all — a hidden column keeps the place it had. The selection
+   * goes, its cell coordinates being positions among those drawn columns.
+   */
+  const moveColumn = (from: number, to: number) => {
+    const name = visible[from]?.column.name
+    if (name === undefined) return
+
+    const next = moveName(
+      arranged.map((one) => one.column.name),
+      name,
+      visible[to]?.column.name,
+    )
+
+    setSelection(null)
+    setOrder(next)
+    saveColumnOrder(orderKey, next)
   }
 
   const changePage = (next: number) => {
@@ -255,7 +293,11 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
                   minSize={PICKER_MIN_WIDTH}
                   maxSize={PICKER_MAX_WIDTH}
                 >
-                  <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleColumn} />
+                  <ColumnPicker
+                    columns={arranged.map((one) => one.column)}
+                    hidden={hidden}
+                    onToggle={toggleColumn}
+                  />
                 </SplitPanel>
 
                 <SplitHandle orientation="horizontal" />
@@ -292,6 +334,7 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
                   isDeleted={(row) => edits.deleted.has(row)}
                   sort={sort}
                   onSortChange={changeOrder}
+                  onMoveColumn={moveColumn}
                   // Export and Filter & Sort live in this surface's own toolbar, so the grid draws
                   // no strip of its own — but the cell menu still reaches the same handlers.
                   onExport={exportRows}
@@ -345,7 +388,11 @@ export function TableDataView({ sessionId, namespace, table }: TableDataViewProp
                   key={`${target.ref.row}:${target.ref.column}`}
                   column={target.column}
                   value={target.value}
-                  editable={editable}
+                  readOnly={
+                    editable
+                      ? undefined
+                      : 'This table has no primary key, so a row cannot be identified for editing.'
+                  }
                   busy={edits.saving}
                   onApply={(value) => edits.setCell(target.ref, value)}
                   formatValue={formatValue}

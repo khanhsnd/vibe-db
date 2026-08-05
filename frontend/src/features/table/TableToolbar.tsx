@@ -1,18 +1,13 @@
-import { Columns3, PanelBottom } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Columns3 } from 'lucide-react'
 
 import type { ExportFormat } from '@/bridge/export'
+import { CellEditorButton } from '@/features/results/CellEditorButton'
 import { ExportMenu } from '@/features/results/ExportMenu'
 import { FilterSortButton } from '@/features/results/FilterSortButton'
 import { cn } from '@/lib/cn'
 import { Button } from '@/shared/ui/Button'
 
 export type PanelKind = 'cell' | 'column'
-
-const ITEMS: ReadonlyArray<{ kind: PanelKind; label: string; icon: ReactNode }> = [
-  { kind: 'cell', label: 'Cell Editor', icon: <PanelBottom size={14} /> },
-  { kind: 'column', label: 'Column', icon: <Columns3 size={14} /> },
-]
 
 interface TableToolbarProps {
   active: ReadonlySet<PanelKind>
@@ -43,18 +38,17 @@ export function TableToolbar({
       role="toolbar"
       className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-bar px-1.5"
     >
-      {ITEMS.map((item) => (
-        <Button
-          key={item.kind}
-          variant="subtle"
-          icon={item.icon}
-          aria-pressed={active.has(item.kind)}
-          onClick={() => onToggle(item.kind)}
-          className={cn(active.has(item.kind) && 'bg-selected text-fg')}
-        >
-          {item.label}
-        </Button>
-      ))}
+      <CellEditorButton shown={active.has('cell')} onToggle={() => onToggle('cell')} />
+
+      <Button
+        variant="subtle"
+        icon={<Columns3 size={14} />}
+        aria-pressed={active.has('column')}
+        onClick={() => onToggle('column')}
+        className={cn(active.has('column') && 'bg-selected text-fg')}
+      >
+        Column
+      </Button>
 
       <FilterSortButton shown={filterShown} count={filterCount} onToggle={onFilterToggle} />
 

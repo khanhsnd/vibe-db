@@ -70,6 +70,10 @@ export function DropView(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['DropView'](arg1, arg2, arg3);
 }
 
+export function DuplicateTable(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['app']['ConnectionAPI']['DuplicateTable'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function EmptyTable(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['EmptyTable'](arg1, arg2, arg3);
 }

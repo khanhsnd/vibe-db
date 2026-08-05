@@ -99,6 +99,41 @@ func TestCreateTableWithoutAKeyHasNoKeyClause(t *testing.T) {
 	}
 }
 
+// MySQL's LIKE brings the defaults and indexes unbidden; PostgreSQL's stands where a column
+// would and has to be asked for them.
+func TestCopyTableTakesEachEngineLikeClause(t *testing.T) {
+	ns := driver.Namespace{Database: "shop", Schema: "public"}
+
+	got := MySQL.CopyTable(ns, "orders", "orders_copy")
+	if want := "CREATE TABLE `shop`.`orders_copy` LIKE `shop`.`orders`"; got != want {
+		t.Errorf("MySQL.CopyTable = %s, want %s", got, want)
+	}
+
+	got = Postgres.CopyTable(ns, "orders", "orders_copy")
+	want := `CREATE TABLE "public"."orders_copy" (LIKE "public"."orders" INCLUDING ALL)`
+	if got != want {
+		t.Errorf("Postgres.CopyTable = %s, want %s", got, want)
+	}
+}
+
+// PostgreSQL refuses a row that supplies a value for the identity column its copy took with it
+// unless the write says it is overriding one; MySQL has no such clause.
+func TestCopyRowsOverridesIdentityWhereTheEngineDemandsIt(t *testing.T) {
+	ns := driver.Namespace{Database: "shop", Schema: "public"}
+
+	got := MySQL.CopyRows(ns, "orders", "orders_copy")
+	if want := "INSERT INTO `shop`.`orders_copy` SELECT * FROM `shop`.`orders`"; got != want {
+		t.Errorf("MySQL.CopyRows = %s, want %s", got, want)
+	}
+
+	got = Postgres.CopyRows(ns, "orders", "orders_copy")
+	want := `INSERT INTO "public"."orders_copy" OVERRIDING SYSTEM VALUE ` +
+		`SELECT * FROM "public"."orders"`
+	if got != want {
+		t.Errorf("Postgres.CopyRows = %s, want %s", got, want)
+	}
+}
+
 func TestAppendIndexColumnFoldsOneEntryPerIndex(t *testing.T) {
 	indexes := []driver.Index{}
 	indexes = AppendIndexColumn(indexes, driver.Index{Name: "by_pair", Unique: true}, "a")

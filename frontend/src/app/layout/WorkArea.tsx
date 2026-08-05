@@ -53,6 +53,7 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             <TableDataView
               key={activeTab.id}
               sessionId={sessionId}
+              profileId={activeTab.profileId}
               namespace={activeTab.namespace}
               table={activeTab.table}
             />
