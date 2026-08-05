@@ -1,4 +1,4 @@
-import { List, Plus, Table2, Terminal, X } from 'lucide-react'
+import { Columns3, List, Plus, Table2, Terminal, X, type LucideIcon } from 'lucide-react'
 
 import { environmentInfo, namespaceLabel, type Profile } from '@/bridge/connections'
 import { EnvironmentStripe } from '@/features/connections/EnvironmentDot'
@@ -9,12 +9,16 @@ import { useTabsStore, type Tab, type TabKind } from '@/stores/tabs'
 
 const MIDDLE_BUTTON = 1
 
-/** What a tab is showing, said in full — its title is only ever the last part of this. */
-const KIND_LABEL: Record<TabKind, string> = {
-  query: 'Query',
-  table: 'Table',
-  design: 'Design',
-  objects: 'Tables',
+/**
+ * What a tab is, in one place: the word it is called by in full — its title is only ever the last
+ * part of that — the glyph it wears, and the colour of that glyph. The colours are the tree's, so
+ * a table opened from the sidebar is the same colour in the strip it lands in.
+ */
+const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: string }> = {
+  query: { label: 'Query', icon: Terminal, tint: 'text-kind-routine' },
+  table: { label: 'Table', icon: Table2, tint: 'text-kind-table' },
+  design: { label: 'Design', icon: Columns3, tint: 'text-kind-field' },
+  objects: { label: 'Tables', icon: List, tint: 'text-kind-database' },
 }
 
 export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
@@ -59,7 +63,7 @@ export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
  */
 function tabTooltip(tab: Tab, profile: Profile | undefined): string {
   const named = 'table' in tab && tab.table !== ''
-  const lines = [named ? `${KIND_LABEL[tab.kind]}: ${tab.table}` : KIND_LABEL[tab.kind]]
+  const lines = [named ? `${KINDS[tab.kind].label}: ${tab.table}` : KINDS[tab.kind].label]
 
   if (tab.namespace.database !== '') lines.push(`Database: ${namespaceLabel(tab.namespace)}`)
   if (profile) {
@@ -83,7 +87,8 @@ interface TabItemProps {
 }
 
 function TabItem({ tab, active, environment, tooltip, onSelect, onClose }: TabItemProps) {
-  const Icon = tab.kind === 'query' ? Terminal : tab.kind === 'objects' ? List : Table2
+  const { icon: Icon, tint } = KINDS[tab.kind]
+  const where = namespaceLabel(tab.namespace)
 
   return (
     <div
@@ -95,7 +100,7 @@ function TabItem({ tab, active, environment, tooltip, onSelect, onClose }: TabIt
         if (e.button === MIDDLE_BUTTON) onClose()
       }}
       className={cn(
-        'group relative flex max-w-[220px] min-w-0 shrink-0 cursor-default items-center gap-1.5',
+        'group relative flex max-w-[260px] min-w-0 shrink-0 cursor-default items-center gap-1.5',
         'border-r border-line px-3 text-sm whitespace-nowrap transition-colors',
         active ? 'bg-canvas text-fg' : 'text-muted hover:bg-hover hover:text-fg',
       )}
@@ -103,8 +108,20 @@ function TabItem({ tab, active, environment, tooltip, onSelect, onClose }: TabIt
       {active ? <span className="absolute inset-x-0 top-0 h-0.5 bg-accent" /> : null}
       <EnvironmentStripe environment={environment} />
 
-      <Icon size={13} className="shrink-0 text-faint" />
-      <span className="truncate">{tab.title}</span>
+      {/* The tab's kind keeps its colour whether or not the tab is in front: it says what the tab
+          *is*, which does not change with the selection, and a strip of grey glyphs would leave
+          the reader reading every title to find the query among the tables. */}
+      <Icon size={13} className={cn('shrink-0', tint)} />
+      <span className="min-w-0 truncate">{tab.title}</span>
+
+      {/* Which namespace, for the reader holding two tabs on one table name. It is capped well
+          under the title's share of the tab: the title is what was asked for, and this only says
+          which of two the reader is looking at. */}
+      {where === '' ? null : (
+        <span className="max-w-[84px] shrink-0 truncate font-mono text-2xs text-faint">
+          {where}
+        </span>
+      )}
 
       <button
         type="button"

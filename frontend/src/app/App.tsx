@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   authInfo,
+  namespaceLabel,
   NO_NAMESPACE,
   toProfileInput,
   type Profile,
@@ -42,6 +43,7 @@ export function App() {
   const openTable = useTabsStore((s) => s.openTable)
   const openDesign = useTabsStore((s) => s.openDesign)
   const openTables = useTabsStore((s) => s.openTables)
+  const activeTab = useTabsStore((s) => s.tabs.find((t) => t.id === s.activeId) ?? null)
 
   const profiles = useConnectionsStore((s) => s.profiles)
   const sessions = useConnectionsStore((s) => s.sessions)
@@ -222,34 +224,45 @@ export function App() {
     })
   }, [openTab, selected, sessions, activeNamespace])
 
+  // The bar reports the connection the reader is *looking at* — the tab in front, or the row they
+  // have selected where no tab is open. Reporting whichever session happened to be first would
+  // name one server while the grid under it drew another's rows.
   const status = useMemo<StatusInfo>(() => {
-    const activeProfileId = Object.keys(sessions)[0]
-    const session = activeProfileId ? sessions[activeProfileId] : undefined
+    const profileId = activeTab?.profileId ?? selected?.profileId ?? Object.keys(sessions)[0] ?? ''
+    const session = sessions[profileId]
+    const profile = profiles.find((p) => p.id === profileId)
+    const open = Object.keys(sessions).length
 
     if (!session) {
       return {
         status: error ? 'error' : 'idle',
+        name: profile?.name ?? null,
         target: error ? error.message : null,
-        engine: null,
-        environment: '',
+        engine: profile?.engine ?? null,
+        environment: profile?.environment ?? '',
         serverVersion: null,
+        namespace: '',
+        connections: open,
         rowCount: null,
         elapsedMs: null,
       }
     }
 
-    const profile = profiles.find((p) => p.id === activeProfileId)
+    const ns = activeTab?.namespace ?? activeNamespace[profileId] ?? NO_NAMESPACE
 
     return {
       status: 'connected',
+      name: profile?.name ?? null,
       target: session.target,
       engine: profile?.engine ?? null,
       environment: profile?.environment ?? '',
       serverVersion: session.serverVersion,
+      namespace: namespaceLabel(ns),
+      connections: open,
       rowCount: null,
       elapsedMs: null,
     }
-  }, [sessions, profiles, error])
+  }, [activeTab, selected, sessions, profiles, activeNamespace, error])
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

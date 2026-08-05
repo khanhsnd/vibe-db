@@ -37,6 +37,23 @@
   both sides of another bar, which is the whole reason the third shade exists — the one place two
   do meet is a surface's own toolbar over the grid's head strip, and they are meant to read as the
   single strip they look like.
+- **A kind is a colour, and a folder wears its contents'.** `--kind-*` is one colour per kind of
+  thing the catalogue holds — a database, a schema, a table, a view, a routine, a field, an index, a
+  foreign key — and `--type-*` one per class of column type, the seven `columnType.tsx` sorts a type
+  into. A sidebar six levels deep in one grey says only that it is six levels deep, so the tree, the
+  tab strip, the query toolbar and the grid's header all draw from these and mean the same thing by
+  them. A **folder takes the colour of what is inside it** rather than one of its own — `Indexes` and
+  the indexes under it read as one thing — and it is drawn as a folder, open or shut, never as the
+  thing it holds: a `Tables` folder wearing a table would be the same row as the tables beneath it.
+  A new kind is a token and a row in the `COLOURS` map beside `ICONS`, never a colour in a component.
+- **A tree badge is a count or a fact, and it is drawn as whichever it is.** A count — how many
+  tables, how many fields — is a pill; a fact about the row itself — a field's type, an index's
+  columns, the server a connection points at — is faint mono text. `isCount` tells them apart by the
+  badge being all digits, which every count the tree draws is and nothing else it draws can be.
+- **The status bar reports the tab in front**, not whichever session happens to be first: it names
+  the connection, its server, the namespace that tab is pointed at and the server's version, and
+  against the right how many connections are open at all. Reporting an arbitrary session would name
+  one server while the grid under it drew another's rows.
 - **Colour and type live only in `shared/theme/tokens.css`.** Raw values sit on `:root`, are
   overridden under `:root[data-theme='light']`, and are mapped into Tailwind utilities via
   `@theme inline` — the `var()` indirection is what makes runtime theme switching work without a

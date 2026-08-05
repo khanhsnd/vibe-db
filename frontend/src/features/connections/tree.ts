@@ -95,6 +95,15 @@ const FOLDERS: ReadonlySet<NodeKind> = new Set([
   'foreignKeys',
 ])
 
+/**
+ * Whether this node holds others rather than standing for something in the catalogue. It is what
+ * decides how a badge reads: a folder's is how many are inside, and a leaf's is a fact about the
+ * thing itself — a field's type, an index's columns, the table a key points at.
+ */
+export function isFolder(node: TreeNode): boolean {
+  return FOLDERS.has(node.kind)
+}
+
 export interface TreeSearch {
   roots: TreeNode[]
   /** The folders above a hit, which are opened whatever the reader had left open. */

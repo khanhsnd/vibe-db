@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Boxes, Database, ListTree, Loader2, Play, Square, WrapText } from 'lucide-react'
 
 import type { Namespace } from '@/bridge/connections'
@@ -45,7 +46,7 @@ export function QueryToolbar({
       role="toolbar"
       className="flex h-9 shrink-0 items-center gap-1.5 border-b border-line bg-bar px-2"
     >
-      <Database size={13} className="shrink-0 text-faint" />
+      <Database size={13} className="shrink-0 text-kind-database" />
       <NamespaceSelect
         label="Database"
         value={namespace.database}
@@ -56,7 +57,7 @@ export function QueryToolbar({
 
       {hasSchemas ? (
         <>
-          <Boxes size={13} className="shrink-0 text-faint" />
+          <Boxes size={13} className="shrink-0 text-kind-schema" />
           <NamespaceSelect
             label="Schema"
             value={namespace.schema}
@@ -71,13 +72,13 @@ export function QueryToolbar({
 
       <Button
         variant="primary"
-        icon={<Play size={12} />}
+        icon={<Play size={12} fill="currentColor" />}
         disabled={!canRun || running}
         onClick={onExecute}
       >
         Execute
       </Button>
-      <span className="mr-1 font-mono text-2xs text-faint">F5</span>
+      <Shortcut>F5</Shortcut>
 
       <Button
         variant="default"
@@ -88,7 +89,14 @@ export function QueryToolbar({
         Explain
       </Button>
 
-      <Button variant="default" icon={<Square size={11} />} disabled={!running} onClick={onStop}>
+      {/* Stop is the danger colour only while there is something to stop: a red button standing
+          over an idle editor claims a statement is running when none is. */}
+      <Button
+        variant={running ? 'danger' : 'default'}
+        icon={<Square size={11} fill="currentColor" />}
+        disabled={!running}
+        onClick={onStop}
+      >
         Stop
       </Button>
 
@@ -104,7 +112,7 @@ export function QueryToolbar({
       >
         Format
       </Button>
-      <span className="mr-1 font-mono text-2xs text-faint">Ctrl+Shift+F</span>
+      <Shortcut>Ctrl+Shift+F</Shortcut>
 
       {running ? (
         <span className="ml-1 flex items-center gap-1.5 text-xs text-muted">
@@ -125,6 +133,18 @@ export function QueryToolbar({
         />
       </div>
     </div>
+  )
+}
+
+/**
+ * The key that does what the button beside it does, drawn as the key: a reader who is looking for
+ * the shortcut finds a keycap where plain grey text reads as part of the label before it.
+ */
+function Shortcut({ children }: { children: ReactNode }) {
+  return (
+    <kbd className="mr-1 shrink-0 rounded border border-line bg-elevated px-1 py-px font-mono text-2xs text-faint">
+      {children}
+    </kbd>
   )
 }
 

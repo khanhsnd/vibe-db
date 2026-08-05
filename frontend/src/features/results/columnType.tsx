@@ -9,6 +9,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import { cn } from '@/lib/cn'
+
 export type TypeKind = 'bool' | 'temporal' | 'json' | 'binary' | 'numeric' | 'text' | 'other'
 
 /** Read in order, so `INTERVAL` is temporal before `INT` can claim it. */
@@ -32,6 +34,21 @@ const ICONS: Record<TypeKind, LucideIcon> = {
   numeric: Hash,
   text: CaseSensitive,
   other: Type,
+}
+
+/**
+ * The colour each class is drawn in, so a wide header is read as a shape and a colour rather than
+ * by spelling out seven type names. `other` and `binary` share the muted one deliberately: neither
+ * is a class the reader can do anything different with.
+ */
+const COLOURS: Record<TypeKind, string> = {
+  bool: 'text-type-bool',
+  temporal: 'text-type-temporal',
+  json: 'text-type-json',
+  binary: 'text-type-binary',
+  numeric: 'text-type-numeric',
+  text: 'text-type-text',
+  other: 'text-type-other',
 }
 
 export function typeKind(type: string): TypeKind {
@@ -65,6 +82,7 @@ export function temporalPicker(type: string): TemporalPicker | null {
 }
 
 export function ColumnTypeIcon({ type }: { type: string }) {
-  const Icon = ICONS[typeKind(type)]
-  return <Icon size={12} className="shrink-0" />
+  const kind = typeKind(type)
+  const Icon = ICONS[kind]
+  return <Icon size={12} className={cn('shrink-0', COLOURS[kind])} />
 }

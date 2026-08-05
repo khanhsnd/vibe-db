@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import { namespaceLabel, type Namespace } from '@/bridge/connections'
+import type { Namespace } from '@/bridge/connections'
 
 import { useQueriesStore } from './queries'
 
@@ -122,13 +122,10 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       table,
     }),
 
+  // The namespace is not in the title: every tab in the strip draws the one it belongs to, and a
+  // title that repeated it would say `hirec.public` twice on one tab.
   openTables: (profileId, namespace) =>
-    get().open({
-      kind: 'objects',
-      title: `${namespaceLabel(namespace)} · Tables`,
-      profileId,
-      namespace,
-    }),
+    get().open({ kind: 'objects', title: 'Tables', profileId, namespace }),
 
   close: (id) => {
     useQueriesStore.getState().discard(id)

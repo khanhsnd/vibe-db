@@ -9,6 +9,7 @@ import {
   Database,
   Eye,
   Folder,
+  FolderOpen,
   KeyRound,
   Link,
   Server,
@@ -24,8 +25,13 @@ import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 import { EngineIcon } from './EngineIcon'
 import { EnvironmentStripe } from './EnvironmentDot'
 import { StatusDot } from './StatusDot'
-import { flatten, type NodeKind, type TreeNode } from './tree'
+import { flatten, isFolder, type NodeKind, type TreeNode } from './tree'
 
+/**
+ * A folder is drawn as a folder, open or shut, and never as the thing inside it: a `Tables` folder
+ * wearing a table would be the same row as the tables under it. What it holds is said in its
+ * colour instead — see `COLOURS`.
+ */
 const ICONS: Record<NodeKind, typeof Table2> = {
   connection: Server,
   database: Database,
@@ -37,16 +43,46 @@ const ICONS: Record<NodeKind, typeof Table2> = {
   view: Eye,
   procedure: Terminal,
   function: Sigma,
-  fields: Columns3,
+  fields: Folder,
   field: Columns3,
-  indexes: ArrowDownAZ,
+  indexes: Folder,
   index: ArrowDownAZ,
-  foreignKeys: Link,
+  foreignKeys: Folder,
   foreignKey: Link,
+}
+
+/**
+ * The colour each row is drawn in. A folder takes the colour of its contents rather than one of
+ * its own, so `Indexes` and the indexes under it read as one thing — six levels of grey icons say
+ * only that there are six levels.
+ */
+const COLOURS: Record<NodeKind, string> = {
+  connection: 'text-muted',
+  database: 'text-kind-database',
+  schema: 'text-kind-schema',
+  tables: 'text-kind-table',
+  views: 'text-kind-view',
+  routines: 'text-kind-routine',
+  table: 'text-kind-table',
+  view: 'text-kind-view',
+  procedure: 'text-kind-routine',
+  function: 'text-kind-routine',
+  fields: 'text-kind-field',
+  field: 'text-kind-field',
+  indexes: 'text-kind-index',
+  index: 'text-kind-index',
+  foreignKeys: 'text-kind-relation',
+  foreignKey: 'text-kind-relation',
 }
 
 const INDENT_PER_DEPTH = 12
 const BASE_INDENT = 6
+
+/**
+ * Whether a badge is how many rather than what: every count the tree draws is a bare number, and
+ * nothing else it draws is — a type carries letters, a key's target an arrow, a server a colon.
+ */
+const isCount = (badge: string) => /^\d+$/.test(badge)
 
 interface ObjectTreeProps {
   roots: TreeNode[]
@@ -85,9 +121,17 @@ export function ObjectTree({
           if (!row) return null
 
           const { node, depth, expanded: isOpen, expandable } = row
+          const folder = isFolder(node)
           // A field of the primary key is drawn with a key rather than a column, which is the
-          // one place the icon says something the label does not.
-          const Icon = node.primaryKey === true ? KeyRound : ICONS[node.kind]
+          // one place the icon says something the label does not. A folder is drawn open once it
+          // is, which is the one place the icon says what the caret beside it already said —
+          // and it is worth the repetition, a caret being three pixels of chevron.
+          const Icon =
+            node.primaryKey === true
+              ? KeyRound
+              : folder && isOpen
+                ? FolderOpen
+                : ICONS[node.kind]
           const selected = node.id === selectedId
           const active = node.active === true
 
@@ -145,25 +189,40 @@ export function ObjectTree({
                     className={cn(
                       'shrink-0',
                       node.primaryKey === true
-                        ? 'text-warn'
+                        ? 'text-grid-key'
                         : active
                           ? 'text-success'
-                          : 'text-muted',
+                          : COLOURS[node.kind],
                     )}
                   />
                 )}
 
-                <span className={cn('truncate', active && 'font-medium text-success')}>
+                <span
+                  className={cn(
+                    'min-w-0 flex-1 truncate',
+                    active && 'font-medium text-success',
+                    selected && 'font-medium',
+                  )}
+                >
                   {node.label}
                 </span>
 
-                {node.status ? <StatusDot status={node.status} className="ml-auto" /> : null}
-
+                {/* A count is a pill and a fact is not: `12` beside `Tables` means twelve of
+                    them, where `varchar(255)` beside a field is what that field *is*, and the
+                    two would read alike drawn alike. */}
                 {node.badge ? (
-                  <span className="ml-auto max-w-[45%] shrink-0 truncate pl-1.5 font-mono text-2xs text-faint">
-                    {node.badge}
-                  </span>
+                  isCount(node.badge) ? (
+                    <span className="shrink-0 rounded-full bg-active px-1.5 font-mono text-2xs text-muted tabular-nums">
+                      {node.badge}
+                    </span>
+                  ) : (
+                    <span className="max-w-[45%] shrink-0 truncate pl-1.5 font-mono text-2xs text-faint">
+                      {node.badge}
+                    </span>
+                  )
                 ) : null}
+
+                {node.status ? <StatusDot status={node.status} /> : null}
               </div>
             </ContextMenu>
           )

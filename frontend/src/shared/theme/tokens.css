@@ -52,6 +52,30 @@
   --env-production: #f85149;
   --env-none: #767f8f;
 
+  /** One per kind of thing the catalogue holds, so a sidebar six levels deep reads as colours
+      before it is read as words. There is no colour for a folder: a folder wears the colour of
+      what is *inside* it, the reader being after the contents and a shut folder the only thing
+      standing where they are. */
+  --kind-database: #58a6ff;
+  --kind-schema: #a371f7;
+  --kind-table: #2dc3d4;
+  --kind-view: #56d364;
+  --kind-routine: #f0883e;
+  --kind-field: #79c0ff;
+  --kind-index: #d2a8ff;
+  --kind-relation: #f778ba;
+
+  /** One per class of column type, so a grid header says what a column *holds* before its name is
+      read. They are the same seven `columnType.tsx` sorts a type into, and nothing else may take
+      them: a colour that meant a type here and something else elsewhere would be worse than grey. */
+  --type-text: #7ee787;
+  --type-numeric: #79c0ff;
+  --type-temporal: #d2a8ff;
+  --type-bool: #ffa657;
+  --type-json: #e3b341;
+  --type-binary: #8b949e;
+  --type-other: #8b949e;
+
   --syn-keyword: #ff7b72;
   --syn-string: #a5d6ff;
   --syn-number: #79c0ff;
@@ -115,6 +139,23 @@
   --env-production: #cf222e;
   --env-none: #79818d;
 
+  --kind-database: #0969da;
+  --kind-schema: #6639ba;
+  --kind-table: #0f7c8a;
+  --kind-view: #1a7f37;
+  --kind-routine: #bc4c00;
+  --kind-field: #0550ae;
+  --kind-index: #8250df;
+  --kind-relation: #bf3989;
+
+  --type-text: #1a7f37;
+  --type-numeric: #0550ae;
+  --type-temporal: #8250df;
+  --type-bool: #bc4c00;
+  --type-json: #9a6700;
+  --type-binary: #6e7781;
+  --type-other: #6e7781;
+
   --syn-keyword: #cf222e;
   --syn-string: #0a3069;
   --syn-number: #0550ae;
@@ -165,6 +206,23 @@
   --color-env-staging: var(--env-staging);
   --color-env-production: var(--env-production);
   --color-env-none: var(--env-none);
+
+  --color-kind-database: var(--kind-database);
+  --color-kind-schema: var(--kind-schema);
+  --color-kind-table: var(--kind-table);
+  --color-kind-view: var(--kind-view);
+  --color-kind-routine: var(--kind-routine);
+  --color-kind-field: var(--kind-field);
+  --color-kind-index: var(--kind-index);
+  --color-kind-relation: var(--kind-relation);
+
+  --color-type-text: var(--type-text);
+  --color-type-numeric: var(--type-numeric);
+  --color-type-temporal: var(--type-temporal);
+  --color-type-bool: var(--type-bool);
+  --color-type-json: var(--type-json);
+  --color-type-binary: var(--type-binary);
+  --color-type-other: var(--type-other);
 
   --font-ui: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   --font-mono: var(--font-data);

@@ -71,24 +71,29 @@ export function GridFooter({
 
             <span className="mx-1 h-4 w-px bg-line" />
 
+            {/* The two that settle a pending edit wear its answer's colour, and only while there
+                is one to settle: a bar of green and red standing over a grid nobody has touched
+                would say something is waiting when nothing is. */}
             <IconButton
               label="Apply changes"
               icon={<Check size={14} />}
               disabled={busy || !pending}
               onClick={onApply}
+              className={pending ? 'text-success hover:text-success' : ''}
             />
             <IconButton
               label="Discard changes"
               icon={<X size={14} />}
               disabled={busy || !pending}
               onClick={onDiscard}
+              className={pending ? 'text-danger hover:text-danger' : ''}
             />
           </>
         ) : null}
 
         <IconButton
           label="Refresh"
-          icon={<RotateCw size={13} />}
+          icon={<RotateCw size={13} className={busy ? 'animate-spin' : ''} />}
           disabled={busy}
           onClick={onRefresh}
         />
@@ -96,9 +101,10 @@ export function GridFooter({
         {onStop ? (
           <IconButton
             label="Stop"
-            icon={<Square size={11} />}
+            icon={<Square size={11} fill="currentColor" />}
             disabled={!running}
             onClick={onStop}
+            className={running ? 'text-danger hover:text-danger' : ''}
           />
         ) : null}
       </div>

@@ -27,6 +27,15 @@ export interface ResultColumn {
   type: string
   fullType: string
   editor?: ColumnEditor | undefined
+  /**
+   * Whether the column is part of the primary key, which the header marks with a lock. A result
+   * that is not a stored table's rows carries none — an expression has no key to be part of.
+   *
+   * It is the one stored fact the header may draw. **Nullability is not**: a driver that cannot
+   * say reports `false`, which is indistinguishable from a column the server really will not take
+   * NULL for, and a grid cannot tell the two apart. The designer reads the catalogue and can.
+   */
+  primaryKey?: boolean | undefined
 }
 
 /** A toggle cell is on when it holds anything at all, a key cell holding its position instead. */

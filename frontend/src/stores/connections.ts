@@ -381,6 +381,10 @@ export function buildTree(input: TreeInput): TreeNode[] {
       engine: info.value,
       environment: profile.environment,
       status: input.statuses[profile.id] ?? 'idle',
+      // Two connections to one server differ only in their name, and two connections *named*
+      // alike differ only in their server — so the row that carries the name carries the server
+      // too, and the reader never has to open a dialog to tell them apart.
+      badge: `${profile.host}:${profile.port}`,
       children: (input.databases[profile.id] ?? []).map((database) =>
         info.hasSchemas
           ? schemaParentNode(input, info, profile.id, database)
@@ -454,6 +458,11 @@ function namespaceNode(
     profileId,
     namespace: ns,
     active: active.database === ns.database && active.schema === ns.schema,
+    // How much is in here, once it has been read — the one number that says whether a namespace
+    // is worth opening. A namespace nobody has opened yet has no number, not a zero.
+    ...(held
+      ? { badge: String(held.tables.length + held.views.length + (held.routines?.length ?? 0)) }
+      : {}),
     children: [
       folder(
         'tables',

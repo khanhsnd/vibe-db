@@ -1,7 +1,8 @@
-import { Plus, Search, X } from 'lucide-react'
+import { Plus, Search, SearchX, Server, X } from 'lucide-react'
 
 import { ObjectTree } from '@/features/connections/ObjectTree'
 import type { TreeNode } from '@/features/connections/tree'
+import { Button } from '@/shared/ui/Button'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { Empty } from '@/shared/ui/Empty'
 import { IconButton } from '@/shared/ui/IconButton'
@@ -36,7 +37,7 @@ export function Sidebar({
       {/* The filter is the whole of the panel's chrome: a title over a tree of servers would say
           what the tree already says, and the sidebar is 240 px of height worth spending on names. */}
       <div className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-bar pr-1 pl-1.5">
-        <div className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded border border-line bg-canvas px-1.5 focus-within:border-accent">
+        <div className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded-md border border-line bg-canvas px-1.5 transition-colors focus-within:border-accent focus-within:ring-1 focus-within:ring-accent">
           <Search size={12} className="shrink-0 text-faint" />
           <input
             value={filter}
@@ -76,11 +77,21 @@ export function Sidebar({
           />
         ) : filter ? (
           <Empty
+            icon={<SearchX size={22} strokeWidth={1.5} />}
             title={`Nothing matches “${filter}”`}
             hint="Only names already read are searched — a database nobody has opened has none yet."
           />
         ) : (
-          <Empty title="No connections yet" hint="Create one to get started." />
+          <Empty
+            icon={<Server size={22} strokeWidth={1.5} />}
+            title="No connections yet"
+            hint="Point one at a server and everything it holds appears here."
+            action={
+              <Button variant="primary" icon={<Plus size={14} />} onClick={onNewConnection}>
+                New Connection
+              </Button>
+            }
+          />
         )}
       </div>
     </aside>

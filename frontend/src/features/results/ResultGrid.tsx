@@ -68,6 +68,8 @@ const MIN_COLUMN_WIDTH = 60
 const MAX_FIT_WIDTH = 520
 const CELL_PADDING = 17
 const TYPE_ICON_WIDTH = 17
+/** The room the lock on a key column takes, ahead of that column's name. */
+const KEY_ICON_WIDTH = 15
 /** The room the header's options button takes on the right, beyond a cell's own padding. */
 const MENU_WIDTH = 20
 /** Pixels scrolled per frame while a drag is held past an edge of the viewport. */
@@ -282,9 +284,10 @@ export function ResultGrid({
 
     const font = gridFont()
     const cells = result.rows.slice(0, FIT_SAMPLE).map((row) => cellPreview(row[index] ?? null))
+    const key = column.primaryKey === true ? KEY_ICON_WIDTH : 0
     const content = Math.max(
       widestText(cells, font),
-      widestText([column.name], headerFont()) + MENU_WIDTH,
+      widestText([column.name], headerFont()) + key + MENU_WIDTH,
       widestText([typeLabel(column)], font) + TYPE_ICON_WIDTH + MENU_WIDTH,
     )
 
@@ -893,6 +896,11 @@ function HeaderRow({
               style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: HEADER_HEIGHT }}
             >
               <span className="flex items-center gap-1">
+                {/* The same lock the tree draws on a key field, in the same gold: which columns
+                    name a row is the first thing a reader asks of a table they did not write. */}
+                {column.primaryKey === true ? (
+                  <KeyRound size={11} className="shrink-0 text-grid-key" />
+                ) : null}
                 {/* The UI font, where a cell is mono: a name read as a label cannot be mistaken
                     for the data under it. */}
                 <span className="min-w-0 truncate text-base font-bold tracking-wide text-fg">
