@@ -127,8 +127,11 @@ export function FilterSortPanel({
   }
 
   return (
-    <div className="shrink-0 border-b border-line bg-panel">
-      <div className="flex items-center gap-1.5 px-2 pt-1.5">
+    // The panel fills the height the splitter gave it and the conditions take the slack, so
+    // dragging the handle is dragging the room there is to build one in. Its own bottom border
+    // would be a second line beside that handle.
+    <div className="flex h-full min-h-0 flex-col bg-panel">
+      <div className="flex shrink-0 items-center gap-1.5 px-2 pt-1.5">
         <Label>Filter</Label>
         <Adders
           disabled={firstColumn === ''}
@@ -139,11 +142,11 @@ export function FilterSortPanel({
         <ModeChoice />
       </div>
 
-      <div className="scroll-thin max-h-52 overflow-y-auto px-2 py-1">
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-2 py-1">
         <Rows group={criteria} path={[]} depth={0} edit={edit} />
       </div>
 
-      <div className="flex items-start gap-1.5 border-t border-line px-2 py-1.5">
+      <div className="flex min-h-0 items-start gap-1.5 border-t border-line px-2 py-1.5">
         <Label>Sort By</Label>
         <IconButton
           label="Add sort criteria"
@@ -156,7 +159,8 @@ export function FilterSortPanel({
         {keys.length === 0 ? (
           <span className="pt-0.5 text-xs text-faint">Click “+” to add sort criteria</span>
         ) : (
-          <div className="flex min-w-0 flex-col gap-0.5">
+          // The keys scroll rather than push Apply off a panel dragged short.
+          <div className="scroll-thin flex min-w-0 flex-col gap-0.5 overflow-y-auto">
             {keys.map((key, index) => (
               <SortRow
                 key={index}
@@ -170,7 +174,7 @@ export function FilterSortPanel({
         )}
       </div>
 
-      <div className="flex items-center gap-3 border-t border-line px-2 py-1.5">
+      <div className="flex shrink-0 items-center gap-3 border-t border-line px-2 py-1.5">
         <Button variant="primary" disabled={!edited} onClick={apply}>
           Apply Filter &amp; Sort
         </Button>

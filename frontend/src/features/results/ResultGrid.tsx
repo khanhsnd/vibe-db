@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -25,6 +26,7 @@ import { ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 import { IconButton } from '@/shared/ui/IconButton'
 import { ICON } from '@/shared/ui/menuIcons'
+import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 
 import { CellChoice } from './CellChoice'
 import { CellEditorButton } from './CellEditorButton'
@@ -80,6 +82,13 @@ const EDGE_STEP = 14
  * measuring each one costs seconds of frozen window for a width nobody can see anyway.
  */
 const FIT_SAMPLE = 2000
+/**
+ * What the Filter & Sort panel opens at, and how far it may be dragged. Only the size it opens at
+ * is a look — the bounds are what stop a drag leaving the panel too small to build a condition in
+ * or the rows with nothing left.
+ */
+const FILTER_HEIGHT = 200
+const FILTER_MIN_HEIGHT = 116
 
 /** Where each arrow key takes the focus, in cells. */
 const ARROWS: Record<string, CellRef> = {
@@ -239,6 +248,12 @@ export function ResultGrid({
   const [menuCell, setMenuCell] = useState<CellRef | null>(null)
   /** The field a header's **Add Filter** asked for, which the panel takes into its draft. */
   const [filterAsk, setFilterAsk] = useState<FilterAsk | null>(null)
+  /**
+   * The header being carried, if one is. It is the grid's rather than the header row's because the
+   * column it marks runs the whole height of the grid: what the reader has hold of is a column, and
+   * a mark that stopped at the header would say only which *header* they had.
+   */
+  const [columnDrag, setColumnDrag] = useState<ColumnDrag | null>(null)
 
   /**
    * The cell open in the value viewer, or null. It is the grid's own rather than a call site's
@@ -289,6 +304,16 @@ export function ResultGrid({
       scrollRef.current?.focus()
     }
   }, [editing])
+
+  /**
+   * Which panels the splitter holds, named for it. A layout is remembered per *combination*, so the
+   * height the reader gave the filter panel is theirs the next time they open it, and closing it
+   * does not teach the rows a new size.
+   */
+  const panelIds = useMemo(
+    () => (filtering?.shown ? ['filter', 'rows'] : ['rows']),
+    [filtering?.shown],
+  )
 
   const totalWidth = GUTTER_WIDTH + widths.reduce((sum, w) => sum + w, 0)
   const bounds = current?.ranges.map(boundsOf) ?? []
@@ -640,6 +665,159 @@ export function ResultGrid({
     }
   }
 
+  /** The header and the rows under it: the whole of the grid but whatever panel sits over it. */
+  const rows = (
+    <div
+      ref={scrollRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className={cn(
+        'scroll-thin overflow-auto bg-canvas',
+        // It fills the panel the splitter gave it where there is one, and takes what the column
+        // leaves where there is not.
+        filtering ? 'h-full' : 'min-h-0 flex-1',
+      )}
+    >
+      <div className="relative w-full" style={{ minWidth: totalWidth }}>
+        <HeaderRow
+          columns={result.columns}
+          widths={widths}
+          bounds={bounds}
+          sort={sort}
+          onResize={setWidth}
+          onFit={fitColumn}
+          onSelectColumn={selectColumn}
+          onMoveColumn={onMoveColumn}
+          drag={columnDrag}
+          onDragChange={setColumnDrag}
+          menuFor={columnMenu}
+        />
+
+        {/* What is being carried, and where it would land — both drawn down the whole grid
+            rather than across the header alone, because a column is what is being moved and
+            the rows under it are what the reader is reading. */}
+        {columnDrag ? (
+          <span
+            className="pointer-events-none absolute top-0 bottom-0 z-3 border-[3px] border-fg"
+            style={{
+              left: edgeOf(widths, columnDrag.from),
+              width: widths[columnDrag.from] ?? DEFAULT_COLUMN_WIDTH,
+            }}
+          />
+        ) : null}
+        {columnDrag && moves(columnDrag) ? (
+          <span
+            className="pointer-events-none absolute top-0 bottom-0 z-3 w-0.5 bg-accent"
+            style={{ left: edgeOf(widths, columnDrag.to) }}
+          />
+        ) : null}
+
+        <ContextMenu items={cellMenu()}>
+          <div
+            ref={bodyRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={endDrag}
+            onLostPointerCapture={endDrag}
+            onClick={onClick}
+            onDoubleClick={onDoubleClick}
+            onContextMenu={onCellContextMenu}
+            className="relative"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualizer.getVirtualItems().map((item) => {
+              const row = result.rows[item.index]
+              if (!row) return null
+
+              // A row is banded across its width only when the selection covers the whole of it;
+              // a column selection touches every row and must not paint the grid over.
+              const banded = rowCovered(bounds, item.index, lastColumn)
+              const touched = rowTouched(bounds, item.index)
+              // A row on its way out reads as struck through whatever the selection says,
+              // because the strike is inherited by every cell below it.
+              const removed = isDeleted(item.index)
+
+              return (
+                <div
+                  key={item.key}
+                  className={cn(
+                    'absolute top-0 left-0 flex w-full border-b border-line/60',
+                    removed
+                      ? 'bg-grid-row-deleted line-through'
+                      : banded
+                        ? 'bg-grid-row-selected'
+                        : 'hover:bg-hover',
+                  )}
+                  style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
+                >
+                  <div
+                    data-gutter=""
+                    className={cn(
+                      'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
+                      removed
+                        ? 'bg-grid-row-deleted text-danger'
+                        : touched
+                          ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
+                          : 'bg-panel text-faint',
+                    )}
+                    style={{ width: GUTTER_WIDTH }}
+                  >
+                    {item.index + 1}
+                  </div>
+
+                  {result.columns.map((column, i) => {
+                    const width = widths[i] ?? DEFAULT_COLUMN_WIDTH
+
+                    if (onEditCell && editing?.row === item.index && editing.column === i) {
+                      const commit = (value: Cell) => {
+                        onEditCell({ row: item.index, column: i }, value)
+                        setEditing(null)
+                      }
+                      const cancel = () => setEditing(null)
+
+                      return column.editor?.kind === 'choice' ? (
+                        <CellChoice
+                          key={i}
+                          value={row[i] ?? null}
+                          options={column.editor.options}
+                          width={width}
+                          onCommit={commit}
+                          onCancel={cancel}
+                        />
+                      ) : (
+                        <CellInput
+                          key={i}
+                          value={row[i] ?? null}
+                          picker={temporalPicker(column.type)}
+                          width={width}
+                          onCommit={commit}
+                          onCancel={cancel}
+                        />
+                      )
+                    }
+
+                    return (
+                      <CellView
+                        key={i}
+                        value={row[i] ?? null}
+                        editor={column.editor}
+                        numeric={isNumeric(column.type)}
+                        width={width}
+                        inRange={within(bounds, item.index, i)}
+                        focused={focus?.row === item.index && focus.column === i}
+                        edited={isDirty(item.index, i)}
+                      />
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        </ContextMenu>
+      </div>
+    </div>
+  )
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {headStrip && hasHeadStrip({ onExport, filtering, cellPanel }) ? (
@@ -651,140 +829,46 @@ export function ResultGrid({
         />
       ) : null}
 
-      {filtering?.shown ? (
-        <FilterSortPanel
-          columns={result.columns}
-          filtering={filtering}
-          sort={sort}
-          onSortChange={onSortChange}
-          ask={filterAsk}
-          onAskTaken={() => setFilterAsk(null)}
-        />
-      ) : null}
+      {/* A grid that can be narrowed carries the splitter, because the panel that narrows it is
+          dragged rather than fixed: a reader who opened it still says how much of the pane the
+          rows keep, and the handle is the only divider between the two. One that cannot be
+          narrowed is the rows alone, and has no panel to be given room. */}
+      {filtering ? (
+        <Split
+          id="vibe-db.grid.filter"
+          orientation="vertical"
+          panelIds={panelIds}
+          className="min-h-0 flex-1"
+        >
+          {filtering.shown ? (
+            <>
+              <SplitPanel
+                id="filter"
+                defaultSize={FILTER_HEIGHT}
+                minSize={FILTER_MIN_HEIGHT}
+                maxSize="70%"
+              >
+                <FilterSortPanel
+                  columns={result.columns}
+                  filtering={filtering}
+                  sort={sort}
+                  onSortChange={onSortChange}
+                  ask={filterAsk}
+                  onAskTaken={() => setFilterAsk(null)}
+                />
+              </SplitPanel>
 
-      <div
-        ref={scrollRef}
-        tabIndex={0}
-        onKeyDown={onKeyDown}
-        className="scroll-thin min-h-0 flex-1 overflow-auto bg-canvas"
-      >
-        <div className="w-full" style={{ minWidth: totalWidth }}>
-          <HeaderRow
-            columns={result.columns}
-            widths={widths}
-            bounds={bounds}
-            sort={sort}
-            onResize={setWidth}
-            onFit={fitColumn}
-            onSelectColumn={selectColumn}
-            onMoveColumn={onMoveColumn}
-            menuFor={columnMenu}
-          />
+              <SplitHandle orientation="vertical" />
+            </>
+          ) : null}
 
-          <ContextMenu items={cellMenu()}>
-            <div
-              ref={bodyRef}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={endDrag}
-              onLostPointerCapture={endDrag}
-              onClick={onClick}
-              onDoubleClick={onDoubleClick}
-              onContextMenu={onCellContextMenu}
-              className="relative"
-              style={{ height: virtualizer.getTotalSize() }}
-            >
-              {virtualizer.getVirtualItems().map((item) => {
-                const row = result.rows[item.index]
-                if (!row) return null
-
-                // A row is banded across its width only when the selection covers the whole of it;
-                // a column selection touches every row and must not paint the grid over.
-                const banded = rowCovered(bounds, item.index, lastColumn)
-                const touched = rowTouched(bounds, item.index)
-                // A row on its way out reads as struck through whatever the selection says,
-                // because the strike is inherited by every cell below it.
-                const removed = isDeleted(item.index)
-
-                return (
-                  <div
-                    key={item.key}
-                    className={cn(
-                      'absolute top-0 left-0 flex w-full border-b border-line/60',
-                      removed
-                        ? 'bg-grid-row-deleted line-through'
-                        : banded
-                          ? 'bg-grid-row-selected'
-                          : 'hover:bg-hover',
-                    )}
-                    style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
-                  >
-                    <div
-                      data-gutter=""
-                      className={cn(
-                        'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
-                        removed
-                          ? 'bg-grid-row-deleted text-danger'
-                          : touched
-                            ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
-                            : 'bg-panel text-faint',
-                      )}
-                      style={{ width: GUTTER_WIDTH }}
-                    >
-                      {item.index + 1}
-                    </div>
-
-                    {result.columns.map((column, i) => {
-                      const width = widths[i] ?? DEFAULT_COLUMN_WIDTH
-
-                      if (onEditCell && editing?.row === item.index && editing.column === i) {
-                        const commit = (value: Cell) => {
-                          onEditCell({ row: item.index, column: i }, value)
-                          setEditing(null)
-                        }
-                        const cancel = () => setEditing(null)
-
-                        return column.editor?.kind === 'choice' ? (
-                          <CellChoice
-                            key={i}
-                            value={row[i] ?? null}
-                            options={column.editor.options}
-                            width={width}
-                            onCommit={commit}
-                            onCancel={cancel}
-                          />
-                        ) : (
-                          <CellInput
-                            key={i}
-                            value={row[i] ?? null}
-                            picker={temporalPicker(column.type)}
-                            width={width}
-                            onCommit={commit}
-                            onCancel={cancel}
-                          />
-                        )
-                      }
-
-                      return (
-                        <CellView
-                          key={i}
-                          value={row[i] ?? null}
-                          editor={column.editor}
-                          numeric={isNumeric(column.type)}
-                          width={width}
-                          inRange={within(bounds, item.index, i)}
-                          focused={focus?.row === item.index && focus.column === i}
-                          edited={isDirty(item.index, i)}
-                        />
-                      )
-                    })}
-                  </div>
-                )
-              })}
-            </div>
-          </ContextMenu>
-        </div>
-      </div>
+          <SplitPanel id="rows" className="min-h-0">
+            {rows}
+          </SplitPanel>
+        </Split>
+      ) : (
+        rows
+      )}
 
       <ValueDialog
         at={viewing}
@@ -912,6 +996,9 @@ interface HeaderRowProps {
   onFit: (index: number) => void
   onSelectColumn: (index: number) => void
   onMoveColumn: ((from: number, to: number) => void) | undefined
+  /** The drag in progress, which the grid holds because the mark it draws is a column's. */
+  drag: ColumnDrag | null
+  onDragChange: (drag: ColumnDrag | null) => void
   menuFor: (index: number) => MenuItem[]
 }
 
@@ -933,10 +1020,11 @@ function HeaderRow({
   onFit,
   onSelectColumn,
   onMoveColumn,
+  drag,
+  onDragChange,
   menuFor,
 }: HeaderRowProps) {
   const strip = useRef<HTMLDivElement>(null)
-  const [drag, setDrag] = useState<ColumnDrag | null>(null)
 
   /**
    * The boundary the pointer is nearest, counted like a caret between characters: past a column's
@@ -961,20 +1049,20 @@ function HeaderRow({
     if (event.target instanceof Element && event.target.closest('button')) return
 
     event.currentTarget.setPointerCapture(event.pointerId)
-    setDrag({ from: index, to: index })
+    onDragChange({ from: index, to: index })
   }
 
   const carry = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!drag) return
 
     const to = boundaryAt(event.clientX)
-    if (to !== drag.to) setDrag({ ...drag, to })
+    if (to !== drag.to) onDragChange({ ...drag, to })
   }
 
   const drop = () => {
     if (!drag) return
 
-    setDrag(null)
+    onDragChange(null)
     if (moves(drag)) onMoveColumn?.(drag.from, drag.to)
   }
 
@@ -984,15 +1072,6 @@ function HeaderRow({
         className="sticky left-0 z-1 shrink-0 border-r border-line bg-bar"
         style={{ width: GUTTER_WIDTH, height: HEADER_HEIGHT }}
       />
-
-      {/* Where the column would land. It is drawn over the headers rather than between them, the
-          row being one flex line and a line of its own would widen it. */}
-      {drag && moves(drag) ? (
-        <span
-          className="pointer-events-none absolute top-0 z-2 w-0.5 bg-accent"
-          style={{ left: edgeOf(widths, drag.to), height: HEADER_HEIGHT }}
-        />
-      ) : null}
 
       {columns.map((column, i) => {
         const active = columnTouched(bounds, i)
