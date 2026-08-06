@@ -29,6 +29,7 @@ import { useTabsStore } from '@/stores/tabs'
 import { useUIStore } from '@/stores/ui'
 
 import { CommandBar } from './layout/CommandBar'
+import { MenuBar } from './layout/MenuBar'
 import { Sidebar } from './layout/Sidebar'
 import { StatusBar, type StatusInfo } from './layout/StatusBar'
 import { WorkArea } from './layout/WorkArea'
@@ -288,6 +289,8 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      <MenuBar />
+
       <CommandBar onNewConnection={openNewConnection} onNewQuery={newQuery} />
 
       <Split

@@ -567,6 +567,14 @@ it — see [frontend.md](frontend.md) on `panelIds`.
   so a column added to the table since, or one dropped from it, moves nothing else.
   [grid.md](grid.md) specifies the drag.
 
+## The menu bar
+
+The strip above the command bar carries `File`, `Edit`, `View`, `Favorites`, `Tools`, `Window` and
+`Help`. **None of the seven does anything yet** — they are names in the place a reader of a desktop
+client looks for them, and nothing behind them. When one is given items they are `MenuItem`s drawn by
+`MenuButton`, the same object the tree's right-click menu is built from, so an action offered both
+ways stays one object.
+
 ## Every divider in the window is dragged
 
 There are five, and they behave alike: **the sidebar against the work area**, **the editor against
