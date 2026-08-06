@@ -2,7 +2,7 @@
 
 **Every surface that shows rows and columns of data is `features/results/ResultGrid`.** Not a
 `<table>`, not a bespoke flex layout, not a second grid component. If a new view needs to show
-rows — a query result, a table's data, a plan, a diff, a column list with values — it hands
+rows — a query result, a table's data, a plan, a diff, a search's hits, a column list with values — it hands
 `GridData` to `ResultGrid` and gets everything below for free. Extending the grid is the way to add
 a table feature; a call site that styles its own rows is a bug, because the two drift apart the day
 after they are written.

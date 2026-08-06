@@ -2,11 +2,14 @@ import { create } from 'zustand'
 
 import { namespaceLabel, type Namespace } from '@/bridge/connections'
 
+import type { SearchMode, SearchScope } from '@/bridge/search'
+
 import { useConsoleStore } from './console'
 import { useQueriesStore } from './queries'
+import { useSearchesStore } from './searches'
 import { useTableViewsStore } from './tableViews'
 
-export type TabKind = 'query' | 'table' | 'design' | 'objects' | 'console' | 'compare'
+export type TabKind = 'query' | 'table' | 'design' | 'objects' | 'console' | 'compare' | 'find'
 
 /** Which half of two tables a comparison is reading: their shapes, or their rows. */
 export type CompareMode = 'structure' | 'data'
@@ -71,7 +74,23 @@ export interface CompareTab extends TabBase {
   mode: CompareMode
 }
 
-export type Tab = QueryTab | TableTab | DesignTab | ObjectsTab | ConsoleTab | CompareTab
+/**
+ * Every table of a namespace searched for one piece of text — what Find in Schema opens. The tab
+ * holds the **question** and `stores/searches` holds the answer, exactly as a query tab keeps its
+ * SQL while its rows live elsewhere: the question is what the tab is.
+ *
+ * Its connection and namespace are where it searches, and its own pickers are what move them —
+ * which is why they are the tab's rather than the view's, the tab strip drawing both.
+ */
+export interface FindTab extends TabBase {
+  kind: 'find'
+  text: string
+  scope: SearchScope
+  mode: SearchMode
+  caseInsensitive: boolean
+}
+
+export type Tab = QueryTab | TableTab | DesignTab | ObjectsTab | ConsoleTab | CompareTab | FindTab
 export type NewTab =
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
@@ -79,6 +98,7 @@ export type NewTab =
   | Omit<ObjectsTab, 'id'>
   | Omit<ConsoleTab, 'id'>
   | Omit<CompareTab, 'id'>
+  | Omit<FindTab, 'id'>
 
 /** What names a table wherever one is opened: which connection, which namespace, which table. */
 export interface TableTarget {
@@ -98,6 +118,7 @@ export function targetLabel(target: TableTarget): string {
 export const COMPARE_ARROW = '⇄'
 
 type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'rowLimit'>>
+type FindEdit = Partial<Pick<FindTab, 'text' | 'scope' | 'mode' | 'caseInsensitive'>>
 
 interface TabsState {
   tabs: Tab[]
@@ -118,11 +139,19 @@ interface TabsState {
   openCompare: (left: TableTarget, right: TableTarget, mode: CompareMode) => string
   /** Switches an open comparison between the two halves — its toolbar's own control. */
   setCompareMode: (id: string, mode: CompareMode) => void
+  /** Every table of a namespace searched for one piece of text. */
+  openFind: (profileId: string, namespace: Namespace) => string
   close: (id: string) => void
   activate: (id: string) => void
   /** Points a tab at another namespace, which is what the picker on its own strip does. */
   retarget: (id: string, namespace: Namespace) => void
+  /**
+   * Points a tab at another *connection* as well, which only Find in Schema's own pickers do: it
+   * searches wherever the reader points it, and a namespace of one server names nothing on another.
+   */
+  repoint: (id: string, profileId: string, namespace: Namespace) => void
   editQuery: (id: string, edit: QueryEdit) => void
+  editFind: (id: string, edit: FindEdit) => void
   designed: (id: string, table: string) => void
 }
 
@@ -218,10 +247,25 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       tabs: s.tabs.map((tab) => (tab.id === id && tab.kind === 'compare' ? { ...tab, mode } : tab)),
     })),
 
+  // One search tab per namespace, like every other tab that names one: asking for it again on the
+  // same namespace reveals the search already open there, text and hits included.
+  openFind: (profileId, namespace) =>
+    get().open({
+      kind: 'find',
+      title: 'Find in Schema',
+      profileId,
+      namespace,
+      text: '',
+      scope: 'data',
+      mode: 'contains',
+      caseInsensitive: false,
+    }),
+
   close: (id) => {
     useQueriesStore.getState().discard(id)
     useTableViewsStore.getState().discard(id)
     useConsoleStore.getState().discard(id)
+    useSearchesStore.getState().discard(id)
 
     set((s) => {
       const index = s.tabs.findIndex((t) => t.id === id)
@@ -240,6 +284,11 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   retarget: (id, namespace) =>
     set((s) => ({ tabs: s.tabs.map((tab) => (tab.id === id ? { ...tab, namespace } : tab)) })),
 
+  repoint: (id, profileId, namespace) =>
+    set((s) => ({
+      tabs: s.tabs.map((tab) => (tab.id === id ? { ...tab, profileId, namespace } : tab)),
+    })),
+
   // A design tab whose Save has just created its table is no longer designing a new one: it now
   // designs that table, and pressing Save again alters it rather than creating it twice.
   designed: (id, table) =>
@@ -254,5 +303,10 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   editQuery: (id, edit) =>
     set((s) => ({
       tabs: s.tabs.map((tab) => (tab.id === id && tab.kind === 'query' ? { ...tab, ...edit } : tab)),
+    })),
+
+  editFind: (id, edit) =>
+    set((s) => ({
+      tabs: s.tabs.map((tab) => (tab.id === id && tab.kind === 'find' ? { ...tab, ...edit } : tab)),
     })),
 }))

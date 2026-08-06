@@ -59,16 +59,30 @@ type Dialect struct {
 	// TextType is what this engine calls text in a CAST, which is how a column of any type is
 	// compared as text — see Where's `contains`.
 	TextType string
+	// RegexIsFunction says a regular-expression match is a function whose third argument is the
+	// case sensitivity — MySQL's `REGEXP_LIKE`. PostgreSQL has an operator per answer, `~` and `~*`.
+	RegexIsFunction bool
+	// PatternIgnoresCase says this engine's own collation already makes LIKE blind to case, so a
+	// match the reader asked to be case-*sensitive* is the one that has to say so — see MatchAny.
+	// MySQL's usual collations do; PostgreSQL's LIKE is sensitive as it stands.
+	PatternIgnoresCase bool
+	// WordBoundary is this engine's regular-expression token for the edge of a word, and is the one
+	// piece of that syntax the two spell differently: `\b` on MySQL's ICU, and `\y` on PostgreSQL,
+	// where `\b` is a backspace.
+	WordBoundary string
 }
 
 var (
 	MySQL = Dialect{
-		IdentQuote:        '`',
-		HashComments:      true,
-		BackslashEscapes:  true,
-		RestatesColumn:    true,
-		MethodBeforeTable: true,
-		TextType:          "CHAR",
+		IdentQuote:         '`',
+		HashComments:       true,
+		BackslashEscapes:   true,
+		RestatesColumn:     true,
+		MethodBeforeTable:  true,
+		TextType:           "CHAR",
+		RegexIsFunction:    true,
+		PatternIgnoresCase: true,
+		WordBoundary:       `\b`,
 	}
 	Postgres = Dialect{
 		IdentQuote:             '"',
@@ -80,6 +94,7 @@ var (
 		IndexIsObject:          true,
 		ForeignKeyIsConstraint: true,
 		TextType:               "TEXT",
+		WordBoundary:           `\y`,
 	}
 	// Shell is the lexical half of a document store's own language, and is a Dialect for one
 	// reason: so `Lex` reads it rather than a second scanner being written. `//` opens a comment,

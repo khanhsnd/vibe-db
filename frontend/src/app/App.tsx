@@ -51,6 +51,7 @@ export function App() {
   const openTables = useTabsStore((s) => s.openTables)
   const openConsole = useTabsStore((s) => s.openConsole)
   const openCompare = useTabsStore((s) => s.openCompare)
+  const openFind = useTabsStore((s) => s.openFind)
   const activeTab = useTabsStore((s) => s.tabs.find((t) => t.id === s.activeId) ?? null)
 
   const profiles = useConnectionsStore((s) => s.profiles)
@@ -227,6 +228,7 @@ export function App() {
       onImport: setImportInto,
       onExport: setExportFrom,
       onCompare: openCompare,
+      onFind: openFind,
     },
     pickedTables,
   )

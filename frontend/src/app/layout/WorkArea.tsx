@@ -5,6 +5,7 @@ import { ConsoleView } from '@/features/console/ConsoleView'
 import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
 import { ObjectListView } from '@/features/objects/ObjectListView'
 import { TableDesigner } from '@/features/schema/TableDesigner'
+import { FindInSchemaView } from '@/features/search/FindInSchemaView'
 import { TableDataView } from '@/features/table/TableDataView'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
@@ -83,6 +84,11 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
           />
         ) : activeTab.kind === 'compare' ? (
           <CompareView key={activeTab.id} tab={activeTab} />
+        ) : activeTab.kind === 'find' ? (
+          // Its own pickers say which connection it searches, so it is drawn whether or not the one
+          // it opened on is still open: the reader points it at another rather than being sent back
+          // to the tree.
+          <FindInSchemaView key={activeTab.id} tab={activeTab} />
         ) : activeTab.kind === 'design' ? (
           sessionId === null ? (
             <Empty title="Not connected" hint="Reconnect this connection to read the table." />

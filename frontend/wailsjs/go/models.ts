@@ -1440,6 +1440,95 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class SearchHit {
+	    table: string;
+	    matches: number;
+	    statement: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchHit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = source["table"];
+	        this.matches = source["matches"];
+	        this.statement = source["statement"];
+	    }
+	}
+	export class SearchInput {
+	    database: string;
+	    schema: string;
+	    runId: string;
+	    text: string;
+	    scope: string;
+	    mode: string;
+	    caseInsensitive: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.runId = source["runId"];
+	        this.text = source["text"];
+	        this.scope = source["scope"];
+	        this.mode = source["mode"];
+	        this.caseInsensitive = source["caseInsensitive"];
+	    }
+	}
+	export class SearchSkip {
+	    table: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchSkip(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = source["table"];
+	        this.error = source["error"];
+	    }
+	}
+	export class SearchResult {
+	    hits: SearchHit[];
+	    searched: number;
+	    skipped: SearchSkip[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hits = this.convertValues(source["hits"], SearchHit);
+	        this.searched = source["searched"];
+	        this.skipped = this.convertValues(source["skipped"], SearchSkip);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class Session {
 	    id: string;
 	    profileId: string;

@@ -291,6 +291,18 @@ func (m *Manager) ColumnValues(
 	return s.driverSession.ColumnValues(ctx, pick)
 }
 
+func (m *Manager) MatchingRows(
+	ctx context.Context,
+	id string,
+	search driver.RowSearch,
+) (driver.RowMatches, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return driver.RowMatches{}, err
+	}
+	return s.driverSession.MatchingRows(ctx, search)
+}
+
 func (m *Manager) Query(
 	ctx context.Context,
 	id string,

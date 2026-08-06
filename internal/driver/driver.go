@@ -153,6 +153,30 @@ type TablePage struct {
 	Stream *RowStream
 }
 
+// RowSearch is one table of a Find in Schema's *data* half: how many of its rows hold the reader's
+// text in any of their columns. One table at a time, because that is what the answer is reported
+// per — a search over a namespace is this asked once per table, and a table nobody may read is one
+// row missing from the answer rather than the whole search failing.
+//
+// The other half of a search asks nothing of a driver: a field, an index and a constraint are names
+// the catalogue reads already answer with, and matching one against the text is domain.TextMatch's.
+type RowSearch struct {
+	Namespace
+	Table string
+	Match domain.TextMatch
+}
+
+// RowMatches is what one table's data search found: how many of its rows hold the text, and the read
+// that would return them.
+//
+// The two are spelled from **one condition**, which is the whole reason the statement is here rather
+// than anywhere else: the number the reader is shown and the rows they open cannot be about different
+// rows. It is the same arrangement TableRows.Statement has, and the same one a migration's preview has.
+type RowMatches struct {
+	Count     int64
+	Statement string
+}
+
 // ColumnPick names the column a filter's value is picked from, rather than typed into. Limit caps
 // the answer, because a column of a million rows is not a list anybody scrolls.
 type ColumnPick struct {
@@ -626,6 +650,11 @@ type Session interface {
 	// value rather than typing it. Deduplicated, ordered and capped, and without NULL — that is
 	// what the IS NULL operator is for.
 	ColumnValues(ctx context.Context, pick ColumnPick) ([]string, error)
+	// MatchingRows counts the rows of one table that hold the reader's text in any column, and spells
+	// the read that would return them. It is the driver's for the reason every other read is: which
+	// rows hold a piece of text is a *statement*, and every column of any type is read as text to
+	// answer it — a search for `36` finds the number as readily as the name.
+	MatchingRows(ctx context.Context, search RowSearch) (RowMatches, error)
 	UpdateCell(ctx context.Context, edit CellEdit) error
 	InsertRow(ctx context.Context, insert RowInsert) error
 	DeleteRow(ctx context.Context, removal RowDelete) error

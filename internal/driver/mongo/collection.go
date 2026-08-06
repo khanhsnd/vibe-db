@@ -135,6 +135,35 @@ func (s *session) ColumnValues(ctx context.Context, pick driver.ColumnPick) ([]s
 	return sqlkit.FirstColumn(read.Rows), nil
 }
 
+// MatchingRows counts the documents of one collection that hold the reader's text — the data half
+// of a Find in Schema. **The fields it looks in are the sampled ones**, which is the only field
+// list a collection has: a field appearing in none of the first `sampleDocs` documents is not
+// searched, exactly as it is not drawn — see fields and docs/grid.md.
+func (s *session) MatchingRows(
+	ctx context.Context,
+	search driver.RowSearch,
+) (driver.RowMatches, error) {
+	known, err := s.fields(ctx, search.Namespace, search.Table)
+	if err != nil {
+		return driver.RowMatches{}, err
+	}
+
+	filter, err := matchDoc(search.Match, known)
+	if err != nil {
+		return driver.RowMatches{}, err
+	}
+
+	total, err := s.collection(search.Namespace, search.Table).CountDocuments(ctx, filter)
+	if err != nil {
+		return driver.RowMatches{}, translateError(err)
+	}
+
+	// The command that would return what was counted, spelled from the **same** document that
+	// counted it — which is what `findText` does for a page, and for the same reason.
+	statement := "db." + key(search.Table) + ".find(" + documentText(filter) + ")"
+	return driver.RowMatches{Count: total, Statement: statement}, nil
+}
+
 // UpdateCell writes one field of one document, addressed by `_id`. A cell the reader emptied is set
 // to null rather than removed: null is what the grid drew and what it will draw again, and a field
 // quietly unset would leave the collection's own field list one field shorter than the reader left it.

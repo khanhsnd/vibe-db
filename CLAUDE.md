@@ -69,6 +69,13 @@ engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL 
     what differs between the engines is a **flag** on `Dialect`, never a second spelling. An Apply
     **stops at the first failure** and there is no transaction around it — the preview is what
     protects the reader, which is why it has to be exact.
+14. **What a search matches is a `domain` rule; how many rows hold it is the driver's.**
+    `domain.TextMatch` is the one rule — a pattern, an expression and a compiled matcher spelled from
+    the same text — so `Contains` means the same thing of a row as of a column name. The data half is
+    `driver.Session.MatchingRows`, and what differs between the SQL engines is a **flag** on
+    `sqlkit.Dialect` (`RegexIsFunction`, `PatternIgnoresCase`, `WordBoundary`), never a second
+    spelling. The structure half asks **no server anything**: those names are what a catalogue read
+    already answered with.
 
 ## Where to read before changing something
 
@@ -81,6 +88,7 @@ engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL 
 | Change UI behaviour, or find out what exists | [docs/features.md](docs/features.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file) |
 | Touch a comparison of two tables | [docs/architecture.md](docs/architecture.md#comparing-two-tables) |
+| Touch a search across a schema | [docs/architecture.md](docs/architecture.md#looking-for-text-across-a-schema) |
 | Touch any table, grid, cell or selection | [docs/grid.md](docs/grid.md) |
 | Touch the SQL editor or completion | [docs/editor.md](docs/editor.md) |
 | Write a component, a store, or a style | [docs/frontend.md](docs/frontend.md) |

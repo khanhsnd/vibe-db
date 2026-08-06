@@ -262,3 +262,81 @@ func TestSortDocDropsAFieldTheCollectionDoesNotHave(t *testing.T) {
 		t.Errorf("sortDoc() = %s, want the unknown field dropped", got)
 	}
 }
+
+// A Find in Schema's data half looks in every field the sample turned up, and looks with the one
+// shape a document store has for it: a regular expression. Every mode arrives already spelled as
+// one by domain.TextMatch, so what is checked here is the *document* — which fields, and which flags.
+func TestMatchDocLooksInEveryKnownField(t *testing.T) {
+	document, err := matchDoc(domain.TextMatch{Text: "an", Mode: domain.MatchContains}, sampled[:3])
+	if err != nil {
+		t.Fatalf("matchDoc() error = %v", err)
+	}
+
+	want := `{ $or: [{ _id: { $regex: "an", $options: "s" } }, ` +
+		`{ age: { $regex: "an", $options: "s" } }, ` +
+		`{ name: { $regex: "an", $options: "s" } }] }`
+	if got := documentText(document); got != want {
+		t.Errorf("matchDoc() = %s, want %s", got, want)
+	}
+}
+
+func TestMatchDocCarriesTheModeAndTheCase(t *testing.T) {
+	tests := []struct {
+		name  string
+		match domain.TextMatch
+		want  string
+	}{
+		{
+			"a pattern read as an expression",
+			domain.TextMatch{Text: "a.b%", Mode: domain.MatchContains},
+			`{ $or: [{ name: { $regex: "a\\.b.*", $options: "s" } }] }`,
+		},
+		{
+			"a prefix is anchored",
+			domain.TextMatch{Text: "kh", Mode: domain.MatchPrefix},
+			`{ $or: [{ name: { $regex: "^kh", $options: "s" } }] }`,
+		},
+		{
+			"a whole word is bounded the server's own way",
+			domain.TextMatch{Text: "kh", Mode: domain.MatchWord},
+			`{ $or: [{ name: { $regex: "\\bkh\\b", $options: "s" } }] }`,
+		},
+		{
+			"the box the reader ticked is a flag",
+			domain.TextMatch{Text: "kh", Mode: domain.MatchContains, CaseInsensitive: true},
+			`{ $or: [{ name: { $regex: "kh", $options: "is" } }] }`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			document, err := matchDoc(tt.match, []driver.Column{{Name: "name"}})
+			if err != nil {
+				t.Fatalf("matchDoc() error = %v", err)
+			}
+			if got := documentText(document); got != tt.want {
+				t.Errorf("matchDoc() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+// A collection whose sample turned up nothing has nothing to look in, and the filter says so: an
+// empty one would count every document in it as a match.
+func TestMatchDocWithoutFieldsMatchesNothing(t *testing.T) {
+	document, err := matchDoc(domain.TextMatch{Text: "an", Mode: domain.MatchContains}, nil)
+	if err != nil {
+		t.Fatalf("matchDoc() error = %v", err)
+	}
+	if got := documentText(document); got != `{ $expr: false }` {
+		t.Errorf("matchDoc() = %s, want a filter nothing satisfies", got)
+	}
+}
+
+func TestMatchDocRefusesWhatItCannotSpell(t *testing.T) {
+	if _, err := matchDoc(domain.TextMatch{Mode: domain.MatchContains}, sampled); err == nil {
+		t.Error("matchDoc() error = nil, want a rejection for nothing to look for")
+	} else if !errors.Is(err, domain.ErrInvalidProfile) {
+		t.Errorf("matchDoc() error = %v, want a validation error", err)
+	}
+}

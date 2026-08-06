@@ -82,6 +82,29 @@ func (s *session) ColumnValues(ctx context.Context, pick driver.ColumnPick) ([]s
 	return sqlkit.FirstColumn(result.Rows), nil
 }
 
+func (s *session) MatchingRows(
+	ctx context.Context,
+	search driver.RowSearch,
+) (driver.RowMatches, error) {
+	columns, err := s.columns(ctx, search.Namespace, search.Table)
+	if err != nil {
+		return driver.RowMatches{}, err
+	}
+
+	where, err := dialect.MatchAny(search.Match, columns)
+	if err != nil {
+		return driver.RowMatches{}, err
+	}
+
+	total, err := s.countRows(ctx, search.Namespace, search.Table, where)
+	if err != nil {
+		return driver.RowMatches{}, err
+	}
+
+	table := dialect.Qualify(search.Schema, search.Table)
+	return driver.RowMatches{Count: total, Statement: dialect.SelectMatching(table, where)}, nil
+}
+
 func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 	columns, err := s.columns(ctx, edit.Namespace, edit.Table)
 	if err != nil {

@@ -110,6 +110,10 @@ export function ExportRows(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ExportRows'](arg1, arg2);
 }
 
+export function FindInSchema(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['FindInSchema'](arg1, arg2);
+}
+
 export function InsertRow(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['InsertRow'](arg1, arg2);
 }
@@ -212,6 +216,10 @@ export function SaveProfile(arg1) {
 
 export function SetPrimaryKey(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['SetPrimaryKey'](arg1, arg2, arg3, arg4);
+}
+
+export function StopSearch(arg1) {
+  return window['go']['app']['ConnectionAPI']['StopSearch'](arg1);
 }
 
 export function StopTableRows(arg1) {

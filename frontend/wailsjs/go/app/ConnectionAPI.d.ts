@@ -56,6 +56,8 @@ export function EmptyTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<v
 
 export function ExportRows(arg1:string,arg2:app.ExportInput):Promise<string>;
 
+export function FindInSchema(arg1:string,arg2:app.SearchInput):Promise<app.SearchResult>;
+
 export function InsertRow(arg1:string,arg2:app.RowInsertInput):Promise<void>;
 
 export function ListDatabases(arg1:string):Promise<Array<string>>;
@@ -107,6 +109,8 @@ export function RunImport(arg1:string,arg2:app.ImportInput):Promise<app.ImportRe
 export function SaveProfile(arg1:app.ProfileInput):Promise<app.Profile>;
 
 export function SetPrimaryKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<string>):Promise<void>;
+
+export function StopSearch(arg1:string):Promise<void>;
 
 export function StopTableRows(arg1:string):Promise<void>;
 

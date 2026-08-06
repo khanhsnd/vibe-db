@@ -245,6 +245,39 @@ that failed leaves every step after it meaningless. And **there is no transactio
 neither engine can put one around DDL in a way that holds for all of it, MySQL committing implicitly
 at every statement. The preview is what protects the reader, which is why it exists.
 
+## Looking for text across a schema
+
+A Find in Schema is **two questions**, and the split between them is the dependency rule in one
+feature.
+
+**What the reader's text matches is a `domain` rule.** `domain.TextMatch` is the text, the mode and
+the case box, and it spells that one rule three ways: a **LIKE pattern** for the two modes a pattern
+can say, a **regular expression** for everything — including those two, translated, for an engine
+that has no LIKE — and a **compiled matcher** for the one place the matching happens here rather than
+on a server. Nothing about it is an engine's, which is what stops `Contains` meaning one thing of a
+row and another of a column name.
+
+**How many rows hold it is the driver's — and so is the read the reader opens.**
+`driver.Session.MatchingRows` answers with both (`driver.RowMatches`): the count, and the `SELECT` that
+would return exactly the rows counted, spelled from the **same** clause. That is the arrangement
+`TableRows.Statement` and `PreviewTableChanges` already have, and it is why a double-click on a hit can
+open a query tab without anything outside a driver having spelled a statement. It counts one table's,
+because
+only the engine knows how to read a column of any type as text and how to quote what it is compared
+against: `sqlkit.Dialect.MatchAny` spells the whole clause for both SQL engines, and the three ways
+they differ are three flags — `RegexIsFunction` (MySQL's `REGEXP_LIKE`, whose third argument is the
+sensitivity, against PostgreSQL's `~` and `~*`), `PatternIgnoresCase` (MySQL's collations ignore case,
+so a *sensitive* pattern is compared as bytes) and `WordBoundary` (`\b` against `\y`, where `\b` is a
+backspace). MongoDB writes its own filter, a `$regex` per sampled field, because a document store has
+no LIKE and no quoting at all.
+
+**Which names hold it asks no server anything.** A field, an index and a constraint are names
+`TableStructure` already answers with, so `internal/app/search.go` reads the shape and asks the
+matcher — one table at a time, either way, so a table nobody may read is one row missing from the
+answer rather than the end of the search. The whole search is one bound method with one deadline and a
+`StopSearch`, for the reason a read of every row has one: how long a schema takes is the schema's
+business and not this side's.
+
 ## The document store
 
 `internal/driver/mongo` is the first adapter that is not a `database/sql` one. Three things about it

@@ -312,6 +312,46 @@ func binaryData(value string) (bson.Binary, error) {
 	return bson.Binary{Subtype: 0, Data: data}, nil
 }
 
+// matchDoc is a Find in Schema's data half as the document the server takes: any of the fields the
+// collection is known to hold matching the reader's text.
+//
+// **A regular expression is the only shape it has.** A document store has no LIKE, so every mode
+// arrives here already spelled as an expression by the one rule the SQL engines use too
+// (domain.TextMatch.Expression) — and what it can match is what `$regex` matches: a field holding a
+// **string**. A number is not text to a document store, and nothing here pretends otherwise by
+// converting one.
+func matchDoc(match domain.TextMatch, fields []driver.Column) (bson.D, error) {
+	if err := match.Validate(); err != nil {
+		return nil, err
+	}
+
+	// `s` so a dot reaches a newline, and `i` for the box the reader ticked — the two flags the
+	// same rule needs of every engine.
+	options := "s"
+	if match.CaseInsensitive {
+		options = "is"
+	}
+
+	any := make(bson.A, 0, len(fields))
+	for _, one := range fields {
+		any = append(any, bson.D{{Key: one.Name, Value: bson.D{
+			{Key: "$regex", Value: match.Expression(regexBoundary)},
+			{Key: "$options", Value: options},
+		}}})
+	}
+
+	// A collection whose sample turned up no fields at all holds nothing to look in, and a filter
+	// no document satisfies says so — the same answer a row with nothing to find it by gets.
+	if len(any) == 0 {
+		return bson.D{{Key: "$expr", Value: false}}, nil
+	}
+	return bson.D{{Key: "$or", Value: any}}, nil
+}
+
+// regexBoundary is the word edge in the server's own flavour of expression, which is the same one
+// MySQL's ICU reads and not PostgreSQL's.
+const regexBoundary = `\b`
+
 func field(fields []driver.Column, name string) (driver.Column, bool) {
 	for _, one := range fields {
 		if one.Name == name {

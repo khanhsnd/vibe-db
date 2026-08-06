@@ -26,6 +26,7 @@ import {
   RotateCw,
   Save,
   Settings2,
+  Search,
   SlidersHorizontal,
   SquareTerminal,
   Table2,
@@ -64,6 +65,9 @@ export const ICON = {
   open: <Table2 size={SIZE} />,
   design: <TableProperties size={SIZE} />,
   compare: <GitCompareArrows size={SIZE} />,
+  // Looking for text across a whole namespace, which only ever reads — the glyph a search wears
+  // everywhere, and the same one its tab wears in the strip.
+  find: <Search size={SIZE} />,
   // Applying a comparison is a *merge* and wears the glyph that means one everywhere.
   migrate: <GitMerge size={SIZE} />,
   add: <Plus size={SIZE} />,

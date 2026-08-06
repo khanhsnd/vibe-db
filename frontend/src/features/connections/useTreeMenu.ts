@@ -39,6 +39,8 @@ interface TreeMenuActions {
   onExport: (target: TableTarget) => void
   /** Opens the pair the reader picked side by side, in whichever half they asked for. */
   onCompare: (left: TableTarget, right: TableTarget, mode: CompareMode) => void
+  /** Searches every table of a namespace for one piece of text. */
+  onFind: (profileId: string, namespace: Namespace) => void
 }
 
 /**
@@ -124,6 +126,7 @@ export function useTreeMenu(
     onImport,
     onExport,
     onCompare,
+    onFind,
   } = actions
 
   return useCallback(
@@ -220,6 +223,15 @@ export function useTreeMenu(
         },
       ]
 
+      // Offered wherever a namespace's tables are — the level that owns them, and the folder that
+      // lists them — because that is the whole subject of a search: every table of one namespace.
+      // It only ever reads, so nothing is confirmed and nothing is asked twice.
+      const findInSchema: MenuItem = {
+        label: 'Find in Schema…',
+        icon: ICON.find,
+        onSelect: () => onFind(node.profileId, ns),
+      }
+
       // One read fills all three folders, so Refresh means the same thing wherever it is asked
       // for under a namespace.
       const refreshObjectList: MenuItem = {
@@ -233,7 +245,7 @@ export function useTreeMenu(
         case 'database':
         case 'schema': {
           const own = ownsObjects(node)
-            ? [newTable, dumpItems(''), ...wizards(''), refreshObjectList]
+            ? [newTable, findInSchema, dumpItems(''), ...wizards(''), refreshObjectList]
             : [
                 {
                   label: 'Refresh',
@@ -271,7 +283,7 @@ export function useTreeMenu(
         }
 
         case 'tables':
-          return [newTable, dumpItems(''), ...wizards(''), refreshObjectList]
+          return [newTable, findInSchema, dumpItems(''), ...wizards(''), refreshObjectList]
 
         case 'views':
         case 'routines':
@@ -373,6 +385,7 @@ export function useTreeMenu(
       onImport,
       onExport,
       onCompare,
+      onFind,
       picked,
     ],
   )
