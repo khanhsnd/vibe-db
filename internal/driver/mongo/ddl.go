@@ -367,6 +367,47 @@ func (s *session) InsertStatements(
 	return statements
 }
 
+// CreateStatements spells a collection as the commands that would make it again, which is the
+// structure half of a dump.
+//
+// **A collection declares nothing about its documents** — see the note at the top of this file — so
+// its structure is the collection itself and the indexes the server really keeps, and *nothing about
+// its fields*: those arrive with the documents, which is InsertStatements' half. A dump of structure
+// alone therefore writes a collection with no fields in it, and that is not a loss — it is what a
+// new collection on this engine is.
+//
+// `_id_` is left out. The server builds that index whether or not anybody asked for one, so a
+// command to build it again is a command that does nothing. Every other index travels as its own
+// keys document, so a descending, compound or special index is written as what it is rather than as
+// what a read of it could describe.
+func (s *session) CreateStatements(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) ([]string, error) {
+	found, err := s.collection(ns, table).Indexes().ListSpecifications(ctx)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	statements := []string{"db.createCollection(" + valueText(table) + ")"}
+	for _, one := range found {
+		if one.Name == idIndex {
+			continue
+		}
+
+		opts := bson.D{{Key: "name", Value: one.Name}}
+		if one.Unique != nil && *one.Unique {
+			opts = append(opts, bson.E{Key: "unique", Value: true})
+		}
+
+		statements = append(statements, "db."+key(table)+".createIndex("+
+			valueText(one.KeysDocument)+", "+valueText(opts)+")")
+	}
+
+	return statements, nil
+}
+
 // DropView drops the view. A MongoDB view is a collection whose contents are an aggregation over
 // another, so it goes the same way an ordinary collection does — there is no second command for it.
 func (s *session) DropView(ctx context.Context, ns driver.Namespace, view string) error {

@@ -508,6 +508,15 @@ type Schema interface {
 	// SQL export is. It is the driver's for the reason every other statement is: only it knows
 	// how this engine quotes a name and a string.
 	InsertStatements(ns Namespace, table string, columns []string, rows [][]*string) []string
+	// CreateStatements spells an object as the statements that would make it again: the table and
+	// its key, then its indexes, then its constraints. It is the structure half of a dump and
+	// InsertStatements is the data half, and it is the driver's for the same reason — only the
+	// engine knows how it declares one.
+	//
+	// It is a *read* rather than a render because an engine that can answer for itself is asked
+	// rather than described: a declaration put back together out of a catalogue is only ever as
+	// complete as the catalogue's columns.
+	CreateStatements(ctx context.Context, ns Namespace, table string) ([]string, error)
 	DropView(ctx context.Context, ns Namespace, view string) error
 	// DropRoutine takes the whole routine rather than its name, because on PostgreSQL the
 	// name alone does not identify one: two functions may share it and differ in arguments.

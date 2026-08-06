@@ -16,6 +16,7 @@ import {
   type Session,
   type TableSchema,
 } from '@/bridge/connections'
+import { objectDump, type DumpRequest } from '@/bridge/export'
 import { schema, type TableStructure } from '@/bridge/schema'
 import type { ConnectionStatus, NodeKind, TreeNode } from '@/features/connections/tree'
 
@@ -79,6 +80,13 @@ interface ConnectionsState {
    * any namespace: creating or dropping a database.
    */
   changeDatabases: (profileId: string, change: ChangeSchema) => Promise<void>
+  /**
+   * Writes a dump of a table, or of every table a namespace holds, to a file the reader picks in
+   * the host's own save dialog. It changes nothing on the server, so there is no cache to
+   * invalidate — and no dialog waiting on the answer, which is why a failure is parked in `error`
+   * the way a read's is rather than thrown the way `changeSchema` throws one.
+   */
+  dump: (profileId: string, request: DumpRequest) => Promise<void>
   toggleNode: (nodeId: string) => void
   clearError: () => void
 }
@@ -354,6 +362,20 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
 
     await change(session.id)
     await get().refreshDatabases(profileId)
+  },
+
+  dump: async (profileId, request) => {
+    const session = get().sessions[profileId]
+    if (!session) return
+
+    try {
+      await objectDump.run(session.id, request)
+      // The bar holds one failure, so it holds the last outcome: a dump that worked has to take a
+      // previous one down or it would read as this dump's.
+      set({ error: null })
+    } catch (thrown) {
+      set({ error: toAppError(thrown) })
+    }
   },
 
   toggleNode: (nodeId) =>

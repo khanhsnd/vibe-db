@@ -39,3 +39,30 @@ export const rowExport = {
       } as unknown as app.ExportInput),
     ),
 }
+
+/**
+ * What to dump and how much of it. It is not an export of a grid: nothing travels from the frontend
+ * but the *names*, because a dump is read out of the server as it is written and is far larger than
+ * anything a grid holds. Which file it lands in is asked for on the Go side, in the host's own save
+ * dialog, and what kind of file it is belongs to the engine — SQL on a table store, the shell's own
+ * script on a document store.
+ */
+export interface DumpRequest {
+  namespace: Namespace
+  /** The one table to dump, or `''` for every table the namespace holds. */
+  table: string
+  /** Whether the rows are written after the shape, which is the two items the menu offers. */
+  withData: boolean
+}
+
+export const objectDump = {
+  /** Answers with the path written, or an empty string for a dialog the reader dismissed. */
+  run: (sessionId: string, request: DumpRequest): Promise<string> =>
+    call(() =>
+      api.DumpObjects(sessionId, {
+        ...request.namespace,
+        table: request.table,
+        withData: request.withData,
+      } as unknown as app.DumpInput),
+    ),
+}

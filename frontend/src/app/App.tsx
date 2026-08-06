@@ -261,6 +261,8 @@ export function App() {
         connections: open,
         rowCount: null,
         elapsedMs: null,
+        // The failure is already standing where the server would be, so it is not said twice.
+        error: null,
       }
     }
 
@@ -277,6 +279,10 @@ export function App() {
       connections: open,
       rowCount: null,
       elapsedMs: null,
+      // A live connection has its host to report, so a failure nothing was waiting on gets a fact of
+      // its own instead — otherwise the one action asked for from a menu rather than from a dialog,
+      // a dump, could fail with nowhere to say so.
+      error: error?.message ?? null,
     }
   }, [activeTab, selected, sessions, profiles, activeNamespace, error])
 

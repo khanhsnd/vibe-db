@@ -136,14 +136,85 @@ func (s *session) primaryKeyName(
 	return name, nil
 }
 
-// CreateIndex puts the access method after the table, which is where PostgreSQL's grammar takes
-// it — MySQL takes it between the name and the table instead.
+// CreateStatements has to *describe* the table, because PostgreSQL cannot be asked: there is no
+// SHOW CREATE TABLE, and `pg_dump` is another program. So the shape the tree already reads is
+// spelled back out through the same dialect every other statement here goes through — the columns
+// and the key as one CREATE TABLE, then an index each, then a constraint each.
+//
+// The index behind the primary key is left out: it arrives with the table's own PRIMARY KEY clause,
+// and declaring it a second time is a statement the server refuses. What a description cannot carry
+// is an index over an *expression*, which reports the expression where a column name would be — the
+// honest cost of an engine that will not answer for itself.
+func (s *session) CreateStatements(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) ([]string, error) {
+	structure, err := s.TableStructure(ctx, ns, table)
+	if err != nil {
+		return nil, err
+	}
+
+	spec := sqlkit.TableSpecOf(ns, table, declared(structure.Columns))
+	statements := []string{dialect.CreateTable(spec)}
+	for _, index := range structure.Indexes {
+		if index.Primary {
+			continue
+		}
+		statements = append(statements, indexStatement(ns, table, sqlkit.IndexSpecOf(index)))
+	}
+	for _, key := range structure.ForeignKeys {
+		statements = append(statements,
+			dialect.AddForeignKey(ns, table, sqlkit.ForeignKeySpecOf(key)))
+	}
+
+	return statements, nil
+}
+
 func (s *session) CreateIndex(
 	ctx context.Context,
 	ns driver.Namespace,
 	table string,
 	spec driver.IndexSpec,
 ) error {
+	return s.run(ctx, ns.Database, indexStatement(ns, table, spec))
+}
+
+// sequenceDefault is how a column that reads from a sequence spells its default.
+const sequenceDefault = "nextval("
+
+// serialTypes is what such a column is declared as instead of its own type and that default.
+var serialTypes = map[string]string{
+	"smallint": "smallserial",
+	"integer":  "serial",
+	"bigint":   "bigserial",
+}
+
+// declared is the columns as a dump has to *declare* them, which is not in every case how the
+// catalogue reports them.
+//
+// A `serial` is not a type PostgreSQL keeps. It is an `integer`, a sequence, and a default reading
+// the next value from it — three objects — so a read reports the first and the third and says nothing
+// about the second. Written back out as read, the column would carry `DEFAULT nextval('t_id_seq')`
+// naming a sequence the dump never created, and the whole statement would fail. Declaring the
+// shorthand instead makes the sequence, which is the whole of what the column needs.
+func declared(columns []driver.Column) []driver.Column {
+	out := make([]driver.Column, 0, len(columns))
+	for _, column := range columns {
+		shorthand, ok := serialTypes[column.FullType]
+		if ok && column.Default != nil && strings.HasPrefix(*column.Default, sequenceDefault) {
+			column.FullType = shorthand
+			column.Default = nil
+		}
+		out = append(out, column)
+	}
+	return out
+}
+
+// indexStatement puts the access method after the table, which is where PostgreSQL's grammar takes
+// it — MySQL takes it between the name and the table instead. It is text rather than a run so a
+// dump writes the index the designer would have built rather than a second spelling of it.
+func indexStatement(ns driver.Namespace, table string, spec driver.IndexSpec) string {
 	statement := "CREATE "
 	if spec.Unique {
 		statement += "UNIQUE "
@@ -154,9 +225,7 @@ func (s *session) CreateIndex(
 		statement += " USING " + method
 	}
 
-	statement += " (" + strings.Join(dialect.QuoteAll(spec.Columns), ", ") + ")"
-
-	return s.run(ctx, ns.Database, statement)
+	return statement + " (" + strings.Join(dialect.QuoteAll(spec.Columns), ", ") + ")"
 }
 
 // DropIndex names the index rather than the table it indexes: in PostgreSQL an index is an

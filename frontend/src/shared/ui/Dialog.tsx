@@ -47,11 +47,18 @@ export function Dialog({
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
         <RadixDialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+        {/*
+          A column, so the *body* is what gives when the window is short: the header and the footer
+          keep their height and everything left over is the body's, which then scrolls inside it.
+          It used to be capped at 60vh of its own inside this 85vh — two caps, of which the smaller
+          always won, so a dialog with a grid in it was squeezed on every screen and the room the
+          shell had been given went unused.
+        */}
         <RadixDialog.Content
           style={{ width }}
-          className="fixed top-1/2 left-1/2 z-50 max-h-[85vh] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-lg border border-line-strong bg-elevated shadow-[var(--shadow-overlay)]"
+          className="fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] max-w-[96vw] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-line-strong bg-elevated shadow-[var(--shadow-overlay)]"
         >
-          <div className="flex items-center gap-3 border-b border-line bg-bar px-4 py-3">
+          <div className="flex shrink-0 items-center gap-3 border-b border-line bg-bar px-4 py-3">
             {icon ? (
               <span
                 className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-md', TONES[tone])}
@@ -75,12 +82,17 @@ export function Dialog({
             </RadixDialog.Close>
           </div>
 
-          <div className={cn('scroll-thin max-h-[60vh] overflow-y-auto', bodyClassName)}>
+          {/*
+            `flex-auto` and not `flex-1`: the body's natural height is its basis, so a short dialog
+            is still only as tall as it needs to be, and `min-h-0` is what lets it shrink below that
+            height — without which it would push the footer off a short window instead of scrolling.
+          */}
+          <div className={cn('scroll-thin min-h-0 flex-auto overflow-y-auto', bodyClassName)}>
             {children}
           </div>
 
           {footer ? (
-            <div className="flex items-center justify-end gap-2 border-t border-line bg-bar px-4 py-2.5">
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line bg-bar px-4 py-2.5">
               {footer}
             </div>
           ) : null}

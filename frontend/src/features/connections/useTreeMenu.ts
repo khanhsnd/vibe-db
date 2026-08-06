@@ -54,6 +54,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
   const setColour = useConnectionsStore((s) => s.setColour)
   const changeSchema = useConnectionsStore((s) => s.changeSchema)
   const changeDatabases = useConnectionsStore((s) => s.changeDatabases)
+  const dump = useConnectionsStore((s) => s.dump)
   const ask = useSchemaStore((s) => s.ask)
   const askAddField = useSchemaStore((s) => s.askAddField)
 
@@ -111,6 +112,27 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
         onSelect: on.create,
       }
 
+      // Dumping is offered wherever a dump has a subject: one table, or every table a namespace
+      // holds — `''`, which is what the Go side reads as all of them. It is the same two-way choice
+      // Duplicate is, so it reads as the same submenu, and what the file is *called* is the
+      // engine's own word for a file of its statements: a document store's are not SQL.
+      //
+      // Nothing is confirmed first, because nothing is changed: the save dialog is the question.
+      const dumpItems = (table: string): MenuItem => ({
+        label: `Dump ${words.scriptFile}`,
+        icon: ICON.dump,
+        items: [
+          {
+            label: 'Structure Only…',
+            onSelect: () => void dump(node.profileId, { namespace: ns, table, withData: false }),
+          },
+          {
+            label: 'Structure and Data…',
+            onSelect: () => void dump(node.profileId, { namespace: ns, table, withData: true }),
+          },
+        ],
+      })
+
       // One read fills all three folders, so Refresh means the same thing wherever it is asked
       // for under a namespace.
       const refreshObjectList: MenuItem = {
@@ -124,7 +146,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
         case 'database':
         case 'schema': {
           const own = ownsObjects(node)
-            ? [newTable, refreshObjectList]
+            ? [newTable, dumpItems(''), refreshObjectList]
             : [
                 {
                   label: 'Refresh',
@@ -162,7 +184,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
         }
 
         case 'tables':
-          return [newTable, refreshObjectList]
+          return [newTable, dumpItems(''), refreshObjectList]
 
         case 'views':
         case 'routines':
@@ -172,6 +194,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
           return tableItems(
             on,
             () => void refreshStructure(node.profileId, ns, node.label),
+            dumpItems(node.label),
             words,
             info.hasTruncate,
           )
@@ -246,6 +269,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       setColour,
       changeSchema,
       changeDatabases,
+      dump,
       ask,
       askAddField,
       onConnect,
@@ -378,6 +402,9 @@ function connectionItems(
 /**
  * The whole of what a table is offered, in the order the tree lists it.
  *
+ * `dump` arrives built rather than being made here, because the same item is offered on a namespace
+ * as well and differs between the two only in what it names — one table, or all of them.
+ *
  * Truncate is left out where it is not a second thing: on a document store every document has to be
  * deleted to empty a collection, so Empty and Truncate would be one command under two names — see
  * `hasTruncate`.
@@ -385,6 +412,7 @@ function connectionItems(
 export function tableItems(
   on: TableActions,
   refresh: () => void,
+  dump: MenuItem,
   words: EngineWords = engineWords(''),
   truncates = true,
 ): MenuItem[] {
@@ -403,6 +431,9 @@ export function tableItems(
         { label: 'Structure and Data…', onSelect: () => on.duplicate(true) },
       ],
     },
+    // Beside Duplicate rather than beside Delete: both copy the table, and the only difference is
+    // whether the copy lands on this server or in a file.
+    dump,
     { label: `Empty ${words.table}`, icon: ICON.empty, separatorBefore: true, onSelect: on.empty },
     ...(truncates
       ? [{ label: `Truncate ${words.table}`, icon: ICON.truncate, onSelect: on.truncate }]

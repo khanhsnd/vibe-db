@@ -118,6 +118,24 @@ export namespace app {
 	        this.extensions = source["extensions"];
 	    }
 	}
+	export class DumpInput {
+	    database: string;
+	    schema: string;
+	    table: string;
+	    withData: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new DumpInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.table = source["table"];
+	        this.withData = source["withData"];
+	    }
+	}
 	export class ExportInput {
 	    database: string;
 	    schema: string;

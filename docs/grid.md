@@ -12,6 +12,13 @@ which are single-column lists of names, not data. `TableDesigner` shows a table'
 keys and its pending changes, and every one of those is a grid — the Fields one editable, through
 `onEditCell` like any other.
 
+**A transcript is not a table, and the rule does not reach it.** The console's log and
+[Execute SQL File](features.md#execute-sql-file)'s both hold one statement and what it came to, and a
+statement is laid out over as many lines as its author wrote it over while an error is a paragraph the
+server wrote. Neither fits a cell: put in one they become the widest column of the set, clipped, and
+the thing the reader opened the surface to read is the thing they cannot see. The test is what the
+*unit* is — a row of fields, or a passage of text — and not whether it could be tabulated.
+
 ## What it looks like
 
 | Part | Rule |

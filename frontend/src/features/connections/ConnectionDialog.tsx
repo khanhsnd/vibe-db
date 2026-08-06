@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, CheckCircle2, Loader2, PlugZap, Save, XCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  FolderOpen,
+  Loader2,
+  PlugZap,
+  Save,
+  XCircle,
+} from 'lucide-react'
 
 import {
   AUTH_METHODS,
@@ -16,6 +25,7 @@ import {
   type ProfileInput,
 } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
+import { files } from '@/bridge/files'
 import { ResultTabs } from '@/features/results/ResultTabs'
 import { Banner } from '@/shared/ui/Banner'
 import { Button } from '@/shared/ui/Button'
@@ -29,6 +39,14 @@ import { EnvironmentDot } from './EnvironmentDot'
 
 /** Tall enough that every tab is the same height, so switching one never moves the footer. */
 const PANE_HEIGHT = 316
+
+/**
+ * What the file picker offers first for a certificate and for a key. Neither is a restriction — All
+ * files sits behind it — and the boxes with no pattern at all are the two whose file is usually
+ * named without an extension: an SSH private key, and `known_hosts`.
+ */
+const CERTIFICATES = '*.pem;*.crt;*.cer;*.der'
+const KEYS = '*.pem;*.key'
 
 type Probe =
   | { state: 'idle' }
@@ -369,6 +387,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                     hint="Blank uses this machine’s own trust store."
                     disabled={!tlsUsesFiles(form.tls.mode)}
                     value={form.tls.rootCert}
+                    pattern={CERTIFICATES}
                     onChange={(value) => updateTLS('rootCert', value)}
                   />
 
@@ -378,12 +397,14 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                       disabled={!tlsUsesFiles(form.tls.mode)}
                       value={form.tls.clientCert}
                       error={fieldError('clientCert')}
+                      pattern={CERTIFICATES}
                       onChange={(value) => updateTLS('clientCert', value)}
                     />
                     <FileField
                       label="Client key"
                       disabled={!tlsUsesFiles(form.tls.mode)}
                       value={form.tls.clientKey}
+                      pattern={KEYS}
                       onChange={(value) => updateTLS('clientKey', value)}
                     />
                   </div>
@@ -547,9 +568,13 @@ function Pane({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * A path on this machine. It is typed rather than picked from a dialog because the reader nearly
- * always has it on the clipboard already — from `gcloud`, from a download, from a colleague — and
- * because it is only ever read here and never sent anywhere.
+ * A path on this machine, picked or typed. **Both**, deliberately: `Browse` is what a reader who has
+ * the file in front of them wants, and the box stays writable because the path is as often already
+ * on the clipboard — out of `gcloud`, out of a download, out of a colleague's message.
+ *
+ * `pattern` is what the picker offers first, and is left empty for a file that usually carries no
+ * extension at all — a private key, a `known_hosts`. Nothing is read here either way: the path is
+ * saved on the profile and the file is opened at connect time.
  */
 function FileField({
   label,
@@ -557,6 +582,7 @@ function FileField({
   value,
   disabled,
   error,
+  pattern,
   onChange,
 }: {
   label: string
@@ -564,20 +590,40 @@ function FileField({
   value: string
   disabled: boolean
   error?: string | undefined
+  pattern?: string
   onChange: (value: string) => void
 }) {
+  // A picker that will not open is not a failure the reader can act on — there is nothing wrong with
+  // the connection they are filling in — so it leaves the box as it was, and they type the path.
+  const browse = () => {
+    void files
+      .choose(label, pattern)
+      .then((path) => path !== '' && onChange(path))
+      .catch(() => {})
+  }
+
   return (
     <Field label={label} hint={hint} error={error}>
       {(id, invalid) => (
-        <TextInput
-          id={id}
-          invalid={invalid}
-          disabled={disabled}
-          value={value}
-          placeholder={disabled ? '' : 'C:\\certs\\ca.pem'}
-          className="font-mono text-xs"
-          onChange={(e) => onChange(e.target.value)}
-        />
+        <div className="flex items-center gap-2">
+          <TextInput
+            id={id}
+            invalid={invalid}
+            disabled={disabled}
+            value={value}
+            placeholder={disabled ? '' : 'C:\\certs\\ca.pem'}
+            className="font-mono text-xs"
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <Button
+            variant="default"
+            icon={<FolderOpen size={12} />}
+            disabled={disabled}
+            onClick={browse}
+          >
+            Browse
+          </Button>
+        </div>
       )}
     </Field>
   )

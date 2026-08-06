@@ -111,6 +111,19 @@ and what runs cannot drift; a SQL export calls `InsertStatements` for the same r
 `[]driver.DatabaseStatement` or `[]string` rather than one string, because a create is several
 statements and some of them — an extension — can only be run inside the database just made.
 
+**A dump is those two methods and nothing else.** `CreateStatements` is its structure half and
+`InsertStatements` its data half, and both are the driver's because only the engine knows how it
+declares a table and quotes a value. The one difference between them is that a declaration has to be
+*read*, so an engine that can answer for itself is **asked** rather than described: MySQL's whole
+dump is one `SHOW CREATE TABLE`, storage engine and charset and constraints included, which no read
+of `information_schema` puts back together. PostgreSQL has no such statement — `pg_dump` is another
+program — so it describes the shape the tree already reads, through the same `Dialect`; the one thing
+a description has to translate rather than copy is a `serial`, which is an `integer`, a sequence and
+a default reading from it, and would otherwise name a sequence the dump never created. MongoDB writes
+`createCollection` and a `createIndex` per index, and nothing about the fields, because a collection
+declares none. `internal/app/dump.go` owns only the file: it opens it, asks for those statements, and
+**streams** the rows into it batch by batch, so a dump of a million rows costs one batch of memory.
+
 A table is addressed by a `driver.Namespace` — `(database, schema)` — and how many of its parts an
 engine fills is the one structural difference between the SQL adapters. MySQL fills `Database`
 alone; PostgreSQL fills both and needs a connection pool per database to do it, because a session
@@ -167,7 +180,9 @@ grammar for the same answer.
 
 1. **Bound methods must not take `context.Context`.** Wails exposes it as a real JavaScript
    argument rather than injecting it, which poisons the frontend API. `ConnectionAPI` instead holds
-   the startup context (`useContext`, called from `App.Startup`) and derives per-call timeouts.
+   the startup context (`useContext`, called from `App.Startup`) and derives per-call timeouts. Every
+   API that raises one of the host's own dialogs needs that context too, which is why `SystemAPI` —
+   which otherwise holds no state at all — embeds `apiContext` for `ChooseFile`.
 2. **`frontend/wailsjs/` is generated on every build and is committed**, so a fresh clone
    type-checks without first running a Go build. It is excluded from `tsconfig.app.json`'s
    `include` — TypeScript resolves the `.d.ts` through the `@wailsjs/*` path alias, because

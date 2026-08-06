@@ -89,6 +89,16 @@ footer under it.
   something. A **certificate name** holds the server to a name other than the one dialled, which is
   what a tunnel makes ordinary — the connection goes to a local port and the certificate is still
   the database server's.
+- **Every path box has a `Browse` beside it and stays writable** — the two together, deliberately.
+  A reader with the file in front of them picks it; a reader who already has the path on the
+  clipboard — out of `gcloud`, out of a download, out of a colleague's message — pastes it, which is
+  as common and would be worse served by a dialog. The picker offers certificates
+  (`*.pem;*.crt;*.cer;*.der`) or keys (`*.pem;*.key`) first and All files behind them, and the two
+  boxes that offer no pattern at all are the SSH private key and `known_hosts`, whose files usually
+  carry no extension. It is `SystemAPI.ChooseFile`, the same API the font list comes from, because it
+  asks the *machine* and not a server — these boxes are filled in before there is a connection to
+  fill them for. **Nothing is read**: the path is saved on the profile and the file is opened at
+  connect time, which is also where a wrong one is reported.
 
 ### SSH
 
@@ -313,10 +323,10 @@ filled in before it runs. `useTreeMenu` is the single place the items are built,
 | Right-click | Items |
 |---|---|
 | A connection | `Connect` / `Disconnect`, `New Database…` — only once there is a session to make one on — `Edit Connection…`, `Delete Connection` |
-| A database | `New Database…`, `Delete Database`, then what its level owns: `New Table` and `Refresh` on MySQL and MongoDB, `Refresh` alone on PostgreSQL, which holds schemas rather than tables |
-| The node owning tables, or its `Tables` folder | `New Table`, `Refresh` |
+| A database | `New Database…`, `Delete Database`, then what its level owns: `New Table`, `Dump SQL File ▸` and `Refresh` on MySQL and MongoDB, `Refresh` alone on PostgreSQL, which holds schemas rather than tables |
+| The node owning tables, or its `Tables` folder | `New Table`, `Dump SQL File ▸`, `Refresh` |
 | The `Views` or `Functions` folder | `Refresh` — one read fills every folder, so it means the same wherever it is asked for |
-| A table | `Open Table`, `Design Table`, `New Table`, `Rename Table…`, `Duplicate Table ▸`, `Empty Table`, `Truncate Table`, `Delete Table`, `Refresh` |
+| A table | `Open Table`, `Design Table`, `New Table`, `Rename Table…`, `Duplicate Table ▸`, `Dump SQL File ▸`, `Empty Table`, `Truncate Table`, `Delete Table`, `Refresh` |
 | A view | `Open View`, `Delete View`, `Refresh` |
 | A function or procedure | `Delete Function` / `Delete Procedure`, `Refresh` |
 | The `Fields` folder | `Add Field`, `Refresh` |
@@ -350,6 +360,45 @@ key rows, because it has none of the three.
   dropped or renamed table needs no telling.
 - **A rejected statement stays where it was asked for** with the server's own wording, so a name
   already taken costs a retype and not the work.
+
+### Dumping a table or a schema to a file
+
+`Dump SQL File ▸` writes **the statements that would make these objects again**, to a file picked in
+the system's own save dialog. It is the one item in the tree's menus that changes nothing on the
+server, and it sits beside `Duplicate` for that reason: both copy the table, and the only difference
+is whether the copy lands on this server or in a file.
+
+- **It is the same two-way choice `Duplicate` is** — `Structure Only` and `Structure and Data` — and
+  the same submenu, because it is one action asked in two ways.
+- **Where it is offered says what it covers.** On a table, that table. On the node owning tables, or
+  its `Tables` folder, **every table of that namespace** in the order the tree lists them. A view is
+  never among them — it holds no rows of its own and its declaration is not a table's — and neither is
+  a routine.
+- **Nothing is confirmed first**, unlike every other item in these menus: nothing is being changed, so
+  the save dialog *is* the question, and dismissing it writes nothing at all. The file is named after
+  the table, or after the schema or database whose tables are going into it.
+- **What kind of file it is belongs to the engine** (`engineWords.scriptFile`): a MongoDB connection
+  reads `Dump Script File` and writes `.js`, because its statements are commands and not SQL — and
+  calling that file `.sql` would be a lie about its contents.
+- **The declaration is the engine's own answer wherever the engine has one.** MySQL's dump is
+  `SHOW CREATE TABLE` verbatim — storage engine, character set, `AUTO_INCREMENT`, every index and
+  every constraint — with the database written into the name so the file's declarations and its rows
+  cannot land in two different places. PostgreSQL has no such statement, so its shape is described
+  from the same catalogue read the tree draws: one `CREATE TABLE`, then a `CREATE INDEX` per index
+  (never the primary key's, which arrives with the table), then an `ALTER TABLE … ADD CONSTRAINT` per
+  foreign key. A `serial` column is declared as `serial` rather than as the `integer` and
+  `nextval(…)` default the catalogue reports it as, or the file would name a sequence it never
+  created; an index over an **expression** is the one thing a description cannot carry, and it is
+  written as though the expression were a column name. MongoDB writes `db.createCollection(…)` and a
+  `createIndex` per index, `_id_` excepted since the server builds that one itself — and **nothing
+  about the fields**, because a collection declares none: they arrive with the documents.
+- **The rows are streamed, not paged.** A dump reads each row once in one pass and writes each batch
+  as it arrives, so a table of a million rows costs one batch of memory and not a table's worth. It is
+  given two hours rather than a query's fifteen seconds, for the reason
+  [Execute SQL File](#execute-sql-file) is: a long job going fine is not a job to cut off.
+- **A `NULL` and a value are written exactly as the SQL export writes them** — the same
+  `InsertStatements` the grid's `Export as SQL` calls, so a dump and an export of one table's rows
+  agree to the character. See [Exporting a grid](#exporting-a-grid).
 
 ### Where a schema change is made
 
@@ -775,10 +824,52 @@ The dialog asks four things and reports one:
   on each other wants. Either way **the reader's own `Stop` ends it** — that is about the run and not
   about a statement, so `Continue on error` does not override it.
 
-The **message log** is one row per statement in the order they ran, with what it changed, how long
-it took and either `OK` or the server's own wording; the footer counts them and says how many
-failed. There is no `Rows` column: a file run keeps no rows, so a number there would be a fact about
-the cap rather than about the statement.
+The **log is a transcript, not a table**, and reads the way a run reads — the statement, then what it
+came to, tagged down the left:
+
+```
+[SQL] Started application_activities.sql
+[SQL] CREATE TABLE "public"."application_activities" (
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
+        "applicationId" uuid NOT NULL,
+        PRIMARY KEY ("id")
+      )
+[ERR] ERROR:  relation "application_activities" already exists
+[SQL] CREATE INDEX "IDX_application_activities_applicationId" ON …
+[OK]  1 ms
+[SQL] Finished with 1 error · 2 statements run · 9 ms
+```
+
+**Cells were the wrong shape for it.** A statement is laid out over as many lines as its author wrote
+it over and an error is a paragraph the server wrote; as two columns of four those are the two widest,
+both clipped to a couple of hundred pixels, and the one thing a reader opened the dialog to read is
+the one thing they cannot see. `ResultGrid` is still the only thing in the app that draws rows and
+columns — see [grid.md](grid.md) — and this simply is not rows and columns, exactly as
+[the console's transcript](#the-console) is not.
+
+- **A statement keeps its own line breaks.** Every line hangs from a six-character tag, measured in
+  `ch` so it holds at whatever size the reader set the data font to, which is what keeps a wrapped
+  line — and a statement's own second line — under the statement rather than under the tag.
+- **`[ERR]` carries the server's wording alone**, without the wire code beside it. The code is what
+  the *app* switches on ([errors.md](errors.md)); next to the wording it is noise, and where the
+  server's own answer already opens `ERROR:` it is noise that reads as a stutter.
+- **`[OK]` on a statement that changed nothing reports its time alone** — the tag already said it
+  succeeded. There is never a row *count*: a file run keeps no rows, so a number there would be a fact
+  about the cap rather than about the statement.
+- **The whole log is selectable and copies as it reads.** The tag is part of each line's own text
+  rather than a span beside it, and the air between statements is padding rather than blank lines, so
+  a log lifted into a message arrives laid out the way it was shown and no longer than it looked.
+- **The dialog opens at a form's width and widens when the log arrives** — 660 px, then 1 120 px,
+  which gives the transcript about 140 characters to a line so a `CREATE TABLE` reads as it was
+  written and only the longest single-line `ALTER TABLE` folds. Holding the wide one from the start
+  would leave most of the dialog standing empty for the whole time a reader spends filling it in — a
+  cost paid every time, against a single widening paid seconds or minutes after `Start`, when the
+  reader is looking at the log that has just appeared rather than at the button. The form keeps its own
+  620 px inside the wide one: a Database picker stretched to 900 px is harder to read, not easier.
+  Nothing is ever *hidden* by a narrower window either way, since the log wraps and never clips.
+- **The log is the one scroller on this surface.** Its height is set so the form above it and the log
+  together clear an ordinary window without the dialog's own body scrolling as well: two nested
+  scrollers is what made the old table unreachable.
 
 Two things Navicat's dialog has are deliberately not here. **Batching several statements per
 round-trip** is not, because where a statement ends is the driver's answer and the app runs them one
@@ -1188,7 +1279,10 @@ footer acts on a row.
 **What is written is what the grid holds, in the order it draws it.** A query result exports its
 whole result rather than the page in front, since a reader who paged still means the result; a table
 tab exports the page, because a table's rows are paged by the *server* and the page is all the grid
-has. A hidden column is not exported: it is one nobody asked for.
+has. A hidden column is not exported: it is one nobody asked for. **A reader who means the whole
+table rather than what is on screen wants
+[`Dump SQL File`](#dumping-a-table-or-a-schema-to-a-file)** in the tree instead, which reads every row
+out of the server rather than off the grid.
 
 **The cell menu's Save Data As ▸ is the same three formats**, so a reader who is already in the menu
 need not travel to the button; **Copy As ▸** beside it puts the selection on the clipboard in the

@@ -37,6 +37,40 @@ func (s *session) TableStructure(
 	return driver.TableStructure{Columns: columns, Indexes: indexes, ForeignKeys: keys}, nil
 }
 
+// CreateStatements asks MySQL for its own answer, because MySQL has one. `SHOW CREATE TABLE`
+// reports the whole declaration — the storage engine, the character set, the auto_increment, every
+// index and every constraint — and no read of information_schema puts all of that back together, so
+// a dump is the server's own words rather than a description of them.
+//
+// It answers with one statement, indexes and constraints included, which is why nothing here
+// spells either: they are already in it.
+func (s *session) CreateStatements(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) ([]string, error) {
+	var name, declaration string
+
+	query := "SHOW CREATE TABLE " + dialect.Table(ns, table)
+	if err := s.db.QueryRowContext(ctx, query).Scan(&name, &declaration); err != nil {
+		return nil, translateError(err)
+	}
+	return []string{qualified(ns, table, declaration)}, nil
+}
+
+// qualified names the database in the declaration the server answered with, which names the table
+// alone — CREATE TABLE and then the bare name — where the rows written after it are qualified. Left
+// as it came, a replayed dump would make the table in whatever database the connection was on and
+// put the rows in the one they came from, which is the one arrangement a reader could not have meant.
+//
+// A prefix the server ever stopped spelling this way simply is not found, and the answer then
+// travels unchanged: this can leave the declaration as it was but never make it something else.
+func qualified(ns driver.Namespace, table, declaration string) string {
+	return strings.Replace(declaration,
+		"CREATE TABLE "+dialect.QuoteIdent(table),
+		"CREATE TABLE "+dialect.Table(ns, table), 1)
+}
+
 // RenameTable qualifies the new name with the same database as the old one, because MySQL
 // reads an unqualified target as a table of whatever database the connection is on — which is
 // not necessarily the one being browsed.

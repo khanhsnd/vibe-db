@@ -62,6 +62,12 @@
   the connection, its server, the namespace that tab is pointed at and the server's version, and
   against the right how many connections are open at all. Reporting an arbitrary session would name
   one server while the grid under it drew another's rows.
+- **It is also where a failure nothing was waiting on is said.** A rejection a *dialog* asked for is
+  answered in that dialog and never here; the bar is for the ones asked for from a menu, which has
+  nowhere to put one — a refresh that could not read, a dump that could not be written. While nothing
+  is connected the wording stands where the server would be, and while something is it takes a fact of
+  its own in the danger colour. There is one slot, so it holds the last outcome: an action that
+  succeeds takes the previous failure down with it.
 - **Colour and type live only in `shared/theme/tokens.css`.** Raw values sit on `:root`, are
   overridden under `:root[data-theme='light']`, and are mapped into Tailwind utilities via
   `@theme inline` — the `var()` indirection is what makes runtime theme switching work without a

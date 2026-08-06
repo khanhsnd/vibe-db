@@ -47,6 +47,7 @@ func New() (*App, error) {
 func (a *App) Startup(ctx context.Context) {
 	a.Connections.useContext(ctx)
 	a.Queries.useContext(ctx)
+	a.System.useContext(ctx)
 }
 
 func (a *App) Shutdown(context.Context) {

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Cable, Clock, Database, Rows3, Server } from 'lucide-react'
+import { Cable, Clock, Database, Rows3, Server, TriangleAlert } from 'lucide-react'
 
 import { EngineIcon } from '@/features/connections/EngineIcon'
 import { EnvironmentBadge } from '@/features/connections/EnvironmentDot'
@@ -23,6 +23,12 @@ export interface StatusInfo {
   connections: number
   rowCount: number | null
   elapsedMs: number | null
+  /**
+   * The wording of the last failure nothing else was waiting to hear about: a refresh that could not
+   * read, a dump that could not be written. A failure a *dialog* asked for is answered in that
+   * dialog and never here — this is for the ones asked for from a menu, which has nowhere to say it.
+   */
+  error: string | null
 }
 
 const numbers = new Intl.NumberFormat('en-US')
@@ -44,6 +50,7 @@ export function StatusBar({
   connections,
   rowCount,
   elapsedMs,
+  error,
 }: StatusInfo) {
   return (
     <footer className="flex h-6 shrink-0 items-center gap-2 border-t border-line bg-panel px-2.5 text-xs text-muted">
@@ -64,6 +71,12 @@ export function StatusBar({
       {serverVersion ? <Fact>{serverVersion}</Fact> : null}
 
       <div className="min-w-2 flex-1" />
+
+      {error ? (
+        <Fact icon={<TriangleAlert size={11} />} tint="text-danger">
+          {error}
+        </Fact>
+      ) : null}
 
       {rowCount !== null ? (
         <Fact icon={<Rows3 size={11} />}>{`${numbers.format(rowCount)} rows`}</Fact>

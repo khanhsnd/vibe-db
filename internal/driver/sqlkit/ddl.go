@@ -102,11 +102,21 @@ func (x DDL) CreateForeignKey(
 	table string,
 	spec driver.ForeignKeySpec,
 ) error {
-	statement := x.alter(ns, table) +
-		" ADD CONSTRAINT " + x.Dialect.QuoteIdent(spec.Name) +
-		" FOREIGN KEY (" + strings.Join(x.Dialect.QuoteAll(spec.Columns), ", ") + ")" +
-		" REFERENCES " + x.Dialect.Referenced(ns, spec) +
-		" (" + strings.Join(x.Dialect.QuoteAll(spec.ReferencedColumns), ", ") + ")"
+	return x.Run(ctx, ns.Database, x.Dialect.AddForeignKey(ns, table, spec))
+}
+
+// AddForeignKey is that statement as text rather than as a run, so a dump writes the same clause
+// the designer would have executed instead of a second spelling of it.
+func (d Dialect) AddForeignKey(
+	ns driver.Namespace,
+	table string,
+	spec driver.ForeignKeySpec,
+) string {
+	statement := "ALTER TABLE " + d.Table(ns, table) +
+		" ADD CONSTRAINT " + d.QuoteIdent(spec.Name) +
+		" FOREIGN KEY (" + strings.Join(d.QuoteAll(spec.Columns), ", ") + ")" +
+		" REFERENCES " + d.Referenced(ns, spec) +
+		" (" + strings.Join(d.QuoteAll(spec.ReferencedColumns), ", ") + ")"
 
 	if action := strings.TrimSpace(spec.OnUpdate); action != "" {
 		statement += " ON UPDATE " + action
@@ -115,7 +125,7 @@ func (x DDL) CreateForeignKey(
 		statement += " ON DELETE " + action
 	}
 
-	return x.Run(ctx, ns.Database, statement)
+	return statement
 }
 
 // Referenced names the table a key points at, which may sit outside the namespace holding the
@@ -160,6 +170,56 @@ func (x DDL) InsertStatements(
 	}
 
 	return statements
+}
+
+// TableSpecOf reads a table's stored shape back as the declaration that would make it, which is what
+// a dump of an engine that will not answer for its own DDL has to be built from — see PostgreSQL's
+// CreateStatements. FullType is the type that goes in: it is what the server will parse and what the
+// reader is shown above the grid, `varchar(255)` rather than `varchar`. A stored default is already
+// an expression, so it travels verbatim exactly as a designer's does.
+func TableSpecOf(
+	ns driver.Namespace,
+	table string,
+	columns []driver.Column,
+) driver.TableSpec {
+	specs := make([]driver.ColumnSpec, 0, len(columns))
+	for _, column := range columns {
+		kind := column.FullType
+		if kind == "" {
+			kind = column.Type
+		}
+		specs = append(specs, driver.ColumnSpec{
+			Name:       column.Name,
+			Type:       kind,
+			Nullable:   column.Nullable,
+			Default:    column.Default,
+			PrimaryKey: column.PrimaryKey,
+		})
+	}
+	return driver.TableSpec{Namespace: ns, Table: table, Columns: specs}
+}
+
+// IndexSpecOf is an index the catalogue reported as the declaration that would build it again.
+func IndexSpecOf(index driver.Index) driver.IndexSpec {
+	return driver.IndexSpec{
+		Name:    index.Name,
+		Columns: index.Columns,
+		Unique:  index.Unique,
+		Method:  index.Method,
+	}
+}
+
+// ForeignKeySpecOf is a constraint the catalogue reported as the declaration that would add it again.
+func ForeignKeySpecOf(key driver.ForeignKey) driver.ForeignKeySpec {
+	return driver.ForeignKeySpec{
+		Name:              key.Name,
+		Columns:           key.Columns,
+		ReferencedSchema:  key.ReferencedSchema,
+		ReferencedTable:   key.ReferencedTable,
+		ReferencedColumns: key.ReferencedColumns,
+		OnUpdate:          key.OnUpdate,
+		OnDelete:          key.OnDelete,
+	}
 }
 
 func (x DDL) DropView(ctx context.Context, ns driver.Namespace, view string) error {

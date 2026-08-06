@@ -170,3 +170,55 @@ func TestAppendKeyColumnPairsBothSides(t *testing.T) {
 		t.Errorf("referenced columns = %v, want [x y]", got)
 	}
 }
+
+// A dump of an engine that will not answer for its own DDL is built from the shape the tree already
+// reads, so the type that goes back in has to be the one the server will parse: `varchar(255)` and
+// not `varchar`.
+func TestTableSpecOfDeclaresTheFullType(t *testing.T) {
+	ns := driver.Namespace{Database: "shop", Schema: "public"}
+	expression := "now()"
+	columns := []driver.Column{
+		{Name: "id", Type: "int4", FullType: "integer", PrimaryKey: true},
+		{Name: "name", Type: "varchar", FullType: "character varying(80)"},
+		{Name: "at", Type: "timestamptz", FullType: "", Default: &expression, Nullable: true},
+	}
+
+	spec := TableSpecOf(ns, "users", columns)
+
+	if got, want := spec.Table, "users"; got != want {
+		t.Errorf("Table = %s, want %s", got, want)
+	}
+	if got, want := spec.Columns[1].Type, "character varying(80)"; got != want {
+		t.Errorf("name type = %s, want %s", got, want)
+	}
+	// A column the catalogue reported no full type for falls back to the type it did report,
+	// rather than being declared with no type at all.
+	if got, want := spec.Columns[2].Type, "timestamptz"; got != want {
+		t.Errorf("at type = %s, want %s", got, want)
+	}
+	if spec.Columns[2].Default != &expression {
+		t.Error("the stored default did not travel verbatim")
+	}
+	if !spec.Columns[0].PrimaryKey {
+		t.Error("id lost its key flag, so CREATE TABLE would declare no key")
+	}
+}
+
+func TestAddForeignKeySpellsBothSidesAndItsActions(t *testing.T) {
+	ns := driver.Namespace{Database: "shop", Schema: "public"}
+	spec := ForeignKeySpecOf(driver.ForeignKey{
+		Name:              "fk_orders_customer",
+		Columns:           []string{"customer_id"},
+		ReferencedTable:   "customers",
+		ReferencedColumns: []string{"id"},
+		OnDelete:          "CASCADE",
+	})
+
+	got := Postgres.AddForeignKey(ns, "orders", spec)
+	want := `ALTER TABLE "public"."orders" ADD CONSTRAINT "fk_orders_customer" ` +
+		`FOREIGN KEY ("customer_id") REFERENCES "public"."customers" ("id") ON DELETE CASCADE`
+
+	if got != want {
+		t.Errorf("AddForeignKey =\n%s\nwant\n%s", got, want)
+	}
+}

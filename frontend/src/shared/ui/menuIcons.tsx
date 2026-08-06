@@ -11,6 +11,7 @@ import {
   Eye,
   EyeOff,
   FileCode2,
+  FileDown,
   Filter,
   FilterX,
   Fingerprint,
@@ -47,6 +48,7 @@ export const ICON = {
   editConnection: <Settings2 size={SIZE} />,
   console: <SquareTerminal size={SIZE} />,
   executeFile: <FileCode2 size={SIZE} />,
+  dump: <FileDown size={SIZE} />,
   colour: <Palette size={SIZE} />,
 
   newDatabase: <Database size={SIZE} />,
