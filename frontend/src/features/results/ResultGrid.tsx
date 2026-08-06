@@ -42,7 +42,7 @@ import { CellPicker } from './CellPicker'
 import { ExportMenu } from './ExportMenu'
 import { FilterSortButton } from './FilterSortButton'
 import { FilterSortPanel } from './FilterSortPanel'
-import { cellMenuItems } from './cellMenu'
+import { cellMenuItems, type CellMenuContext } from './cellMenu'
 import { ValueDialog } from './ValueDialog'
 import { ColumnTypeIcon, isNumeric, temporalPicker, type TemporalPicker } from './columnType'
 import { countConditions, type GridFiltering } from './filter'
@@ -299,6 +299,18 @@ interface ResultGridProps {
    * is never read alone, so it is moved through `viewportRef` like the panes it sits between.
    */
   strip?: boolean
+  /**
+   * The cell menu this surface raises **instead** of the one every other grid does. It is handed
+   * exactly the context `cellMenuItems` is, so an override is a different menu and never a second set
+   * of handlers — everything it can act through is still a prop the grid was given.
+   *
+   * It exists for the one surface where the built-in menu is wrong nearly throughout rather than in
+   * one item: a **key space**, which has no NULL to set on a key that would then not exist, no UUID
+   * worth minting into one, no condition to add — its bar above the grid is where it is narrowed —
+   * and no sort worth offering over a page cut from a sorted scan. A flag per item would have been
+   * eight flags; see `features/table/keyMenu.ts`.
+   */
+  cellMenu?: ((context: CellMenuContext) => MenuItem[]) | undefined
 }
 
 /** The head strip has nothing to say for a grid with none of the things it carries. */
@@ -330,6 +342,7 @@ export function ResultGrid({
   viewportRef,
   dense = false,
   strip = false,
+  cellMenu = cellMenuItems,
 }: ResultGridProps) {
   const density = dense ? DENSE : ROOMY
   const size = strip ? { ...density, gutter: 0 } : density
@@ -574,10 +587,10 @@ export function ResultGrid({
    * menu exists before the first one — an item list that was empty would leave no trigger for
    * Radix to open, and the first right-click would raise the WebView's menu instead of this.
    */
-  const cellMenu = (): MenuItem[] => {
+  const cellMenuFor = (): MenuItem[] => {
     const at = menuCell ?? focus ?? { row: 0, column: 0 }
 
-    return cellMenuItems({
+    return cellMenu({
       at,
       data: result,
       selection: current ?? oneRange({ anchor: at, focus: at }),
@@ -838,7 +851,7 @@ export function ResultGrid({
           />
         ) : null}
 
-        <ContextMenu items={cellMenu()}>
+        <ContextMenu items={cellMenuFor()}>
           <div
             ref={bodyRef}
             onPointerDown={onPointerDown}

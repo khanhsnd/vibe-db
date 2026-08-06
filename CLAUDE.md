@@ -86,7 +86,11 @@ engine, `internal/driver/mongo` is the proof the port is not secretly a SQL one,
     value is spelled as **JSON** so that what the grid draws is exactly what an edit hands back — a
     value it could only sample is marked and refuses to be written. What a command *does* is
     `domain.RedisHazard`, the fourth grammar for one rule, and everything a key space has not got is
-    `domain.Unsupported` naming which.
+    `domain.Unsupported` naming which. **How that key space is read is the frontend's, and asks the
+    server nothing extra**: `features/table` groups the page's keys on the colon into an
+    [outlined column](docs/grid.md), edits a container member by member out of the same JSON, and
+    replaces Filter & Sort with two boxes that write the same `Key contains …` / `Type = …`
+    conditions the builder would have. Never a second read, and never a second notation.
 
 ## Where to read before changing something
 

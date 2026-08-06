@@ -209,6 +209,10 @@ type Objects struct {
 	Tables   []string
 	Views    []string
 	Routines []Routine
+	// KeyCount is how many keys the namespace holds, on an engine whose namespace is a key space.
+	// It is what "how much is in here" means there — the lists above are one fixed table and say
+	// nothing — and is zero on every engine that answers the question by being listed.
+	KeyCount int64
 }
 
 // TableList is one row per table of a namespace: its name in the first column, then whatever

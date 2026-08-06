@@ -227,11 +227,27 @@ func (*session) Schemas(context.Context, string) ([]string, error) {
 // Objects is the one folder a key space has, holding the one table there is. There is no view here
 // and no routine: a Lua script is sent with the call that runs it and is not stored under a name
 // the reader could list.
-func (*session) Objects(context.Context, driver.Namespace) (driver.Objects, error) {
+//
+// The count comes with it because that list cannot carry it: one table always is one table, so what
+// the tree shows beside a Redis database is `DBSIZE` — how many keys the database holds — and it is
+// read here rather than in a second call so that opening the folder and being told its size are the
+// same read, exactly as they are on an engine whose namespace is counted by what is listed.
+func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Objects, error) {
+	client, err := s.client(ns)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	size, err := client.DBSize(ctx).Result()
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
 	return driver.Objects{
 		Tables:   []string{keySpace},
 		Views:    []string{},
 		Routines: []driver.Routine{},
+		KeyCount: size,
 	}, nil
 }
 

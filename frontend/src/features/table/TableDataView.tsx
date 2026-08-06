@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 
-import type { Namespace } from '@/bridge/connections'
+import { engineInfo, type Namespace } from '@/bridge/connections'
 import { rowExport, type ExportFormat } from '@/bridge/export'
 import { queries } from '@/bridge/query'
 import { tables, type TablePage } from '@/bridge/tables'
@@ -28,6 +28,8 @@ import {
   rowRange,
   selectedRows,
   type CellRef,
+  type GridOutline,
+  type ResultColumn,
   type Selection,
   type SortKey,
 } from '@/features/results/resultSet'
@@ -38,9 +40,24 @@ import { FetchProgress } from '@/shared/ui/FetchProgress'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
+import { useConnectionsStore } from '@/stores/connections'
 import { IDLE_VIEW, useTableViewsStore } from '@/stores/tableViews'
 
 import { ColumnPicker } from './ColumnPicker'
+import { KeyEditor, KEY_EDITOR_HEIGHT, KEY_EDITOR_MIN_HEIGHT, type KeyEdit } from './KeyEditor'
+import { keyLabel, keyRows } from './keyTree'
+import { keyMenuItems } from './keyMenu'
+import {
+  cellAt,
+  columnAt,
+  KEY_COLUMN,
+  readSearch,
+  TTL_COLUMN,
+  TYPE_COLUMN,
+  VALUE_COLUMN,
+  writeSearch,
+  type KeySearch,
+} from './keySpace'
 import { TableToolbar, type PanelKind } from './TableToolbar'
 import { useTableData } from './useTableData'
 
@@ -50,6 +67,12 @@ import { useTableData } from './useTableData'
 const PICKER_WIDTH = 168
 const PICKER_MIN_WIDTH = 120
 const PICKER_MAX_WIDTH = 420
+
+/**
+ * What the key column opens at where it is drawn as a tree. A tree's name column is wider than a
+ * plain one — it holds an indent, a caret and a name — and it is only the width it *opens* at.
+ */
+const TREE_KEY_WIDTH = 360
 
 interface TableDataViewProps {
   sessionId: string
@@ -86,6 +109,17 @@ export function TableDataView({
     stopFetch,
   } = useTableData(sessionId, namespace, table, tabId)
 
+  /**
+   * Whether this namespace is a **key space**, which changes four things about the surface: the rows
+   * group into a tree, the builder is replaced by a search, the panel below is always open and holds
+   * the key rather than one cell, and the cell menu is the short one. It is `EngineInfo.keys` and
+   * never a comparison against an engine's name.
+   */
+  const engine = useConnectionsStore(
+    (s) => s.profiles.find((profile) => profile.id === profileId)?.engine ?? '',
+  )
+  const keySpace = engineInfo(engine).keys
+
   // A table outlives the app, so the order its columns were dragged into is stored under it. The
   // tab is keyed on its own target, so the key is read once and never changes under the component.
   const orderKey = columnOrderKey(profileId, namespace, table)
@@ -93,7 +127,9 @@ export function TableDataView({
 
   // How the tab was set up is the tab's and survives it being looked away from; the selection is
   // not — it names rows of a read this mount is about to make again.
-  const { panels, hidden, filterShown } = useTableViewsStore((s) => s.views[tabId] ?? IDLE_VIEW)
+  const { panels, hidden, filterShown, flatten, shut } = useTableViewsStore(
+    (s) => s.views[tabId] ?? IDLE_VIEW,
+  )
   const change = useTableViewsStore((s) => s.change)
   const [selection, setSelection] = useState<Selection | null>(null)
 
@@ -111,38 +147,121 @@ export function TableDataView({
     [arranged, hidden],
   )
 
-  const grid = useMemo(
-    () => ({
-      columns: visible.map((entry) => entry.column),
-      rows: edits.rows.map((row) => visible.map((entry) => row[entry.index] ?? null)),
-    }),
+  /** Which column identifies a row, and so which one a key space groups its tree by. */
+  const keyColumn = keySpace ? columnAt(columns, KEY_COLUMN) : -1
+
+  /**
+   * The keys of the page as the tree they group into, or `null` where the rows are drawn flat — every
+   * engine but this one, and this one once the reader has pressed Flatten. It is built over
+   * `edits.rows` rather than over the read, so a staged rename regroups and a draft key appears.
+   */
+  const tree = useMemo(
+    () =>
+      keyColumn < 0 || flatten
+        ? null
+        : keyRows(
+            edits.rows.map((row) => row[keyColumn] ?? null),
+            shut,
+          ),
+    [keyColumn, flatten, edits.rows, shut],
+  )
+
+  const outline = useMemo<GridOutline | undefined>(
+    () =>
+      tree === null
+        ? undefined
+        : {
+            depth: (row) => tree[row]?.depth ?? 0,
+            open: (row) => tree[row]?.open,
+            onToggle: (row) => {
+              const branch = tree[row]?.branch
+              if (branch !== undefined) change(tabId, { shut: toggled(shut, branch) })
+            },
+          },
+    [tree, shut, change, tabId],
+  )
+
+  /** The page as it stands, in the reader's own column order. What an export writes is this. */
+  const flatRows = useMemo(
+    () => edits.rows.map((row) => visible.map((entry) => row[entry.index] ?? null)),
     [edits.rows, visible],
   )
+
+  const grid = useMemo(() => {
+    const drawn = visible.map((entry) => entry.column)
+    if (tree === null) return { columns: drawn, rows: flatRows }
+
+    return {
+      // The hierarchy is one *column's* business and not a mode of the grid — see `GridOutline`.
+      columns: drawn.map((column, at): ResultColumn =>
+        visible[at]?.index === keyColumn ? { ...column, outline, width: TREE_KEY_WIDTH } : column,
+      ),
+      rows: tree.map((row) => {
+        const held = row.source < 0 ? undefined : edits.rows[row.source]
+        return visible.map((entry) => {
+          if (entry.index === keyColumn) return keyLabel(row)
+          // A branch stands for a prefix and not for a key, so it has no type, value or clock — and
+          // is drawn **blank** rather than as `(Null)`, which is the word for a value the server said
+          // was absent. There is no such value here: there is no key.
+          if (held === undefined) return ''
+          return held[entry.index] ?? null
+        })
+      }),
+    }
+  }, [tree, flatRows, visible, keyColumn, outline, edits.rows])
+
+  /**
+   * Which row of the page the grid's row *n* is. A tree reorders and adds rows, so the two differ
+   * exactly as the visible columns differ from the real ones — and a **branch** that is no key of its
+   * own answers `-1`, there being nothing there to write to.
+   */
+  const realRow = (row: number) => (tree === null ? row : (tree[row]?.source ?? -1))
+
+  /** The grid reports positions among the visible columns, which map back to real indexes. */
+  const realColumn = (column: number) => visible[column]?.index ?? -1
 
   const target = useMemo(() => {
     const focus = focusOf(selection)
     if (!focus) return null
 
     const entry = visible[focus.column]
-    const row = edits.rows[focus.row]
+    const row = edits.rows[realRow(focus.row)]
     if (!entry || !row) return null
 
     return {
-      ref: { row: focus.row, column: entry.index },
+      ref: { row: realRow(focus.row), column: entry.index },
       column: entry.column,
       value: row[entry.index] ?? null,
     }
-  }, [selection, visible, edits.rows])
+  }, [selection, visible, edits.rows, tree])
 
-  /** The grid reports positions among the visible columns, which map back to real indexes. */
-  const realColumn = (column: number) => visible[column]?.index ?? -1
+  /**
+   * The key the panel below is showing: a whole row rather than one cell, because that is what a
+   * Redis row is. A branch of the tree names none, and neither does a grid nobody has clicked in.
+   */
+  const keyTarget = useMemo(() => {
+    if (!keySpace) return null
+
+    const source = realRow(focusOf(selection)?.row ?? 0)
+    const row = source < 0 ? undefined : edits.rows[source]
+    if (!row) return null
+
+    return {
+      source,
+      name: cellAt(row, columnAt(columns, KEY_COLUMN)) ?? '',
+      type: cellAt(row, columnAt(columns, TYPE_COLUMN)) ?? '',
+      value: cellAt(row, columnAt(columns, VALUE_COLUMN)),
+      ttl: cellAt(row, columnAt(columns, TTL_COLUMN)),
+    }
+  }, [keySpace, selection, edits.rows, columns, tree])
 
   /**
    * Where the reader is in the whole table. The rows are paged on the server, so the grid's first
    * row is this page's first row and the read's own offset is what puts it in the table — and with
    * nothing focused, the page's first row is where the reader is.
    */
-  const record = data === null ? 0 : data.offset + (focusOf(selection)?.row ?? 0) + 1
+  const record =
+    data === null ? 0 : data.offset + Math.max(0, realRow(focusOf(selection)?.row ?? 0)) + 1
 
   const togglePanel = (kind: PanelKind) => change(tabId, { panels: toggled(panels, kind) })
 
@@ -153,7 +272,7 @@ export function TableDataView({
 
   /** The draft lands after every fetched row, and is selected so a paste that follows means it. */
   const addRow = () => {
-    setSelection(oneRange(rowRange(edits.rows.length, visible.length)))
+    setSelection(oneRange(rowRange(grid.rows.length, visible.length)))
     edits.addRow()
   }
 
@@ -207,6 +326,27 @@ export function TableDataView({
     changeCriteria(next)
   }
 
+  /** The same conditions from the other spelling, and no panel to open — see `writeSearch`. */
+  const changeSearch = (next: KeySearch) => {
+    setSelection(null)
+    changeCriteria(writeSearch(next))
+  }
+
+  /** Stages a whole key: a rename, a value and a clock are three cells and one write. */
+  const applyKey = (edit: KeyEdit) => {
+    if (keyTarget === null) return
+
+    const stage = (name: string, value: string | null, was: string | null) => {
+      const column = columnAt(columns, name)
+      if (column < 0 || value === was) return
+      edits.setCell({ row: keyTarget.source, column }, value)
+    }
+
+    stage(KEY_COLUMN, edit.name, keyTarget.name)
+    stage(VALUE_COLUMN, edit.value, keyTarget.value)
+    stage(TTL_COLUMN, edit.ttl, keyTarget.ttl)
+  }
+
   /**
    * The values a column holds, for the filter builder's picker. Held steady across renders,
    * because the picker reads it once per column and one rebuilt every render would never stop.
@@ -236,19 +376,21 @@ export function TableDataView({
   /** The panel edits the focused cell, so the menu's own cell becomes the selection first. */
   const editInPanel = (ref: CellRef) => {
     setSelection(oneRange({ anchor: ref, focus: ref }))
-    change(tabId, { panels: new Set(panels).add('cell') })
+    if (!keySpace) change(tabId, { panels: new Set(panels).add('cell') })
   }
 
   /**
    * The page in front, with the columns that are showing — a table's rows are paged by the
    * server, so what the grid holds *is* the page, and a hidden column is one nobody asked for.
+   * It writes the rows **flat**: a tree draws a key by its tail, the prefix being on the row above,
+   * and a file of tails would be a file of keys no server has.
    */
   const exportRows = (format: ExportFormat) =>
     void rowExport.run(sessionId, format, {
       namespace,
       table,
-      columns: grid.columns.map((column) => column.name),
-      rows: grid.rows,
+      columns: visible.map((entry) => entry.column.name),
+      rows: flatRows,
     })
 
   const failure = edits.error ?? (data ? error : null)
@@ -256,9 +398,14 @@ export function TableDataView({
   /**
    * Which panels are open, named for the splitter. A layout is remembered per *combination*, which
    * is what `panelIds` is for: the width the reader gave the column list is theirs the next time
-   * they open it, and closing it does not teach the grid a new size.
+   * they open it, and closing it does not teach the grid a new size. A key space's panel is always
+   * one of them, there being no toggle for it.
    */
-  const rowPanels = useMemo(() => (panels.has('cell') ? ['rows', 'cell'] : ['rows']), [panels])
+  const editorShown = keySpace || panels.has('cell')
+  const rowPanels = useMemo(
+    () => (editorShown ? ['rows', keySpace ? 'key' : 'cell'] : ['rows']),
+    [editorShown, keySpace],
+  )
   const gridPanels = useMemo(() => (panels.has('column') ? ['picker', 'grid'] : ['grid']), [panels])
 
   return (
@@ -270,6 +417,16 @@ export function TableDataView({
         filterCount={countConditions(criteria) + sort.length}
         onFilterToggle={() => setFilterShown(!filterShown)}
         onExport={data !== null ? exportRows : undefined}
+        keySpace={
+          keySpace
+            ? {
+                search: readSearch(criteria),
+                onSearchChange: changeSearch,
+                flatten,
+                onFlattenToggle: () => change(tabId, { flatten: !flatten }),
+              }
+            : undefined
+        }
       />
 
       {/* Both side panels are dragged rather than fixed, and the handle between them is the only
@@ -326,14 +483,28 @@ export function TableDataView({
                   result={grid}
                   selection={selection}
                   onSelectionChange={setSelection}
+                  // A key space passes none, which is what makes its rows **read** rather than
+                  // typed: one click there shows the key in the panel below and changes nothing.
+                  // Inline editing is the right gesture on a table store — a cell is one of forty
+                  // and the reader is pointing at it already — and the wrong one here, where a click
+                  // is how a reader walks a key space and the value is a container the panel lays
+                  // out. Editing has one place, and it is that panel.
                   onEditCell={
-                    editable
-                      ? (ref: CellRef, value) =>
-                          edits.setCell({ row: ref.row, column: realColumn(ref.column) }, value)
+                    editable && !keySpace
+                      ? (ref: CellRef, value) => {
+                          const row = realRow(ref.row)
+                          if (row >= 0) edits.setCell({ row, column: realColumn(ref.column) }, value)
+                        }
                       : undefined
                   }
-                  isDirty={(row, column) => edits.isDirty(row, realColumn(column))}
-                  isDeleted={(row) => edits.deleted.has(row)}
+                  isDirty={(row, column) => {
+                    const at = realRow(row)
+                    return at >= 0 && edits.isDirty(at, realColumn(column))
+                  }}
+                  isDeleted={(row) => {
+                    const at = realRow(row)
+                    return at >= 0 && edits.deleted.has(at)
+                  }}
                   sort={sort}
                   onSortChange={changeOrder}
                   onMoveColumn={moveColumn}
@@ -342,16 +513,31 @@ export function TableDataView({
                   onExport={exportRows}
                   headStrip={false}
                   onEditInPanel={editInPanel}
-                  onDeleteRows={editable ? (rows) => edits.deleteRows(rows) : undefined}
+                  onDeleteRows={
+                    editable
+                      ? (rows) => edits.deleteRows(rows.map(realRow).filter((row) => row >= 0))
+                      : undefined
+                  }
                   onRefresh={refresh}
                   formatValue={formatValue}
-                  filtering={{
-                    criteria,
-                    shown: filterShown,
-                    onShownChange: setFilterShown,
-                    onChange: changeConditions,
-                    suggest,
-                  }}
+                  // A key space is narrowed by the bar above rather than by the builder, so it
+                  // passes none: no panel, no button, and no Add Filter on a header's own menu.
+                  filtering={
+                    keySpace
+                      ? undefined
+                      : {
+                          criteria,
+                          shown: filterShown,
+                          onChange: changeConditions,
+                          onShownChange: setFilterShown,
+                          suggest,
+                        }
+                  }
+                  cellMenu={
+                    keySpace
+                      ? (context) => keyMenuItems(context, { onAddKey: addRow })
+                      : undefined
+                  }
                   columnMenuItems={(column) => [
                     {
                       label: 'Hide column',
@@ -373,34 +559,61 @@ export function TableDataView({
           </Split>
         </SplitPanel>
 
-        {panels.has('cell') ? (
+        {editorShown ? (
           <>
             <SplitHandle orientation="vertical" />
 
-            <SplitPanel
-              id="cell"
-              defaultSize={EDITOR_HEIGHT}
-              minSize={EDITOR_MIN_HEIGHT}
-              maxSize="70%"
-            >
-              {target === null ? (
-                <Empty title="No cell selected" hint="Click a cell in the grid to edit its value." />
-              ) : (
-                <CellEditor
-                  key={`${target.ref.row}:${target.ref.column}`}
-                  column={target.column}
-                  value={target.value}
-                  readOnly={
-                    editable
-                      ? undefined
-                      : 'This table has no primary key, so a row cannot be identified for editing.'
-                  }
-                  busy={edits.saving}
-                  onApply={(value) => edits.setCell(target.ref, value)}
-                  formatValue={formatValue}
-                />
-              )}
-            </SplitPanel>
+            {keySpace ? (
+              <SplitPanel
+                id="key"
+                defaultSize={KEY_EDITOR_HEIGHT}
+                minSize={KEY_EDITOR_MIN_HEIGHT}
+                maxSize="70%"
+              >
+                {keyTarget === null ? (
+                  <Empty title="No key selected" hint="Click a key in the grid to edit it." />
+                ) : (
+                  <KeyEditor
+                    key={keyTarget.source}
+                    keyName={keyTarget.name}
+                    type={keyTarget.type}
+                    value={keyTarget.value}
+                    ttl={keyTarget.ttl}
+                    busy={edits.saving}
+                    onApply={applyKey}
+                    formatValue={formatValue}
+                  />
+                )}
+              </SplitPanel>
+            ) : (
+              <SplitPanel
+                id="cell"
+                defaultSize={EDITOR_HEIGHT}
+                minSize={EDITOR_MIN_HEIGHT}
+                maxSize="70%"
+              >
+                {target === null ? (
+                  <Empty
+                    title="No cell selected"
+                    hint="Click a cell in the grid to edit its value."
+                  />
+                ) : (
+                  <CellEditor
+                    key={`${target.ref.row}:${target.ref.column}`}
+                    column={target.column}
+                    value={target.value}
+                    readOnly={
+                      editable
+                        ? undefined
+                        : 'This table has no primary key, so a row cannot be identified for editing.'
+                    }
+                    busy={edits.saving}
+                    onApply={(value) => edits.setCell(target.ref, value)}
+                    formatValue={formatValue}
+                  />
+                )}
+              </SplitPanel>
+            )}
           </>
         ) : null}
       </Split>
@@ -413,7 +626,9 @@ export function TableDataView({
         pending={edits.pending}
         busy={edits.saving || loading}
         onAddRow={addRow}
-        onDeleteRow={() => edits.deleteRows(selectedRows(selection))}
+        onDeleteRow={() =>
+          edits.deleteRows(selectedRows(selection).map(realRow).filter((row) => row >= 0))
+        }
         onApply={() => void edits.apply()}
         onDiscard={edits.discard}
         onRefresh={refresh}

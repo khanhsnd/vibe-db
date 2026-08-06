@@ -125,7 +125,7 @@ export function useGridEdits(
 
     setSaving(true)
     try {
-      for (const edit of Object.values(edits)) {
+      for (const edit of renamesLast(columns, Object.values(edits))) {
         const row = base[edit.ref.row]
         const column = columns[edit.ref.column]
         if (!row || !column || deleted.has(edit.ref.row)) continue
@@ -171,6 +171,20 @@ export function useGridEdits(
     discard,
     apply,
   }
+}
+
+/**
+ * The same edits with every change to a **primary key** at the end. Each write names its row by the
+ * key that row had when it was read, so a rename that went first would leave the edits after it
+ * addressed to a row that is no longer there — and the engine that makes this ordinary rather than
+ * exotic is the one whose primary key *is* the value the reader types: renaming a Redis key and
+ * changing what it holds is one press of Apply. The sort is stable, so nothing else moves.
+ */
+function renamesLast(columns: TableColumn[], edits: PendingEdit[]): PendingEdit[] {
+  const renames = (edit: PendingEdit) =>
+    columns[edit.ref.column]?.primaryKey === true ? 1 : 0
+
+  return [...edits].sort((a, b) => renames(a) - renames(b))
 }
 
 function replace(row: Cell[], column: number, value: Cell): Cell[] {

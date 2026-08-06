@@ -32,10 +32,20 @@ export interface TableView {
   limit: number
   sort: readonly SortKey[]
   criteria: Group
+  /**
+   * Whether a **key space** is drawn as plain rows rather than as the tree its keys group into. It is
+   * the tree that is the default there, a Redis key being a path spelled with colons, and this is the
+   * reader asking to see the page as it actually is. It means nothing on any other engine, where the
+   * rows have no hierarchy to flatten.
+   */
+  flatten: boolean
+  /** The branches of that tree the reader has folded shut, by their prefix — see `keyTree.ts`. */
+  shut: ReadonlySet<string>
 }
 
 const NO_PANELS: ReadonlySet<PanelKind> = new Set()
 const NOTHING_HIDDEN: ReadonlySet<string> = new Set()
+const NOTHING_SHUT: ReadonlySet<string> = new Set()
 
 /**
  * A tab nobody has set up yet, and a stable snapshot for one whose view has not been started —
@@ -50,6 +60,8 @@ export const IDLE_VIEW: TableView = {
   limit: DEFAULT_PAGE_SIZE,
   sort: NO_SORT,
   criteria: NO_FILTER,
+  flatten: false,
+  shut: NOTHING_SHUT,
 }
 
 interface TableViewsState {

@@ -343,6 +343,12 @@ from anywhere and are not inferred from anything: unlike a document store's samp
 the same five on every Redis server there has ever been. A table by any other name is
 `domain.ErrUnknownTable`, which is the honest answer — there is nowhere for it to be.
 
+**And because that list is fixed, the count comes with it.** The tree draws beside a namespace how
+much is in it, which on a table store is what the list already said; here the list is one table and
+always will be, so `Objects` carries `KeyCount` — `DBSIZE` — and the badge beside a Redis database is
+how many keys it holds. It is read in that same call rather than a second one, so that opening the
+folder and being told its size stay one round trip.
+
 **A page is cut from a scan, so the names are held and the values are not.** `SCAN` is a cursor with
 no offset and no order, so `keys.go` walks the whole space, **sorts the names**, and only then cuts
 the page — because a page cut from an unordered list is a different page every time it is read. The
@@ -363,6 +369,14 @@ types are spelled as JSON — a list as an array, a hash and a sorted set as obj
 order — so what the grid draws is exactly what an edit hands back, and there is no second notation to
 learn. A value too large for a row is **sampled and marked**, and the mark is what makes writing it
 back fail: an edit of a sample would drop whatever was not shown.
+
+**How the reader is shown that key space is the frontend's, and asks the server nothing more.** The
+keys group into a tree on the colon, the panel under the grid edits a container member by member, and
+the bar over it is two boxes rather than the filter builder — and not one of the three is a second way
+into the driver. The tree is a *reading* of the page this side already holds, the members are read out
+of the JSON `value.go` wrote and go back as the JSON `parseValue` reads, and the two boxes write the
+same `Key contains …` / `Type = …` conditions the builder would have. See
+[features.md](features.md#browsing-a-key-space).
 
 **A command is argv, not a sentence.** `command.go` rebuilds each argument from the tokens
 `sqlkit.Lex` already produced — an argument is a *run of adjacent tokens*, since `user:1` is three

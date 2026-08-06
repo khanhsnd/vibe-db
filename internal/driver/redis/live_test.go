@@ -139,6 +139,9 @@ func TestLiveAgainstARealServer(t *testing.T) {
 		if len(objects.Tables) != 1 || objects.Tables[0] != keySpace {
 			t.Errorf("Tables = %q, want just %q", objects.Tables, keySpace)
 		}
+		if objects.KeyCount != 8 {
+			t.Errorf("KeyCount = %d, want 8", objects.KeyCount)
+		}
 	})
 
 	t.Run("TableList counts the keys", func(t *testing.T) {

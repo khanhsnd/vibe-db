@@ -494,11 +494,8 @@ function namespaceNode(
     namespace: ns,
     active: active.database === ns.database && active.schema === ns.schema,
     // How much is in here, once it has been read — the one number that says whether a namespace
-    // is worth opening. A namespace nobody has opened yet has no number, not a zero; and a key
-    // space is always exactly one thing, so counting it would say nothing at all.
-    ...(held && !info.keys
-      ? { badge: String(held.tables.length + held.views.length + (held.routines?.length ?? 0)) }
-      : {}),
+    // is worth opening. A namespace nobody has opened yet has no number, not a zero.
+    ...(held ? { badge: String(namespaceCount(info, held)) } : {}),
     children: [
       folder(
         'tables',
@@ -533,6 +530,14 @@ function namespaceNode(
         : []),
     ],
   }
+}
+
+// How much a namespace holds, which is not the same question on every engine. A table store is
+// counted by what it lists; a key space lists one fixed table and always will, so the number worth
+// drawing there is how many keys are under it — the driver's own count, since only the server has it.
+function namespaceCount(info: EngineInfo, held: Objects): number {
+  if (info.keys) return held.keyCount
+  return held.tables.length + held.views.length + (held.routines?.length ?? 0)
 }
 
 // A table carries its folders whether or not its shape has been read: they are what the caret is

@@ -209,6 +209,12 @@ fills in numbers. Clicking the node that owns tables — a MySQL database, a Pos
 MongoDB database — marks it the active namespace for that connection, which is what a new query tab
 inherits, and the row is drawn in the success colour to say so.
 
+**A namespace's badge is how much is in it, and a Redis database's is how many keys.** On every other
+engine that number is what the read already listed — tables, views and routines added up — but a key
+space lists one fixed table, so counting the list would say `1` of every database on the server. The
+count is the server's own `DBSIZE`, arriving with that same read, so the reader can tell which of the
+sixteen databases has anything in it. See [architecture.md](architecture.md#the-key-value-store).
+
 **A MongoDB field is inferred, not declared.** A collection says nothing about what it holds, so the
 Fields folder is the fields the *documents* were found to carry — a sample of the collection's first
 few hundred, `_id` always among them. What that costs, and where it shows, is in
@@ -363,14 +369,90 @@ is refused if the key is already there, an insert being for a row that is not. *
 `UNLINK`, which frees a million-element list on a background thread instead of stopping the server
 with it. **Empty Key Space** is `FLUSHDB`.
 
-**Filtering is where a big key space becomes browsable.** A filter on `Key` — begins, contains, ends
-or equals — becomes the server's own glob, so the narrowing happens *there* and the app never sees
-the rest: `Key begins user:` is `SCAN 0 MATCH user:* COUNT 1000`, and the statement under the grid
-says so. Everything else — a type, a clock, a cost, a value — is answered here, over the keys the
-glob let through, so those cost a read per key and a filter on the **value** is bounded at five
-thousand keys and says so if there are more. A condition inside an `OR` never becomes the glob: `Key
-begins user OR Type is hash` admits every hash in the database, and narrowing the scan by half of it
-would hide rows that were asked for.
+### The keys are drawn as the tree they spell
+
+**A key space is flat and a key is not.** `user:1:name` is a path, every server and library there is
+spells one with colons, and a reader looking at sixteen thousand keys is looking at a few dozen
+prefixes. So the grid **groups them**, on the colon and on nothing else: a prefix is a branch that
+carries how many keys are under it — `asynq (14)` — and a key is a leaf named by its **tail**, the
+prefix being on the row above it. A key with no colon in it is a leaf at the top, whole. A prefix that
+is *also* a key of its own is both: the row opens and still carries that key's own type, value and
+clock.
+
+It is the **default**, and **Flatten** on the toolbar is how it is turned off — that is the page
+exactly as it was read, one row per key, whole names. Which it is, and which branches are folded, is
+the tab's and survives being looked away from, like everything else it was set up with.
+
+The grouping is a *reading* of the page and asks the server nothing: it is the key column drawn as an
+[outlined column](grid.md), which is the same mechanism a comparison's shape half uses. Because a page
+is cut from a **sorted** scan, every prefix is contiguous and the tree of a page is a coherent slice
+of the tree of the whole. What a **branch** row is not is a key — nothing can be written to one, and
+an export writes the flat page rather than the tails the tree drew.
+
+### A key space is searched, not filtered
+
+**The Filter & Sort panel is not there, and a search bar stands where its button does.** A type, and a
+fragment of a key's name. That is not a narrowing of the feature but the shape of the engine: Redis
+narrows a read exactly one way — a glob against a key's name — so most of the builder's twenty
+operators would be twenty ways of asking for something that could only be answered by reading every
+value on the server.
+
+Underneath it is **the same conditions the builder would have written** — `Key contains …` and
+`Type = …` — so the read that follows is an ordinary read and the driver is unchanged by any of it. A
+name typed in the box becomes the server's own glob, so the narrowing happens *there* and the app
+never sees the rest: `SCAN 0 MATCH *user* COUNT 1000`, and the statement under the grid says so. The
+type is answered here, over the keys the glob let through.
+
+The rest of what the driver can be asked is still what it always was, and is worth knowing because it
+is why the bar is only two boxes. A filter on `Key` — begins, contains, ends or equals — becomes the
+glob; everything else — a type, a clock, a cost, a value — is answered here, so those cost a read per
+key and a filter on the **value** is bounded at five thousand keys and says so if there are more. A
+condition inside an `OR` never becomes the glob: `Key begins user OR Type is hash` admits every hash
+in the database, and narrowing the scan by half of it would hide rows that were asked for.
+
+### The key panel is always open
+
+**Under the grid sits the key itself, and there is no toggle for it.** On a table store a cell editor
+is one of several ways to reach one cell of forty, so it is a panel the reader asks for; here there
+are five columns, three of them one line long, and the fourth is a container — so there is nothing for
+a toggle to save and a grid row is the wrong shape to edit one in.
+
+**Which is also why the grid itself does not edit.** Clicking a key **shows** it — in the panel, whole
+— and changes nothing. On a table store one click opens the cell, because the reader is already
+pointing at the one value they came for; on a key space a click is how the keys are *walked*, and an
+editor opening under every one of them is in the way. So editing has exactly one place here, and the
+footer still writes: **Add**, **Delete**, **Apply** and **Discard** are unchanged.
+
+It holds the four things a key is: its **name**, its **type**, its **value** and its **clock**. The
+type is shown and never picked, because a type is what the value *is* — the driver refuses to change
+one for the same reason. The clock is two controls and not one: **No expiry** and **Expire In
+(seconds)**, because clearing the box is what takes a clock off and zero would delete the key.
+
+**A container is edited member by member**, which is what a hash or a sorted set actually is: a field
+and a value per row, `+` and `−` to add and take one out, and an index instead of a field on a list or
+a set, where the order is the meaning. The notation underneath is unchanged — the members are read out
+of the JSON the driver wrote and written back into the JSON it parses — so nothing here is a second
+spelling of a value. A **string** is read in the ordinary [value viewer](#reading-a-value-whole)
+instead, there being no members to draw.
+
+**Apply stages, and the footer's Apply writes** — the same two steps the cell editor has on every
+other surface, and the reason it matters here is that a rename, a new value and a new clock are three
+cells and become **one** press: three commands in the order they have to run, a rename last, because
+every command before it names the key by the name it had.
+
+A value the grid could only sample, a **stream** and a module's own type all refuse to be written, and
+the panel says which before anything is typed rather than after Apply.
+
+### What a right-click on a key offers
+
+**A shorter menu than every other grid's**, because the long one is built for a table store: there is
+no NULL to set on a key that would then not exist, no UUID worth minting into one, no condition to add
+— the bar above is where a key space is narrowed — and no sort worth offering over a page cut from a
+sorted scan. What is left is what a reader does to a key.
+
+**Edit Key** puts it in the panel below, **Add Key** appends one, **Delete Key** marks it — all three
+being the footer's own buttons reached without travelling to the bar — and then **View Value**,
+**Copy**, **Copy Field Name**, **Copy As**, **Save Data As** and **Refresh**.
 
 **The rows are in key order** before a page is cut from them, because `SCAN` has no order of its own
 and a page cut from an unordered list is a different page every time it is read. Sorting by any other

@@ -210,6 +210,9 @@ type Objects struct {
 	Tables   []string      `json:"tables"`
 	Views    []string      `json:"views"`
 	Routines []RoutineInfo `json:"routines"`
+	// How many keys the namespace holds, on an engine whose namespace is a key space, and zero on
+	// one whose namespace is counted by the lists above — see driver.Objects.
+	KeyCount int64 `json:"keyCount"`
 }
 
 type IndexInfo struct {
@@ -1094,7 +1097,12 @@ func toObjectsDTO(source driver.Objects) Objects {
 		})
 	}
 
-	return Objects{Tables: source.Tables, Views: source.Views, Routines: routines}
+	return Objects{
+		Tables:   source.Tables,
+		Views:    source.Views,
+		Routines: routines,
+		KeyCount: source.KeyCount,
+	}
 }
 
 func toTableListDTO(source driver.TableList) TableList {

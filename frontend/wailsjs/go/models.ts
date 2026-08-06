@@ -851,6 +851,7 @@ export namespace app {
 	    tables: string[];
 	    views: string[];
 	    routines: RoutineInfo[];
+	    keyCount: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Objects(source);
@@ -861,6 +862,7 @@ export namespace app {
 	        this.tables = source["tables"];
 	        this.views = source["views"];
 	        this.routines = this.convertValues(source["routines"], RoutineInfo);
+	        this.keyCount = source["keyCount"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

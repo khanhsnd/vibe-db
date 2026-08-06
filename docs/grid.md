@@ -143,6 +143,14 @@ the thing the reader opened the surface to read is the thing they cannot see. Th
   An absent handler leaves its item **off** rather than showing it dead, which is the rule
   `onEditCell` already set for the whole grid; a grid with **no rows** offers `Refresh` alone,
   because every other item would name a row that is not there.
+- **A surface may raise a different cell menu, through `cellMenu`.** It is handed exactly the context
+  the built-in one is, so an override is a *shorter menu* and never a second set of handlers —
+  everything it can act through is still a prop the grid was given. It exists for the one surface
+  where the built-in menu is wrong nearly throughout rather than in one item: a **key space**, which
+  has no NULL to set on a key that would then not exist, no UUID worth minting into one, no condition
+  to add — [its own bar](features.md#a-key-space-is-searched-not-filtered) is where it is narrowed —
+  and no sort worth offering over a page cut from a sorted scan. A flag per absent item would have
+  been eight flags. `features/table/keyMenu.ts` is the one override there is.
 - **A filter is a tree, not a list** (`filter.ts`). Its leaves are **conditions** — a column, an
   operator and as many values as that operator takes — and its branches are **groups**, each joining
   its children by `and` or by `or`. The root is a group, and a tree rather than a list because a
@@ -416,7 +424,10 @@ the one place the app shows a *sample* rather than an answer.
 **On a key-value store there is no fact and no sample either** — the columns are a *constant*. A
 Redis key space is drawn as `Key`, `Type`, `Value`, `TTL` and `Size` on every server there has ever
 been, `Key` being the primary key because it is the only thing that identifies a row and it
-identifies exactly one. What is sampled there is not the header but the **value**: a container too
+identifies exactly one. Because they are a constant, they are also the one set of column names the UI
+may *name*: `features/table/keySpace.ts` does, and everything that reads one is reached only where
+`EngineInfo.keys` says the namespace is a key space at all. What is never done is asking an engine's
+name anything. What is sampled there is not the header but the **value**: a container too
 large for a row is drawn as its first fifty members and ends with `… 50 of 4321`, and that mark is
 what makes writing the cell back fail — an edit of a sample would drop whatever it did not show. See
 [architecture.md](architecture.md#the-key-value-store).
@@ -487,6 +498,22 @@ surrounds the grid:
   and the only one that turns the head strip off (`headStrip={false}`), its own toolbar already
   carrying both **Filter & Sort** and **Export**. Its value picker asks about the table it is
   showing, which is the one table it could possibly mean.
+  Over a **key space** it is also the one site that maps *rows*: the keys group into a tree, so the
+  grid's row *n* is not the page's row *n*, and one `realRow` answers for an edit, `isDirty`,
+  `isDeleted`, a delete and the record on the status line alike — the same arrangement its column
+  mapping already is. A **branch** of that tree stands for a prefix and not for a key, so it maps to
+  `-1` and every write to it is dropped: there is no key there to write to. It also passes **no
+  `onEditCell`** there, so those rows are read and not typed: a click shows the key in the panel below
+  and nothing else. Inline editing is right on a table store — a cell is one of forty and the reader
+  is pointing at it already — and wrong on a key space, where a click is how a reader *walks* the
+  keys and the value is a container the panel lays out; an editor opening under every click was the
+  grid's behaviour applied where it does not belong. The footer still writes, so the four editing
+  icons stay: what changed is where an edit is spelled, not whether there is one. It passes `outline`
+  on the key column (the second site to, after a comparison), `cellMenu`, and no `filtering` at all.
+  What an
+  **export** writes stays the *flat* page: a tree draws a key by its tail, the prefix being on the row
+  above, and a file of tails would be a file of keys no server has. A `Ctrl`+`C` still copies what is
+  drawn, which is the grid's own rule — **Flatten** is one press away for a copy of whole keys.
 
 - The **comparison** is `ComparePanes` twice over — two grids that map nothing, built from **one**
   list so row *n* of one is row *n* of the other by construction. Its *shape* half draws that list
