@@ -18,6 +18,7 @@ import {
   isObjectFolder,
   ownsObjects,
   searchTree,
+  type PickHow,
   type TreeNode,
 } from '@/features/connections/tree'
 import { useTreeMenu } from '@/features/connections/useTreeMenu'
@@ -49,6 +50,7 @@ export function App() {
   const openDesign = useTabsStore((s) => s.openDesign)
   const openTables = useTabsStore((s) => s.openTables)
   const openConsole = useTabsStore((s) => s.openConsole)
+  const openCompare = useTabsStore((s) => s.openCompare)
   const activeTab = useTabsStore((s) => s.tabs.find((t) => t.id === s.activeId) ?? null)
 
   const profiles = useConnectionsStore((s) => s.profiles)
@@ -83,8 +85,27 @@ export function App() {
     [profiles, statuses, databases, schemas, objects, structures, activeNamespace],
   )
 
-  const [selected, setSelected] = useState<TreeNode | null>(null)
+  /**
+   * Every row the reader has picked, in the order they picked them, and the **last is the focused
+   * one** — the same arrangement the grid's own selection has, and for the same reason: everything
+   * that acts on one row acts on the last press, and Compare acts on two.
+   */
+  const [picked, setPicked] = useState<TreeNode[]>([])
+  const selected = picked.at(-1) ?? null
+  const pickedIds = useMemo(() => new Set(picked.map((node) => node.id)), [picked])
   const [filter, setFilter] = useState('')
+
+  // The tables among what is picked, in the order they were picked. Compare is offered on two of
+  // them, and anything that is not a table — a folder, a database — is simply not one of the two.
+  const pickedTables = useMemo(
+    () =>
+      picked.flatMap((node) =>
+        hasRows(node) && node.namespace
+          ? [{ profileId: node.profileId, namespace: node.namespace, table: node.label }]
+          : [],
+      ),
+    [picked],
+  )
 
   // Searching narrows the tree it is looking at and opens what it had to open to show a hit, so the
   // reader's own expansion survives the search and is what is left when the box is emptied.
@@ -195,30 +216,51 @@ export function App() {
     [openConsole, activeNamespace],
   )
 
-  const menuItemsFor = useTreeMenu({
-    onConnect: startConnect,
-    onEditConnection: openEditConnection,
-    onConsole: openConnectionConsole,
-    onExecuteFile: setFileFor,
-    onOpenRows: openTable,
-    onDesign: openDesign,
-    onImport: setImportInto,
-    onExport: setExportFrom,
-  })
+  const menuItemsFor = useTreeMenu(
+    {
+      onConnect: startConnect,
+      onEditConnection: openEditConnection,
+      onConsole: openConnectionConsole,
+      onExecuteFile: setFileFor,
+      onOpenRows: openTable,
+      onDesign: openDesign,
+      onImport: setImportInto,
+      onExport: setExportFrom,
+      onCompare: openCompare,
+    },
+    pickedTables,
+  )
 
   // Selecting reads nothing and dials nothing, and expanding stays the caret's job. The one
   // thing it opens is the Tables folder's own list, which is what that folder *is* to a reader:
   // the tree draws the names, and the list beside it draws what the catalogue keeps about them.
+  //
+  // What a press does to the pick is `how`'s: a plain one starts over, `Ctrl` toggles this row
+  // beside whatever is there, and a right-click that landed *inside* the pick leaves it whole so
+  // that the pair a menu is about survives being right-clicked. Only a press that names one row
+  // reads a namespace or opens a list — picking a second table is not travelling to it.
   const selectNode = useCallback(
-    (node: TreeNode) => {
-      setSelected(node)
+    (node: TreeNode, how: PickHow) => {
+      if (how === 'add') {
+        setPicked((current) =>
+          current.some((one) => one.id === node.id)
+            ? current.filter((one) => one.id !== node.id)
+            : [...current, node],
+        )
+        return
+      }
+
+      if (how === 'menu' && picked.length > 1 && pickedIds.has(node.id)) return
+      setPicked([node])
 
       // The node that owns tables is the one a query tab can run against. A PostgreSQL
       // database is not that node — its schemas are — so selecting one names nothing.
       if (node.namespace && ownsObjects(node)) selectNamespace(node.profileId, node.namespace)
-      if (node.kind === 'tables' && node.namespace) openTables(node.profileId, node.namespace)
+      if (how === 'replace' && node.kind === 'tables' && node.namespace) {
+        openTables(node.profileId, node.namespace)
+      }
     },
-    [selectNamespace, openTables],
+    [picked.length, pickedIds, selectNamespace, openTables],
   )
 
   // A table opens its data rather than its folders, even though it now has folders to open: the
@@ -321,7 +363,8 @@ export function App() {
           <Sidebar
             roots={shownRoots}
             expanded={shownExpanded}
-            selectedId={selected?.id ?? null}
+            pickedIds={pickedIds}
+            focusedId={selected?.id ?? null}
             filter={filter}
             onFilterChange={setFilter}
             onToggle={toggleTreeNode}

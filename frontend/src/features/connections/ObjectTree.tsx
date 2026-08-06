@@ -26,7 +26,7 @@ import { colourTint } from './ConnectionColour'
 import { EngineIcon } from './EngineIcon'
 import { EnvironmentStripe } from './EnvironmentDot'
 import { StatusDot } from './StatusDot'
-import { flatten, isFolder, type NodeKind, type TreeNode } from './tree'
+import { flatten, isFolder, type NodeKind, type PickHow, type TreeNode } from './tree'
 
 /**
  * A folder is drawn as a folder, open or shut, and never as the thing inside it: a `Tables` folder
@@ -80,6 +80,17 @@ const INDENT_PER_DEPTH = 12
 const BASE_INDENT = 6
 
 /**
+ * The glyph a kind of catalogue object is drawn as, in its own colour — the tree's, and anywhere
+ * else one is drawn. A field means the same thing in the sidebar and in a comparison, so it wears
+ * the same shape and the same `--kind-*` colour in both; a second map somewhere else would drift
+ * the day after it was written.
+ */
+export function nodeGlyph(kind: NodeKind, open = false, size = 13) {
+  const Icon = isFolder({ kind } as TreeNode) && open ? FolderOpen : ICONS[kind]
+  return <Icon size={size} className={cn('shrink-0', COLOURS[kind])} />
+}
+
+/**
  * Whether a badge is how many rather than what: every count the tree draws is a bare number, and
  * nothing else it draws is — a type carries letters, a key's target an arrow, a server a colon.
  */
@@ -88,9 +99,16 @@ const isCount = (badge: string) => /^\d+$/.test(badge)
 interface ObjectTreeProps {
   roots: TreeNode[]
   expanded: ReadonlySet<string>
-  selectedId: string | null
+  /**
+   * Every row the reader has picked, and the **focused** one — the last press to land. Two depths
+   * rather than one, exactly as the grid has: a picked row is washed and the focused one is washed
+   * and bold, so a pair picked with `Ctrl` reads as a pair and the reader still knows where they
+   * are. A single press leaves the two the same row, which is every press but a `Ctrl` one.
+   */
+  pickedIds: ReadonlySet<string>
+  focusedId: string | null
   onToggle: (node: TreeNode) => void
-  onSelect: (node: TreeNode) => void
+  onSelect: (node: TreeNode, how: PickHow) => void
   onActivate: (node: TreeNode) => void
   menuItemsFor?: (node: TreeNode) => MenuItem[]
 }
@@ -98,7 +116,8 @@ interface ObjectTreeProps {
 export function ObjectTree({
   roots,
   expanded,
-  selectedId,
+  pickedIds,
+  focusedId,
   onToggle,
   onSelect,
   onActivate,
@@ -134,7 +153,8 @@ export function ObjectTree({
               : folder && isOpen
                 ? FolderOpen
                 : ICONS[node.kind]
-          const selected = node.id === selectedId
+          const picked = pickedIds.has(node.id)
+          const focused = node.id === focusedId
           const active = node.active === true
 
           return (
@@ -142,10 +162,13 @@ export function ObjectTree({
               <div
                 role="treeitem"
                 aria-level={depth + 1}
-                aria-selected={selected}
+                aria-selected={picked}
                 aria-expanded={expandable ? isOpen : undefined}
-                onClick={() => onSelect(node)}
-                onContextMenu={() => onSelect(node)}
+                // `Ctrl`/`Cmd` picks a second row beside the first rather than replacing it,
+                // which is how a pair is named for Compare — and is the same modifier that adds
+                // a rectangle in the grid.
+                onClick={(e) => onSelect(node, e.ctrlKey || e.metaKey ? 'add' : 'replace')}
+                onContextMenu={() => onSelect(node, 'menu')}
                 onDoubleClick={() => onActivate(node)}
                 // Indenting six levels leaves a field's name little room, so what a row could
                 // not draw is still readable by hovering it.
@@ -153,7 +176,7 @@ export function ObjectTree({
                 className={cn(
                   'absolute top-0 left-0 flex w-full items-center gap-1 pr-1.5',
                   'cursor-default text-xs whitespace-nowrap',
-                  selected ? 'bg-selected text-fg' : 'text-fg hover:bg-hover',
+                  picked ? 'bg-selected text-fg' : 'text-fg hover:bg-hover',
                 )}
                 style={{
                   height: TREE_ROW_HEIGHT,
@@ -182,7 +205,7 @@ export function ObjectTree({
                     aria-label={isOpen ? 'Collapse' : 'Expand'}
                     onClick={(e) => {
                       e.stopPropagation()
-                      onSelect(node)
+                      onSelect(node, 'replace')
                       onToggle(node)
                     }}
                     onDoubleClick={(e) => e.stopPropagation()}
@@ -214,7 +237,7 @@ export function ObjectTree({
                   className={cn(
                     'min-w-0 flex-1 truncate',
                     active && 'font-medium text-success',
-                    selected && 'font-medium',
+                    focused && 'font-medium',
                   )}
                 >
                   {node.label}

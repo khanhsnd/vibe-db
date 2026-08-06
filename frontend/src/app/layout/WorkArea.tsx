@@ -1,5 +1,6 @@
 import { Terminal } from 'lucide-react'
 
+import { CompareView } from '@/features/compare/CompareView'
 import { ConsoleView } from '@/features/console/ConsoleView'
 import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
 import { ObjectListView } from '@/features/objects/ObjectListView'
@@ -80,6 +81,8 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             schemas={schemas}
             engine={engine}
           />
+        ) : activeTab.kind === 'compare' ? (
+          <CompareView key={activeTab.id} tab={activeTab} />
         ) : activeTab.kind === 'design' ? (
           sessionId === null ? (
             <Empty title="Not connected" hint="Reconnect this connection to read the table." />

@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 import type { Cell, TableColumn } from '@/bridge/tables'
 
 import { isNumeric } from './columnType'
@@ -21,6 +23,28 @@ export type ColumnEditor =
   | { kind: 'check' }
   | { kind: 'key' }
 
+/**
+ * How a column's cells are drawn as the rows of a **tree**: indented by how deep the row sits, with
+ * a caret on a row that holds others and a glyph saying what it is.
+ *
+ * It is a *column* and not a mode of the grid, because that is what it actually is — one column
+ * carries the hierarchy and every other column beside it stays a plain fact about the row. The rows
+ * are still a flat list, in the order they read, and the call site is what flattens the tree into
+ * one: the grid neither holds a shape nor decides what is open.
+ *
+ * A grid with rows and not branches was the reason `PlanNode.Depth` is drawn flat; this is what
+ * that would need.
+ */
+export interface GridOutline {
+  /** How deep this row sits. Zero is the top, and every row of a flat list.  */
+  depth: (row: number) => number
+  /** Whether the row holds others: `undefined` for a leaf, and open or shut for a branch. */
+  open: (row: number) => boolean | undefined
+  onToggle: (row: number) => void
+  /** What the row *is*, drawn ahead of its name — a folder, a field, an index. */
+  icon?: (row: number) => ReactNode
+}
+
 export interface ResultColumn {
   name: string
   /** The bare type, which classifies the column. `fullType` carries its length and modifiers. */
@@ -36,7 +60,34 @@ export interface ResultColumn {
    * NULL for, and a grid cannot tell the two apart. The designer reads the catalogue and can.
    */
   primaryKey?: boolean | undefined
+  /**
+   * Whether this column refuses an edit on an otherwise writable grid. It exists for the one
+   * arrangement a single `onEditCell` cannot express: a grid whose rows are *read* and which
+   * carries one column that is acted on — a comparison's **Take** tick beside four columns of
+   * facts. Without it, passing `onEditCell` for the tick would open a text editor on every fact
+   * beside it, and none of them is a thing a reader may type over.
+   */
+  readOnly?: boolean | undefined
+  /**
+   * The width this column opens at, where the grid's own is wrong for it — a column of **ticks** is
+   * not as wide as a column of values, and a tree's name column is wider than one. It is only the
+   * width it *opens* at: a drag or a fit replaces it, and the reader's width always wins.
+   */
+  width?: number | undefined
+  /** Draws this column's cells as the rows of a tree — see `GridOutline`. */
+  outline?: GridOutline | undefined
 }
+
+/**
+ * What a comparison says about one row of a grid drawing one side of it. The first three are
+ * `bridge/compare`'s own statuses; `absent` is the fourth thing a *pane* has to draw and the diff
+ * has no word for — the blank standing opposite a row this side simply has not got, which is
+ * neither a value nor an empty one. A row the two sides agree about carries no mark at all.
+ *
+ * It is the grid's own type rather than the bridge's because the grid must not learn what a
+ * comparison is: it is handed a word per row and paints it.
+ */
+export type DiffMark = 'added' | 'removed' | 'changed' | 'absent'
 
 /** A toggle cell is on when it holds anything at all, a key cell holding its position instead. */
 export function checked(value: Cell): boolean {

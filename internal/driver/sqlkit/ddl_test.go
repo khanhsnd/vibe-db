@@ -222,3 +222,76 @@ func TestAddForeignKeySpellsBothSidesAndItsActions(t *testing.T) {
 		t.Errorf("AddForeignKey =\n%s\nwant\n%s", got, want)
 	}
 }
+
+// The whole point of AlterStatements is that a migration is shown what its Apply will run, so what
+// it spells has to be exactly what the runs beside it send — one per change, in the order given.
+func TestAlterStatementsSpellsEachChangeTheEnginesOwnWay(t *testing.T) {
+	ns := driver.Namespace{Database: "shop", Schema: "public"}
+	note := "'x'"
+
+	changes := []driver.TableChange{
+		{Kind: driver.ChangeDropForeignKey, Name: "users_city_fk"},
+		{Kind: driver.ChangeDropIndex, Name: "by_email"},
+		{Kind: driver.ChangeDropColumn, Name: "gone"},
+		{
+			Kind:   driver.ChangeAddColumn,
+			Column: driver.ColumnSpec{Name: "note", Type: "varchar(20)", Nullable: true, Default: &note},
+		},
+		{
+			Kind:   driver.ChangeAlterColumn,
+			Name:   "name",
+			Column: driver.ColumnSpec{Name: "name", Type: "varchar(100)"},
+		},
+		{
+			Kind:  driver.ChangeCreateIndex,
+			Index: driver.IndexSpec{Name: "by_email", Columns: []string{"email"}, Unique: true, Method: "btree"},
+		},
+	}
+
+	mysql := DDL{Dialect: MySQL}.AlterStatements(ns, "users", changes)
+	want := []string{
+		"ALTER TABLE `shop`.`users` DROP FOREIGN KEY `users_city_fk`",
+		"ALTER TABLE `shop`.`users` DROP INDEX `by_email`",
+		"ALTER TABLE `shop`.`users` DROP COLUMN `gone`",
+		"ALTER TABLE `shop`.`users` ADD COLUMN `note` varchar(20) DEFAULT 'x'",
+		"ALTER TABLE `shop`.`users` MODIFY COLUMN `name` varchar(100) NOT NULL",
+		"CREATE UNIQUE INDEX `by_email` USING btree ON `shop`.`users` (`email`)",
+	}
+	for at := range want {
+		if at >= len(mysql) {
+			t.Fatalf("MySQL spelled %d statements, want %d", len(mysql), len(want))
+		}
+		if mysql[at] != want[at] {
+			t.Errorf("MySQL[%d] =\n%s\nwant\n%s", at, mysql[at], want[at])
+		}
+	}
+
+	postgres := DDL{Dialect: Postgres}.AlterStatements(ns, "users", changes)
+	wantPG := []string{
+		`ALTER TABLE "public"."users" DROP CONSTRAINT "users_city_fk"`,
+		`DROP INDEX "public"."by_email"`,
+		`ALTER TABLE "public"."users" DROP COLUMN "gone"`,
+		`ALTER TABLE "public"."users" ADD COLUMN "note" varchar(20) DEFAULT 'x'`,
+		`ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE varchar(100), ALTER COLUMN "name" SET NOT NULL, ALTER COLUMN "name" DROP DEFAULT`,
+		`CREATE UNIQUE INDEX "by_email" ON "public"."users" USING btree ("email")`,
+	}
+	for at := range wantPG {
+		if at >= len(postgres) {
+			t.Fatalf("PostgreSQL spelled %d statements, want %d", len(postgres), len(wantPG))
+		}
+		if postgres[at] != wantPG[at] {
+			t.Errorf("PostgreSQL[%d] =\n%s\nwant\n%s", at, postgres[at], wantPG[at])
+		}
+	}
+}
+
+// A change this engine has no concept of contributes nothing rather than a statement that could
+// only fail: spelling raises no error, and the *run* is where domain.Unsupported is answered.
+func TestAlterStatementsSkipsWhatItCannotSpell(t *testing.T) {
+	changes := []driver.TableChange{{Kind: driver.TableChangeKind("renameTheServer")}}
+
+	got := DDL{Dialect: MySQL}.AlterStatements(driver.Namespace{}, "users", changes)
+	if len(got) != 0 {
+		t.Errorf("AlterStatements = %v, want none", got)
+	}
+}

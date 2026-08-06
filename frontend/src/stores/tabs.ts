@@ -1,12 +1,15 @@
 import { create } from 'zustand'
 
-import type { Namespace } from '@/bridge/connections'
+import { namespaceLabel, type Namespace } from '@/bridge/connections'
 
 import { useConsoleStore } from './console'
 import { useQueriesStore } from './queries'
 import { useTableViewsStore } from './tableViews'
 
-export type TabKind = 'query' | 'table' | 'design' | 'objects' | 'console'
+export type TabKind = 'query' | 'table' | 'design' | 'objects' | 'console' | 'compare'
+
+/** Which half of two tables a comparison is reading: their shapes, or their rows. */
+export type CompareMode = 'structure' | 'data'
 
 interface TabBase {
   id: string
@@ -52,13 +55,30 @@ export interface ConsoleTab extends TabBase {
   kind: 'console'
 }
 
-export type Tab = QueryTab | TableTab | DesignTab | ObjectsTab | ConsoleTab
+/**
+ * Two tables read side by side — what Compare opens. The tab's own connection, namespace and
+ * table are the **left** side, which is the side the reader reads down; `right` is what it is
+ * being compared against and carries a connection of its own, because comparing a staging table
+ * against the production one is the whole point and those are two servers.
+ *
+ * `mode` is state rather than identity: one pair is one tab, and asking for the other half of it
+ * from the menu reveals that tab and switches it rather than opening a second.
+ */
+export interface CompareTab extends TabBase {
+  kind: 'compare'
+  table: string
+  right: TableTarget
+  mode: CompareMode
+}
+
+export type Tab = QueryTab | TableTab | DesignTab | ObjectsTab | ConsoleTab | CompareTab
 export type NewTab =
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
   | Omit<DesignTab, 'id'>
   | Omit<ObjectsTab, 'id'>
   | Omit<ConsoleTab, 'id'>
+  | Omit<CompareTab, 'id'>
 
 /** What names a table wherever one is opened: which connection, which namespace, which table. */
 export interface TableTarget {
@@ -66,6 +86,16 @@ export interface TableTarget {
   namespace: Namespace
   table: string
 }
+
+/** How a table reads on a tab that names two of them: `shop.users`, or `users` on its own. */
+export function targetLabel(target: TableTarget): string {
+  return target.namespace.database === ''
+    ? target.table
+    : `${namespaceLabel(target.namespace)}.${target.table}`
+}
+
+/** The arrow between a comparison's two sides, wherever one is drawn. */
+export const COMPARE_ARROW = '⇄'
 
 type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'rowLimit'>>
 
@@ -81,6 +111,13 @@ interface TabsState {
   openTables: (profileId: string, namespace: Namespace) => string
   /** A console on one connection. One per connection and namespace, like every other tab. */
   openConsole: (profileId: string, namespace: Namespace) => string
+  /**
+   * Two tables side by side. One pair is one tab, so asking for the other half of a comparison
+   * already open reveals it and switches its mode rather than opening a second tab on one pair.
+   */
+  openCompare: (left: TableTarget, right: TableTarget, mode: CompareMode) => string
+  /** Switches an open comparison between the two halves — its toolbar's own control. */
+  setCompareMode: (id: string, mode: CompareMode) => void
   close: (id: string) => void
   activate: (id: string) => void
   /** Points a tab at another namespace, which is what the picker on its own strip does. */
@@ -94,14 +131,22 @@ const nextId = () => `tab-${++seq}`
 
 const tableOf = (tab: Tab | NewTab) => ('table' in tab ? tab.table : '')
 
+const sameTable = (one: TableTarget, other: TableTarget) =>
+  one.profileId === other.profileId &&
+  one.namespace.database === other.namespace.database &&
+  one.namespace.schema === other.namespace.schema &&
+  one.table === other.table
+
 // One tab per thing it shows: opening a table twice reveals the tab already showing it, and its
-// data tab, its designer and the list it sits in are different kinds of the same namespace.
+// data tab, its designer and the list it sits in are different kinds of the same namespace. A
+// comparison is named by *both* of its sides and not by its mode, which is state inside the tab.
 const sameTarget = (tab: Tab, target: NewTab) =>
   tab.kind === target.kind &&
   tab.profileId === target.profileId &&
   tab.namespace.database === target.namespace.database &&
   tab.namespace.schema === target.namespace.schema &&
-  tableOf(tab) === tableOf(target)
+  tableOf(tab) === tableOf(target) &&
+  (tab.kind !== 'compare' || sameTable(tab.right, (target as CompareTab).right))
 
 // A query is never reused — two of them are two buffers — and neither is a table being designed
 // that has no name yet, because two of those are two tables.
@@ -150,6 +195,28 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   openConsole: (profileId, namespace) =>
     get().open({ kind: 'console', title: 'Console', profileId, namespace }),
+
+  openCompare: (left, right, mode) => {
+    const id = get().open({
+      kind: 'compare',
+      title: `${left.table} ${COMPARE_ARROW} ${right.table}`,
+      profileId: left.profileId,
+      namespace: left.namespace,
+      table: left.table,
+      right,
+      mode,
+    })
+    // A pair already open is revealed rather than opened again, so the mode the reader just asked
+    // for is applied to the tab they were sent to — otherwise Compare ▸ Data Only on a comparison
+    // already showing structure would look like it had done nothing.
+    get().setCompareMode(id, mode)
+    return id
+  },
+
+  setCompareMode: (id, mode) =>
+    set((s) => ({
+      tabs: s.tabs.map((tab) => (tab.id === id && tab.kind === 'compare' ? { ...tab, mode } : tab)),
+    })),
 
   close: (id) => {
     useQueriesStore.getState().discard(id)

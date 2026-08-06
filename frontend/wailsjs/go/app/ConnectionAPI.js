@@ -10,12 +10,28 @@ export function AlterColumn(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['ConnectionAPI']['AlterColumn'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function ApplyRowWrite(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['ApplyRowWrite'](arg1, arg2);
+}
+
+export function ApplyTableChanges(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['ConnectionAPI']['ApplyTableChanges'](arg1, arg2, arg3, arg4);
+}
+
 export function ChooseTransferFile(arg1) {
   return window['go']['app']['ConnectionAPI']['ChooseTransferFile'](arg1);
 }
 
 export function ChooseTransferFolder() {
   return window['go']['app']['ConnectionAPI']['ChooseTransferFolder']();
+}
+
+export function CompareData(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['CompareData'](arg1, arg2, arg3);
+}
+
+export function CompareStructure(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['CompareStructure'](arg1, arg2);
 }
 
 export function Connect(arg1, arg2) {
@@ -126,6 +142,10 @@ export function LoadColumnValues(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadColumnValues'](arg1, arg2);
 }
 
+export function LoadCreateStatements(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['LoadCreateStatements'](arg1, arg2, arg3);
+}
+
 export function LoadDatabaseOptions(arg1) {
   return window['go']['app']['ConnectionAPI']['LoadDatabaseOptions'](arg1);
 }
@@ -156,6 +176,14 @@ export function PreviewCreateDatabase(arg1, arg2) {
 
 export function PreviewImportFile(arg1) {
   return window['go']['app']['ConnectionAPI']['PreviewImportFile'](arg1);
+}
+
+export function PreviewRowWrite(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['PreviewRowWrite'](arg1, arg2);
+}
+
+export function PreviewTableChanges(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['ConnectionAPI']['PreviewTableChanges'](arg1, arg2, arg3, arg4);
 }
 
 export function RenameColumn(arg1, arg2, arg3, arg4, arg5) {

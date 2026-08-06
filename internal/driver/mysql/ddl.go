@@ -84,24 +84,6 @@ func (s *session) RenameTable(
 	return s.run(ctx, ns.Database, statement)
 }
 
-// AlterColumn restates the whole column, which is the only form MODIFY COLUMN takes: a fact
-// left out of it is dropped rather than kept.
-func (s *session) AlterColumn(
-	ctx context.Context,
-	ns driver.Namespace,
-	table, column string,
-	spec driver.ColumnSpec,
-) error {
-	// The clause names the column being changed, not the name in the spec, so renaming is
-	// RenameColumn's job alone and never a side effect of an edit.
-	restated := spec
-	restated.Name = column
-
-	statement := "ALTER TABLE " + dialect.Table(ns, table) +
-		" MODIFY COLUMN " + dialect.ColumnClause(restated)
-	return s.run(ctx, ns.Database, statement)
-}
-
 // SetPrimaryKey needs no name for the key it replaces: MySQL calls every primary key PRIMARY and
 // drops it by that. It does need to know whether there is one, since dropping none is an error.
 func (s *session) SetPrimaryKey(
@@ -128,46 +110,6 @@ func (s *session) SetPrimaryKey(
 	}
 
 	statement := "ALTER TABLE " + dialect.Table(ns, table) + " " + strings.Join(actions, ", ")
-	return s.run(ctx, ns.Database, statement)
-}
-
-// CreateIndex puts the access method between the name and the table, which is where MySQL's
-// grammar takes it — PostgreSQL takes it after the table instead.
-func (s *session) CreateIndex(
-	ctx context.Context,
-	ns driver.Namespace,
-	table string,
-	spec driver.IndexSpec,
-) error {
-	statement := "CREATE "
-	if spec.Unique {
-		statement += "UNIQUE "
-	}
-	statement += "INDEX " + dialect.QuoteIdent(spec.Name)
-
-	if method := strings.TrimSpace(spec.Method); method != "" {
-		statement += " USING " + method
-	}
-
-	statement += " ON " + dialect.Table(ns, table) +
-		" (" + strings.Join(dialect.QuoteAll(spec.Columns), ", ") + ")"
-
-	return s.run(ctx, ns.Database, statement)
-}
-
-func (s *session) DropIndex(ctx context.Context, ns driver.Namespace, table, index string) error {
-	statement := "ALTER TABLE " + dialect.Table(ns, table) +
-		" DROP INDEX " + dialect.QuoteIdent(index)
-	return s.run(ctx, ns.Database, statement)
-}
-
-func (s *session) DropForeignKey(
-	ctx context.Context,
-	ns driver.Namespace,
-	table, constraint string,
-) error {
-	statement := "ALTER TABLE " + dialect.Table(ns, table) +
-		" DROP FOREIGN KEY " + dialect.QuoteIdent(constraint)
 	return s.run(ctx, ns.Database, statement)
 }
 

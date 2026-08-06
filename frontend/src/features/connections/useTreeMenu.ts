@@ -17,7 +17,7 @@ import { tableActions, type TableActions } from '@/features/schema/tableActions'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { tableKey, useConnectionsStore, type ChangeSchema } from '@/stores/connections'
 import { useSchemaStore, type SchemaRequest } from '@/stores/schema'
-import type { TableTarget } from '@/stores/tabs'
+import { COMPARE_ARROW, type CompareMode, type TableTarget } from '@/stores/tabs'
 
 import { colourSwatch } from './ConnectionColour'
 import { ownsObjects, type TreeNode } from './tree'
@@ -37,6 +37,55 @@ interface TreeMenuActions {
   onImport: (target: TableTarget) => void
   /** Raises the wizard that writes tables out as files. An empty table means all of them. */
   onExport: (target: TableTarget) => void
+  /** Opens the pair the reader picked side by side, in whichever half they asked for. */
+  onCompare: (left: TableTarget, right: TableTarget, mode: CompareMode) => void
+}
+
+/**
+ * The tables the reader has picked, in the order they picked them — what `Ctrl` in the tree
+ * builds. Compare needs exactly two, and it is the *tree's* pick rather than the menu's because
+ * the second table is nearly always somewhere the first one's right-click cannot reach: another
+ * database, another server.
+ */
+export type PickedTables = readonly TableTarget[]
+
+/**
+ * The two halves of a comparison as the menu offers them, which is the same two-way choice Dump
+ * and Duplicate already read as. Structure alone is a read of two catalogues and is instant; data
+ * is a bounded read of two tables, which is why it is the second of the two and never the default.
+ */
+const COMPARE_MODES: ReadonlyArray<{ label: string; mode: CompareMode }> = [
+  { label: 'Structure Only', mode: 'structure' },
+  { label: 'Data Only', mode: 'data' },
+]
+
+/**
+ * What a table's right-click offers about comparing it. Two tables picked is the whole
+ * precondition, so with fewer the item stays and **says what is missing** rather than vanishing:
+ * a gesture nobody can see is a gesture nobody finds. It is the same reason the tree's own Delete
+ * Index is drawn dead with a reason rather than left out.
+ */
+function compareItem(picked: PickedTables, on: TreeMenuActions['onCompare']): MenuItem {
+  const [left, right] = picked
+
+  if (!left || !right) {
+    return {
+      label: 'Compare — Ctrl-click a second table',
+      icon: ICON.compare,
+      disabled: true,
+      separatorBefore: true,
+    }
+  }
+
+  return {
+    label: `Compare ${left.table} ${COMPARE_ARROW} ${right.table}`,
+    icon: ICON.compare,
+    separatorBefore: true,
+    items: COMPARE_MODES.map(({ label, mode }) => ({
+      label: `${label}…`,
+      onSelect: () => on(left, right, mode),
+    })),
+  }
 }
 
 /**
@@ -45,7 +94,10 @@ interface TreeMenuActions {
  * the statement. Nothing here changes a schema without asking first, and nothing changes one
  * silently, because whatever asked is also where a rejection is shown.
  */
-export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuItem[] {
+export function useTreeMenu(
+  actions: TreeMenuActions,
+  picked: PickedTables,
+): (node: TreeNode) => MenuItem[] {
   const profiles = useConnectionsStore((s) => s.profiles)
   const sessions = useConnectionsStore((s) => s.sessions)
   const structures = useConnectionsStore((s) => s.structures)
@@ -71,6 +123,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
     onDesign,
     onImport,
     onExport,
+    onCompare,
   } = actions
 
   return useCallback(
@@ -230,10 +283,13 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
             () => void refreshStructure(node.profileId, ns, node.label),
             dumpItems(node.label),
             wizards(node.label),
+            compareItem(picked, onCompare),
             words,
             info.hasTruncate,
           )
 
+        // A view has rows and a shape like a table, so it compares like one. Everything else it
+        // is offered is shorter, because a view is not a thing this app alters.
         case 'view':
           return [
             {
@@ -242,6 +298,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
               onSelect: () =>
                 onOpenRows({ profileId: node.profileId, namespace: ns, table: node.label }),
             },
+            compareItem(picked, onCompare),
             {
               label: 'Delete View',
               icon: ICON.delete,
@@ -315,6 +372,8 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       onDesign,
       onImport,
       onExport,
+      onCompare,
+      picked,
     ],
   )
 }
@@ -439,9 +498,9 @@ function connectionItems(
 /**
  * The whole of what a table is offered, in the order the tree lists it.
  *
- * `dump` and `wizards` arrive built rather than being made here, because the same items are offered
- * on a namespace as well and differ between the two only in what they name — one table, or all of
- * them.
+ * `dump`, `wizards` and `compare` arrive built rather than being made here, because the same items
+ * are offered elsewhere and differ only in what they name — one table or all of them for the first
+ * two, and for the third the *pair* the tree has picked, which no one table's menu could know.
  *
  * Truncate is left out where it is not a second thing: on a document store every document has to be
  * deleted to empty a collection, so Empty and Truncate would be one command under two names — see
@@ -452,12 +511,16 @@ export function tableItems(
   refresh: () => void,
   dump: MenuItem,
   wizards: MenuItem[],
+  compare: MenuItem,
   words: EngineWords = engineWords(''),
   truncates = true,
 ): MenuItem[] {
   return [
     { label: `Open ${words.table}`, icon: ICON.open, onSelect: on.open },
     { label: `Design ${words.table}`, icon: ICON.design, onSelect: on.design },
+    // Beside Open and Design rather than beside Dump: comparing only ever *reads*, and the three
+    // items under it all carry the table somewhere else.
+    compare,
     { label: `New ${words.table}`, icon: ICON.add, separatorBefore: true, onSelect: on.create },
     { label: `Rename ${words.table}…`, icon: ICON.rename, onSelect: on.rename },
     {

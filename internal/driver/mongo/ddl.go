@@ -321,6 +321,83 @@ func (s *session) DropIndex(ctx context.Context, ns driver.Namespace, table, ind
 	return translateError(s.collection(ns, table).Indexes().DropOne(ctx, index))
 }
 
+// AlterStatements spells changes to a collection as the commands that would make them — the same
+// commands the runs above send, written the way the shell writes them.
+//
+// **A field is not a column, so a change to one is a change to the documents that carry it**: what
+// a SQL engine says in an `ALTER TABLE`, this says as an `updateMany` with `$set`, `$unset` or a
+// `$convert` pipeline. Two kinds contribute *nothing at all* — a foreign key of either direction —
+// because this engine has no such thing, and a migration that offered one would be offering a
+// command that cannot be written rather than one that fails. The run of that same change is where
+// `domain.Unsupported` is raised, which is where a reader can be told why.
+func (s *session) AlterStatements(
+	_ driver.Namespace,
+	table string,
+	changes []driver.TableChange,
+) []string {
+	collection := "db." + key(table) + "."
+	statements := make([]string, 0, len(changes))
+
+	for _, change := range changes {
+		switch change.Kind {
+		case driver.ChangeAddColumn:
+			// The same three parts AddColumn runs: only the documents without the field, the
+			// declared default read as the shell would read it, and null where there is none.
+			value := any(nil)
+			if change.Column.Default != nil && strings.TrimSpace(*change.Column.Default) != "" {
+				value = shellValue(strings.TrimSpace(*change.Column.Default))
+			}
+			statements = append(statements, collection+"updateMany({ "+key(change.Column.Name)+
+				": { $exists: false } }, { $set: { "+key(change.Column.Name)+": "+
+				valueText(value)+" } })")
+
+		case driver.ChangeAlterColumn:
+			statements = append(statements, collection+"updateMany({ "+key(change.Name)+
+				": { $exists: true } }, [{ $set: { "+key(change.Name)+
+				": { $convert: { input: "+valueText("$"+change.Name)+", to: "+
+				valueText(strings.TrimSpace(change.Column.Type))+
+				", onError: \"$$REMOVE\", onNull: \"$$REMOVE\" } } } }])")
+
+		case driver.ChangeDropColumn:
+			statements = append(statements,
+				collection+"updateMany({}, { $unset: { "+key(change.Name)+": \"\" } })")
+
+		case driver.ChangeCreateIndex:
+			statements = append(statements, collection+"createIndex("+
+				valueText(indexKeysOf(change.Index))+", "+valueText(indexOptions(change.Index))+")")
+
+		case driver.ChangeDropIndex:
+			statements = append(statements, collection+"dropIndex("+valueText(change.Name)+")")
+		}
+	}
+
+	return statements
+}
+
+// indexKeys is the keys document CreateIndex builds, spelled once so the command shown and the
+// index made cannot differ: an ordinary index's key is `1`, and a special one's key *is* its method.
+func indexKeysOf(spec driver.IndexSpec) bson.D {
+	method := strings.TrimSpace(spec.Method)
+	keys := bson.D{}
+
+	for _, column := range spec.Columns {
+		if method == "" || method == "asc" {
+			keys = append(keys, bson.E{Key: column, Value: 1})
+			continue
+		}
+		keys = append(keys, bson.E{Key: column, Value: method})
+	}
+	return keys
+}
+
+func indexOptions(spec driver.IndexSpec) bson.D {
+	opts := bson.D{{Key: "name", Value: spec.Name}}
+	if spec.Unique {
+		opts = append(opts, bson.E{Key: "unique", Value: true})
+	}
+	return opts
+}
+
 // CreateForeignKey and DropForeignKey both refuse. MongoDB has no referential constraints of any
 // kind: there is nothing to create, nothing to drop, and nothing that would check the documents
 // afterwards. Saying so is the honest answer — the alternative is a statement the server rejects for

@@ -60,6 +60,114 @@ export namespace app {
 	        this.column = source["column"];
 	    }
 	}
+	export class CompareSide {
+	    sessionId: string;
+	    database: string;
+	    schema: string;
+	    table: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CompareSide(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.table = source["table"];
+	    }
+	}
+	export class RowDiff {
+	    status: string;
+	    key: string[];
+	    left: string[];
+	    right: string[];
+	    differs: boolean[];
+	
+	    static createFrom(source: any = {}) {
+	        return new RowDiff(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.key = source["key"];
+	        this.left = source["left"];
+	        this.right = source["right"];
+	        this.differs = source["differs"];
+	    }
+	}
+	export class TableColumn {
+	    name: string;
+	    type: string;
+	    fullType: string;
+	    nullable: boolean;
+	    primaryKey: boolean;
+	    default?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TableColumn(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.fullType = source["fullType"];
+	        this.nullable = source["nullable"];
+	        this.primaryKey = source["primaryKey"];
+	        this.default = source["default"];
+	    }
+	}
+	export class DataDiff {
+	    key: string[];
+	    keyDeclared: boolean;
+	    columns: TableColumn[];
+	    leftOnly: string[];
+	    rightOnly: string[];
+	    rows: RowDiff[];
+	    leftRows: number;
+	    rightRows: number;
+	    leftTruncated: boolean;
+	    rightTruncated: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new DataDiff(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.key = source["key"];
+	        this.keyDeclared = source["keyDeclared"];
+	        this.columns = this.convertValues(source["columns"], TableColumn);
+	        this.leftOnly = source["leftOnly"];
+	        this.rightOnly = source["rightOnly"];
+	        this.rows = this.convertValues(source["rows"], RowDiff);
+	        this.leftRows = source["leftRows"];
+	        this.rightRows = source["rightRows"];
+	        this.leftTruncated = source["leftTruncated"];
+	        this.rightTruncated = source["rightTruncated"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DatabaseOptions {
 	    owners: string[];
 	    templates: string[];
@@ -303,6 +411,44 @@ export namespace app {
 		}
 	}
 	
+	export class FieldDiff {
+	    name: string;
+	    status: string;
+	    differs: string[];
+	    left?: TableColumn;
+	    right?: TableColumn;
+	
+	    static createFrom(source: any = {}) {
+	        return new FieldDiff(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.differs = source["differs"];
+	        this.left = this.convertValues(source["left"], TableColumn);
+	        this.right = this.convertValues(source["right"], TableColumn);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class FieldMapping {
 	    source: string;
 	    target: string;
@@ -343,6 +489,45 @@ export namespace app {
 	        this.onDelete = source["onDelete"];
 	    }
 	}
+	export class ForeignKeyDiff {
+	    name: string;
+	    status: string;
+	    differs: string[];
+	    left?: ForeignKeyInfo;
+	    right?: ForeignKeyInfo;
+	
+	    static createFrom(source: any = {}) {
+	        return new ForeignKeyDiff(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.differs = source["differs"];
+	        this.left = this.convertValues(source["left"], ForeignKeyInfo);
+	        this.right = this.convertValues(source["right"], ForeignKeyInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ForeignKeyInput {
 	    name: string;
 	    columns: string[];
@@ -575,6 +760,45 @@ export namespace app {
 	        this.method = source["method"];
 	    }
 	}
+	export class IndexDiff {
+	    name: string;
+	    status: string;
+	    differs: string[];
+	    left?: IndexInfo;
+	    right?: IndexInfo;
+	
+	    static createFrom(source: any = {}) {
+	        return new IndexDiff(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.differs = source["differs"];
+	        this.left = this.convertValues(source["left"], IndexInfo);
+	        this.right = this.convertValues(source["right"], IndexInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class IndexInput {
 	    name: string;
 	    columns: string[];
@@ -864,6 +1088,7 @@ export namespace app {
 	        this.key = source["key"];
 	    }
 	}
+	
 	export class RowValueInput {
 	    column: string;
 	    value?: string;
@@ -915,6 +1140,30 @@ export namespace app {
 		}
 	}
 	
+	export class RowWriteInput {
+	    database: string;
+	    schema: string;
+	    table: string;
+	    mode: string;
+	    columns: string[];
+	    keys: string[];
+	    rows: string[][];
+	
+	    static createFrom(source: any = {}) {
+	        return new RowWriteInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.table = source["table"];
+	        this.mode = source["mode"];
+	        this.columns = source["columns"];
+	        this.keys = source["keys"];
+	        this.rows = source["rows"];
+	    }
+	}
 	
 	export class ScriptFileInput {
 	    database: string;
@@ -1086,28 +1335,6 @@ export namespace app {
 		    return a;
 		}
 	}
-	export class TableColumn {
-	    name: string;
-	    type: string;
-	    fullType: string;
-	    nullable: boolean;
-	    primaryKey: boolean;
-	    default?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new TableColumn(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.type = source["type"];
-	        this.fullType = source["fullType"];
-	        this.nullable = source["nullable"];
-	        this.primaryKey = source["primaryKey"];
-	        this.default = source["default"];
-	    }
-	}
 	export class ScriptResult {
 	    database: string;
 	    schema: string;
@@ -1233,7 +1460,79 @@ export namespace app {
 	}
 	
 	
+	export class StructureDiff {
+	    fields: FieldDiff[];
+	    indexes: IndexDiff[];
+	    foreignKeys: ForeignKeyDiff[];
 	
+	    static createFrom(source: any = {}) {
+	        return new StructureDiff(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fields = this.convertValues(source["fields"], FieldDiff);
+	        this.indexes = this.convertValues(source["indexes"], IndexDiff);
+	        this.foreignKeys = this.convertValues(source["foreignKeys"], ForeignKeyDiff);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class TableChangeInput {
+	    kind: string;
+	    name: string;
+	    column: ColumnInput;
+	    index: IndexInput;
+	    key: ForeignKeyInput;
+	
+	    static createFrom(source: any = {}) {
+	        return new TableChangeInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.column = this.convertValues(source["column"], ColumnInput);
+	        this.index = this.convertValues(source["index"], IndexInput);
+	        this.key = this.convertValues(source["key"], ForeignKeyInput);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class TableCriterionInput {
 	    kind: string;

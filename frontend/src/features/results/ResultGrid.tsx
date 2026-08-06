@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -6,12 +7,14 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type RefObject,
 } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
   ChevronDown,
+  ChevronRight,
   EllipsisVertical,
   KeyRound,
   Square,
@@ -22,7 +25,12 @@ import {
 import { copyText, readText } from '@/bridge/clipboard'
 import type { ExportFormat } from '@/bridge/export'
 import { cn } from '@/lib/cn'
-import { ROW_HEIGHT } from '@/shared/theme/density'
+import {
+  DENSE_GUTTER_WIDTH,
+  DENSE_HEADER_HEIGHT,
+  DENSE_ROW_HEIGHT,
+  ROW_HEIGHT,
+} from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 import { IconButton } from '@/shared/ui/IconButton'
 import { ICON } from '@/shared/ui/menuIcons'
@@ -58,7 +66,9 @@ import {
   type CellRange,
   type CellRef,
   type ColumnEditor,
+  type DiffMark,
   type GridData,
+  type GridOutline,
   type ResultColumn,
   type Selection,
   type SortKey,
@@ -66,6 +76,25 @@ import {
 
 const GUTTER_WIDTH = 52
 const HEADER_HEIGHT = 40
+
+/**
+ * How tall a row, its header and its gutter are. There are two sets of them and no more: the one
+ * every grid has, and the one a grid drawn to be *scanned* takes — see `density.ts`. The numbers
+ * travel as an object rather than as three arguments because they are read in seven places and
+ * three of them are outside the component.
+ */
+interface Density {
+  row: number
+  header: number
+  gutter: number
+}
+
+const ROOMY: Density = { row: ROW_HEIGHT, header: HEADER_HEIGHT, gutter: GUTTER_WIDTH }
+const DENSE: Density = {
+  row: DENSE_ROW_HEIGHT,
+  header: DENSE_HEADER_HEIGHT,
+  gutter: DENSE_GUTTER_WIDTH,
+}
 const DEFAULT_COLUMN_WIDTH = 160
 const MIN_COLUMN_WIDTH = 60
 const MAX_FIT_WIDTH = 520
@@ -75,6 +104,8 @@ const TYPE_ICON_WIDTH = 17
 const KEY_ICON_WIDTH = 15
 /** The room the header's options button takes on the right, beyond a cell's own padding. */
 const MENU_WIDTH = 20
+/** How far one level of an outlined column indents its name — the tree's own step. */
+const OUTLINE_INDENT = 12
 /** Pixels scrolled per frame while a drag is held past an edge of the viewport. */
 const EDGE_STEP = 14
 /**
@@ -100,6 +131,27 @@ const ARROWS: Record<string, CellRef> = {
 
 const NOTHING_DIRTY = () => false
 const NOTHING_DELETED = () => false
+const NOTHING_MARKED = () => undefined
+const NO_CELL_MARKED = () => false
+
+/**
+ * What a comparison paints a row in: the row's own wash, its gutter's, and the bar down the
+ * gutter's leading edge that says which of the four it is without reading a legend. The colours
+ * are `--grid-diff-*` tokens and never a hex — see `shared/theme/tokens.css`.
+ */
+const DIFF_ROW: Record<DiffMark, string> = {
+  added: 'bg-grid-diff-added',
+  removed: 'bg-grid-diff-removed',
+  changed: 'bg-grid-diff-changed',
+  absent: 'bg-grid-diff-absent',
+}
+
+const DIFF_GUTTER: Record<DiffMark, string> = {
+  added: 'bg-grid-diff-added text-diff-added shadow-[inset_2px_0_0_var(--diff-added)]',
+  removed: 'bg-grid-diff-removed text-diff-removed shadow-[inset_2px_0_0_var(--diff-removed)]',
+  changed: 'bg-grid-diff-changed text-diff-changed shadow-[inset_2px_0_0_var(--diff-changed)]',
+  absent: 'bg-grid-diff-absent text-faint',
+}
 
 /** Where a drag started, so extending it never depends on the render that began it. */
 interface Drag {
@@ -139,6 +191,19 @@ interface ResultGridProps {
   /** Whether a row is marked for deletion but not written back yet. A predicate for the same
    * reason `isDirty` is one: a call site that pages answers in its own coordinates. */
   isDeleted?: (row: number) => boolean
+  /**
+   * What a comparison says about a row, where the grid is drawing one side of one — and nothing
+   * at all for a row the two sides agree about. A predicate for the reason the two above are:
+   * a comparison holds its own list of pairs and answers in the grid's coordinates from it.
+   *
+   * Deletion wins over it, being the more consequential fact, and neither surface has both.
+   */
+  markRow?: (row: number) => DiffMark | undefined
+  /**
+   * Whether this cell is one of the ones that differ, which a `changed` row draws cell by cell so
+   * a row of forty columns says *which* of them moved. It is asked only of a marked row.
+   */
+  markCell?: (row: number, column: number) => boolean
   /**
    * The keys the rows arrived in order of, which the header marks — the first deciding and the
    * rest breaking its ties, so a header carrying the second key says so with its place. Reordering
@@ -208,6 +273,31 @@ interface ResultGridProps {
    * `Raw` alone. See `ValueViewer.formatValue`, which requires it to be referentially stable.
    */
   formatValue?: ((value: string) => Promise<string>) | undefined
+  /**
+   * The grid's own scroller, for a surface that has to move two grids as one: the two panes of a
+   * comparison hold the same rows in the same order, and a pane scrolled on its own would put row
+   * *n* of one beside row *m* of the other, which is the one thing that makes a diff unreadable.
+   *
+   * It is the *element* rather than a scroll position, because who mirrors whom — and how a loop
+   * between two of them is broken — is the call site's business and not the grid's. Pass a stable
+   * ref: it is attached with the element and would otherwise detach on every render.
+   */
+  viewportRef?: RefObject<HTMLDivElement | null> | undefined
+  /**
+   * Draws the grid to be *scanned* rather than worked in: shorter rows, a one-line header, a
+   * narrower gutter. It is a surface that has to fit several grids in one pane that asks for it —
+   * a comparison is two of them and a script — and nothing is left out to get it.
+   */
+  dense?: boolean
+  /**
+   * Draws the grid as a **strip that follows another**: no row gutter and no scrollbars of its own,
+   * because the grid beside it already carries both and a second set would only repeat them.
+   *
+   * It exists for one thing — the column of ticks between a comparison's two panes, which is a pane
+   * of its own precisely so that scrolling either side sideways cannot slide it away. Such a strip
+   * is never read alone, so it is moved through `viewportRef` like the panes it sits between.
+   */
+  strip?: boolean
 }
 
 /** The head strip has nothing to say for a grid with none of the things it carries. */
@@ -221,6 +311,8 @@ export function ResultGrid({
   onEditCell,
   isDirty = NOTHING_DIRTY,
   isDeleted = NOTHING_DELETED,
+  markRow = NOTHING_MARKED,
+  markCell = NO_CELL_MARKED,
   sort = NO_SORT,
   onSortChange,
   onActivateRow,
@@ -234,7 +326,13 @@ export function ResultGrid({
   onRefresh,
   filtering,
   formatValue,
+  viewportRef,
+  dense = false,
+  strip = false,
 }: ResultGridProps) {
+  const density = dense ? DENSE : ROOMY
+  const size = strip ? { ...density, gutter: 0 } : density
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const drag = useRef<Drag | null>(null)
@@ -262,6 +360,17 @@ export function ResultGrid({
    */
   const [viewing, setViewing] = useState<CellRef | null>(null)
 
+  // The scroller is the grid's own and a call site's at once, where one was asked for. A callback
+  // rather than two `ref` attributes, because an element takes one — and a memoized one, because
+  // an inline callback ref detaches and reattaches the scroller on every render.
+  const attachViewport = useCallback(
+    (node: HTMLDivElement | null) => {
+      scrollRef.current = node
+      if (viewportRef) viewportRef.current = node
+    },
+    [viewportRef],
+  )
+
   const current = selection === undefined ? ownSelection : selection
 
   const select = (next: Selection) => {
@@ -269,13 +378,17 @@ export function ResultGrid({
     onSelectionChange?.(next)
   }
 
-  const widths = result.columns.map((column) => resized[column.name] ?? DEFAULT_COLUMN_WIDTH)
+  // The reader's own width first, then the column's own, then the grid's — so a drag outlives the
+  // width a call site asked to open at, and neither of them outlives the other's turn.
+  const widths = result.columns.map(
+    (column) => resized[column.name] ?? column.width ?? DEFAULT_COLUMN_WIDTH,
+  )
   const lastColumn = result.columns.length - 1
 
   const virtualizer = useVirtualizer({
     count: result.rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => size.row,
     overscan: 16,
   })
 
@@ -315,7 +428,7 @@ export function ResultGrid({
     [filtering?.shown],
   )
 
-  const totalWidth = GUTTER_WIDTH + widths.reduce((sum, w) => sum + w, 0)
+  const totalWidth = size.gutter + widths.reduce((sum, w) => sum + w, 0)
   const bounds = current?.ranges.map(boundsOf) ?? []
   const focus = focusOf(current)
 
@@ -479,10 +592,10 @@ export function ResultGrid({
   /** Reads a cell straight off the pointer, so a drag needs no per-cell handlers. */
   const cellAt = (clientX: number, clientY: number, wholeRow: boolean): CellRef => {
     const rect = bodyRef.current?.getBoundingClientRect()
-    const row = clamp(Math.floor((clientY - (rect?.top ?? 0)) / ROW_HEIGHT), result.rows.length - 1)
+    const row = clamp(Math.floor((clientY - (rect?.top ?? 0)) / size.row), result.rows.length - 1)
     const column = wholeRow
       ? lastColumn
-      : columnAt(widths, clientX - (rect?.left ?? 0) - GUTTER_WIDTH)
+      : columnAt(widths, clientX - (rect?.left ?? 0) - size.gutter)
 
     return { row, column }
   }
@@ -495,19 +608,19 @@ export function ResultGrid({
     const scroller = scrollRef.current
     if (!scroller) return
 
-    const top = ref.row * ROW_HEIGHT
-    const left = edgeOf(widths, ref.column)
+    const top = ref.row * size.row
+    const left = edgeOf(widths, ref.column, size.gutter)
 
     scroller.scrollTo({
       top: keepWithin(
         scroller.scrollTop,
-        top + ROW_HEIGHT - scroller.clientHeight,
-        top - HEADER_HEIGHT,
+        top + size.row - scroller.clientHeight,
+        top - size.header,
       ),
       left: keepWithin(
         scroller.scrollLeft,
         left + (widths[ref.column] ?? 0) - scroller.clientWidth,
-        left - GUTTER_WIDTH,
+        left - size.gutter,
       ),
     })
   }
@@ -551,7 +664,7 @@ export function ResultGrid({
     const rect = scroller.getBoundingClientRect()
     const { x, y } = pointer.current
     const left = edgePush(x, rect.left, rect.right)
-    const top = edgePush(y, rect.top + HEADER_HEIGHT, rect.bottom)
+    const top = edgePush(y, rect.top + size.header, rect.bottom)
 
     if (left !== 0 || top !== 0) {
       scroller.scrollBy({ left, top })
@@ -616,6 +729,9 @@ export function ResultGrid({
     return true
   }
 
+  /** Whether this column takes an edit at all — see `ResultColumn.readOnly`. */
+  const writable = (column: number) => result.columns[column]?.readOnly !== true
+
   /**
    * **One click opens the cell it lands on**, which is the whole of what a click does beyond
    * selecting: a toggle is flipped, anything else opens its editor. Read off the press — pointer
@@ -625,6 +741,7 @@ export function ResultGrid({
   const onClick = () => {
     const hit = lastHit.current
     if (!onEditCell || !hit || hit.wholeRow || hit.moved || hit.extending) return
+    if (!writable(hit.ref.column)) return
     if (!toggle(hit.ref)) setEditing(hit.ref)
   }
 
@@ -646,7 +763,7 @@ export function ResultGrid({
     }
     if (!current) return
 
-    if (event.key === 'Enter' && onEditCell && focus) {
+    if (event.key === 'Enter' && onEditCell && focus && writable(focus.column)) {
       event.preventDefault()
       if (!toggle(focus)) setEditing(focus)
       return
@@ -668,11 +785,12 @@ export function ResultGrid({
   /** The header and the rows under it: the whole of the grid but whatever panel sits over it. */
   const rows = (
     <div
-      ref={scrollRef}
+      ref={attachViewport}
       tabIndex={0}
       onKeyDown={onKeyDown}
       className={cn(
-        'scroll-thin overflow-auto bg-canvas',
+        'overflow-auto bg-canvas',
+        strip ? 'scroll-none' : 'scroll-thin',
         // It fills the panel the splitter gave it where there is one, and takes what the column
         // leaves where there is not.
         filtering ? 'h-full' : 'min-h-0 flex-1',
@@ -691,6 +809,9 @@ export function ResultGrid({
           drag={columnDrag}
           onDragChange={setColumnDrag}
           menuFor={columnMenu}
+          size={size}
+          dense={dense}
+          strip={strip}
         />
 
         {/* What is being carried, and where it would land — both drawn down the whole grid
@@ -700,7 +821,7 @@ export function ResultGrid({
           <span
             className="pointer-events-none absolute top-0 bottom-0 z-3 border-[3px] border-fg"
             style={{
-              left: edgeOf(widths, columnDrag.from),
+              left: edgeOf(widths, columnDrag.from, size.gutter),
               width: widths[columnDrag.from] ?? DEFAULT_COLUMN_WIDTH,
             }}
           />
@@ -708,7 +829,7 @@ export function ResultGrid({
         {columnDrag && moves(columnDrag) ? (
           <span
             className="pointer-events-none absolute top-0 bottom-0 z-3 w-0.5 bg-accent"
-            style={{ left: edgeOf(widths, columnDrag.to) }}
+            style={{ left: edgeOf(widths, columnDrag.to, size.gutter) }}
           />
         ) : null}
 
@@ -736,6 +857,10 @@ export function ResultGrid({
               // A row on its way out reads as struck through whatever the selection says,
               // because the strike is inherited by every cell below it.
               const removed = isDeleted(item.index)
+              // What a comparison says about the row, and nothing for one the two sides agree
+              // about. Deletion wins over it, being the more consequential fact — and no surface
+              // is ever both a comparison and writable, so the two never actually meet.
+              const mark = removed ? undefined : markRow(item.index)
 
               return (
                 <div
@@ -746,24 +871,30 @@ export function ResultGrid({
                       ? 'bg-grid-row-deleted line-through'
                       : banded
                         ? 'bg-grid-row-selected'
-                        : 'hover:bg-hover',
+                        : mark
+                          ? DIFF_ROW[mark]
+                          : 'hover:bg-hover',
                   )}
-                  style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
+                  style={{ height: size.row, transform: `translateY(${item.start}px)` }}
                 >
-                  <div
-                    data-gutter=""
-                    className={cn(
-                      'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
-                      removed
-                        ? 'bg-grid-row-deleted text-danger'
-                        : touched
-                          ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
-                          : 'bg-panel text-faint',
-                    )}
-                    style={{ width: GUTTER_WIDTH }}
-                  >
-                    {item.index + 1}
-                  </div>
+                  {size.gutter > 0 ? (
+                    <div
+                      data-gutter=""
+                      className={cn(
+                        'sticky left-0 z-1 flex shrink-0 items-center justify-end border-r border-line pr-2 font-mono text-2xs',
+                        removed
+                          ? 'bg-grid-row-deleted text-danger'
+                          : touched
+                            ? 'bg-grid-row-selected text-fg shadow-[inset_2px_0_0_var(--accent)]'
+                            : mark
+                              ? DIFF_GUTTER[mark]
+                              : 'bg-panel text-faint',
+                      )}
+                      style={{ width: size.gutter }}
+                    >
+                      {item.index + 1}
+                    </div>
+                  ) : null}
 
                   {result.columns.map((column, i) => {
                     const width = widths[i] ?? DEFAULT_COLUMN_WIDTH
@@ -806,6 +937,9 @@ export function ResultGrid({
                         inRange={within(bounds, item.index, i)}
                         focused={focus?.row === item.index && focus.column === i}
                         edited={isDirty(item.index, i)}
+                        differs={mark !== undefined && markCell(item.index, i)}
+                        row={item.index}
+                        outline={column.outline}
                       />
                     )
                   })}
@@ -934,8 +1068,8 @@ const keepWithin = (value: number, lowest: number, highest: number) =>
   Math.min(Math.max(value, lowest), highest)
 
 /** Where a column's left edge sits across the grid's whole width, the row gutter included. */
-function edgeOf(widths: number[], index: number): number {
-  return GUTTER_WIDTH + widths.slice(0, index).reduce((sum, width) => sum + width, 0)
+function edgeOf(widths: number[], index: number, gutter: number): number {
+  return gutter + widths.slice(0, index).reduce((sum, width) => sum + width, 0)
 }
 
 function columnAt(widths: number[], x: number): number {
@@ -1000,6 +1134,16 @@ interface HeaderRowProps {
   drag: ColumnDrag | null
   onDragChange: (drag: ColumnDrag | null) => void
   menuFor: (index: number) => MenuItem[]
+  /** The geometry the grid picked, which the header has to draw itself and its gutter at. */
+  size: Density
+  /** Whether the name and its type share one line — see `ResultGridProps.dense`. */
+  dense: boolean
+  /**
+   * A strip's header carries the name and nothing else — see `ResultGridProps.strip`. Its width is
+   * the frame's and not the reader's to drag: a column wider than the strip around it could not be
+   * scrolled back into view, the strip having no bar to scroll it with.
+   */
+  strip: boolean
 }
 
 /** A header being carried, and the boundary between two columns it would be dropped on. */
@@ -1023,8 +1167,11 @@ function HeaderRow({
   drag,
   onDragChange,
   menuFor,
+  size,
+  dense,
+  strip,
 }: HeaderRowProps) {
-  const strip = useRef<HTMLDivElement>(null)
+  const bar = useRef<HTMLDivElement>(null)
 
   /**
    * The boundary the pointer is nearest, counted like a caret between characters: past a column's
@@ -1032,7 +1179,7 @@ function HeaderRow({
    * columns, so it is measured from the row's own left edge exactly as a cell is.
    */
   const boundaryAt = (clientX: number): number => {
-    const x = clientX - (strip.current?.getBoundingClientRect().left ?? 0) - GUTTER_WIDTH
+    const x = clientX - (bar.current?.getBoundingClientRect().left ?? 0) - size.gutter
 
     let edge = 0
     for (let i = 0; i < widths.length; i++) {
@@ -1067,11 +1214,13 @@ function HeaderRow({
   }
 
   return (
-    <div ref={strip} className="sticky top-0 z-2 flex border-b border-line-strong bg-bar">
-      <div
-        className="sticky left-0 z-1 shrink-0 border-r border-line bg-bar"
-        style={{ width: GUTTER_WIDTH, height: HEADER_HEIGHT }}
-      />
+    <div ref={bar} className="sticky top-0 z-2 flex border-b border-line-strong bg-bar">
+      {size.gutter > 0 ? (
+        <div
+          className="sticky left-0 z-1 shrink-0 border-r border-line bg-bar"
+          style={{ width: size.gutter, height: size.header }}
+        />
+      ) : null}
 
       {columns.map((column, i) => {
         const active = columnTouched(bounds, i)
@@ -1083,18 +1232,20 @@ function HeaderRow({
         return (
           <ContextMenu key={i} items={menuFor(i)}>
             <div
+              title={`${column.name} — ${typeLabel(column)}`}
               onContextMenu={() => onSelectColumn(i)}
               onPointerDown={(event) => startDrag(event, i)}
               onPointerMove={carry}
               onPointerUp={drop}
               onLostPointerCapture={drop}
               className={cn(
-                'relative flex shrink-0 flex-col justify-center border-r border-line pr-7 pl-2',
+                'relative flex shrink-0 flex-col justify-center border-r border-line pl-2',
+                strip ? 'pr-2' : 'pr-7',
                 active ? 'bg-grid-cell-selected' : 'bg-bar',
                 onMoveColumn && 'cursor-grab',
                 drag?.from === i && 'opacity-50',
               )}
-              style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: HEADER_HEIGHT }}
+              style={{ width: widths[i] ?? DEFAULT_COLUMN_WIDTH, height: size.header }}
             >
               <span className="flex items-center gap-1">
                 {/* The same lock the tree draws on a key field, in the same gold: which columns
@@ -1102,9 +1253,17 @@ function HeaderRow({
                 {column.primaryKey === true ? (
                   <KeyRound size={11} className="shrink-0 text-grid-key" />
                 ) : null}
+                {/* A dense header puts the type-kind glyph beside the name instead of on a line
+                    of its own: the colour is what the icon is read for, and it costs no height. */}
+                {dense ? <ColumnTypeIcon type={column.type} /> : null}
                 {/* The UI font, where a cell is mono: a name read as a label cannot be mistaken
                     for the data under it. */}
-                <span className="min-w-0 truncate text-base font-bold tracking-wide text-fg">
+                <span
+                  className={cn(
+                    'min-w-0 truncate font-bold tracking-wide text-fg',
+                    dense ? 'text-xs' : 'text-base',
+                  )}
+                >
                   {column.name}
                 </span>
                 {sorted ? (
@@ -1114,24 +1273,34 @@ function HeaderRow({
                   />
                 ) : null}
               </span>
-              <span className="flex items-center gap-1 text-2xs text-muted">
-                <ColumnTypeIcon type={column.type} />
-                <span className="truncate font-mono">{typeLabel(column)}</span>
-              </span>
 
-              <IconButton
-                label={`${column.name} options`}
-                icon={<EllipsisVertical size={14} />}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={openColumnMenu}
-                className="absolute top-1/2 right-1 z-1 -translate-y-1/2"
-              />
+              {/* The type line is the first thing a dense header gives up: it is the one fact of
+                  the two that the *cells* underneath repeat, and its icon has moved up beside
+                  the name. The whole of it is still in the header's own tooltip. */}
+              {dense ? null : (
+                <span className="flex items-center gap-1 text-2xs text-muted">
+                  <ColumnTypeIcon type={column.type} />
+                  <span className="truncate font-mono">{typeLabel(column)}</span>
+                </span>
+              )}
 
-              <ResizeHandle
-                width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
-                onResize={(width) => onResize(column.name, width)}
-                onFit={() => onFit(i)}
-              />
+              {strip ? null : (
+                <>
+                  <IconButton
+                    label={`${column.name} options`}
+                    icon={<EllipsisVertical size={14} />}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={openColumnMenu}
+                    className="absolute top-1/2 right-1 z-1 -translate-y-1/2"
+                  />
+
+                  <ResizeHandle
+                    width={widths[i] ?? DEFAULT_COLUMN_WIDTH}
+                    onResize={(width) => onResize(column.name, width)}
+                    onFit={() => onFit(i)}
+                  />
+                </>
+              )}
             </div>
           </ContextMenu>
         )
@@ -1222,9 +1391,26 @@ interface CellViewProps {
   inRange: boolean
   focused: boolean
   edited: boolean
+  /** Whether a comparison found this cell's two sides different — see `markCell`. */
+  differs: boolean
+  /** Which row this is, which only an outlined cell needs: everything else is in `value`. */
+  row: number
+  /** Set where this column draws its cells as the rows of a tree — see `GridOutline`. */
+  outline: GridOutline | undefined
 }
 
-function CellView({ value, editor, numeric, width, inRange, focused, edited }: CellViewProps) {
+function CellView({
+  value,
+  editor,
+  numeric,
+  width,
+  inRange,
+  focused,
+  edited,
+  differs,
+  row,
+  outline,
+}: CellViewProps) {
   const tone = focused
     ? 'text-on-accent'
     : value === null
@@ -1240,11 +1426,14 @@ function CellView({ value, editor, numeric, width, inRange, focused, edited }: C
         'data-font whitespace-nowrap',
         numeric && 'justify-end',
         isToggle(editor) && 'justify-center',
-        focused ? 'bg-accent' : inRange && 'bg-grid-cell-selected',
+        // The row's own wash already says the row differs; this deepens the cells that are why.
+        focused ? 'bg-accent' : inRange ? 'bg-grid-cell-selected' : differs && 'bg-grid-diff-cell',
         edited && 'shadow-[inset_0_0_0_1px_var(--warn)]',
       )}
       style={{ width }}
     >
+      {outline ? <OutlineMark outline={outline} row={row} focused={focused} /> : null}
+
       {editor?.kind === 'check' ? (
         <CheckMark on={checked(value)} focused={focused} />
       ) : editor?.kind === 'key' ? (
@@ -1261,6 +1450,54 @@ function CellView({ value, editor, numeric, width, inRange, focused, edited }: C
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * The indent, the caret and the glyph that turn a column of names into a tree.
+ *
+ * The caret **stops its own press**, for the reason the resize handle does: the grid reads a drag
+ * off the press on its body, and a caret that let one through would start selecting cells every
+ * time a branch was opened. A leaf keeps the caret's width so every name on one level starts on
+ * one line.
+ */
+function OutlineMark({
+  outline,
+  row,
+  focused,
+}: {
+  outline: GridOutline
+  row: number
+  focused: boolean
+}) {
+  const open = outline.open(row)
+
+  return (
+    <>
+      <span aria-hidden className="shrink-0" style={{ width: outline.depth(row) * OUTLINE_INDENT }} />
+
+      {open === undefined ? (
+        <span aria-hidden className="w-3.5 shrink-0" />
+      ) : (
+        <button
+          type="button"
+          aria-label={open ? 'Collapse' : 'Expand'}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            outline.onToggle(row)
+          }}
+          className={cn(
+            'grid h-4 w-3.5 shrink-0 place-items-center',
+            focused ? 'text-on-accent' : 'text-muted hover:text-fg',
+          )}
+        >
+          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+      )}
+
+      {outline.icon ? <span className="shrink-0">{outline.icon(row)}</span> : null}
+    </>
   )
 }
 

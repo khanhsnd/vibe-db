@@ -27,16 +27,19 @@ the thing the reader opened the surface to read is the thing they cannot see. Th
 | Filter & Sort panel | Under the head strip and over the header, drawn only where the call site passed `filtering` and the reader asked for it — the **Filter & Sort** button, the cell menu's **Show/Hide Filter & Sort**, or a header menu's **Add Filter**. It is `FilterSortPanel`, and it is the whole of what the section below describes. It is **dragged rather than fixed**: a grid that can be narrowed puts the panel and the rows in a `Split` of its own, so a reader who opened the panel still says how much of the pane the rows keep, and the handle between them is the only divider — the panel carries no bottom border beside it. The conditions take the slack, which is what makes dragging the handle worth doing; the keys scroll rather than push **Apply** off a panel dragged short. The height is remembered per combination like every other panel, and a grid the call site passed no `filtering` has no splitter at all. The conditions hold whether it is showing or not: hiding the panel is not widening the grid, which is why the button carries a **count** of the conditions and sort keys in force. |
 | Header | Two lines, 40 px on `--surface-bar`, so the shade alone says where the data starts. The column **name** on top in the **UI font**, bold 14 px — the one place the grid is neither mono nor the reader's own font, a size above its cells and weights clear of their light, so a name reads as a label and not as the data beneath it — and its **type** below in muted mono 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx` and is drawn in **that class's own colour** (`--type-*`), so a wide header is read as shapes and colours rather than by spelling out seven type names. Never uppercased — the server's own casing stands. A column that is part of the **primary key** carries the tree's own `--grid-key` lock ahead of its name, from `ResultColumn.primaryKey`, so a result the driver could not trace back to a table simply has none. **Nullability is not drawn here**, and must not be: a driver that cannot report it says `false`, which the grid cannot tell from a column the server really will not take NULL for — the designer reads the catalogue and can. On the right of every header sits the **`⋮` options button**, and beside the name of a sorted column an arrow saying which way — followed by **which key it is** where more than one is in force, so the header under the second key does not claim the order for itself. |
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
-| Rows | `ROW_HEIGHT` from `shared/theme/density.ts`. The **data font** — the `.data-font` class, which is the family, size and weight the reader picked in Settings, mono 13 px light by default. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
+| Density | Two sets of numbers and no more. The **roomy** one every grid takes, and the **dense** one a grid drawn to be *scanned* asks for with `dense`: 22 px rows, a 24 px one-line header, a 34 px gutter (`density.ts`). Nothing is dropped to get it — the header keeps the name and the type-kind glyph, and its whole type moves into the header's tooltip. The comparison is the surface that asks: it holds two grids and a script in one pane, so every pixel a row does not take is another row on the screen. |
+| Rows | `ROW_HEIGHT` from `shared/theme/density.ts`, or the dense one where the call site asked. The **data font** — the `.data-font` class, which is the family, size and weight the reader picked in Settings, mono 13 px light by default. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
 | Long values | A cell draws at most `PREVIEW_LIMIT` characters and then an ellipsis — `cellPreview`. A cell is a couple of hundred pixels wide, so the rest was never readable, and the browser still shapes every character of it to find where the ellipsis goes: **two columns of JSON documents made a 200-row table lag on text layout alone.** Nothing that *acts* on a value is clipped — a copy, an export, a filter's own condition and **View Value** all carry the whole of it — and a fit measures the preview because `MAX_FIT_WIDTH` caps a column far below that many characters anyway. |
 | NULL | The literal `(Null)` in `--syn-null` (`text-null`), from `NULL_TEXT` — one constant, so what the grid shows and what a copy writes cannot disagree. |
 | Bytes | A value that is not text arrives as `\x…` hex and is drawn as that text, like any other. The grid has no special case for it: **View Value** is where a blob becomes a picture or a dump, and a row of them reads as a row of lengths rather than as replacement characters. Why it arrives that way is in [features.md](features.md#why-bytes-arrive-as-x). |
 | Documents | A nested document or an array arrives as the shell's own notation — `{ city: "Hanoi" }`, `[1, "two"]` — and is drawn as that text. The grid has no special case for it either: **View Value** is where one is read whole, in the **Document** view, and the **Cell Editor** panel is where one is *changed* in that same view — the notation is the parser's own, so a cell typed into it goes back as the document it showed, and nobody is sent to `Raw` to edit what `Raw` does not lay out. Laying it out is the **engine's**, through the `formatValue` a call site with a session passes; a grid with none offers `Raw` alone rather than a layout it cannot vouch for. See [features.md](features.md#reading-a-value-whole). |
 | Selection | Three depths: cells inside any rectangle get a fill (`--grid-cell-selected`), the **focus** cell — the pointer's last landing, which is the live rectangle's focus — is solid `--accent` with `--fg-on-accent` text, and a row the selection holds *end to end* is banded across its width (`--grid-row-selected`). A row the selection merely touches gets the band and the accent bar **on its gutter alone**, because a selected column touches every row and must not paint the whole grid. Headers of the selected columns take the cell fill too, so a range is readable from the edges. |
 | Hover | A row highlight, applied *only* to rows outside the selection. Both are background colours, so a selected row must not also carry `hover:bg-hover` or the tint flickers away under the pointer. |
+| Outlined column | A column may draw its cells as **the rows of a tree**, through `ResultColumn.outline`: indented by how deep the row sits, with a caret on a row that holds others and a glyph saying what it is. It is a *column* and not a mode of the grid, because that is what it is — one column carries the hierarchy and every other column beside it stays a plain fact about the row. The rows are still a flat list in the order they read, and **the call site is what flattens the tree**: the grid neither holds a shape nor decides what is open. The caret stops its own press, for the reason the resize handle does — a drag is read off the body, and a caret that let one through would start selecting cells every time a branch was opened. A leaf keeps the caret's width, so every name on one level starts on one line. |
 | Column editors | A column may say how its cells are drawn and changed, through `ResultColumn.editor`. A **`choice`** cell keeps its text and gains a muted chevron; a **`check`** cell is a centred box — filled `--accent` when on, an outline in `--fg-faint` when off — and never the word it holds; a **`key`** cell is a `--grid-key` lock followed by the cell's own value, which is the field's place in the key, and is empty when it holds nothing. A toggle cell shows **nothing** rather than `(Null)`, a no being a no. |
 | Pending edit | A warning-coloured inset ring plus warning text, from `isDirty`. It is a predicate rather than a set of keys so a call site that hides columns can answer in its own coordinates. Every cell of a row that is not on the server yet is pending, so a new row is ringed whole. |
 | Row for deletion | A row that `isDeleted` answers for is banded in `--grid-row-deleted` and struck through — set on the row, so every cell inherits it — and its gutter number turns `text-danger`. Deletion wins over the selection band, because it is the more consequential fact. It is a predicate for the same reason `isDirty` is one: a call site that pages answers in its own coordinates. |
+| Row of a comparison | A row `markRow` answers for is washed in its own `--grid-diff-*` colour and its gutter carries a bar of that colour: **added** (on the right and not the left), **removed** (the other way about), **changed**, and **absent** — the blank standing opposite a row this side has not got, which is a fourth thing and neither a value nor an empty one. A row the two sides agree about is not marked at all. On a `changed` row, every cell `markCell` answers for is drawn deeper still (`--grid-diff-cell`), so a row of forty columns says *which* of them moved. They are their own colour family and not the success and danger ones reused: nothing about a comparison has gone wrong or gone right. Deletion wins over a mark, and no surface is ever both — a comparison is read-only. |
 
 ## How it behaves
 
@@ -179,8 +182,29 @@ the thing the reader opened the surface to read is the thing they cannot see. Th
   does not reset them. It measures the **first `FIT_SAMPLE` (2 000) rows and no more**: a grid may
   hold every row of a table, and measuring a million cells is seconds of frozen window for a width
   nobody can see anyway.
+- **A column may say what width it opens at** (`ResultColumn.width`), for the one where the grid's
+  own 160 px is plainly wrong: a column of **ticks** is not as wide as a column of values. It is
+  only the width it *opens* at — a drag or a fit replaces it, and the reader's width always wins,
+  which is the order the three are read in.
+- **A grid may be drawn as a strip that follows another** (`strip`): no row gutter, no scrollbars,
+  no header menu and no resize handle — the grids either side carry all of them, and a second set
+  would only repeat what is already there. It exists for the column of **ticks between a
+  comparison's two panes**, which is a grid of its own precisely so that scrolling either side
+  sideways cannot slide it away. Its width is the frame's and not the reader's: a column dragged
+  wider than the strip around it could never be scrolled back, there being no bar to scroll it with.
+- **A column may refuse an edit** (`ResultColumn.readOnly`), which is the one arrangement a single
+  `onEditCell` cannot express: a grid whose rows are *read* and which carries one column that is
+  acted on. A comparison is that grid — a **Take** tick beside the columns of facts — and without
+  it, passing `onEditCell` for the tick would open a text editor on every fact beside it.
 - **The grid keeps its own selection when uncontrolled.** Pass `selection` +
   `onSelectionChange` only when something outside needs the focused cell.
+- **The grid hands its scroller over through `viewportRef`**, for the one surface that has to move
+  two grids as one. Two panes of a comparison hold the same rows in the same order, and a pane
+  scrolled on its own would put row *n* of one beside row *m* of the other — which is the single
+  thing that makes a diff unreadable. It is the **element** and not a scroll position, because who
+  mirrors whom is the call site's; `ComparePanes` is the only one, and what stops the echo there is
+  that a scroller already at the position it is being sent to does nothing, never a flag on a timer.
+  Pass a stable ref: it is attached with the element and would otherwise detach on every render.
 - **Export belongs over the grid, never in the footer**, because it acts on the whole grid rather
   than on a row: `ExportMenu` opens CSV, JSON and SQL, each writing what the grid holds to a file
   picked in the system's own save dialog. It is one component in two places — the head strip the
@@ -360,8 +384,8 @@ SELECT * FROM `shop`.`users` ORDER BY `id` LIMIT 100 OFFSET 0  ⧉ │ Record 19
    `density.ts`, because the object tree virtualizes on the same number.
 3. New behaviour is added once, in the grid, and this file is updated in the same change. Every call
    site — `ResultPane`, `TableDataView`, `TableDesigner`, `ObjectListView`, `QueryHistory`,
-   `ScriptMessages` and the three plan surfaces (`Summary`, and `Grid` and `Statistics` inside
-   `ExplainPane`) — then has it, which is the whole point.
+   `ScriptMessages`, the two panes of `ComparePanes` and the three plan surfaces (`Summary`, and
+   `Grid` and `Statistics` inside `ExplainPane`) — then has it, which is the whole point.
 
 ## Where the columns come from
 
@@ -448,6 +472,22 @@ surrounds the grid:
   and the only one that turns the head strip off (`headStrip={false}`), its own toolbar already
   carrying both **Filter & Sort** and **Export**. Its value picker asks about the table it is
   showing, which is the one table it could possibly mean.
+
+- The **comparison** is `ComparePanes` twice over — two grids that map nothing, built from **one**
+  list so row *n* of one is row *n* of the other by construction. Its *shape* half draws that list
+  as a **tree**: the table is the root, the three sections fold under it, and each pane carries the
+  name and the declaration **its own side** holds. It is the one site that passes `outline`, and
+  `structureTree.ts` is what flattens the tree into the list both panes read; a caret belongs to the
+  row and not to a pane, so folding either folds the pair. Its *data* half draws the same list as
+  rows. Both are `dense` and both pass `markRow` and `markCell`.
+- **The ticks are a third grid**, `strip`, standing between the two panes and belonging to neither:
+  a tick is a fact about the comparison and not about either table, and a tick column inside a pane
+  slides out of sight the moment that pane is scrolled sideways. It is the only writable grid of the
+  three — the panes are `readOnly` throughout — so what is acted on is exactly the tick and nothing
+  beside it can be typed over. Stacked panes have no between, so there the tick goes back to being
+  each pane's first column. `ComparePanes` is also the one site that takes a `viewportRef` — its
+  panes are useless apart, and **sideways is carried only between scrollers that have somewhere to
+  go sideways**, or the strip's own nought would drag both panes back to the first column.
 
 - The three **plan** surfaces — `Summary`, and `Grid` and `Statistics` inside `ExplainPane` — are the
   plainest sites there are: a `GridData` built by `features/results/plan.ts` from `QueryResult.plan`,

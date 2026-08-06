@@ -7,6 +7,18 @@
   because that is what a caret is for. The **`Tables` folder** is the one row whose selection also
   opens a pane — its table list, which is what that folder means to a reader; it costs one
   catalogue read and no more than reopening the tab it reveals.
+- **`Ctrl`/`Cmd` picks a second row beside the first**, in the tree as in the grid — that modifier
+  means "and this one as well" everywhere. The tree keeps a *list* of picked nodes with the last as
+  the focused one, so it has the grid's two depths: a picked row is washed, the focused one is bold.
+  It differs from the grid in one way and deliberately — `Ctrl` **toggles** here, because a
+  rectangle cannot be split and a list of rows can. A right-click that lands *inside* a pick of
+  several leaves it standing, which is the rule the cell menu already sets and the whole reason a
+  pair survives being right-clicked. Today the one thing that reads the pair is
+  [Compare](features.md#comparing-two-tables).
+- **A grid may be writable in one column and read-only in every other** (`ResultColumn.readOnly`).
+  It exists for the one arrangement a single `onEditCell` cannot express: rows that are *read*, with
+  one column that is acted on. A comparison is that grid — a **Take** tick beside the columns of
+  facts — and without it, passing a handler for the tick would open a text editor on every fact.
 - **In a writable grid, one click opens the cell.** Nothing there loads or dials anything — an
   editor is staged, not sent — so making the reader click twice to change a value they are already
   pointing at buys nothing. `Escape` closes the editor and hands the keyboard back to the grid, which

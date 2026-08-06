@@ -1,5 +1,6 @@
 import {
   Columns3,
+  GitCompareArrows,
   List,
   Plus,
   SquareTerminal,
@@ -14,7 +15,7 @@ import { EnvironmentStripe } from '@/features/connections/EnvironmentDot'
 import { cn } from '@/lib/cn'
 import { IconButton } from '@/shared/ui/IconButton'
 import { useConnectionsStore } from '@/stores/connections'
-import { useTabsStore, type Tab, type TabKind } from '@/stores/tabs'
+import { targetLabel, useTabsStore, type Tab, type TabKind } from '@/stores/tabs'
 
 const MIDDLE_BUTTON = 1
 
@@ -29,6 +30,7 @@ const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: string }> 
   design: { label: 'Design', icon: Columns3, tint: 'text-kind-field' },
   objects: { label: 'Tables', icon: List, tint: 'text-kind-database' },
   console: { label: 'Console', icon: SquareTerminal, tint: 'text-kind-routine' },
+  compare: { label: 'Compare', icon: GitCompareArrows, tint: 'text-kind-schema' },
 }
 
 export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
@@ -74,6 +76,11 @@ export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
 function tabTooltip(tab: Tab, profile: Profile | undefined): string {
   const named = 'table' in tab && tab.table !== ''
   const lines = [named ? `${KINDS[tab.kind].label}: ${tab.table}` : KINDS[tab.kind].label]
+
+  // A comparison names two tables and the strip has room for neither in full, so the side that is
+  // *not* the tab's own connection is spelled here — otherwise two tabs comparing `users` against
+  // two different servers read as the same tab.
+  if (tab.kind === 'compare') lines.push(`Against: ${targetLabel(tab.right)}`)
 
   if (tab.namespace.database !== '') lines.push(`Database: ${namespaceLabel(tab.namespace)}`)
   if (profile) {

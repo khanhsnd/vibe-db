@@ -48,10 +48,10 @@ func TestIndexStatementPutsTheMethodAfterTheTable(t *testing.T) {
 		Method:  "btree",
 	}
 
-	got := indexStatement(ns, "orders", spec)
+	got := dialect.CreateIndex(ns, "orders", spec)
 	want := `CREATE UNIQUE INDEX "idx_orders_total" ON "public"."orders" USING btree ("total")`
 
 	if got != want {
-		t.Errorf("indexStatement =\n%s\nwant\n%s", got, want)
+		t.Errorf("CreateIndex =\n%s\nwant\n%s", got, want)
 	}
 }

@@ -42,6 +42,20 @@ type Dialect struct {
 	// in the verb (`INSERT IGNORE`) and in a clause that names no columns at all, leaving the
 	// server to find whichever key was broken. See InsertVerb and MergeClause.
 	MergesOnConflict bool
+	// RestatesColumn says an altered column is restated *whole* — MySQL's `MODIFY COLUMN`, where a
+	// fact left out is a fact dropped. PostgreSQL has no such clause and takes one `ALTER COLUMN`
+	// action per fact instead. See AlterColumn.
+	RestatesColumn bool
+	// MethodBeforeTable says an index's access method sits between its name and the table —
+	// MySQL's `CREATE INDEX n USING m ON t (…)`. PostgreSQL takes it after the table.
+	MethodBeforeTable bool
+	// IndexIsObject says an index is an object of the schema in its own right and is dropped by
+	// name — PostgreSQL's `DROP INDEX`. On MySQL an index belongs to its table and is dropped
+	// through it.
+	IndexIsObject bool
+	// ForeignKeyIsConstraint says a referential constraint is dropped as a constraint —
+	// PostgreSQL's `DROP CONSTRAINT`. MySQL has a clause of its own, `DROP FOREIGN KEY`.
+	ForeignKeyIsConstraint bool
 	// TextType is what this engine calls text in a CAST, which is how a column of any type is
 	// compared as text — see Where's `contains`.
 	TextType string
@@ -49,19 +63,23 @@ type Dialect struct {
 
 var (
 	MySQL = Dialect{
-		IdentQuote:       '`',
-		HashComments:     true,
-		BackslashEscapes: true,
-		TextType:         "CHAR",
+		IdentQuote:        '`',
+		HashComments:      true,
+		BackslashEscapes:  true,
+		RestatesColumn:    true,
+		MethodBeforeTable: true,
+		TextType:          "CHAR",
 	}
 	Postgres = Dialect{
-		IdentQuote:        '"',
-		NamespaceIsSchema: true,
-		DollarQuotes:      true,
-		LikeInColumnList:  true,
-		OverridesIdentity: true,
-		MergesOnConflict:  true,
-		TextType:          "TEXT",
+		IdentQuote:             '"',
+		NamespaceIsSchema:      true,
+		DollarQuotes:           true,
+		LikeInColumnList:       true,
+		OverridesIdentity:      true,
+		MergesOnConflict:       true,
+		IndexIsObject:          true,
+		ForeignKeyIsConstraint: true,
+		TextType:               "TEXT",
 	}
 	// Shell is the lexical half of a document store's own language, and is a Dialect for one
 	// reason: so `Lex` reads it rather than a second scanner being written. `//` opens a comment,

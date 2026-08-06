@@ -75,8 +75,131 @@ func (x DDL) AddColumn(
 	table string,
 	spec driver.ColumnSpec,
 ) error {
-	statement := x.alter(ns, table) + " ADD COLUMN " + x.Dialect.ColumnClause(spec)
-	return x.Run(ctx, ns.Database, statement)
+	return x.Run(ctx, ns.Database, x.Dialect.AddColumn(ns, table, spec))
+}
+
+// AlterStatements spells changes to a table as the statements that would make them, and runs none
+// of them. Every one of them is spelled by the same Dialect method the run beside it uses, so what
+// a migration shows the reader and what its Apply does cannot drift apart.
+func (x DDL) AlterStatements(
+	ns driver.Namespace,
+	table string,
+	changes []driver.TableChange,
+) []string {
+	statements := make([]string, 0, len(changes))
+
+	for _, change := range changes {
+		switch change.Kind {
+		case driver.ChangeAddColumn:
+			statements = append(statements, x.Dialect.AddColumn(ns, table, change.Column))
+		case driver.ChangeAlterColumn:
+			statements = append(statements,
+				x.Dialect.AlterColumn(ns, table, change.Name, change.Column))
+		case driver.ChangeDropColumn:
+			statements = append(statements, x.Dialect.DropColumn(ns, table, change.Name))
+		case driver.ChangeCreateIndex:
+			statements = append(statements, x.Dialect.CreateIndex(ns, table, change.Index))
+		case driver.ChangeDropIndex:
+			statements = append(statements, x.Dialect.DropIndex(ns, table, change.Name))
+		case driver.ChangeCreateForeignKey:
+			statements = append(statements, x.Dialect.AddForeignKey(ns, table, change.Key))
+		case driver.ChangeDropForeignKey:
+			statements = append(statements, x.Dialect.DropForeignKey(ns, table, change.Name))
+		}
+	}
+
+	return statements
+}
+
+// AddColumn is that statement as text rather than as a run, the arrangement AddForeignKey already
+// has and for the same reason: a migration writes the clause the designer would have executed
+// instead of a second spelling of it.
+func (d Dialect) AddColumn(ns driver.Namespace, table string, spec driver.ColumnSpec) string {
+	return "ALTER TABLE " + d.Table(ns, table) + " ADD COLUMN " + d.ColumnClause(spec)
+}
+
+func (d Dialect) DropColumn(ns driver.Namespace, table, column string) string {
+	return "ALTER TABLE " + d.Table(ns, table) + " DROP COLUMN " + d.QuoteIdent(column)
+}
+
+// AlterColumn is the one statement of these that the two engines do not merely spell differently
+// but *shape* differently. MySQL restates the column whole, so a fact left out of the clause is a
+// fact dropped; PostgreSQL has no such clause and takes one action per fact, all in one ALTER TABLE
+// so the column is never left half-changed.
+//
+// Either way the clause names the column **being changed** rather than the name in the spec, so
+// renaming is RenameColumn's alone and never a side effect of an edit.
+func (d Dialect) AlterColumn(
+	ns driver.Namespace,
+	table, column string,
+	spec driver.ColumnSpec,
+) string {
+	head := "ALTER TABLE " + d.Table(ns, table) + " "
+
+	if d.RestatesColumn {
+		restated := spec
+		restated.Name = column
+		return head + "MODIFY COLUMN " + d.ColumnClause(restated)
+	}
+
+	quoted := d.QuoteIdent(column)
+	actions := []string{"ALTER COLUMN " + quoted + " TYPE " + strings.TrimSpace(spec.Type)}
+
+	if spec.Nullable && !spec.PrimaryKey {
+		actions = append(actions, "ALTER COLUMN "+quoted+" DROP NOT NULL")
+	} else {
+		actions = append(actions, "ALTER COLUMN "+quoted+" SET NOT NULL")
+	}
+
+	if spec.Default != nil && strings.TrimSpace(*spec.Default) != "" {
+		actions = append(actions, "ALTER COLUMN "+quoted+" SET DEFAULT "+strings.TrimSpace(*spec.Default))
+	} else {
+		actions = append(actions, "ALTER COLUMN "+quoted+" DROP DEFAULT")
+	}
+
+	return head + strings.Join(actions, ", ")
+}
+
+// CreateIndex differs between the engines only in where the access method goes: MySQL takes it
+// between the name and the table, PostgreSQL after the table. An empty method takes the engine's
+// own default, and reaches the statement verbatim the way a column's type does.
+func (d Dialect) CreateIndex(ns driver.Namespace, table string, spec driver.IndexSpec) string {
+	statement := "CREATE "
+	if spec.Unique {
+		statement += "UNIQUE "
+	}
+	statement += "INDEX " + d.QuoteIdent(spec.Name)
+
+	method := strings.TrimSpace(spec.Method)
+	using := ""
+	if method != "" {
+		using = " USING " + method
+	}
+
+	if d.MethodBeforeTable {
+		statement += using + " ON " + d.Table(ns, table)
+	} else {
+		statement += " ON " + d.Table(ns, table) + using
+	}
+
+	return statement + " (" + strings.Join(d.QuoteAll(spec.Columns), ", ") + ")"
+}
+
+// DropIndex names the index alone where an index is an object of the schema in its own right, and
+// goes through the table where it belongs to one.
+func (d Dialect) DropIndex(ns driver.Namespace, table, index string) string {
+	if d.IndexIsObject {
+		return "DROP INDEX " + d.Qualify(ns.Schema, index)
+	}
+	return "ALTER TABLE " + d.Table(ns, table) + " DROP INDEX " + d.QuoteIdent(index)
+}
+
+func (d Dialect) DropForeignKey(ns driver.Namespace, table, constraint string) string {
+	clause := " DROP FOREIGN KEY "
+	if d.ForeignKeyIsConstraint {
+		clause = " DROP CONSTRAINT "
+	}
+	return "ALTER TABLE " + d.Table(ns, table) + clause + d.QuoteIdent(constraint)
 }
 
 func (x DDL) RenameColumn(
@@ -90,8 +213,42 @@ func (x DDL) RenameColumn(
 }
 
 func (x DDL) DropColumn(ctx context.Context, ns driver.Namespace, table, column string) error {
-	statement := x.alter(ns, table) + " DROP COLUMN " + x.Dialect.QuoteIdent(column)
-	return x.Run(ctx, ns.Database, statement)
+	return x.Run(ctx, ns.Database, x.Dialect.DropColumn(ns, table, column))
+}
+
+// AlterColumn, CreateIndex, DropIndex and DropForeignKey are here rather than in each adapter
+// because the Dialect above now spells all four: what differs between the engines is a *flag* —
+// whether a column is restated whole, where an index's method goes, whether an index is an object
+// of the schema, and what the clause dropping a constraint is called — and a flag is the form every
+// other difference between the two takes.
+func (x DDL) AlterColumn(
+	ctx context.Context,
+	ns driver.Namespace,
+	table, column string,
+	spec driver.ColumnSpec,
+) error {
+	return x.Run(ctx, ns.Database, x.Dialect.AlterColumn(ns, table, column, spec))
+}
+
+func (x DDL) CreateIndex(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+	spec driver.IndexSpec,
+) error {
+	return x.Run(ctx, ns.Database, x.Dialect.CreateIndex(ns, table, spec))
+}
+
+func (x DDL) DropIndex(ctx context.Context, ns driver.Namespace, table, index string) error {
+	return x.Run(ctx, ns.Database, x.Dialect.DropIndex(ns, table, index))
+}
+
+func (x DDL) DropForeignKey(
+	ctx context.Context,
+	ns driver.Namespace,
+	table, constraint string,
+) error {
+	return x.Run(ctx, ns.Database, x.Dialect.DropForeignKey(ns, table, constraint))
 }
 
 // CreateForeignKey is spelled the same by both engines once the quoting is the dialect's, and

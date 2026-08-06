@@ -82,4 +82,15 @@
   .scroll-thin::-webkit-scrollbar-corner {
     background: transparent;
   }
+
+  /** A scroller that is moved by whatever it sits beside rather than by a bar of its own — the
+      strip of ticks between a comparison's two panes. Hiding the bar is also what keeps the strip
+      exactly as wide as the one column it holds. */
+  .scroll-none {
+    scrollbar-width: none;
+  }
+
+  .scroll-none::-webkit-scrollbar {
+    display: none;
+  }
 }

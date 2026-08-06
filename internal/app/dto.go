@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"github.com/khanhsnd/vibe-db/internal/compare"
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 )
@@ -433,6 +434,114 @@ type HistoryEntry struct {
 	RanAt        int64  `json:"ranAt"`
 }
 
+// A comparison's four statuses, spelled on the wire exactly as compare.Status spells them. They
+// are a string rather than a flag per kind because one word answers for a field, an index, a
+// constraint and a row alike, and the grid draws one colour per word.
+//
+// `added` is on the right and not on the left; `removed` is the other way about.
+
+// FieldDiff is one field of a structure comparison: whichever sides hold it, and what differs.
+// `left` or `right` is null for a field the other side alone holds, which is what the blank
+// opposite an added or a removed one is drawn from.
+type FieldDiff struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	// Differs names the facts that differ — `type`, `nullable`, `default`, `primary key` — so the
+	// reader is told *which* fact changed rather than only that one did.
+	Differs []string     `json:"differs"`
+	Left    *TableColumn `json:"left"`
+	Right   *TableColumn `json:"right"`
+}
+
+type IndexDiff struct {
+	Name    string     `json:"name"`
+	Status  string     `json:"status"`
+	Differs []string   `json:"differs"`
+	Left    *IndexInfo `json:"left"`
+	Right   *IndexInfo `json:"right"`
+}
+
+type ForeignKeyDiff struct {
+	Name    string          `json:"name"`
+	Status  string          `json:"status"`
+	Differs []string        `json:"differs"`
+	Left    *ForeignKeyInfo `json:"left"`
+	Right   *ForeignKeyInfo `json:"right"`
+}
+
+// StructureDiff is two tables' shapes lined up, one entry per thing either side holds and in the
+// left's own reading order — so row *n* of the left pane and row *n* of the right pane are the
+// same field, which is the whole of what makes two panes readable side by side.
+type StructureDiff struct {
+	Fields      []FieldDiff      `json:"fields"`
+	Indexes     []IndexDiff      `json:"indexes"`
+	ForeignKeys []ForeignKeyDiff `json:"foreignKeys"`
+}
+
+// RowDiff is one row of a data comparison. `left` and `right` hold one value per compared column,
+// in the order DataDiff.columns names them, and one of the two is null for a row only the other
+// side has.
+type RowDiff struct {
+	Status string    `json:"status"`
+	Key    []string  `json:"key"`
+	Left   []*string `json:"left"`
+	Right  []*string `json:"right"`
+	// Differs is one flag per compared column, true where the sides hold different values, and is
+	// empty for a row only one side holds — there being nothing to have compared it against.
+	Differs []bool `json:"differs"`
+}
+
+// DataDiff is two tables' rows lined up.
+type DataDiff struct {
+	// Key is the columns rows were matched on, and `keyDeclared` says they are the tables' own
+	// primary key rather than the fallback. On the fallback a row is matched on the whole of
+	// itself, so nothing can be `changed` — and the reader has to be told that rather than shown
+	// "no changed rows" as though it meant there were none.
+	Key         []string `json:"key"`
+	KeyDeclared bool     `json:"keyDeclared"`
+	// Columns is the columns both sides hold, in the left's order, and the only ones compared.
+	// They arrive as the left's own columns rather than as names, because the grid draws a type.
+	Columns []TableColumn `json:"columns"`
+	// The columns one side holds alone, named rather than compared: a value with nothing opposite
+	// it is a difference between two *shapes*, which the structure comparison is where to read.
+	LeftOnly  []string  `json:"leftOnly"`
+	RightOnly []string  `json:"rightOnly"`
+	Rows      []RowDiff `json:"rows"`
+	// What each side's read returned, and whether the table held more. A comparison is bounded on
+	// purpose — see DefaultCompareRows — so it says which side it did not see the whole of.
+	LeftRows       int  `json:"leftRows"`
+	RightRows      int  `json:"rightRows"`
+	LeftTruncated  bool `json:"leftTruncated"`
+	RightTruncated bool `json:"rightTruncated"`
+}
+
+// TableChangeInput is one change to a table's shape as a migration declares it: `kind` says which
+// of the seven it is and only the field belonging to that kind is read. `name` is what the change
+// is addressed to — the column, index or constraint — and is empty for one that only adds.
+//
+// It is the *same* list for both halves of the round trip: PreviewTableChanges spells it and
+// ApplyTableChanges runs it, so what the reader was shown and what happened cannot be two things.
+type TableChangeInput struct {
+	Kind   string          `json:"kind"`
+	Name   string          `json:"name"`
+	Column ColumnInput     `json:"column"`
+	Index  IndexInput      `json:"index"`
+	Key    ForeignKeyInput `json:"key"`
+}
+
+// RowWriteInput is a batch of rows and what they are to do to a table — the data half of a
+// migration, and the same shape an import already travels as. `mode` is a token from a closed
+// list, and `keys` names the columns that identify a stored row, which every mode but an append
+// needs: without one there is nothing to change or remove.
+type RowWriteInput struct {
+	Namespace
+	Table   string      `json:"table"`
+	Mode    string      `json:"mode"`
+	Columns []string    `json:"columns"`
+	Keys    []string    `json:"keys"`
+	Rows    [][]*string `json:"rows"`
+}
+
 type CellEditInput struct {
 	Namespace
 	Table  string            `json:"table"`
@@ -713,6 +822,39 @@ func toHistoryDTOs(entries []domain.HistoryEntry) []HistoryEntry {
 	return out
 }
 
+// toDriver reads a change the migration declared. A kind this side does not know is carried across
+// as it stands: the driver spells nothing for it and the run refuses it, so one unknown word is
+// answered in one place rather than guessed at in two.
+func (in TableChangeInput) toDriver() driver.TableChange {
+	return driver.TableChange{
+		Kind:   driver.TableChangeKind(in.Kind),
+		Name:   in.Name,
+		Column: in.Column.toDriver(),
+		Index:  in.Index.toDriver(),
+		Key:    in.Key.toDriver(),
+	}
+}
+
+func toDriverChanges(in []TableChangeInput) []driver.TableChange {
+	changes := make([]driver.TableChange, 0, len(in))
+	for _, change := range in {
+		changes = append(changes, change.toDriver())
+	}
+	return changes
+}
+
+// toDriver fixes the batch this side rather than taking the caller's: a migration's rows are the
+// ones it just showed, and how many a server will accept is a fact about the server.
+func (in RowWriteInput) toDriver() driver.RowWrite {
+	return driver.RowWrite{
+		Mode:    driver.RowWriteMode(in.Mode),
+		Columns: in.Columns,
+		Keys:    in.Keys,
+		Rows:    in.Rows,
+		Batch:   MigrationBatch,
+	}
+}
+
 func (in ColumnInput) toDriver() driver.ColumnSpec {
 	return driver.ColumnSpec{
 		Name:       in.Name,
@@ -778,26 +920,12 @@ func (in TableSpecInput) toDriver() driver.TableSpec {
 func toTableStructureDTO(source driver.TableStructure) TableStructure {
 	indexes := make([]IndexInfo, 0, len(source.Indexes))
 	for _, index := range source.Indexes {
-		indexes = append(indexes, IndexInfo{
-			Name:    index.Name,
-			Columns: index.Columns,
-			Unique:  index.Unique,
-			Primary: index.Primary,
-			Method:  index.Method,
-		})
+		indexes = append(indexes, toIndexDTO(index))
 	}
 
 	keys := make([]ForeignKeyInfo, 0, len(source.ForeignKeys))
 	for _, key := range source.ForeignKeys {
-		keys = append(keys, ForeignKeyInfo{
-			Name:              key.Name,
-			Columns:           key.Columns,
-			ReferencedSchema:  key.ReferencedSchema,
-			ReferencedTable:   key.ReferencedTable,
-			ReferencedColumns: key.ReferencedColumns,
-			OnUpdate:          key.OnUpdate,
-			OnDelete:          key.OnDelete,
-		})
+		keys = append(keys, toForeignKeyDTO(key))
 	}
 
 	return TableStructure{
@@ -805,6 +933,126 @@ func toTableStructureDTO(source driver.TableStructure) TableStructure {
 		Indexes:     indexes,
 		ForeignKeys: keys,
 	}
+}
+
+func toIndexDTO(index driver.Index) IndexInfo {
+	return IndexInfo{
+		Name:    index.Name,
+		Columns: index.Columns,
+		Unique:  index.Unique,
+		Primary: index.Primary,
+		Method:  index.Method,
+	}
+}
+
+func toForeignKeyDTO(key driver.ForeignKey) ForeignKeyInfo {
+	return ForeignKeyInfo{
+		Name:              key.Name,
+		Columns:           key.Columns,
+		ReferencedSchema:  key.ReferencedSchema,
+		ReferencedTable:   key.ReferencedTable,
+		ReferencedColumns: key.ReferencedColumns,
+		OnUpdate:          key.OnUpdate,
+		OnDelete:          key.OnDelete,
+	}
+}
+
+// toStructureDiffDTO carries a shape comparison across as it was worked out. A side that has not
+// got the thing arrives as `null` rather than as an empty object, because a field with no type is
+// not the same fact as a field that is not there at all.
+func toStructureDiffDTO(source compare.Structure) StructureDiff {
+	fields := make([]FieldDiff, 0, len(source.Fields))
+	for _, pair := range source.Fields {
+		fields = append(fields, FieldDiff{
+			Name:    pair.Name,
+			Status:  string(pair.Status),
+			Differs: names(pair.Differs),
+			Left:    side(pair.Left, toColumnDTO),
+			Right:   side(pair.Right, toColumnDTO),
+		})
+	}
+
+	indexes := make([]IndexDiff, 0, len(source.Indexes))
+	for _, pair := range source.Indexes {
+		indexes = append(indexes, IndexDiff{
+			Name:    pair.Name,
+			Status:  string(pair.Status),
+			Differs: names(pair.Differs),
+			Left:    side(pair.Left, toIndexDTO),
+			Right:   side(pair.Right, toIndexDTO),
+		})
+	}
+
+	keys := make([]ForeignKeyDiff, 0, len(source.ForeignKeys))
+	for _, pair := range source.ForeignKeys {
+		keys = append(keys, ForeignKeyDiff{
+			Name:    pair.Name,
+			Status:  string(pair.Status),
+			Differs: names(pair.Differs),
+			Left:    side(pair.Left, toForeignKeyDTO),
+			Right:   side(pair.Right, toForeignKeyDTO),
+		})
+	}
+
+	return StructureDiff{Fields: fields, Indexes: indexes, ForeignKeys: keys}
+}
+
+// toDataDiffDTO carries a row comparison across, and takes the compared columns' own declarations
+// from the side they were read in the order of — the left — so the grid drawing them has a type to
+// draw and a key to mark.
+func toDataDiffDTO(source compare.Data, left []driver.Column) DataDiff {
+	columns := make([]TableColumn, 0, len(source.Columns))
+	for _, name := range source.Columns {
+		for _, column := range left {
+			if column.Name == name {
+				columns = append(columns, toColumnDTO(column))
+				break
+			}
+		}
+	}
+
+	rows := make([]RowDiff, 0, len(source.Rows))
+	for _, pair := range source.Rows {
+		rows = append(rows, RowDiff{
+			Status:  string(pair.Status),
+			Key:     names(pair.Key),
+			Left:    pair.Left,
+			Right:   pair.Right,
+			Differs: flags(pair.Differs),
+		})
+	}
+
+	return DataDiff{
+		Key:            names(source.Key.Columns),
+		KeyDeclared:    source.Key.Declared,
+		Columns:        columns,
+		LeftOnly:       names(source.LeftOnly),
+		RightOnly:      names(source.RightOnly),
+		Rows:           rows,
+		LeftRows:       source.LeftRows,
+		RightRows:      source.RightRows,
+		LeftTruncated:  source.LeftTruncated,
+		RightTruncated: source.RightTruncated,
+	}
+}
+
+// side carries one half of a comparison's pair across, and answers nil for the half that has not
+// got the thing at all.
+func side[From any, To any](source *From, to func(From) To) *To {
+	if source == nil {
+		return nil
+	}
+	converted := to(*source)
+	return &converted
+}
+
+// flags is `names` for a list of booleans: a nil slice crosses the wire as `null`, and a caller
+// indexing into what a row differs by has to find a list there.
+func flags(list []bool) []bool {
+	if list == nil {
+		return []bool{}
+	}
+	return list
 }
 
 func (in IndexInput) toDriver() driver.IndexSpec {
@@ -864,16 +1112,20 @@ func toTableSchemaDTOs(source []driver.TableSchema) []TableSchema {
 func toColumnDTOs(source []driver.Column) []TableColumn {
 	columns := make([]TableColumn, 0, len(source))
 	for _, column := range source {
-		columns = append(columns, TableColumn{
-			Name:       column.Name,
-			Type:       column.Type,
-			FullType:   column.FullType,
-			Nullable:   column.Nullable,
-			PrimaryKey: column.PrimaryKey,
-			Default:    column.Default,
-		})
+		columns = append(columns, toColumnDTO(column))
 	}
 	return columns
+}
+
+func toColumnDTO(column driver.Column) TableColumn {
+	return TableColumn{
+		Name:       column.Name,
+		Type:       column.Type,
+		FullType:   column.FullType,
+		Nullable:   column.Nullable,
+		PrimaryKey: column.PrimaryKey,
+		Default:    column.Default,
+	}
 }
 
 // toDomain fills in what the dialog may leave blank. An unnamed engine is MySQL, which is

@@ -3,7 +3,7 @@
 Ports and adapters, with a strictly one-way dependency rule:
 
 ```
-internal/app  ->  session / profile / secret / history  ->  internal/driver  ->  internal/domain
+internal/app  ->  session / profile / secret / history / transfer / compare  ->  internal/driver  ->  internal/domain
 ```
 
 - **`internal/domain`** — `ConnectionProfile`, `Validate()`, sentinel errors. Pure; imports nothing
@@ -38,6 +38,14 @@ internal/app  ->  session / profile / secret / history  ->  internal/driver  -> 
   and the other is a documented token exchange.
 - **`internal/transfer`** — the file formats a table travels as, and nothing about either end of the
   journey. See [carrying a table to a file](#carrying-a-table-to-a-file).
+- **`internal/compare`** — the difference between two tables, and nothing about how either was read.
+  Both sides arrive already read — the columns, indexes and constraints a driver reported, and its
+  rows as `[][]*string` — and what comes back is those same facts *paired*, one entry per thing
+  compared. It sits where `transfer` sits and for the same reason: a diff is a rule about data
+  rather than a wire format, and it is worth being able to test without a server. **Nothing in it is
+  matched by position** — a field by its name, a row by its key — because a column inserted in the
+  middle would otherwise report every column below it as changed. See
+  [comparing two tables](#comparing-two-tables).
 - **`internal/fonts`** — the font families the host machine has, read from the Windows font registry
   (both the machine-wide hive and the reader's own, since a per-user install is registered only
   there). Bound through `SystemAPI`, the one API that answers about the *machine* rather than about a
@@ -72,10 +80,12 @@ there already, and an engine differs from another only in
 | a dialler and a TLS configuration | registered **globally by name** before the DSN can refer to them, and deregistered with the session (`transport.go`) | set on the parsed `pgx.ConnConfig`, which `stdlib` then takes by name — the certificate *files* need none of it, being libpq keywords already |
 | `errors.go` | errno → sentinel | SQLSTATE → sentinel |
 | catalogue reads | `information_schema` | `pg_catalog`, for `format_type` |
+| a stored default | reported as the **value** — `x`, not `'x'` — and only marked `DEFAULT_GENERATED` when it is an expression, so a text literal is quoted on the way in (`defaultExpression`) | already an expression: `'x'::character varying` |
 | placeholders | `?` | `$1` |
 | `sqlkit.Dialect` | backtick quoting, `#` comments, `\` escapes a string | double-quote quoting, `$tag$` bodies |
 | levels above a table | one pool, `USE <database>` | a pool per database, `SET search_path` |
-| `ddl.go` | `MODIFY COLUMN` restates a column whole; a qualified rename target; `DROP INDEX` on the table; every primary key is called `PRIMARY`; `USING` comes before the table | one `ALTER COLUMN` action per fact; an unqualified rename target; an index is an object of the schema; a key's constraint name has to be read before it can be dropped; `USING` comes after the table |
+| `ddl.go` | a qualified rename target; every primary key is called `PRIMARY` | an unqualified rename target; a key's constraint name has to be read before it can be dropped |
+| the four `Dialect` flags | `RestatesColumn`, `MethodBeforeTable` | `IndexIsObject`, `ForeignKeyIsConstraint` |
 | `database.go` | a database is a namespace with a character set | a database is an object with an owner, a template, a locale, a tablespace and a connection limit, and can carry extensions and a comment |
 
 **`sqlkit.Lex` is the one place a script is read character by character.** Splitting, formatting and
@@ -112,6 +122,20 @@ Preview calls `CreateDatabaseSQL`, which is exactly the list `CreateDatabase` ru
 and what runs cannot drift; a SQL export calls `RowStatements` for the same reason. Each returns
 `[]driver.DatabaseStatement` or `[]string` rather than one string, because a create is several
 statements and some of them — an extension — can only be run inside the database just made.
+
+**`AlterStatements` is the third of the same arrangement**: it spells a list of `driver.TableChange`
+as the statements that would make them and runs none of them, so a migration shows the reader what
+its Apply will do rather than a description of it. Every kind on that list has a *run* beside it on
+the same interface, and both go through one speller on `sqlkit.Dialect`, so the two cannot drift.
+Spelling needs no connection and raises no error: a change an engine has no concept of contributes
+**nothing**, and the run of it is where `domain.Unsupported` is answered.
+
+Four statements that used to be written out per engine now live on `Dialect` behind flags, which is
+the form every other difference between the two takes: `RestatesColumn` (MySQL's `MODIFY COLUMN`
+against one `ALTER COLUMN` action per fact), `MethodBeforeTable`, `IndexIsObject` and
+`ForeignKeyIsConstraint`. What is left in `mysql/ddl.go` and `postgres/ddl.go` is what genuinely
+cannot be shared: the catalogue reads, and `SetPrimaryKey`, which on PostgreSQL has to *read* the
+constraint's name before it can drop it.
 
 **A dump is those two methods and nothing else.** `CreateStatements` is its structure half and
 `RowStatements` its data half, and both are the driver's because only the engine knows how it
@@ -168,6 +192,58 @@ engine fills is the one structural difference between the SQL adapters. MySQL fi
 alone; PostgreSQL fills both and needs a connection pool per database to do it, because a session
 cannot leave the database it was opened with. MongoDB fills `Database` alone and needs one pool for
 the *server*, a single connection reading every database on it. See [decisions.md](decisions.md).
+
+## Comparing two tables
+
+`internal/compare` is the whole of the difference between two tables and knows nothing about how
+either was read. `internal/app/compare.go` is what reads them — two shapes, and for the data half
+two bounded pages — and hands both to it.
+
+**The left is what the reader has and the right is what they are comparing it against.** `added`
+means the right holds it and the left does not; `removed` is the other way about. Nothing in the
+package decides which table is which: the caller does, and every word follows from that.
+
+**Nothing is matched by position.** A field, an index and a constraint are matched by *name* and a
+row by its *key*, and `pairNames` is the one function all three shapes go through — it walks the
+left in its own order and emits whatever the right holds before the next shared name, so a column
+added in the middle is drawn in the middle rather than pushed to the end. What comes back is a list
+of *pairs*, which is why the two panes drawing it can never fall out of step: they are built from
+one list and hold the same rows in the same order, a blank standing where a side has not got the row.
+
+**The key is read from the shapes, before a single row is.** `KeyFor` answers with the primary key
+both sides declare, or — where they share none — with every column they share, and it says which
+(`Key.Declared`). That matters twice. The reads are **ordered by that key** before they are cut to
+the row limit, so a bounded compare compares comparable windows of the two tables rather than two
+arbitrary hundreds; and on the fallback nothing can come back `changed`, a row being matched on the
+whole of itself, so the reader is told rather than shown "no changed rows" as if it were a finding.
+
+**A comparison is bounded on purpose, and says so.** Both sides are held in memory at once and cross
+the bridge as one answer, so there is no `All` here the way there is on a table tab — that read is
+*streamed*, and a diff cannot be, needing both sides together. `app.DefaultCompareRows` is the
+default and `DataDiff.leftTruncated` / `rightTruncated` are how a window says it was not a table.
+
+Two more rules are the package's and not a caller's. **Only the columns both sides hold are
+compared**, and the rest are *named* rather than silently dropped: a value with nothing opposite it
+is a difference between two shapes, and the structure half is where that is read. And **a key held
+more than once pairs first-to-first**, so two identical rows on one side pair with two on the other
+rather than with one twice — which is exactly what an unkeyed table's comparison is made of.
+
+### Making the two agree
+
+A comparison the reader can act on is a *migration*, and it adds nothing to `internal/compare`: the
+diff answers what differs, and turning a ticked difference into a change is the frontend's
+(`features/compare/migrate.ts`), because only it knows which way the reader pointed it and what they
+ticked. What that produces is the same two shapes the driver already takes — a list of
+`driver.TableChange` for a shape, a `driver.RowWrite` for rows — and **one list goes to both halves
+of the round trip**: `PreviewTableChanges` spells it, `ApplyTableChanges` runs it, so the script the
+reader copied is the script that ran. `PreviewRowWrite` and `ApplyRowWrite` are the same pair over
+`RowStatements`, which is why a migration's rows and an import's are the same statements.
+
+Two things about applying are deliberate. **It stops at the first failure**, because the order is
+what makes a migration work — what is going goes first, what is arriving is made last — so a step
+that failed leaves every step after it meaningless. And **there is no transaction around it**:
+neither engine can put one around DDL in a way that holds for all of it, MySQL committing implicitly
+at every statement. The preview is what protects the reader, which is why it exists.
 
 ## The document store
 

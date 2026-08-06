@@ -16,6 +16,8 @@ import {
   Filter,
   FilterX,
   Fingerprint,
+  GitCompareArrows,
+  GitMerge,
   Palette,
   PanelBottom,
   Pencil,
@@ -61,6 +63,9 @@ export const ICON = {
 
   open: <Table2 size={SIZE} />,
   design: <TableProperties size={SIZE} />,
+  compare: <GitCompareArrows size={SIZE} />,
+  // Applying a comparison is a *merge* and wears the glyph that means one everywhere.
+  migrate: <GitMerge size={SIZE} />,
   add: <Plus size={SIZE} />,
   duplicate: <CopyPlus size={SIZE} />,
   rename: <Pencil size={SIZE} />,

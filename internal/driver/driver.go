@@ -269,6 +269,35 @@ type ForeignKeySpec struct {
 	OnDelete          string
 }
 
+// TableChangeKind is one thing that can be done to a table's shape. The list is closed and a kind
+// this side does not know is refused rather than guessed at, exactly as a filter's operator is.
+//
+// There is no rename here, and no primary key. Both exist as methods on Schema and neither belongs
+// in a *migration*: a rename cannot be told from a drop and an add by comparing two catalogues, and
+// a primary key is a fact of the fields rather than a change of its own.
+type TableChangeKind string
+
+const (
+	ChangeAddColumn        TableChangeKind = "addColumn"
+	ChangeAlterColumn      TableChangeKind = "alterColumn"
+	ChangeDropColumn       TableChangeKind = "dropColumn"
+	ChangeCreateIndex      TableChangeKind = "createIndex"
+	ChangeDropIndex        TableChangeKind = "dropIndex"
+	ChangeCreateForeignKey TableChangeKind = "createForeignKey"
+	ChangeDropForeignKey   TableChangeKind = "dropForeignKey"
+)
+
+// TableChange is one change to a table's shape, in the form both spelling it and running it take.
+// Name is what the change is addressed to — the column, index or constraint — and only the field
+// belonging to the kind is read.
+type TableChange struct {
+	Kind   TableChangeKind
+	Name   string
+	Column ColumnSpec
+	Index  IndexSpec
+	Key    ForeignKeySpec
+}
+
 // DatabaseSpec is a CREATE DATABASE as the dialog declares it. How much of it an engine reads
 // is the engine's own business: MySQL knows only Encoding and Collation, PostgreSQL knows most of
 // the rest, and MongoDB knows only the name and the collection.
@@ -537,6 +566,21 @@ type Schema interface {
 	DropIndex(ctx context.Context, ns Namespace, table, index string) error
 	CreateForeignKey(ctx context.Context, ns Namespace, table string, spec ForeignKeySpec) error
 	DropForeignKey(ctx context.Context, ns Namespace, table, constraint string) error
+	// AlterStatements spells changes to a table's shape as the statements that would make them, in
+	// the order they are given, and **runs none of them**. It is what a migration shows the reader
+	// before anything happens, and it is the driver's for the reason every other statement is:
+	// `MODIFY COLUMN` against one `ALTER COLUMN` per fact, an index that is an object of the schema
+	// against one that belongs to its table, and a document store's `$set` are one intention spelled
+	// four ways.
+	//
+	// It is spelling and not running, so it needs no connection and answers no error: a change this
+	// engine has no concept of contributes **nothing** rather than failing, and the run of that same
+	// change is where `domain.Unsupported` is raised. A migration that shows an empty script is a
+	// migration with nothing to run.
+	//
+	// Every kind here has a run beside it on this same interface, and both go through one speller,
+	// so what the reader was shown and what happens cannot drift apart.
+	AlterStatements(ns Namespace, table string, changes []TableChange) []string
 	// RowStatements spells rows as the statements that write them into a table the way the caller
 	// asked: appended, merged on a key, or removed by one. It is the driver's for the reason every
 	// other statement is — only it knows how this engine quotes a name and a string, and MySQL's

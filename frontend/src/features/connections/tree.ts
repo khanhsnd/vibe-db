@@ -55,6 +55,17 @@ export interface TreeNode {
   routine?: Routine
 }
 
+/**
+ * What a press means for what the tree has picked. It mirrors the grid's own rule, which is the
+ * one the reader already knows: a plain press starts over, `Ctrl`/`Cmd` adds beside what is there,
+ * and a right-click leaves a pick it landed *inside* standing so a pair can be acted on whole.
+ *
+ * The tree differs from the grid in one way and deliberately: `Ctrl` **toggles**. A rectangle
+ * cannot be split, which is why the grid only ever adds; a list of rows can, and taking the wrong
+ * table back out of a pair is the commonest correction there is.
+ */
+export type PickHow = 'replace' | 'add' | 'menu'
+
 export interface FlatNode {
   node: TreeNode
   depth: number

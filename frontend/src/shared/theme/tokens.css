@@ -24,6 +24,24 @@
   /** The lock on a key field. Gold rather than the warning colour, which means unsaved. */
   --grid-key: #e3b341;
 
+  /** What a comparison paints a row in. They are a family of their own rather than the success
+      and danger colours reused, because nothing here has gone wrong or gone right: `removed` is
+      only "the other side has not got it", and drawing it in the colour of a failed statement
+      would say something about the table that is not true. The cell colour is the row's, deeper,
+      so a changed row reads as a row at a glance and as which *cells* changed on a second look —
+      and `absent` is the blank standing opposite a row this side simply has not got, which is
+      neither a value nor an empty one. */
+  --grid-diff-added: #14301f;
+  --grid-diff-removed: #33191c;
+  --grid-diff-changed: #322815;
+  --grid-diff-cell: #4c3d17;
+  --grid-diff-absent: #191c22;
+  /** The bar down a marked row's gutter, and the word a legend draws. Full strength, unlike the
+      washes above: one is read at a glance across a whole grid, the other is read on one row. */
+  --diff-added: #3fb950;
+  --diff-removed: #f85149;
+  --diff-changed: #d29922;
+
   --fg: #e8ebf0;
   --fg-muted: #9ba5b4;
   --fg-faint: #767f8f;
@@ -132,6 +150,16 @@
   --grid-row-deleted: #ffe3e1;
   --grid-key: #b08800;
 
+  --grid-diff-added: #ddf7e3;
+  --grid-diff-removed: #ffe3e1;
+  --grid-diff-changed: #fff3d0;
+  --grid-diff-cell: #ffe1a3;
+  --grid-diff-absent: #f2f4f7;
+
+  --diff-added: #1a7f37;
+  --diff-removed: #cf222e;
+  --diff-changed: #9a6700;
+
   --fg: #16191f;
   --fg-muted: #545c67;
   --fg-faint: #79818d;
@@ -211,6 +239,15 @@
   --color-grid-row-deleted: var(--grid-row-deleted);
   --color-grid-key: var(--grid-key);
   --color-null: var(--syn-null);
+
+  --color-grid-diff-added: var(--grid-diff-added);
+  --color-grid-diff-removed: var(--grid-diff-removed);
+  --color-grid-diff-changed: var(--grid-diff-changed);
+  --color-grid-diff-cell: var(--grid-diff-cell);
+  --color-grid-diff-absent: var(--grid-diff-absent);
+  --color-diff-added: var(--diff-added);
+  --color-diff-removed: var(--diff-removed);
+  --color-diff-changed: var(--diff-changed);
 
   --color-fg: var(--fg);
   --color-muted: var(--fg-muted);

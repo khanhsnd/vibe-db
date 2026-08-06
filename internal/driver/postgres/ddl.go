@@ -48,37 +48,6 @@ func (s *session) RenameTable(
 	return s.run(ctx, ns.Database, statement)
 }
 
-// AlterColumn needs one action per fact changed: PostgreSQL has no single clause that
-// restates a column the way MySQL's MODIFY COLUMN does. They travel in one ALTER TABLE so the
-// column is never left half-changed.
-func (s *session) AlterColumn(
-	ctx context.Context,
-	ns driver.Namespace,
-	table, column string,
-	spec driver.ColumnSpec,
-) error {
-	quoted := dialect.QuoteIdent(column)
-	actions := []string{
-		"ALTER COLUMN " + quoted + " TYPE " + strings.TrimSpace(spec.Type),
-	}
-
-	if spec.Nullable && !spec.PrimaryKey {
-		actions = append(actions, "ALTER COLUMN "+quoted+" DROP NOT NULL")
-	} else {
-		actions = append(actions, "ALTER COLUMN "+quoted+" SET NOT NULL")
-	}
-
-	if spec.Default != nil && strings.TrimSpace(*spec.Default) != "" {
-		actions = append(actions,
-			"ALTER COLUMN "+quoted+" SET DEFAULT "+strings.TrimSpace(*spec.Default))
-	} else {
-		actions = append(actions, "ALTER COLUMN "+quoted+" DROP DEFAULT")
-	}
-
-	statement := "ALTER TABLE " + dialect.Table(ns, table) + " " + strings.Join(actions, ", ")
-	return s.run(ctx, ns.Database, statement)
-}
-
 // SetPrimaryKey has to name the constraint it is replacing, which PostgreSQL keeps in
 // pg_constraint rather than deriving from the table, so the old key is read before it is dropped.
 func (s *session) SetPrimaryKey(
@@ -161,7 +130,7 @@ func (s *session) CreateStatements(
 		if index.Primary {
 			continue
 		}
-		statements = append(statements, indexStatement(ns, table, sqlkit.IndexSpecOf(index)))
+		statements = append(statements, dialect.CreateIndex(ns, table, sqlkit.IndexSpecOf(index)))
 	}
 	for _, key := range structure.ForeignKeys {
 		statements = append(statements,
@@ -169,15 +138,6 @@ func (s *session) CreateStatements(
 	}
 
 	return statements, nil
-}
-
-func (s *session) CreateIndex(
-	ctx context.Context,
-	ns driver.Namespace,
-	table string,
-	spec driver.IndexSpec,
-) error {
-	return s.run(ctx, ns.Database, indexStatement(ns, table, spec))
 }
 
 // sequenceDefault is how a column that reads from a sequence spells its default.
@@ -209,39 +169,6 @@ func declared(columns []driver.Column) []driver.Column {
 		out = append(out, column)
 	}
 	return out
-}
-
-// indexStatement puts the access method after the table, which is where PostgreSQL's grammar takes
-// it — MySQL takes it between the name and the table instead. It is text rather than a run so a
-// dump writes the index the designer would have built rather than a second spelling of it.
-func indexStatement(ns driver.Namespace, table string, spec driver.IndexSpec) string {
-	statement := "CREATE "
-	if spec.Unique {
-		statement += "UNIQUE "
-	}
-	statement += "INDEX " + dialect.QuoteIdent(spec.Name) + " ON " + dialect.Table(ns, table)
-
-	if method := strings.TrimSpace(spec.Method); method != "" {
-		statement += " USING " + method
-	}
-
-	return statement + " (" + strings.Join(dialect.QuoteAll(spec.Columns), ", ") + ")"
-}
-
-// DropIndex names the index rather than the table it indexes: in PostgreSQL an index is an
-// object of the schema in its own right.
-func (s *session) DropIndex(ctx context.Context, ns driver.Namespace, _, index string) error {
-	return s.run(ctx, ns.Database, "DROP INDEX "+dialect.Qualify(ns.Schema, index))
-}
-
-func (s *session) DropForeignKey(
-	ctx context.Context,
-	ns driver.Namespace,
-	table, constraint string,
-) error {
-	statement := "ALTER TABLE " + dialect.Table(ns, table) +
-		" DROP CONSTRAINT " + dialect.QuoteIdent(constraint)
-	return s.run(ctx, ns.Database, statement)
 }
 
 // run is what sqlkit.DDL executes its statements through, and the one place a schema change

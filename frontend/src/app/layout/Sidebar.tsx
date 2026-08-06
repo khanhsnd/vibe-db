@@ -1,7 +1,7 @@
 import { Plus, Search, SearchX, Server, X } from 'lucide-react'
 
 import { ObjectTree } from '@/features/connections/ObjectTree'
-import type { TreeNode } from '@/features/connections/tree'
+import type { PickHow, TreeNode } from '@/features/connections/tree'
 import { Button } from '@/shared/ui/Button'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { Empty } from '@/shared/ui/Empty'
@@ -10,11 +10,13 @@ import { IconButton } from '@/shared/ui/IconButton'
 interface SidebarProps {
   roots: TreeNode[]
   expanded: ReadonlySet<string>
-  selectedId: string | null
+  /** Every row picked, and the focused one — see `ObjectTree`, which draws the two differently. */
+  pickedIds: ReadonlySet<string>
+  focusedId: string | null
   filter: string
   onFilterChange: (value: string) => void
   onToggle: (node: TreeNode) => void
-  onSelect: (node: TreeNode) => void
+  onSelect: (node: TreeNode, how: PickHow) => void
   onActivate: (node: TreeNode) => void
   onNewConnection: () => void
   menuItemsFor: (node: TreeNode) => MenuItem[]
@@ -23,7 +25,8 @@ interface SidebarProps {
 export function Sidebar({
   roots,
   expanded,
-  selectedId,
+  pickedIds,
+  focusedId,
   filter,
   onFilterChange,
   onToggle,
@@ -69,7 +72,8 @@ export function Sidebar({
           <ObjectTree
             roots={roots}
             expanded={expanded}
-            selectedId={selectedId}
+            pickedIds={pickedIds}
+            focusedId={focusedId}
             onToggle={onToggle}
             onSelect={onSelect}
             onActivate={onActivate}

@@ -14,7 +14,8 @@ engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL 
 ## Rules that must not be broken
 
 1. **The dependency rule is one-way:**
-   `internal/app` → `session / profile / secret / history` → `internal/driver` → `internal/domain`.
+   `internal/app` → `session / profile / secret / history / transfer / compare` → `internal/driver`
+   → `internal/domain`.
    Business rules live in `domain`, not in the API layer. `internal/app` speaks `dto.go` wire types,
    never domain types. `frontend/src/bridge` is the only frontend directory allowed to import
    `frontend/wailsjs/**`. **What is dangerous to run is a `domain` rule**
@@ -54,6 +55,20 @@ engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL 
     all live in the credential store — the profile's id for the first, `<id>:ssh` for the second, and
     the third is never stored at all. A DTO says *that* one exists (`hasPassword`,
     `hasSshSecret`), never what it is.
+12. **A difference between two tables is `internal/compare`'s, and nothing there is matched by
+    position.** A field is matched by its name and a row by its key, because a column inserted in the
+    middle would otherwise report every column below it as changed. It answers with *pairs* — one
+    entry per thing either side holds — which is what lets two panes hold the same rows in the same
+    order, and is the only reason a diff can be read across. A comparison is **bounded on purpose**:
+    both sides are held at once, so there is no `All` the way a table tab has one, and the answer
+    says which side it did not see the whole of.
+13. **A statement a migration shows is the statement it runs.** One list of `driver.TableChange`
+    goes to `PreviewTableChanges` to be spelled and to `ApplyTableChanges` to be run, and every kind
+    on it has a *run* beside its spelling on `driver.Schema`, both going through one speller on
+    `sqlkit.Dialect`. Nothing outside a driver has ever spelled a statement and nothing may start:
+    what differs between the engines is a **flag** on `Dialect`, never a second spelling. An Apply
+    **stops at the first failure** and there is no transaction around it — the preview is what
+    protects the reader, which is why it has to be exact.
 
 ## Where to read before changing something
 
@@ -65,6 +80,7 @@ engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL 
 | Add or change a failure mode | [docs/errors.md](docs/errors.md) |
 | Change UI behaviour, or find out what exists | [docs/features.md](docs/features.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file) |
+| Touch a comparison of two tables | [docs/architecture.md](docs/architecture.md#comparing-two-tables) |
 | Touch any table, grid, cell or selection | [docs/grid.md](docs/grid.md) |
 | Touch the SQL editor or completion | [docs/editor.md](docs/editor.md) |
 | Write a component, a store, or a style | [docs/frontend.md](docs/frontend.md) |

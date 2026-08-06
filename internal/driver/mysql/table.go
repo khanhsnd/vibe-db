@@ -126,8 +126,12 @@ func (s *session) columns(
 	ns driver.Namespace,
 	table string,
 ) ([]driver.Column, error) {
+	// `extra` is read for one word: MySQL reports a *literal* default as the bare value —
+	// `x`, not `'x'` — and only marks an expression one DEFAULT_GENERATED. Everywhere else in the
+	// app a `Column.Default` is an expression, because that is what goes back into a statement, so
+	// the literal is quoted here rather than left to reach one as a bare identifier.
 	const query = `
-		SELECT column_name, data_type, column_type, is_nullable, column_key, column_default
+		SELECT column_name, data_type, column_type, is_nullable, column_key, column_default, extra
 		FROM information_schema.columns
 		WHERE table_schema = ? AND table_name = ?
 		ORDER BY ordinal_position`
@@ -140,10 +144,11 @@ func (s *session) columns(
 
 	columns := []driver.Column{}
 	for rows.Next() {
-		var name, dataType, fullType, nullable, key string
+		var name, dataType, fullType, nullable, key, extra string
 		var defaultValue sql.NullString
 
-		if err := rows.Scan(&name, &dataType, &fullType, &nullable, &key, &defaultValue); err != nil {
+		err := rows.Scan(&name, &dataType, &fullType, &nullable, &key, &defaultValue, &extra)
+		if err != nil {
 			return nil, translateError(err)
 		}
 
@@ -153,7 +158,7 @@ func (s *session) columns(
 			FullType:   fullType,
 			Nullable:   nullable == "YES",
 			PrimaryKey: key == "PRI",
-			Default:    sqlkit.TextOrNil(defaultValue),
+			Default:    defaultExpression(dataType, defaultValue, extra),
 		})
 	}
 	if err := rows.Err(); err != nil {
@@ -164,6 +169,46 @@ func (s *session) columns(
 	}
 
 	return columns, nil
+}
+
+// generatedDefault is the word MySQL puts in a column's `extra` when its default is an expression
+// rather than a value. It is the only way the two can be told apart: `information_schema` reports
+// `now()` and `now` identically otherwise.
+const generatedDefault = "DEFAULT_GENERATED"
+
+// defaultExpression is a stored default read back as the expression the rest of the app takes it
+// for — which is what has to go into an `ALTER TABLE`, a dump and a migration's script.
+//
+// MySQL reports a **literal** default as the bare value, so `DEFAULT 'x'` comes back as `x`; put
+// straight back into a statement that is an identifier and the server refuses it. An expression
+// default comes back already spelled and is marked DEFAULT_GENERATED, so it travels verbatim.
+//
+// A numeric or a temporal column's literal needs no quoting and gets none: `0` is the number and
+// `CURRENT_TIMESTAMP` on a timestamp column is reported without the marker but is not a string.
+func defaultExpression(dataType string, value sql.NullString, extra string) *string {
+	if !value.Valid {
+		return nil
+	}
+	if strings.Contains(extra, generatedDefault) || !quotesDefault(dataType) {
+		return sqlkit.TextOrNil(value)
+	}
+
+	quoted := dialect.QuoteString(value.String)
+	return &quoted
+}
+
+// quotesDefault says a literal default of this type is written as a string. It is the text and
+// binary types and nothing else: a number, a date and a boolean are all written bare, and so is
+// anything an engine keeps as an expression.
+func quotesDefault(dataType string) bool {
+	switch strings.ToLower(dataType) {
+	case "char", "varchar", "text", "tinytext", "mediumtext", "longtext",
+		"enum", "set", "json",
+		"binary", "varbinary", "blob", "tinyblob", "mediumblob", "longblob":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *session) countRows(

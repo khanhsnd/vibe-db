@@ -6,9 +6,17 @@ export function AddColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:app.Co
 
 export function AlterColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:app.ColumnInput):Promise<void>;
 
+export function ApplyRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<void>;
+
+export function ApplyTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<app.TableChangeInput>):Promise<void>;
+
 export function ChooseTransferFile(arg1:string):Promise<string>;
 
 export function ChooseTransferFolder():Promise<string>;
+
+export function CompareData(arg1:app.CompareSide,arg2:app.CompareSide,arg3:number):Promise<app.DataDiff>;
+
+export function CompareStructure(arg1:app.CompareSide,arg2:app.CompareSide):Promise<app.StructureDiff>;
 
 export function Connect(arg1:string,arg2:string):Promise<app.Session>;
 
@@ -64,6 +72,8 @@ export function ListWorksheets(arg1:string):Promise<Array<string>>;
 
 export function LoadColumnValues(arg1:string,arg2:app.ColumnValuesInput):Promise<Array<string>>;
 
+export function LoadCreateStatements(arg1:string,arg2:app.Namespace,arg3:string):Promise<Array<string>>;
+
 export function LoadDatabaseOptions(arg1:string):Promise<app.DatabaseOptions>;
 
 export function LoadObjects(arg1:string,arg2:app.Namespace):Promise<app.Objects>;
@@ -79,6 +89,10 @@ export function LoadTableStructure(arg1:string,arg2:app.Namespace,arg3:string):P
 export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<Array<string>>;
 
 export function PreviewImportFile(arg1:app.ImportSource):Promise<app.ImportPreview>;
+
+export function PreviewRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<Array<string>>;
+
+export function PreviewTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<app.TableChangeInput>):Promise<Array<string>>;
 
 export function RenameColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:string):Promise<void>;
 
