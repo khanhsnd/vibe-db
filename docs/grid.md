@@ -231,15 +231,22 @@ narrowing a table is nearly always about to order it too, and two panels would b
   button is how the draft says it differs from what is in force, and the button is dead until it
   does. Only what changed is sent — an Apply on an untouched panel is not a re-read. The **cell
   menu** is the exception and applies at once: its condition was picked whole.
+- **The draft is the grid's, not the panel's** (`useFilterDraft`). The panel is mounted only while it
+  is showing, so a draft held inside it would be thrown away by the very button that hides it: a
+  reader who removed two conditions and then closed the panel would find both back on opening it
+  again, the removal having been undone rather than left waiting for Apply. Hiding the panel neither
+  widens the grid nor withdraws the edit in hand. It does not outlive the *tab*, though — a table tab
+  is taken down when it is looked away from, and what it keeps is what was asked for, never what was
+  half-asked.
 - **The draft follows what is in force.** A condition added from the cell menu, or a sort taken off a
   header's menu, appears in the panel rather than being overwritten by the draft beside it.
 - **A header's Add Filter adds to the draft, not to what is in force.** It is the one addition that
   is *not* picked whole — a header knows the field and not the value — so it opens the panel and
   lands at the end of the root with its value unset, and Apply is still what narrows the rows. That
   is also what keeps it cheap: no read is made for a condition nobody has spelled yet, and a draft
-  the reader was half-way through is added to rather than replaced. The ask travels as `FilterAsk`,
-  a fresh object per click so that asking twice for one field adds two rows, and the panel clears it
-  once taken — an effect that runs twice for one commit must not add two.
+  the reader was half-way through is added to rather than replaced. It reaches the draft **directly**
+  (`draft.addCondition`), the draft being the grid's own, so asking twice for one field is simply two
+  rows and there is no ask to carry into the panel and clear again.
 - **A condition is three parts, and each opens what it may be** — the column, the operator, and the
   value. The column and the value open a **small panel hung under the part itself** (`PickerPanel`,
   a popover) rather than a dialog over the grid: what is being changed is three words on a row, and

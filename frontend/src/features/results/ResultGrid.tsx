@@ -41,11 +41,12 @@ import { CellEditorButton } from './CellEditorButton'
 import { CellPicker } from './CellPicker'
 import { ExportMenu } from './ExportMenu'
 import { FilterSortButton } from './FilterSortButton'
-import { FilterSortPanel, type FilterAsk } from './FilterSortPanel'
+import { FilterSortPanel } from './FilterSortPanel'
 import { cellMenuItems } from './cellMenu'
 import { ValueDialog } from './ValueDialog'
 import { ColumnTypeIcon, isNumeric, temporalPicker, type TemporalPicker } from './columnType'
 import { countConditions, type GridFiltering } from './filter'
+import { useFilterDraft } from './useFilterDraft'
 import { gridFont, headerFont, widestText } from './measureText'
 import {
   boundsOf,
@@ -344,8 +345,12 @@ export function ResultGrid({
   const [editing, setEditing] = useState<CellRef | null>(null)
   /** The cell the last right-click landed on, which the menu names — see `onCellContextMenu`. */
   const [menuCell, setMenuCell] = useState<CellRef | null>(null)
-  /** The field a header's **Add Filter** asked for, which the panel takes into its draft. */
-  const [filterAsk, setFilterAsk] = useState<FilterAsk | null>(null)
+  /**
+   * What the Filter & Sort panel is building. It is held here rather than in the panel because the
+   * panel is only mounted while it is showing: a reader who removed a condition and then hid the
+   * panel would otherwise find it back on opening the panel again.
+   */
+  const draft = useFilterDraft(filtering, sort, onSortChange)
   /**
    * The header being carried, if one is. It is the grid's rather than the header row's because the
    * column it marks runs the whole height of the grid: what the reader has hold of is a column, and
@@ -512,7 +517,7 @@ export function ResultGrid({
             icon: ICON.filter,
             onSelect: () => {
               filtering.onShownChange(true)
-              setFilterAsk({ column: column.name })
+              draft.addCondition(column.name)
             },
           },
         ]
@@ -982,14 +987,7 @@ export function ResultGrid({
                 minSize={FILTER_MIN_HEIGHT}
                 maxSize="70%"
               >
-                <FilterSortPanel
-                  columns={result.columns}
-                  filtering={filtering}
-                  sort={sort}
-                  onSortChange={onSortChange}
-                  ask={filterAsk}
-                  onAskTaken={() => setFilterAsk(null)}
-                />
+                <FilterSortPanel columns={result.columns} filtering={filtering} draft={draft} />
               </SplitPanel>
 
               <SplitHandle orientation="vertical" />

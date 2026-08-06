@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, type ReactNode } from 'react'
 import { Check, Parentheses, Plus, X } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
@@ -26,90 +26,39 @@ import {
   type Path,
 } from './filter'
 import type { ResultColumn, SortKey } from './resultSet'
+import type { FilterDraft } from './useFilterDraft'
 
 /** How far a group's contents sit in from the parentheses that hold them. */
 const INDENT = 20
 /** The label column both sections share, so `Filter` and `Sort By` line their rows up. */
 const LABEL_WIDTH = 56
 
-/**
- * A field a header's `⋮` asked to filter on. An object rather than a bare name so that asking
- * twice for the same field is two asks, each adding its own row.
- */
-export interface FilterAsk {
-  column: string
-}
-
 interface FilterSortPanelProps {
   columns: ResultColumn[]
   filtering: GridFiltering
-  sort: readonly SortKey[]
-  onSortChange?: ((sort: SortKey[]) => void) | undefined
   /**
-   * The field a header asked to filter on, or null. It lands in the **draft** as a fresh condition:
-   * a header knows the field and not the value, so what it adds was not picked whole and is
-   * therefore not the cell menu's exception — nothing narrows until Apply.
+   * What is being built, which is the **grid's** and not this panel's: hiding the panel takes it
+   * down, and a draft that died with it would put back every condition the reader had just removed.
    */
-  ask?: FilterAsk | null
-  /** Clears that ask, so a panel closed and opened again does not add the same row twice. */
-  onAskTaken?: (() => void) | undefined
+  draft: FilterDraft
 }
 
 /**
  * Where a grid is narrowed and ordered: the conditions as a tree the reader builds, and the keys it
  * is sorted by, over one **Apply**. It is opened from the Filter & Sort button over the grid and
  * from the cell menu's **Show/Hide Filter & Sort**, and what it holds goes on holding whether it is
- * showing or not — hiding the panel is not widening the grid.
+ * showing or not — hiding the panel neither widens the grid nor withdraws the edit in hand, the
+ * draft being `useFilterDraft`'s and therefore outliving the panel that spells it.
  *
  * Nothing here narrows anything until **Apply**: a condition is three parts and a value picked from
  * a list, and a read per keystroke would be a read of the rows nobody asked for yet. A condition
  * added from the **cell menu** is the exception and applies at once, having been picked whole.
  */
-export function FilterSortPanel({
-  columns,
-  filtering,
-  sort,
-  onSortChange,
-  ask = null,
-  onAskTaken,
-}: FilterSortPanelProps) {
-  const [criteria, setCriteria] = useState(filtering.criteria)
-  const [keys, setKeys] = useState<readonly SortKey[]>(sort)
-  const taken = useRef<FilterAsk | null>(null)
-  const inForce = useRef(filtering.criteria)
-
-  // The draft follows what is in force **as that changes**, so a condition added from the cell menu
-  // or a sort taken off a header lands in the builder rather than being overwritten by the draft
-  // beside it. The tree last seen is remembered rather than simply assigned, because an effect run
-  // again for a tree that never changed would undo the row an ask below has just added to the draft.
-  useEffect(() => {
-    if (inForce.current === filtering.criteria) return
-
-    inForce.current = filtering.criteria
-    setCriteria(filtering.criteria)
-  }, [filtering.criteria])
-  useEffect(() => setKeys(sort), [sort])
-
-  // A header's Add Filter appends its field to the draft — at the end of the root, where the cell
-  // menu's own conditions land. The ask is taken **once**: React runs an effect twice for a single
-  // commit in development, and one click would otherwise add two rows.
-  useEffect(() => {
-    if (ask === null || taken.current === ask) return
-
-    taken.current = ask
-    setCriteria((current) => appendTo(current, [], newCondition(ask.column)))
-    onAskTaken?.()
-  }, [ask, onAskTaken])
+export function FilterSortPanel({ columns, filtering, draft }: FilterSortPanelProps) {
+  const { criteria, setCriteria, keys, setKeys } = draft
 
   const names = useMemo(() => columns.map((column) => column.name), [columns])
   const firstColumn = names[0] ?? ''
-  const edited = criteria !== filtering.criteria || keys !== sort
-
-  /** Nothing is sent that has not changed: Apply on an untouched panel is not a re-read. */
-  const apply = () => {
-    if (criteria !== filtering.criteria) filtering.onChange(criteria)
-    if (keys !== sort) onSortChange?.([...keys])
-  }
 
   const edit: Edit = {
     names,
@@ -151,7 +100,7 @@ export function FilterSortPanel({
         <IconButton
           label="Add sort criteria"
           icon={<Plus size={12} />}
-          disabled={firstColumn === '' || onSortChange === undefined}
+          disabled={firstColumn === '' || !draft.canSort}
           className="h-5 w-5 border border-line-strong bg-panel"
           onClick={() => setKeys([...keys, { column: firstColumn, descending: false }])}
         />
@@ -175,10 +124,10 @@ export function FilterSortPanel({
       </div>
 
       <div className="flex shrink-0 items-center gap-3 border-t border-line px-2 py-1.5">
-        <Button variant="primary" disabled={!edited} onClick={apply}>
+        <Button variant="primary" disabled={!draft.edited} onClick={draft.apply}>
           Apply Filter &amp; Sort
         </Button>
-        <span className="text-xs text-muted">{edited ? 'Criteria Edited' : ''}</span>
+        <span className="text-xs text-muted">{draft.edited ? 'Criteria Edited' : ''}</span>
 
         <div className="min-w-2 flex-1" />
 
