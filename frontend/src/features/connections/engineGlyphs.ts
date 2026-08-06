@@ -1,11 +1,14 @@
 import type { Engine } from '@/bridge/connections'
 
 /**
- * The mark of each engine: one path over a 128-unit box, drawn in `currentColor`. Vendored from
- * Devicon (MIT) rather than pulled in as a dependency — three paths are three paths, and an icon
- * set is three thousand. The elephant's eyes and tusks are subpaths of that one path and are filled
- * `evenodd`, so they read as holes onto the chip's colour rather than needing a second fill; the
- * leaf's own stem is the same trick.
+ * The mark of each engine: one path over a 128-unit box, drawn in `currentColor`. The first three
+ * are vendored from Devicon (MIT) rather than pulled in as a dependency — three paths are three
+ * paths, and an icon set is three thousand. The elephant's eyes and tusks are subpaths of that one
+ * path and are filled `evenodd`, so they read as holes onto the chip's colour rather than needing a
+ * second fill; the leaf's own stem is the same trick.
+ *
+ * The fourth is drawn here rather than vendored: Redis's mark is a stack of three discs, and three
+ * ellipses say that at sixteen pixels as well as five hundred nodes would.
  */
 export interface EngineGlyph {
   path: string
@@ -160,5 +163,13 @@ export const ENGINE_GLYPHS: Record<Engine, EngineGlyph> = {
       "3.081 2.09-2.054 4.175-4.134 6.045-6.383a47.846 47.846 0 006.191-9.516c1.122-2.284 2.178-4.614 3.052" +
       "-7.001.77-2.104 1.247-4.315 1.854-6.479.054-.156.126-.309.16-.468 1.254-5.841 1.465-11.741 1.004-17." +
       "682zm-23.599 49.375l-.805-1.763.805 1.763 1.183 1.01-1.183-1.01z",
+  },
+  redis: {
+    evenOdd: false,
+    // Three stacked discs, top to bottom, each an ellipse written as two arcs.
+    path:
+      "M14 32a50 16 0 1 0 100 0a50 16 0 1 0-100 0z" +
+      "M14 63a50 16 0 1 0 100 0a50 16 0 1 0-100 0z" +
+      "M14 94a50 16 0 1 0 100 0a50 16 0 1 0-100 0z",
   },
 }

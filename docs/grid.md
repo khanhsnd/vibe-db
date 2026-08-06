@@ -413,10 +413,18 @@ the one place the app shows a *sample* rather than an answer.
 - **A nested value is one column**, drawn in the shell's notation. A column per path would give two
   documents of one collection different columns, which is the one thing a grid cannot draw.
 
+**On a key-value store there is no fact and no sample either** — the columns are a *constant*. A
+Redis key space is drawn as `Key`, `Type`, `Value`, `TTL` and `Size` on every server there has ever
+been, `Key` being the primary key because it is the only thing that identifies a row and it
+identifies exactly one. What is sampled there is not the header but the **value**: a container too
+large for a row is drawn as its first fifty members and ends with `… 50 of 4321`, and that mark is
+what makes writing the cell back fail — an edit of a sample would drop whatever it did not show. See
+[architecture.md](architecture.md#the-key-value-store).
+
 None of this is a special case in `ResultGrid`. It receives `GridData` exactly as every other surface
-does; the difference is entirely `internal/driver/mongo/documents.go`, and it is written down here
-because a reader who does not know the list is a sample would read a missing column as a missing
-field.
+does; the difference is entirely `internal/driver/mongo/documents.go` and
+`internal/driver/redis/keys.go`, and it is written down here because a reader who does not know the
+list is a sample would read a missing column as a missing field.
 
 ## Where the two call sites legitimately differ
 

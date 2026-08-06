@@ -9,8 +9,8 @@ internal/app  ->  session / profile / secret / history / transfer / compare  -> 
 - **`internal/domain`** — `ConnectionProfile`, `Validate()`, sentinel errors. Pure; imports nothing
   of ours. Business rules live here, not in the API layer.
 - **`internal/driver`** — the `Driver`/`Session` interfaces plus a `Registry` keyed by engine.
-  `driver/mysql`, `driver/postgres` and `driver/mongo` are the adapters; `driver/sqlkit` is what the
-  two SQL ones share, and `sqlkit.Lex` alone is what all three do.
+  `driver/mysql`, `driver/postgres`, `driver/mongo` and `driver/redis` are the adapters;
+  `driver/sqlkit` is what the two SQL ones share, and `sqlkit.Lex` alone is what all four do.
 - **`internal/app`** — the Wails boundary and the only package bound to JavaScript. Speaks `dto.go`
   wire types, never domain types, and maps every error to a stable code (see
   [errors.md](errors.md)).
@@ -66,6 +66,12 @@ those two ends should need to change — if it does, an abstraction leaked.
 and no foreign keys, and adding it changed nothing in `app`, `session`, `profile`, `secret`, `history`
 or `jsonstore` beyond one registry line and one new failure code. What it *did* need is set out in
 [a section of its own](#the-document-store) below.
+
+**Redis is the harder proof.** A document store still has collections to name and documents to read;
+a key-value store has neither, and the port took it anyway — one registry line, one `domain.Engine`,
+four capability flags on the frontend's `EngineInfo`, and **no new failure code at all**. Nothing in
+`app`, `session`, `transfer` or `compare` knows it exists. See
+[the key-value store](#the-key-value-store).
 
 Reach for `internal/driver/sqlkit` before writing anything: row scanning, result-column
 reflection, statement classification, **the lexer** and everything written over it — script
@@ -323,6 +329,63 @@ grammar for the same answer.
 | `ddl.go` | a field is not a column, so a change to one is a change to the documents that carry it: `$set` to add, `$rename`, `$unset`, and a pipeline `$convert` to alter. `CreateTable` creates the collection and *only* the collection — see [decisions.md](decisions.md) for why a `$jsonSchema` validator built from the declared fields is a trap |
 | `database.go` | there is no `CREATE DATABASE`. A database exists exactly as long as it holds a collection, so making one is making its first — which is why `DatabaseSpec.FirstCollection` exists and why the dialog asks |
 | what it has not got | a foreign key, a primary key other than `_id`, a stored routine, a truncate distinct from an empty. Each says so through `domain.Unsupported` rather than being approximated or left to the server to refuse |
+
+## The key-value store
+
+`internal/driver/redis` is the second adapter that is not a `database/sql` one, and it differs from
+the first in a deeper place. MongoDB changed what a *row* is; this changes what a **table** is,
+because there are none.
+
+**The key space is the table.** A Redis database is one flat namespace of keys, so the adapter
+answers `Objects` with exactly one table, called `(All Data)` — the name every other client gives it
+— holding one row per key: `Key`, `Type`, `Value`, `TTL` and `Size`. Those five columns are not read
+from anywhere and are not inferred from anything: unlike a document store's sampled fields, they are
+the same five on every Redis server there has ever been. A table by any other name is
+`domain.ErrUnknownTable`, which is the honest answer — there is nowhere for it to be.
+
+**A page is cut from a scan, so the names are held and the values are not.** `SCAN` is a cursor with
+no offset and no order, so `keys.go` walks the whole space, **sorts the names**, and only then cuts
+the page — because a page cut from an unordered list is a different page every time it is read. The
+values of that one page are then fetched in **two pipelines**: one for what each key *is* (its type,
+its clock, its cost) and one, which needs the first's answer to know what to ask, for what it holds.
+A hundred rows is two round trips rather than four hundred. The walk is bounded at `scanCap` keys and
+**says so** rather than showing a window that lies about how big it is.
+
+**A filter is answered here, and a glob is the part of it the server can do.** Redis narrows a read
+exactly one way — a glob against a key's name — so `filter.go` takes that glob from the top level of
+an `AND` and applies the whole tree to what comes back. A condition inside an `OR` never becomes the
+glob: `key begins user OR type is hash` admits every hash in the database, and narrowing the scan by
+the first half would hide rows the reader asked for. Nothing in the package quotes anything, for the
+reason nothing in the MongoDB one does: a pattern crosses as an **argument**.
+
+**A value is JSON, and that is what makes it editable.** A string is itself; the five container
+types are spelled as JSON — a list as an array, a hash and a sorted set as objects, in field and rank
+order — so what the grid draws is exactly what an edit hands back, and there is no second notation to
+learn. A value too large for a row is **sampled and marked**, and the mark is what makes writing it
+back fail: an edit of a sample would drop whatever was not shown.
+
+**A command is argv, not a sentence.** `command.go` rebuilds each argument from the tokens
+`sqlkit.Lex` already produced — an argument is a *run of adjacent tokens*, since `user:1` is three
+tokens and one argument — so there is no second scanner here either. What a command then *does* is
+`domain.RedisHazard`, the fourth grammar for one rule beside `StatementHazard`, `MongoHazard` and
+`ImportHazard`; `FLUSHDB` is classified **unfiltered** rather than destructive, because it names
+nothing and therefore takes everything, and that is the one class answered for on a laptop as well as
+on production.
+
+| Part | Redis |
+|---|---|
+| a DSN | none: `options.go` builds go-redis's own options, for the reason MongoDB builds its driver's |
+| a dialler and a TLS configuration | values on those options, so there is nothing registered globally and nothing to release with the session |
+| `errors.go` | the first word of the server's message → sentinel, that word being what Redis puts a class in. Plus a text read for a password rejection, which has no class — see [errors.md](errors.md) |
+| catalogue reads | there is no catalogue. `SCAN` for the keys, `TYPE`/`PTTL`/`MEMORY USAGE` for each, `DBSIZE` and `INFO keyspace` for the counts, `CONFIG GET databases` for how many databases there are |
+| placeholders | none; every argument is a value |
+| the lexer's dialect | `#` comments, both quotes open a string, a backslash escapes inside one — which is `redis-cli`'s own grammar |
+| levels above a key | a client **per database**, because `SELECT` is connection state and a pool that switched underneath a read would answer from somewhere else |
+| statement terminator | a **newline**. A semicolon is read as one too, since every file this app writes ends its statements with one and a reader coming from another tab will type one |
+| `ddl.go` | nothing to declare, so nearly all of it is `domain.Unsupported` naming what is missing. `EmptyTable` is `FLUSHDB` and `AlterStatements` spells nothing at all |
+| `database.go` | there is none. A server is started with a fixed number of databases and they all exist from that moment — the opposite of MongoDB, where one exists only as long as something is in it |
+| a search | `MatchingRows` is a glob over key *names*, case folded into the pattern itself (`[uU][sS][eE][rR]*`) because Redis has no insensitive matching. The two modes a pattern cannot say are refused rather than approximated, and the statement it answers with is `KEYS <glob>` — which returns exactly what it counted |
+| what it has not got | a second table, a column, an index, a foreign key, a routine, a view, a plan, a database it can make or drop, a truncate distinct from an empty. Each says so through `domain.Unsupported` |
 
 ## Two Wails v2 constraints that shaped the design
 

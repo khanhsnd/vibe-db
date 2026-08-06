@@ -6,10 +6,11 @@ repository.
 ## What this is
 
 `vibe-db` is a desktop database client in the Navicat Premium mould — a Go backend in a Wails v2
-shell (OS WebView2, no bundled Chromium) with a React 19 + TypeScript frontend. MySQL, PostgreSQL
-and MongoDB are implemented; the driver layer is a port so others are added as adapters,
+shell (OS WebView2, no bundled Chromium) with a React 19 + TypeScript frontend. MySQL, PostgreSQL,
+MongoDB and Redis are implemented; the driver layer is a port so others are added as adapters,
 `internal/driver/sqlkit` holds everything about a `database/sql` adapter that does not vary by
-engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL one.
+engine, `internal/driver/mongo` is the proof the port is not secretly a SQL one, and
+`internal/driver/redis` is the proof it does not secretly assume tables either.
 
 ## Rules that must not be broken
 
@@ -77,6 +78,16 @@ engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL 
     spelling. The structure half asks **no server anything**: those names are what a catalogue read
     already answered with.
 
+15. **A key-value store has one table, and it is not declared.** `internal/driver/redis` answers
+    with exactly one table per database — `(All Data)`, and five fixed columns that are the same on
+    every Redis server there is — because a Redis database is a flat key space; any other table name
+    is `ErrUnknownTable`. A page is cut from a **sorted** scan and only that page's values are read,
+    a glob is the only narrowing the server will do and is taken from an `AND` alone, and a container
+    value is spelled as **JSON** so that what the grid draws is exactly what an edit hands back — a
+    value it could only sample is marked and refuses to be written. What a command *does* is
+    `domain.RedisHazard`, the fourth grammar for one rule, and everything a key space has not got is
+    `domain.Unsupported` naming which.
+
 ## Where to read before changing something
 
 | Task | Read |
@@ -84,6 +95,7 @@ engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL 
 | Build, test, run against a real database | [docs/development.md](docs/development.md) |
 | Touch a layer boundary, or add an engine | [docs/architecture.md](docs/architecture.md) |
 | Touch anything MongoDB | [docs/architecture.md](docs/architecture.md#the-document-store) |
+| Touch anything Redis | [docs/architecture.md](docs/architecture.md#the-key-value-store) |
 | Add or change a failure mode | [docs/errors.md](docs/errors.md) |
 | Change UI behaviour, or find out what exists | [docs/features.md](docs/features.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file) |
@@ -99,8 +111,9 @@ A new failure mode needs all four of: a `domain` sentinel, a mapping in `errmap.
 `ErrorCode` union, and a row in the table in [docs/errors.md](docs/errors.md).
 
 A new engine capability the UI has to know about is a field on `EngineInfo` in
-`frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `documents` — and never a
-comparison against an engine's name in a component.
+`frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `documents`, `keys`,
+`createsTables`, `createsDatabases`, `hasViews`, `needsUser` — and never a comparison against an
+engine's name in a component.
 
 Commands, in short: `wails dev`, `wails build`, `go test ./...`, `go vet ./...`,
 `gofmt -l internal main.go`, and `pnpm typecheck` in `frontend/`.

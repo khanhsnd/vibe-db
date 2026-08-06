@@ -123,3 +123,69 @@ func TestMongoHazardIgnoresCase(t *testing.T) {
 		t.Errorf("MongoHazard() = %q, want %q", got, HazardDestructive)
 	}
 }
+
+func TestRedisHazardReadsTheCommandAndItsContainer(t *testing.T) {
+	tests := []struct {
+		command  string
+		argument string
+		want     Hazard
+	}{
+		{"GET", "user:1", HazardNone},
+		{"SCAN", "0", HazardNone},
+		{"INFO", "keyspace", HazardNone},
+		{"KEYS", "*", HazardNone},
+
+		{"SET", "user:1", HazardWrite},
+		{"DEL", "user:1", HazardWrite},
+		{"UNLINK", "user:1", HazardWrite},
+		{"HSET", "user:1", HazardWrite},
+		{"EXPIRE", "user:1", HazardWrite},
+		{"EVAL", "return 1", HazardWrite},
+
+		{"RENAME", "a", HazardDestructive},
+		{"SHUTDOWN", "", HazardDestructive},
+
+		// A container command keeps its verb in two words, so one word is not enough to tell the
+		// two apart.
+		{"CONFIG", "GET", HazardNone},
+		{"CONFIG", "SET", HazardDestructive},
+		{"CLIENT", "LIST", HazardNone},
+		{"CLIENT", "KILL", HazardDestructive},
+
+		// The commands that name nothing and therefore take everything. They are answered for
+		// wherever they are run, which is what being unfiltered means here.
+		{"FLUSHDB", "", HazardUnfiltered},
+		{"FLUSHALL", "ASYNC", HazardUnfiltered},
+		{"SCRIPT", "FLUSH", HazardUnfiltered},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.command+" "+tt.argument, func(t *testing.T) {
+			if got := RedisHazard(tt.command, tt.argument); got != tt.want {
+				t.Errorf("RedisHazard(%q, %q) = %q, want %q", tt.command, tt.argument, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedisHazardIgnoresCase(t *testing.T) {
+	if got := RedisHazard("flushdb", ""); got != HazardUnfiltered {
+		t.Errorf("RedisHazard(\"flushdb\") = %q, want %q", got, HazardUnfiltered)
+	}
+	if got := RedisHazard("config", "set"); got != HazardDestructive {
+		t.Errorf("RedisHazard(\"config\", \"set\") = %q, want %q", got, HazardDestructive)
+	}
+}
+
+// Anything that takes everything is confirmed wherever it runs, and that is the whole reason
+// FLUSHDB is classified unfiltered rather than destructive.
+func TestAFlushIsConfirmedOnALaptopToo(t *testing.T) {
+	flush := RedisHazard("FLUSHALL", "")
+
+	if !EnvironmentDevelopment.NeedsConfirmation(flush) {
+		t.Error("a flush on development is not confirmed")
+	}
+	if !EnvironmentProduction.NeedsConfirmation(flush) {
+		t.Error("a flush on production is not confirmed")
+	}
+}

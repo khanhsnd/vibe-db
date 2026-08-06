@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { engineWords, type Namespace } from '@/bridge/connections'
+import { engineInfo, engineWords, type Namespace } from '@/bridge/connections'
 import { GridFooter } from '@/features/results/GridFooter'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import { focusOf, type Selection } from '@/features/results/resultSet'
@@ -42,6 +42,7 @@ export function ObjectListView({ sessionId, profileId, namespace }: ObjectListVi
   const engine = useConnectionsStore(
     (s) => s.profiles.find((profile) => profile.id === profileId)?.engine ?? '',
   )
+  const info = engineInfo(engine)
   const words = engineWords(engine)
 
   const nameAt = (row: number) => data?.rows[row]?.[0] ?? ''
@@ -80,21 +81,27 @@ export function ObjectListView({ sessionId, profileId, namespace }: ObjectListVi
         <Button variant="subtle" icon={ICON.open} disabled={table === ''} onClick={on.open}>
           Open {words.table}
         </Button>
-        <Button variant="subtle" icon={ICON.design} disabled={table === ''} onClick={on.design}>
-          Design {words.table}
-        </Button>
-        <Button variant="subtle" icon={ICON.add} onClick={on.create}>
-          New {words.table}
-        </Button>
-        <Button
-          variant="subtle"
-          icon={ICON.delete}
-          disabled={table === ''}
-          onClick={on.remove}
-          className="text-danger hover:bg-danger-subtle hover:text-danger"
-        >
-          Delete {words.table}
-        </Button>
+        {/* Declaring one is left out for an engine whose tables are not declared: a Redis
+            database holds one key space and always has — see `createsTables`. */}
+        {info.createsTables ? (
+          <>
+            <Button variant="subtle" icon={ICON.design} disabled={table === ''} onClick={on.design}>
+              Design {words.table}
+            </Button>
+            <Button variant="subtle" icon={ICON.add} onClick={on.create}>
+              New {words.table}
+            </Button>
+            <Button
+              variant="subtle"
+              icon={ICON.delete}
+              disabled={table === ''}
+              onClick={on.remove}
+              className="text-danger hover:bg-danger-subtle hover:text-danger"
+            >
+              Delete {words.table}
+            </Button>
+          </>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1">
@@ -107,7 +114,11 @@ export function ObjectListView({ sessionId, profileId, namespace }: ObjectListVi
         ) : data.rows.length === 0 ? (
           <Empty
             title={`No ${words.tables.toLowerCase()} here yet`}
-            hint={`New ${words.table} opens the designer on one this namespace does not have.`}
+            hint={
+              info.createsTables
+                ? `New ${words.table} opens the designer on one this namespace does not have.`
+                : undefined
+            }
           />
         ) : (
           <ResultGrid

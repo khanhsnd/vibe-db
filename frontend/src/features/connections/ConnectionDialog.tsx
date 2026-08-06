@@ -22,6 +22,7 @@ import {
   tlsUsesFiles,
   withEngine,
   type Engine,
+  type EngineInfo,
   type ProfileInput,
 } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
@@ -246,11 +247,12 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
-                    {/* A MongoDB server started without access control takes no credentials at
-                        all, so the box says so rather than being refused when it is left empty. */}
+                    {/* A MongoDB server started without access control and a Redis server with no
+                        ACL take no credentials at all, so the box says so rather than being
+                        refused when it is left empty. */}
                     <Field
                       label="User"
-                      hint={engine.documents ? 'Optional' : undefined}
+                      hint={engine.needsUser ? undefined : 'Optional'}
                       error={fieldError('user')}
                     >
                       {(id, invalid) => (
@@ -279,9 +281,11 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                     </Field>
                   </div>
 
+                  {/* A Redis database is numbered rather than named, so the box takes an index and
+                      says which — leaving it blank is database 0. */}
                   <Field
                     label={engine.needsDatabase ? 'Database' : 'Default database'}
-                    hint={engine.needsDatabase ? 'Required' : 'Optional'}
+                    hint={databaseHint(engine)}
                     error={fieldError('database')}
                   >
                     {(id, invalid) => (
@@ -289,6 +293,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                         id={id}
                         invalid={invalid}
                         value={form.database}
+                        placeholder={engine.keys ? '0' : undefined}
                         onChange={(e) => update('database', e.target.value)}
                       />
                     )}
@@ -631,6 +636,12 @@ function FileField({
 
 function tlsHint(mode: string): string {
   return TLS_MODES.find((one) => one.value === mode)?.hint ?? ''
+}
+
+/** What the Database box takes, which on a key-value store is a number and not a name. */
+function databaseHint(engine: EngineInfo): string {
+  if (engine.keys) return 'A number, counting from 0'
+  return engine.needsDatabase ? 'Required' : 'Optional'
 }
 
 function passwordHint(form: ProfileInput, minted: boolean, editing: boolean): string | undefined {

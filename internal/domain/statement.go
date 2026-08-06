@@ -168,3 +168,86 @@ func MongoHazard(method string, filtered bool) Hazard {
 	}
 	return mongoHazards[name]
 }
+
+// redisHazards is the command against what it will do, which is where a key-value store keeps the
+// verb the other two grammars keep in a first word and in a method. A command that is not here
+// reads, and so does everything this side cannot tell apart from a read.
+//
+// A **container** command carries its verb in its second word — `CONFIG SET` writes and `CONFIG GET`
+// does not — so those are keyed by both words. RedisHazard tries the pair before the name, which is
+// what keeps `CLIENT LIST` out of the same class as `CLIENT KILL`.
+var redisHazards = map[string]Hazard{
+	// Everything that names the keys it touches. A DEL is a DELETE that carried its WHERE.
+	"del": HazardWrite, "unlink": HazardWrite, "set": HazardWrite, "setnx": HazardWrite,
+	"setex": HazardWrite, "psetex": HazardWrite, "getset": HazardWrite, "getdel": HazardWrite,
+	"getex": HazardWrite, "mset": HazardWrite, "msetnx": HazardWrite, "append": HazardWrite,
+	"setrange": HazardWrite, "setbit": HazardWrite, "bitop": HazardWrite, "bitfield": HazardWrite,
+	"incr": HazardWrite, "incrby": HazardWrite, "incrbyfloat": HazardWrite, "decr": HazardWrite,
+	"decrby": HazardWrite, "copy": HazardWrite, "restore": HazardWrite, "move": HazardWrite,
+	"expire": HazardWrite, "expireat": HazardWrite, "pexpire": HazardWrite, "pexpireat": HazardWrite,
+	"persist": HazardWrite,
+	"hset":    HazardWrite, "hsetnx": HazardWrite, "hdel": HazardWrite, "hincrby": HazardWrite,
+	"hincrbyfloat": HazardWrite, "hexpire": HazardWrite,
+	"lpush": HazardWrite, "rpush": HazardWrite, "lpushx": HazardWrite, "rpushx": HazardWrite,
+	"lpop": HazardWrite, "rpop": HazardWrite, "lmpop": HazardWrite, "blpop": HazardWrite,
+	"brpop": HazardWrite, "lset": HazardWrite, "linsert": HazardWrite, "lrem": HazardWrite,
+	"ltrim": HazardWrite, "lmove": HazardWrite, "rpoplpush": HazardWrite,
+	"sadd": HazardWrite, "srem": HazardWrite, "spop": HazardWrite, "smove": HazardWrite,
+	"sinterstore": HazardWrite, "sunionstore": HazardWrite, "sdiffstore": HazardWrite,
+	"zadd": HazardWrite, "zrem": HazardWrite, "zincrby": HazardWrite, "zpopmin": HazardWrite,
+	"zpopmax": HazardWrite, "zremrangebyrank": HazardWrite, "zremrangebyscore": HazardWrite,
+	"zremrangebylex": HazardWrite, "zrangestore": HazardWrite, "zdiffstore": HazardWrite,
+	"zunionstore": HazardWrite, "zinterstore": HazardWrite,
+	"xadd": HazardWrite, "xdel": HazardWrite, "xtrim": HazardWrite, "xsetid": HazardWrite,
+	"xack": HazardWrite, "xclaim": HazardWrite, "xautoclaim": HazardWrite,
+	"pfadd": HazardWrite, "pfmerge": HazardWrite, "pfcount": HazardWrite,
+	"geoadd": HazardWrite, "geosearchstore": HazardWrite, "georadius": HazardWrite,
+	"json.set": HazardWrite, "json.del": HazardWrite, "json.arrappend": HazardWrite,
+	// A script is whatever it was written to be, which is `runCommand`'s position exactly: it is
+	// answered for because only the server knows what it will do. The `_RO` forms cannot write.
+	"eval": HazardWrite, "evalsha": HazardWrite, "fcall": HazardWrite,
+	"xgroup create": HazardWrite, "xgroup destroy": HazardDestructive,
+	"acl setuser": HazardWrite,
+
+	// Renaming a key is the same class RENAME is in every other grammar: what was there is gone
+	// under that name and no transaction puts it back.
+	"rename": HazardDestructive, "renamenx": HazardDestructive, "migrate": HazardDestructive,
+	// The server rather than its keys. A CONFIG SET outlives the connection that made it.
+	"shutdown": HazardDestructive, "failover": HazardDestructive, "replicaof": HazardDestructive,
+	"slaveof": HazardDestructive, "debug": HazardDestructive,
+	"config set": HazardDestructive, "config rewrite": HazardDestructive,
+	"config resetstat": HazardDestructive, "client kill": HazardDestructive,
+	"cluster forget": HazardDestructive, "acl deluser": HazardDestructive,
+}
+
+// redisSweeping is every command that names nothing and therefore takes everything. They are
+// unfiltered in exactly the sense a `DELETE` with no `WHERE` is — which is why they are answered
+// for on a laptop as well as on production, and why they are not merely destructive: a FLUSHALL
+// nobody meant is the one mistake this class exists to catch.
+var redisSweeping = map[string]bool{
+	"flushdb":        true,
+	"flushall":       true,
+	"swapdb":         true,
+	"script flush":   true,
+	"function flush": true,
+	"cluster reset":  true,
+}
+
+// RedisHazard is StatementHazard for a key-value store: the command is the verb, and a container
+// command's second word is part of it. It is the same rule read off a third grammar, and it lives
+// here beside the other two for the reason they do — what is dangerous to run is a domain rule, and
+// only its spelling is the engine's.
+func RedisHazard(command, argument string) Hazard {
+	name := strings.ToLower(strings.TrimSpace(command))
+	pair := name + " " + strings.ToLower(strings.TrimSpace(argument))
+
+	switch {
+	case redisSweeping[pair], redisSweeping[name]:
+		return HazardUnfiltered
+	default:
+		if hazard, ok := redisHazards[pair]; ok {
+			return hazard
+		}
+		return redisHazards[name]
+	}
+}

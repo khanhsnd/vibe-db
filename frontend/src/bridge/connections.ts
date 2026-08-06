@@ -231,13 +231,17 @@ export const SSH_AUTHS: ReadonlyArray<{ value: SSHAuth; label: string }> = [
   { value: 'agent', label: 'SSH Agent' },
 ]
 
-export type Engine = 'mysql' | 'postgres' | 'mongo'
+export type Engine = 'mysql' | 'postgres' | 'mongo' | 'redis'
 
 export interface EngineInfo {
   value: Engine
   label: string
   port: number
   user: string
+  // Whether every connection to this engine is made *as* somebody. A MongoDB server started
+  // without access control and a Redis server with no ACL both take no user name at all, which is
+  // what greys the box rather than refusing the profile.
+  needsUser: boolean
   // PostgreSQL binds a session to one database for its whole life, so a profile that names
   // none has nothing to connect to. MySQL can be browsed without one.
   needsDatabase: boolean
@@ -253,6 +257,20 @@ export interface EngineInfo {
   // to know about without asking a driver, because it changes what the *words* mean: a table is a
   // collection, a field is not declared anywhere, and the editor is not writing SQL.
   documents: boolean
+  // Whether this engine stores values under keys and nothing else. A Redis database holds one flat
+  // key space rather than tables, so what the reader browses is that key space, and the editor is
+  // writing commands rather than either SQL or a shell.
+  keys: boolean
+  // Whether a database of this engine is something the app can make and drop. A Redis server is
+  // started with a fixed number of them and they all exist from that moment, so there is nothing
+  // for a New Database dialog to make and nothing for a delete to remove.
+  createsDatabases: boolean
+  // Whether a namespace's tables are the reader's to declare. A Redis database holds exactly one
+  // key space and always has, so there is nothing to create, rename, duplicate, design or drop.
+  createsTables: boolean
+  // Whether this engine has views at all, which is what decides if the tree draws a folder that
+  // could only ever be empty.
+  hasViews: boolean
   // Whether a new database of this engine has to be given its first collection. MongoDB has no
   // CREATE DATABASE — a database exists exactly as long as it holds a collection — so making one
   // is making that collection, and the dialog asks which.
@@ -307,8 +325,23 @@ const DOCUMENT_WORDS: EngineWords = {
   scriptFile: 'Script File',
 }
 
+/**
+ * A key-value store has one table to a database and it is not called a table. `Data` is the folder
+ * every other Redis client draws, and a row in it is a *key* — which is the word that matters most
+ * here, since it is also what identifies one.
+ */
+const KEY_WORDS: EngineWords = {
+  table: 'Key Space',
+  tables: 'Data',
+  row: 'key',
+  rows: 'keys',
+  scriptFile: 'Command File',
+}
+
 export function engineWords(engine: string): EngineWords {
-  return engineInfo(engine).documents ? DOCUMENT_WORDS : SQL_WORDS
+  const info = engineInfo(engine)
+  if (info.keys) return KEY_WORDS
+  return info.documents ? DOCUMENT_WORDS : SQL_WORDS
 }
 
 // The order here is the order of the dialog's Engine list, and the first entry is what an
@@ -319,10 +352,15 @@ export const ENGINES = [
     label: 'MySQL',
     port: 3306,
     user: 'root',
+    needsUser: true,
     needsDatabase: false,
     hasSchemas: false,
     databaseHasOwner: false,
     documents: false,
+    keys: false,
+    createsDatabases: true,
+    createsTables: true,
+    hasViews: true,
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
@@ -333,10 +371,15 @@ export const ENGINES = [
     label: 'PostgreSQL',
     port: 5432,
     user: 'postgres',
+    needsUser: true,
     needsDatabase: true,
     hasSchemas: true,
     databaseHasOwner: true,
     documents: false,
+    keys: false,
+    createsDatabases: true,
+    createsTables: true,
+    hasViews: true,
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
@@ -349,11 +392,38 @@ export const ENGINES = [
     label: 'MongoDB',
     port: 27017,
     user: '',
+    needsUser: false,
     needsDatabase: false,
     hasSchemas: false,
     databaseHasOwner: false,
     documents: true,
+    keys: false,
+    createsDatabases: true,
+    createsTables: true,
+    hasViews: true,
     databaseNeedsCollection: true,
+    hasForeignKeys: false,
+    hasRoutines: false,
+    hasTruncate: false,
+  },
+  {
+    // A Redis database is *numbered* rather than named — `0` to `15` on a default install — so the
+    // Database box takes an index, and leaving it blank is database 0. Nothing else about this
+    // engine is declared: one key space to a database, and no shape to any of it.
+    value: 'redis',
+    label: 'Redis',
+    port: 6379,
+    user: '',
+    needsUser: false,
+    needsDatabase: false,
+    hasSchemas: false,
+    databaseHasOwner: false,
+    documents: false,
+    keys: true,
+    createsDatabases: false,
+    createsTables: false,
+    hasViews: false,
+    databaseNeedsCollection: false,
     hasForeignKeys: false,
     hasRoutines: false,
     hasTruncate: false,

@@ -11,21 +11,23 @@ A new failure mode needs a `domain` sentinel, a mapping in `errmap.go`, an entry
 `ErrorCode` union, and a row in the table below. `errmap_test.go` guards the JSON contract the
 frontend depends on.
 
-| Code | MySQL | PostgreSQL | MongoDB |
-|---|---|---|---|
-| `INVALID_PROFILE` | Validation failed; `field` names the offending input. It is also what a request that is well-named but not well-formed answers with — an export in a format nobody offers, or a foreign key naming a different number of columns on each side | as MySQL, plus a missing `database` | as MySQL. A missing `user` is *not* one of them: a server started without access control takes no credentials at all |
-| `INVALID_NAME` | A schema change arrived with a blank identifier; `field` says which — `table`, `column`, `column type`, `new column`, `index`, `index column`, `database`, `view`, `routine`, `foreign key`, `referenced table`, `referenced column`. Every identifier is quoted on its way into a statement, so having one is the only rule left to enforce above the server | as MySQL | as MySQL, with `collection` and `field` in place of `table` and `column`. Nothing is quoted into anything here — a name reaches the server as a *value* — so having one is the only rule there ever was |
-| `BAD_CREDENTIALS` | errno 1045 / 1698 | SQLSTATE 28P01 / 28000 | code 18 / 11, or 8000 from a hosted cluster; also a handshake failure, which arrives as a connection error carrying no code and is read from its text |
-| `UNKNOWN_DATABASE` | errno 1049 | SQLSTATE 3D000 | — (a database that is not there reads as one holding nothing, which is the server's own answer) |
-| `UNKNOWN_SCHEMA` | — (a MySQL database *is* its schema) | SQLSTATE 3F000, which PostgreSQL raises for DDL against a missing schema; a *read* through one is 42P01 below | — (a MongoDB database holds its collections directly) |
-| `UNKNOWN_TABLE` | errno 1146, or no columns in `information_schema` | SQLSTATE 42P01, or no rows in `pg_attribute` | code 26 (`NamespaceNotFound`), from a command against a collection that is not there. A *read* is not one of them: `find` over a missing collection answers with no documents, and inventing an error the server does not raise would be inventing one |
-| `QUERY_CANCELLED` | Stop was pressed, or the run context was cancelled | as MySQL, plus SQLSTATE 57014 | as MySQL |
-| `TLS_UNSUPPORTED` | `mysql.ErrNoTLS` | pgx refusing a TLS-less server | — (the driver has no opportunistic mode: TLS is on or it is not, so there is nothing to fall back from) |
-| `INVALID_PROFILE` on `tlsMode` | A certificate file named under a mode that never opens one. A file the app quietly ignores is a reader believing they have configured something, so it is refused instead | as MySQL | as MySQL |
-| `SQL_ERROR` | Any other server rejection; `message` is its own wording, `detail` the errno | the same, `detail` the SQLSTATE | the same, `detail` the server's own *name* for the failure — `NamespaceExists` — or its number where it sent none. It is also what a command **this side** could not read answers with, under the code `SHELL`: nothing was sent anywhere, but the wording is still the only useful thing to show |
+| Code | MySQL | PostgreSQL | MongoDB | Redis |
+|---|---|---|---|---|
+| `INVALID_PROFILE` | Validation failed; `field` names the offending input. It is also what a request that is well-named but not well-formed answers with — an export in a format nobody offers, or a foreign key naming a different number of columns on each side | as MySQL, plus a missing `database` | as MySQL. A missing `user` is *not* one of them: a server started without access control takes no credentials at all | as MySQL, plus a `database` that is not a number — a Redis database is numbered and not named. A missing `user` is not one of them either |
+| `INVALID_NAME` | A schema change arrived with a blank identifier; `field` says which — `table`, `column`, `column type`, `new column`, `index`, `index column`, `database`, `view`, `routine`, `foreign key`, `referenced table`, `referenced column`. Every identifier is quoted on its way into a statement, so having one is the only rule left to enforce above the server | as MySQL | as MySQL, with `collection` and `field` in place of `table` and `column`. Nothing is quoted into anything here — a name reaches the server as a *value* — so having one is the only rule there ever was | — (nothing here is declared, so there is no identifier to arrive blank) |
+| `BAD_CREDENTIALS` | errno 1045 / 1698 | SQLSTATE 28P01 / 28000 | code 18 / 11, or 8000 from a hosted cluster; also a handshake failure, which arrives as a connection error carrying no code and is read from its text | `NOAUTH`, `WRONGPASS` or `NOPERM`, which is the first word of the server's own line; also `ERR invalid password`, which carries no such word and is read from its text |
+| `UNKNOWN_DATABASE` | errno 1049 | SQLSTATE 3D000 | — (a database that is not there reads as one holding nothing, which is the server's own answer) | `ERR DB index is out of range`. The set is fixed when the server starts, so a seventeenth database is impossible rather than missing |
+| `UNKNOWN_SCHEMA` | — (a MySQL database *is* its schema) | SQLSTATE 3F000, which PostgreSQL raises for DDL against a missing schema; a *read* through one is 42P01 below | — (a MongoDB database holds its collections directly) | — (a Redis database holds its keys directly) |
+| `UNKNOWN_TABLE` | errno 1146, or no columns in `information_schema` | SQLSTATE 42P01, or no rows in `pg_attribute` | code 26 (`NamespaceNotFound`), from a command against a collection that is not there. A *read* is not one of them: `find` over a missing collection answers with no documents, and inventing an error the server does not raise would be inventing one | any table but `(All Data)`: a database holds one key space and there is nowhere else for a table to be. Also a key that expired between being listed and being edited |
+| `QUERY_CANCELLED` | Stop was pressed, or the run context was cancelled | as MySQL, plus SQLSTATE 57014 | as MySQL | as MySQL |
+| `TLS_UNSUPPORTED` | `mysql.ErrNoTLS` | pgx refusing a TLS-less server | — (the driver has no opportunistic mode: TLS is on or it is not, so there is nothing to fall back from) | — (as MongoDB: TLS is on or it is not) |
+| `INVALID_PROFILE` on `tlsMode` | A certificate file named under a mode that never opens one. A file the app quietly ignores is a reader believing they have configured something, so it is refused instead | as MySQL | as MySQL | as MySQL |
+| `SQL_ERROR` | Any other server rejection; `message` is its own wording, `detail` the errno | the same, `detail` the SQLSTATE | the same, `detail` the server's own *name* for the failure — `NamespaceExists` — or its number where it sent none. It is also what a command **this side** could not read answers with, under the code `SHELL`: nothing was sent anywhere, but the wording is still the only useful thing to show | the same, `detail` the **first word** of the server's line — `WRONGTYPE`, `BUSYKEY`, `NOSCRIPT` — that being where Redis puts a class. It is also what this side answers with when nothing was sent at all: `SHELL` for a command it could not read, `VALUE` for JSON it could not read back into a value, `SAMPLE` for a value the grid could only sample, and `SCANLIMIT` for a key space too large to order |
 
 `domain.StatementError.Code` is a string for exactly that last row: MySQL numbers its errors,
-PostgreSQL gives a SQLSTATE like `42P01`, and MongoDB gives a name like `NamespaceExists`.
+PostgreSQL gives a SQLSTATE like `42P01`, MongoDB gives a name like `NamespaceExists`, and Redis
+puts a word at the front of the line — `WRONGTYPE Operation against a key holding the wrong kind of
+value`.
 
 **`UNSUPPORTED` is not a failure.** It is a thing the engine has no concept of — a foreign key on
 MongoDB, a primary key other than `_id`, a stored routine — and it is its own code so the UI can say
@@ -35,7 +37,7 @@ reject the request reports a design decision as a server failure.
 
 | Code | Cause |
 |---|---|
-| `UNSUPPORTED` | The engine has no such concept. `message` names it: `a foreign key`, `a primary key other than _id`, `a stored routine`, `changing the type of _id`, `dropping _id`, `cloud identity authentication on MongoDB`, `explaining <method>` |
+| `UNSUPPORTED` | The engine has no such concept. `message` names it: `a foreign key`, `a primary key other than _id`, `a stored routine`, `changing the type of _id`, `dropping _id`, `cloud identity authentication on MongoDB`, `explaining <method>` — and on Redis `creating a table: a Redis database holds one key space and nothing else`, `an index: a Redis key is the index`, `changing the type of a key`, `editing a stream`, `SELECT: the database a tab reads is the one it was opened on`, `searching a key space by regex` |
 
 **A script reports a rejection as a message rather than as a failure.** One statement fails the way
 it always has, so the output panel shows the server's wording where the reader is looking; but a
@@ -74,6 +76,8 @@ two in the app that read an error's *message*, because `x/crypto/ssh` offers no 
 is the same trade an engine adapter makes with an errno: the text is the library's and not anything a
 reader typed, and what the UI switches on is still the code it produces.
 
-**The other is `driver/mongo`**, for the same reason: a handshake that fails at authentication
-arrives wrapped in a connection error whose type carries nothing to switch on, so `authWordings`
-reads it. Both are *adapters* reading a library's text. The UI still never does.
+**The other two are `driver/mongo` and `driver/redis`**, for the same reason. A MongoDB handshake
+that fails at authentication arrives wrapped in a connection error whose type carries nothing to
+switch on, so `authWordings` reads it; a Redis server with `requirepass` set answers `ERR invalid
+password` or `ERR Client sent AUTH, but no password is set` depending on its age, and `ERR` is not a
+class. All three are *adapters* reading a library's or a server's text. The UI still never does.

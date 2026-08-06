@@ -23,6 +23,7 @@ wails doctor
 | Go tests | `go test ./...` |
 | Single Go test | `go test ./internal/driver/postgres -run TestBuildDSNTLSModes -v` |
 | MongoDB against a real server | `VIBE_MONGO_DSN=root:mongodb@127.0.0.1:27017 go test ./internal/driver/mongo -run TestLive -v` |
+| Redis against a real server | `VIBE_REDIS_DSN=127.0.0.1:6379 go test ./internal/driver/redis -run TestLive -v` |
 | Go vet + format | `go vet ./...` and `gofmt -l internal main.go` |
 | Frontend typecheck | `pnpm typecheck` (in `frontend/`) |
 | Frontend build | `pnpm build` (in `frontend/`) — runs `tsc -b` then `vite build` |
@@ -32,11 +33,12 @@ Testing Library exists — add the dependency first, or verify frontend behaviou
 
 ## Verifying against a real database
 
-All three engines are exercised through the same UI, but each has a failure mode the others cannot
-show — `USE` versus `SET search_path` versus neither, an errno versus a SQLSTATE versus a code name,
-`LIMIT 1` on an update versus none versus an `updateOne`. A change to any adapter deserves a run
-against that server; a PostgreSQL profile needs a database name before it will connect at all, and a
-MongoDB one needs neither a database nor a user.
+All four engines are exercised through the same UI, but each has a failure mode the others cannot
+show — `USE` versus `SET search_path` versus neither versus a client per database, an errno versus a
+SQLSTATE versus a code name versus a first word, `LIMIT 1` on an update versus none versus an
+`updateOne` versus a `SET`. A change to any adapter deserves a run against that server; a PostgreSQL
+profile needs a database name before it will connect at all, a MongoDB one needs neither a database
+nor a user, and a Redis one takes a database *number*.
 
 **MongoDB is where a run against a real server matters most**, because the two things that cannot be
 unit-tested are exactly the two that make it different: a field list is inferred from documents, so it
@@ -49,6 +51,12 @@ understands — against a server, in a database of its own that it drops afterwa
 `VIBE_MONGO_DSN` names one, so `go test ./...` stays offline. The user and the password are both
 optional there (`127.0.0.1:27017` alone is a server with no access control).
 
+**Redis has two of its own**, and `TestLiveAgainstARealServer` in `internal/driver/redis` covers
+both: a page is cut from a *scan*, which only a server has, and a value is read by a different
+command per type, which only a server holds. It works in database 15 and empties it first, and it
+**skips** unless `VIBE_REDIS_DSN` names a server — `127.0.0.1:6379` alone is a server with no
+password, and `user:password@host:port` is one with an ACL.
+
 Then, by hand in the app:
 
 | What | Why it needs a server |
@@ -59,6 +67,17 @@ Then, by hand in the app:
 | A **view** | `$collStats` refuses one, so its row in the collection list must carry nulls rather than zeroes |
 | `Empty`, then **Add Field** / **Edit Field** / **Delete Field** | Each is an update over the documents, and an empty collection is the case with nothing to update |
 | A **replica set through an SSH tunnel** | The connection is pinned `Direct`, or discovery hands back addresses that resolve only on the far side |
+
+And for Redis:
+
+| What | Why it needs a server |
+|---|---|
+| A database holding **tens of thousands of keys** | The names are all held so a page can be cut from a sorted list; how that feels is not something a unit test can say |
+| A key of **each of the six types**, one of them large | The value column is a different command per type, and one past `previewItems` has to be marked as the sample it is — and then refuse to be written back |
+| **Editing a hash or a list in the grid** | The JSON the cell shows has to go back as the value it drew, and the key's expiry has to survive it |
+| A key with **a colon-heavy name** and one holding a space | An argument is a run of adjacent tokens, and only a real key proves the run was rebuilt whole |
+| `CONFIG GET`, `XRANGE`, `HGETALL`, `INFO` in a query tab | The four reply shapes: a map, a list of lists, a list, and one long string |
+| A **database other than 0** | Every database has its own client, and a read of database 3 that answered from 0 would look like data |
 
 `wails dev` serves the frontend *with* the Wails runtime and bindings on `http://localhost:34115`,
 so `window.go.app.ConnectionAPI` is callable from an ordinary browser. This is the most effective

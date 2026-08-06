@@ -176,6 +176,12 @@ func TestDefaultPortPerEngine(t *testing.T) {
 	if got := EnginePostgres.DefaultPort(); got != DefaultPostgresPort {
 		t.Errorf("EnginePostgres.DefaultPort() = %d, want %d", got, DefaultPostgresPort)
 	}
+	if got := EngineMongo.DefaultPort(); got != DefaultMongoPort {
+		t.Errorf("EngineMongo.DefaultPort() = %d, want %d", got, DefaultMongoPort)
+	}
+	if got := EngineRedis.DefaultPort(); got != DefaultRedisPort {
+		t.Errorf("EngineRedis.DefaultPort() = %d, want %d", got, DefaultRedisPort)
+	}
 }
 
 func TestTargetFallsBackWhenNoDatabase(t *testing.T) {
@@ -250,5 +256,36 @@ func TestValidateDoesNotAskAMongoProfileForADatabase(t *testing.T) {
 func TestMongoDefaultPort(t *testing.T) {
 	if got := EngineMongo.DefaultPort(); got != DefaultMongoPort {
 		t.Errorf("DefaultPort() = %d, want %d", got, DefaultMongoPort)
+	}
+}
+
+// A Redis database is numbered rather than named, so the box takes an index — and anything that is
+// not one is not a database this server has.
+func TestValidateReadsARedisDatabaseAsANumber(t *testing.T) {
+	profile := ConnectionProfile{
+		Name:   "local keys",
+		Engine: EngineRedis,
+		Host:   "127.0.0.1",
+		Port:   DefaultRedisPort,
+		Auth:   AuthPassword,
+		TLS:    TLSOptions{Mode: TLSPreferred},
+	}
+
+	// No user, and no database at all: both are a connection rather than a failure.
+	if err := profile.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want no error", err)
+	}
+
+	profile.Database = "3"
+	if err := profile.Validate(); err != nil {
+		t.Errorf("Validate() with database 3 = %v, want no error", err)
+	}
+
+	for _, named := range []string{"shop", "-1", "3.5"} {
+		profile.Database = named
+		var invalid ValidationError
+		if err := profile.Validate(); !errors.As(err, &invalid) || invalid.Field != "database" {
+			t.Errorf("Validate() with database %q = %v, want it refused on the database", named, err)
+		}
 	}
 }

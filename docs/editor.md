@@ -6,8 +6,8 @@ caret and the undo stack do not follow a tab switch.
 
 **The language follows the connection's engine**, through `queryLanguage`, and rides in the same
 compartment as the schema so it reconfigures in place rather than rebuilding the editor. There are
-two of them, because two of the three engines write the same language and the third writes nothing
-like it:
+three of them, because two of the four engines write the same language and the other two write
+nothing like it or like each other:
 
 - **SQL** (`sqlLanguage`, `@codemirror/lang-sql`) for MySQL and PostgreSQL, whose dialects differ only
   in a quoting rule and a keyword list.
@@ -16,9 +16,16 @@ like it:
   brace and a string is a string — and nothing like JavaScript to *run*: the driver reads one command
   and its arguments, with no variables and no control flow. See
   [architecture.md](architecture.md#the-document-store).
+- **Commands** (`commandLanguage`) for Redis. A command is **argv** — a verb and then bytes — so
+  there is no grammar to parse and nothing to indent, and what colouring can honestly say is which
+  word is the verb (and the second word of `CONFIG SET`, which is half of one), which run is quoted,
+  which is a number, and where a `#` comment starts. Everything else is a key or a value the reader
+  chose, and painting it would be inventing a meaning the server does not give it. Completion offers
+  the commands with a line on what each does, and a container command's second word after its first.
 
 `queryLanguage` is the whole of what the editor knows about which engine it is in front of, down to
-the empty tab's own prompt — `SELECT * FROM ...` is not what a document store is waiting for.
+the empty tab's own prompt — `SELECT * FROM ...` is not what a document store is waiting for, and
+neither is what a key-value store is.
 
 **A document store has no keywords, so what carries the colour is the shape of a command.** Most of
 it comes off the tags lang-javascript already hands back, resolved against the same `--syn-*` tokens

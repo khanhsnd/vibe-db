@@ -35,16 +35,16 @@ existing connection changes engine: editing one opens straight on the form, sinc
 type.
 
 Everything the form defaults to comes from that choice: port 3306 and user `root` for MySQL, 5432
-and `postgres` for PostgreSQL, 27017 and **no user at all** for MongoDB — a server started without
-access control takes no credentials, and a name filled in for it would be a name the reader had to
-clear. Going back and choosing another engine rewrites only the fields that still hold the old
-engine's default, so a typed port survives the switch. The editor loads that engine's own language
-for highlighting and completion — SQL for two of them, the shell for MongoDB; see
-[editor.md](editor.md).
+and `postgres` for PostgreSQL, 27017 and **no user at all** for MongoDB, 6379 and no user for Redis —
+a server started without access control takes no credentials, and a name filled in for it would be a
+name the reader had to clear. Going back and choosing another engine rewrites only the fields that
+still hold the old engine's default, so a typed port survives the switch. The editor loads that
+engine's own language for highlighting and completion — SQL for two of them, the shell for MongoDB,
+and commands for Redis; see [editor.md](editor.md).
 
 **Every connection wears its engine's chip** — the dolphin on teal for MySQL, the elephant on blue
-for PostgreSQL, the leaf on green for MongoDB — in the tree, in the dialog's header and in the status
-bar. It replaces the engine badge the tree used to carry on the right of a connection row, which is
+for PostgreSQL, the leaf on green for MongoDB, the stack of discs on red for Redis — in the tree, in
+the dialog's header and in the status bar. It replaces the engine badge the tree used to carry on the right of a connection row, which is
 where the **connection status dot** now sits: what the connection *is* on the left, how it is *doing*
 on the right.
 
@@ -58,6 +58,10 @@ Two things differ rather than just defaulting:
   or it is not — the driver has no opportunistic mode — so `Preferred` connects in the clear, and the
   two cloud identity methods are refused outright rather than sent as a password no MongoDB
   authentication mechanism would take.
+- **Redis takes a database *number*.** Its databases are not named but numbered — `0` to `15` on a
+  default install — and the set is fixed when the server starts, so the box takes an index and blank
+  means `0`. Anything that is not a number is refused before anything is dialled. The two cloud
+  identity methods are refused here too, for the same reason they are on MongoDB.
 
 ## Filling a connection in
 
@@ -322,6 +326,62 @@ it the same `GridFooter` every grid has, with `Refresh` and the table count.
   `onActivateRow` — see [grid.md](grid.md).
 - The list is **read per tab rather than cached** like the tree's names are: a size and a row count
   are what the reader opened it for, and a stale one is worse than a second query.
+
+## Browsing a key space
+
+**A Redis connection's tree is short, and everything missing from it is missing on purpose.** The
+connection holds its databases — numbered `0` upwards, not named — each holds a `Data` folder, and
+that folder holds one entry: `(All Data)`. There is no Views folder and no Functions folder because a
+Redis server has neither; there is no New Database and no Delete Database because its databases are
+fixed when it starts; and there is no New, Rename, Duplicate, Design or Delete on the key space
+itself, because it is not declared and never was. What is left is what a key-value store actually
+offers, and every one of them works.
+
+**Opening it opens a grid of keys, five columns wide.** They are not read from a catalogue and not
+inferred from a sample: they are the same five on every Redis server there has ever been.
+
+| Column | What it is |
+|---|---|
+| `Key` | The key, and the **primary key** of the row — it identifies exactly one, which is what makes the grid writable at all |
+| `Type` | What `TYPE` answered: `string`, `list`, `set`, `hash`, `zset`, `stream` |
+| `Value` | A string as itself; the five container types as **JSON** — a list as an array, a hash and a sorted set as objects, a stream as its entries. A value larger than a row can carry ends with `… 50 of 4321`, which says it is a sample |
+| `TTL` | Seconds until the key expires, and **empty** for a key nobody put a clock on. Empty is not zero: zero would mean it has already gone |
+| `Size` | What `MEMORY USAGE` says the key costs, and empty on a server that will not answer that |
+
+**Four of the five can be edited in place, and each is a different command.** Writing `Value` writes
+the value **whole** — the JSON in the cell is what the key becomes — and the key's expiry survives
+it. Writing `TTL` is `EXPIRE`, and *clearing* it is `PERSIST` rather than an expiry of zero, which
+the server reads as *now* and answers by deleting the key. Writing `Key` renames it, and is refused
+if a key of that name is already there rather than taking it. `Type` and `Size` are not the reader's
+to change: a type is what the value is, so the value is what to change.
+
+A value the grid could only **sample** refuses to be written back, and says so: whatever it did not
+show would go with the edit.
+
+**Adding a row writes a new key** — its `Type` decides what is written and defaults to `string` — and
+is refused if the key is already there, an insert being for a row that is not. **Deleting a row** is
+`UNLINK`, which frees a million-element list on a background thread instead of stopping the server
+with it. **Empty Key Space** is `FLUSHDB`.
+
+**Filtering is where a big key space becomes browsable.** A filter on `Key` — begins, contains, ends
+or equals — becomes the server's own glob, so the narrowing happens *there* and the app never sees
+the rest: `Key begins user:` is `SCAN 0 MATCH user:* COUNT 1000`, and the statement under the grid
+says so. Everything else — a type, a clock, a cost, a value — is answered here, over the keys the
+glob let through, so those cost a read per key and a filter on the **value** is bounded at five
+thousand keys and says so if there are more. A condition inside an `OR` never becomes the glob: `Key
+begins user OR Type is hash` admits every hash in the database, and narrowing the scan by half of it
+would hide rows that were asked for.
+
+**The rows are in key order** before a page is cut from them, because `SCAN` has no order of its own
+and a page cut from an unordered list is a different page every time it is read. Sorting by any other
+column sorts what was read for it. A database holding more than a million keys refuses to be ordered
+whole and asks for a filter instead, rather than showing a window that lies about how big it is.
+
+**Find in Schema searches key names.** That is not a narrowing of the feature but the whole of what
+the server can answer — there is no index over values and no LIKE — so `Contains` and `Prefix` are
+answered exactly, case folded into the pattern itself, and the two modes a glob cannot say say so
+rather than guessing. Double-clicking a hit opens `KEYS <glob>`, which returns precisely the keys it
+counted.
 
 ## Finding text in a schema
 
@@ -1082,6 +1142,35 @@ db.runCommand({ collStats: "users" })
 - **`Ctrl`+`Shift`+`F` lays a command out** the way it lays a statement out: a brace holding more than
   a line comfortably carries goes down the page, and one that does not stays across it. Nothing a
   server would notice changes.
+
+### What a Redis tab runs
+
+**A newline ends a command.** There is no terminator to leave out — a Redis command is a line of
+arguments — so a script is its lines, and a semicolon at the end of one is read as punctuation and
+dropped, because every file this app writes ends its statements with one. An argument is a run of
+characters with no space in it, or a quoted run: `SET greeting "hello world"` is three arguments, and
+`redis-cli`'s own escapes (`
+`, `A`) work inside the quotes. A quote **anywhere** in an argument
+opens a quoted run, exactly as `redis-cli` reads one, so JSON typed bare loses its quotes and JSON
+typed inside `'…'` does not.
+
+**What comes back is drawn in whichever of four shapes it has**: one value in one cell, a list as
+rows, a list of lists as a column per position (`XRANGE`), and the pairs of a map as Field and Value
+(`CONFIG GET`, `XINFO STREAM`). A key that is not there is a NULL cell rather than an error, that
+being what the server actually said.
+
+**A handful of commands are refused before they are sent**, each because the reader could not see
+what it would do. `SELECT` and `SWAPDB` change which database the *connection* is on, and that
+connection is one of a pool shared by every read of that database — a tab that ran one would leave
+the grid reading from somewhere else at a moment nothing could predict; the database a tab reads is
+the one it was opened on. `SUBSCRIBE` and `MONITOR` never answer, and would hold a pooled connection
+open for as long as the app was. `MULTI`, `WATCH` and `EXEC` cannot span two commands here, each
+being sent on its own connection. `EXPLAIN` has no meaning: Redis has no plan to ask for.
+
+**`FLUSHDB` and `FLUSHALL` are confirmed on a laptop as well as on production.** They are classified
+*unfiltered* rather than destructive — they name nothing and therefore take everything, which is
+exactly what a `DELETE` with no `WHERE` is — and that is the one class this app stops for wherever it
+is run. See [what gets confirmed before it runs](#what-gets-confirmed-before-it-runs).
 
 ### One Execute runs the whole script
 

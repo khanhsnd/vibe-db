@@ -12,12 +12,14 @@ const (
 	EngineMySQL    Engine = "mysql"
 	EnginePostgres Engine = "postgres"
 	EngineMongo    Engine = "mongo"
+	EngineRedis    Engine = "redis"
 )
 
 const (
 	DefaultMySQLPort    = 3306
 	DefaultPostgresPort = 5432
 	DefaultMongoPort    = 27017
+	DefaultRedisPort    = 6379
 	DefaultSSHPort      = 22
 )
 
@@ -28,6 +30,8 @@ func (e Engine) DefaultPort() int {
 		return DefaultPostgresPort
 	case EngineMongo:
 		return DefaultMongoPort
+	case EngineRedis:
+		return DefaultRedisPort
 	default:
 		return DefaultMySQLPort
 	}
@@ -35,7 +39,7 @@ func (e Engine) DefaultPort() int {
 
 func (e Engine) Valid() bool {
 	switch e {
-	case EngineMySQL, EnginePostgres, EngineMongo:
+	case EngineMySQL, EnginePostgres, EngineMongo, EngineRedis:
 		return true
 	default:
 		return false
@@ -48,6 +52,21 @@ func (e Engine) Valid() bool {
 // profile is not asked for a user name it may not have.
 func (e Engine) Documents() bool {
 	return e == EngineMongo
+}
+
+// Keys says the engine stores values under keys and nothing else: one flat key space to a
+// database, with no tables in it to name and no columns to declare. It is the second fact of
+// Documents' kind — what a reader sees is a key, its type and its value, and every word the app
+// would otherwise say about a table is untrue here.
+func (e Engine) Keys() bool {
+	return e == EngineRedis
+}
+
+// NeedsUser says every connection to this engine is made *as* somebody the server knows. A MongoDB
+// server started without access control and a Redis server with no ACL both take none at all, so
+// insisting on a user name for either would be refusing a profile that connects perfectly well.
+func (e Engine) NeedsUser() bool {
+	return e == EngineMySQL || e == EnginePostgres
 }
 
 // Environment is what a server is *for*, and the one fact about a profile that changes how the
@@ -327,9 +346,10 @@ func (p ConnectionProfile) Validate() error {
 	if !p.Engine.Valid() {
 		return ValidationError{Field: "engine", Message: "is not supported"}
 	}
-	// A MongoDB server started without access control takes no credentials at all, so a user name
-	// is asked for only by an engine that authenticates every connection.
-	if !p.Engine.Documents() && strings.TrimSpace(p.User) == "" {
+	// A MongoDB server started without access control and a Redis server with no ACL take no
+	// credentials at all, so a user name is asked for only by an engine that authenticates every
+	// connection.
+	if p.Engine.NeedsUser() && strings.TrimSpace(p.User) == "" {
 		return ValidationError{Field: "user", Message: "is required"}
 	}
 	if !p.Environment.Valid() {
@@ -342,6 +362,13 @@ func (p ConnectionProfile) Validate() error {
 	// another, so a profile that names none has nothing to connect to.
 	if p.Engine == EnginePostgres && strings.TrimSpace(p.Database) == "" {
 		return ValidationError{Field: "database", Message: "is required for PostgreSQL"}
+	}
+	// A Redis database is not named but numbered — one of a fixed set the server was started with —
+	// so anything that is not a number is not a database this server has.
+	if p.Engine == EngineRedis && strings.TrimSpace(p.Database) != "" {
+		if index, err := strconv.Atoi(strings.TrimSpace(p.Database)); err != nil || index < 0 {
+			return ValidationError{Field: "database", Message: "is a number on Redis, counting from 0"}
+		}
 	}
 	if !p.Auth.Valid() {
 		return ValidationError{Field: "auth", Message: "is not a known authentication method"}

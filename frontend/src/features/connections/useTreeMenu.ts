@@ -4,6 +4,7 @@ import {
   CONNECTION_COLOURS,
   engineInfo,
   engineWords,
+  type EngineInfo,
   type EngineWords,
   type Namespace,
   type Profile,
@@ -137,11 +138,15 @@ export function useTreeMenu(
       const info = engineInfo(profile.engine)
       const words = engineWords(profile.engine)
 
-      const newDatabase: MenuItem = {
-        label: 'New Database…',
-        icon: ICON.newDatabase,
-        onSelect: () => ask({ kind: 'database', profileId: node.profileId }),
-      }
+      // A Redis server's databases are fixed at start-up, so there is nothing for this to make and
+      // it is not offered — see `createsDatabases`.
+      const newDatabase: MenuItem | null = info.createsDatabases
+        ? {
+            label: 'New Database…',
+            icon: ICON.newDatabase,
+            onSelect: () => ask({ kind: 'database', profileId: node.profileId }),
+          }
+        : null
 
       if (node.kind === 'connection') {
         return connectionItems(profile, words, Boolean(sessions[node.profileId]), {
@@ -174,12 +179,11 @@ export function useTreeMenu(
       )
 
       // A new table is designed in a tab like any other, with an empty name: the designer's Save
-      // is what creates it, so declaring one and altering one are the same surface.
-      const newTable: MenuItem = {
-        label: `New ${words.table}`,
-        icon: ICON.add,
-        onSelect: on.create,
-      }
+      // is what creates it, so declaring one and altering one are the same surface. A key space is
+      // not declared at all, so this is not offered there — see `createsTables`.
+      const newTable: MenuItem[] = info.createsTables
+        ? [{ label: `New ${words.table}`, icon: ICON.add, onSelect: on.create }]
+        : []
 
       // Dumping is offered wherever a dump has a subject: one table, or every table a namespace
       // holds — `''`, which is what the Go side reads as all of them. It is the same two-way choice
@@ -245,7 +249,7 @@ export function useTreeMenu(
         case 'database':
         case 'schema': {
           const own = ownsObjects(node)
-            ? [newTable, findInSchema, dumpItems(''), ...wizards(''), refreshObjectList]
+            ? [...newTable, findInSchema, dumpItems(''), ...wizards(''), refreshObjectList]
             : [
                 {
                   label: 'Refresh',
@@ -255,8 +259,9 @@ export function useTreeMenu(
                 },
               ]
 
-          // Only the database level can make or drop a database; a schema sits inside one.
-          if (node.kind !== 'database') return own
+          // Only the database level can make or drop a database; a schema sits inside one. An
+          // engine whose databases are fixed has neither, and its database node is its objects.
+          if (node.kind !== 'database' || !newDatabase) return own
           return [
             newDatabase,
             {
@@ -283,7 +288,7 @@ export function useTreeMenu(
         }
 
         case 'tables':
-          return [newTable, findInSchema, dumpItems(''), ...wizards(''), refreshObjectList]
+          return [...newTable, findInSchema, dumpItems(''), ...wizards(''), refreshObjectList]
 
         case 'views':
         case 'routines':
@@ -296,8 +301,7 @@ export function useTreeMenu(
             dumpItems(node.label),
             wizards(node.label),
             compareItem(picked, onCompare),
-            words,
-            info.hasTruncate,
+            info,
           )
 
         // A view has rows and a shape like a table, so it compares like one. Everything else it
@@ -439,7 +443,7 @@ function connectionItems(
   words: EngineWords,
   connected: boolean,
   on: {
-    newDatabase: MenuItem
+    newDatabase: MenuItem | null
     onConnect: (profile: Profile) => void
     onEditConnection: (profile: Profile) => void
     onConsole: (profile: Profile) => void
@@ -468,7 +472,7 @@ function connectionItems(
           icon: ICON.executeFile,
           onSelect: () => on.onExecuteFile(profile),
         },
-        on.newDatabase,
+        ...(on.newDatabase ? [on.newDatabase] : []),
       ]
     : []
 
@@ -515,9 +519,12 @@ function connectionItems(
  * are offered elsewhere and differ only in what they name — one table or all of them for the first
  * two, and for the third the *pair* the tree has picked, which no one table's menu could know.
  *
- * Truncate is left out where it is not a second thing: on a document store every document has to be
- * deleted to empty a collection, so Empty and Truncate would be one command under two names — see
- * `hasTruncate`.
+ * Two groups of items are the engine's rather than the table's. **Declaring one** — designing,
+ * making, renaming, duplicating and dropping — is left out where a table is not declared at all: a
+ * Redis database has one key space, always has had, and there is nothing there to make or remove
+ * (`createsTables`). And **Truncate** is left out where it is not a second thing: on a document
+ * store every document has to be deleted to empty a collection, and on a key space `FLUSHDB` is
+ * both, so the two would be one command under two names (`hasTruncate`).
  */
 export function tableItems(
   on: TableActions,
@@ -525,36 +532,47 @@ export function tableItems(
   dump: MenuItem,
   wizards: MenuItem[],
   compare: MenuItem,
-  words: EngineWords = engineWords(''),
-  truncates = true,
+  info: EngineInfo = engineInfo(''),
 ): MenuItem[] {
+  const words = engineWords(info.value)
+
+  const declaring: MenuItem[] = info.createsTables
+    ? [
+        { label: `New ${words.table}`, icon: ICON.add, separatorBefore: true, onSelect: on.create },
+        { label: `Rename ${words.table}…`, icon: ICON.rename, onSelect: on.rename },
+        {
+          label: `Duplicate ${words.table}`,
+          icon: ICON.duplicate,
+          // The copy is one action asked in two ways, so the submenu is where the reader says which
+          // — and both still ask for the name, as everything that makes an object here does.
+          items: [
+            { label: 'Structure Only…', onSelect: () => on.duplicate(false) },
+            { label: 'Structure and Data…', onSelect: () => on.duplicate(true) },
+          ],
+        },
+      ]
+    : []
+
   return [
     { label: `Open ${words.table}`, icon: ICON.open, onSelect: on.open },
-    { label: `Design ${words.table}`, icon: ICON.design, onSelect: on.design },
+    ...(info.createsTables
+      ? [{ label: `Design ${words.table}`, icon: ICON.design, onSelect: on.design }]
+      : []),
     // Beside Open and Design rather than beside Dump: comparing only ever *reads*, and the three
     // items under it all carry the table somewhere else.
     compare,
-    { label: `New ${words.table}`, icon: ICON.add, separatorBefore: true, onSelect: on.create },
-    { label: `Rename ${words.table}…`, icon: ICON.rename, onSelect: on.rename },
-    {
-      label: `Duplicate ${words.table}`,
-      icon: ICON.duplicate,
-      // The copy is one action asked in two ways, so the submenu is where the reader says which
-      // — and both still ask for the name, as everything that makes an object here does.
-      items: [
-        { label: 'Structure Only…', onSelect: () => on.duplicate(false) },
-        { label: 'Structure and Data…', onSelect: () => on.duplicate(true) },
-      ],
-    },
+    ...declaring,
     // Beside Duplicate rather than beside Delete: both copy the table, and the only difference is
     // whether the copy lands on this server or in a file.
     dump,
     ...wizards,
     { label: `Empty ${words.table}`, icon: ICON.empty, separatorBefore: true, onSelect: on.empty },
-    ...(truncates
+    ...(info.hasTruncate
       ? [{ label: `Truncate ${words.table}`, icon: ICON.truncate, onSelect: on.truncate }]
       : []),
-    { label: `Delete ${words.table}`, icon: ICON.delete, danger: true, onSelect: on.remove },
+    ...(info.createsTables
+      ? [{ label: `Delete ${words.table}`, icon: ICON.delete, danger: true, onSelect: on.remove }]
+      : []),
     { label: 'Refresh', icon: ICON.refresh, separatorBefore: true, onSelect: refresh },
   ]
 }

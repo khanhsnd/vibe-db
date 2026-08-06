@@ -60,6 +60,7 @@
   --engine-mysql: #0e8fa8;
   --engine-postgres: #4779b8;
   --engine-mongo: #1aa85f;
+  --engine-redis: #e8564a;
 
   /** One per environment, so a connection says what it is *for* before anything is run on it.
       They are a traffic light deliberately: what those three colours already mean to everybody is
@@ -177,6 +178,7 @@
   --engine-mysql: #00758f;
   --engine-postgres: #336791;
   --engine-mongo: #13aa52;
+  --engine-redis: #d82c20;
 
   --env-development: #1a7f37;
   --env-staging: #9a6700;
@@ -266,6 +268,7 @@
   --color-engine-mysql: var(--engine-mysql);
   --color-engine-postgres: var(--engine-postgres);
   --color-engine-mongo: var(--engine-mongo);
+  --color-engine-redis: var(--engine-redis);
 
   --color-env-development: var(--env-development);
   --color-env-staging: var(--env-staging);

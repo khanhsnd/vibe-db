@@ -494,8 +494,9 @@ function namespaceNode(
     namespace: ns,
     active: active.database === ns.database && active.schema === ns.schema,
     // How much is in here, once it has been read — the one number that says whether a namespace
-    // is worth opening. A namespace nobody has opened yet has no number, not a zero.
-    ...(held
+    // is worth opening. A namespace nobody has opened yet has no number, not a zero; and a key
+    // space is always exactly one thing, so counting it would say nothing at all.
+    ...(held && !info.keys
       ? { badge: String(held.tables.length + held.views.length + (held.routines?.length ?? 0)) }
       : {}),
     children: [
@@ -504,11 +505,17 @@ function namespaceNode(
         engineWords(info.value).tables,
         (held?.tables ?? []).map((table) => tableNode(input, info, profileId, ns, table)),
       ),
-      folder(
-        'views',
-        'Views',
-        (held?.views ?? []).map((view) => objectNode('view', view)),
-      ),
+      // Views is left out for an engine that has none at all, for the reason Functions is: a
+      // folder that could only ever be empty is a folder that says nothing — see `hasViews`.
+      ...(info.hasViews
+        ? [
+            folder(
+              'views',
+              'Views',
+              (held?.views ?? []).map((view) => objectNode('view', view)),
+            ),
+          ]
+        : []),
       ...(info.hasRoutines
         ? [
             folder(

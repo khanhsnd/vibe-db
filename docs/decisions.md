@@ -126,3 +126,36 @@
   `ClipboardGetText` / `ClipboardSetText` and keeps the browser API — then a hidden textarea — as
   fallbacks. That is also why it lives in `bridge`: it is the only directory allowed to import
   `wailsjs/**`.
+- **A Redis database is one table called `(All Data)`, and not a folder of key prefixes.** Grouping
+  keys by the `:` in their names was the obvious alternative and it is wrong twice: the prefixes are a
+  convention and not a fact — nothing stops a key called `user:1:sessions:2` or one with no colon at
+  all — and building the list means scanning the whole space before the tree can draw a single row.
+  One table, and a **glob filter** on the grid, gives the same narrowing with the server doing the
+  work: `Key begins user:` is `SCAN … MATCH user:*`, which is exactly what the prefix folder would
+  have had to run anyway.
+- **A Redis container value is spelled as JSON, not as the notation the server prints.** A hash could
+  be drawn as `field=value, field=value` and it would read a little more compactly. It could not be
+  *edited*: an edit hands text back, and text with no grammar cannot be turned into members again
+  without inventing one. JSON is a grammar every reader already has, `encoding/json` is what escapes
+  it, and the cell the grid drew is the cell an edit takes — which is the same bargain the MongoDB
+  adapter strikes with the shell's own notation.
+- **A key space is ordered by key before a page is cut, and the names are held to do it.** `SCAN` is a
+  cursor: it has no offset, and the order it hands buckets back in is an implementation detail that
+  changes when the table rehashes. Paging straight off the cursor would give a reader a different
+  page two every time they pressed Next. So the names are walked whole and sorted, which costs a scan
+  per page and is bounded at a million keys — beyond that the read asks for a filter instead of
+  quietly showing a window that claims to be the whole.
+- **A Redis session opens a client per database, not one client with `SELECT`.** `SELECT` is
+  connection state, and a pool hands out whichever connection is free: one client would answer a read
+  of database 3 from whichever database that connection last happened to be on. It is the same shape
+  PostgreSQL's pool-per-database has, for a different reason.
+- **`FLUSHDB` is classified *unfiltered*, not *destructive*.** The distinction is not academic:
+  destructive is confirmed on a guarded environment only, and unfiltered is confirmed everywhere,
+  because a statement that names nothing and therefore takes everything is a mistake on a laptop as
+  surely as in production. `FLUSHALL` on the wrong tab is the exact mistake that class exists to
+  catch — see `domain.RedisHazard`.
+- **A few Redis commands are refused by the query tab rather than sent.** `SELECT` and `SWAPDB` would
+  move a pooled connection under the grid; `SUBSCRIBE` and `MONITOR` never answer and would hold that
+  connection for the life of the app; `MULTI`/`WATCH`/`EXEC` cannot span two commands each sent on its
+  own connection. Every one of them would *appear* to work and then quietly break something else,
+  which is the only kind of command worth refusing outright.
