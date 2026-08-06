@@ -25,7 +25,7 @@ const MIDDLE_BUTTON = 1
  * part of that — the glyph it wears, and the colour of that glyph. The colours are the tree's, so
  * a table opened from the sidebar is the same colour in the strip it lands in.
  */
-const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: string }> = {
+export const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: string }> = {
   query: { label: 'Query', icon: Terminal, tint: 'text-kind-routine' },
   table: { label: 'Table', icon: Table2, tint: 'text-kind-table' },
   design: { label: 'Design', icon: Columns3, tint: 'text-kind-field' },

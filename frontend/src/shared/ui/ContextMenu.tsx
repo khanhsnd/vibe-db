@@ -90,8 +90,10 @@ export function MenuItems({ parts, items }: { parts: MenuParts; items: MenuItem[
 
   return (
     <>
-      {items.map((item) => (
-        <div key={item.label}>
+      {items.map((item, at) => (
+        // By position as well as by label: a list of tabs is a list of menu items, and two of them
+        // can be called the same thing.
+        <div key={`${at}-${item.label}`}>
           {item.separatorBefore ? <parts.Separator className="my-0.5 h-px bg-line" /> : null}
 
           {item.items ? (

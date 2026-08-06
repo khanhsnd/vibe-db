@@ -899,10 +899,19 @@ it — see [frontend.md](frontend.md) on `panelIds`.
 ## The menu bar
 
 The strip above the command bar carries `File`, `Edit`, `View`, `Favorites`, `Tools`, `Window` and
-`Help`. **None of the seven does anything yet** — they are names in the place a reader of a desktop
-client looks for them, and nothing behind them. When one is given items they are `MenuItem`s drawn by
-`MenuButton`, the same object the tree's right-click menu is built from, so an action offered both
-ways stays one object.
+`Help`. **Only `Window` does anything yet** — the other six are names in the place a reader of a
+desktop client looks for them, and nothing behind them. Items are `MenuItem`s drawn by `MenuButton`,
+the same object the tree's right-click menu is built from, so an action offered both ways stays one
+object, and a menu given no items draws its name alone.
+
+- **`Window` lists every open tab**, in the order the strip draws them, and picking one is exactly
+  what clicking it in the strip is. It is the one place that names all of them at once: the strip
+  truncates each title and scrolls the moment it holds more tabs than it can draw. Each row wears
+  its tab's kind glyph in the tree's colour for that kind, and says **where** the tab is —
+  `users — shop.public · Local MySQL` — because a strip has room for the title alone and two tabs
+  called `users` on two servers read there as one tab. **The tab in front wears a tick** in place of
+  its glyph, which is the one fact the strip stops telling the reader once it has scrolled. With
+  nothing open the menu says `No open tabs` rather than opening empty.
 
 ## Every divider in the window is dragged
 
