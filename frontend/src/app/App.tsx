@@ -22,6 +22,8 @@ import {
 } from '@/features/connections/tree'
 import { useTreeMenu } from '@/features/connections/useTreeMenu'
 import { SchemaDialogs } from '@/features/schema/SchemaDialogs'
+import { ExportWizard, type ExportTarget } from '@/features/transfer/ExportWizard'
+import { ImportWizard, type ImportTarget } from '@/features/transfer/ImportWizard'
 import { Split, SplitHandle, SplitPanel, usePanelRef } from '@/shared/ui/Split'
 import { buildTree, useConnectionsStore } from '@/stores/connections'
 import { useSettingsStore } from '@/stores/settings'
@@ -98,6 +100,9 @@ export function App() {
   const [promptFor, setPromptFor] = useState<Profile | null>(null)
   /** The connection a file is being run against, and non-null exactly while that dialog is up. */
   const [fileFor, setFileFor] = useState<Profile | null>(null)
+  /** Where each transfer wizard is pointed, and non-null exactly while it is up. */
+  const [importInto, setImportInto] = useState<ImportTarget | null>(null)
+  const [exportFrom, setExportFrom] = useState<ExportTarget | null>(null)
 
   useEffect(() => {
     void loadProfiles()
@@ -197,6 +202,8 @@ export function App() {
     onExecuteFile: setFileFor,
     onOpenRows: openTable,
     onDesign: openDesign,
+    onImport: setImportInto,
+    onExport: setExportFrom,
   })
 
   // Selecting reads nothing and dials nothing, and expanding stays the caret's job. The one
@@ -340,6 +347,20 @@ export function App() {
         profile={fileFor}
         onOpenChange={(open) => {
           if (!open) setFileFor(null)
+        }}
+      />
+
+      <ImportWizard
+        target={importInto}
+        onOpenChange={(open) => {
+          if (!open) setImportInto(null)
+        }}
+      />
+
+      <ExportWizard
+        target={exportFrom}
+        onOpenChange={(open) => {
+          if (!open) setExportFrom(null)
         }}
       />
 

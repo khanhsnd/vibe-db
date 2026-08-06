@@ -189,7 +189,12 @@ func (a *ConnectionAPI) dumpTable(
 		Stream: &driver.RowStream{
 			Rows: func(batch [][]*string) {
 				if failed == nil {
-					failed = writeStatements(out, schema.InsertStatements(ns, table, columns, batch))
+					failed = writeStatements(out, schema.RowStatements(ns, table, driver.RowWrite{
+						Mode:    driver.WriteAppend,
+						Columns: columns,
+						Rows:    batch,
+						Batch:   1,
+					}))
 				}
 			},
 			Counted: func(int) {},

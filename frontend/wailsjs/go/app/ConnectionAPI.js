@@ -10,6 +10,14 @@ export function AlterColumn(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['ConnectionAPI']['AlterColumn'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function ChooseTransferFile(arg1) {
+  return window['go']['app']['ConnectionAPI']['ChooseTransferFile'](arg1);
+}
+
+export function ChooseTransferFolder() {
+  return window['go']['app']['ConnectionAPI']['ChooseTransferFolder']();
+}
+
 export function Connect(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['Connect'](arg1, arg2);
 }
@@ -102,6 +110,18 @@ export function ListSchemas(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ListSchemas'](arg1, arg2);
 }
 
+export function ListTransferEncodings() {
+  return window['go']['app']['ConnectionAPI']['ListTransferEncodings']();
+}
+
+export function ListTransferFormats() {
+  return window['go']['app']['ConnectionAPI']['ListTransferFormats']();
+}
+
+export function ListWorksheets(arg1) {
+  return window['go']['app']['ConnectionAPI']['ListWorksheets'](arg1);
+}
+
 export function LoadColumnValues(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadColumnValues'](arg1, arg2);
 }
@@ -134,12 +154,28 @@ export function PreviewCreateDatabase(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['PreviewCreateDatabase'](arg1, arg2);
 }
 
+export function PreviewImportFile(arg1) {
+  return window['go']['app']['ConnectionAPI']['PreviewImportFile'](arg1);
+}
+
 export function RenameColumn(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['ConnectionAPI']['RenameColumn'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function RenameTable(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['RenameTable'](arg1, arg2, arg3, arg4);
+}
+
+export function ReviewImport(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['ReviewImport'](arg1, arg2);
+}
+
+export function RunExport(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['RunExport'](arg1, arg2);
+}
+
+export function RunImport(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['RunImport'](arg1, arg2);
 }
 
 export function SaveProfile(arg1) {

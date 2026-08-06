@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
+	"github.com/khanhsnd/vibe-db/internal/driver"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -89,11 +90,17 @@ func (a *ConnectionAPI) render(
 		return "", err
 	}
 
-	statements := schema.InsertStatements(
+	statements := schema.RowStatements(
 		input.Namespace.toDriver(),
 		input.tableName(),
-		input.Columns,
-		input.Rows,
+		driver.RowWrite{
+			Mode:    driver.WriteAppend,
+			Columns: input.Columns,
+			Rows:    input.Rows,
+			// One row to a statement: an export is read by a person as often as it is run, and a
+			// file of thousand-row tuples is neither.
+			Batch: 1,
+		},
 	)
 	if len(statements) == 0 {
 		return "", nil

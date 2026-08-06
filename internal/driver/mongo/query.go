@@ -484,13 +484,27 @@ func (s *session) update(
 		update = pipeline
 	}
 
+	// The third argument is the shell's options document, and `upsert` is the one of them that
+	// changes what the command *does* rather than how it runs — it is what makes an import's
+	// "add it if it is not there" a single command instead of a read and then a write.
+	upsert := false
+	if given, ok := one.Arg(2).(bson.D); ok {
+		for _, field := range given {
+			if asked, ok := field.Value.(bool); ok && strings.EqualFold(field.Key, "upsert") {
+				upsert = asked
+			}
+		}
+	}
+
 	many := strings.EqualFold(one.Method, "updateMany")
 	outcome := &mgo.UpdateResult{}
 	var err error
 	if many {
-		outcome, err = collection.UpdateMany(ctx, one.Filter(), update)
+		outcome, err = collection.UpdateMany(ctx, one.Filter(), update,
+			options.UpdateMany().SetUpsert(upsert))
 	} else {
-		outcome, err = collection.UpdateOne(ctx, one.Filter(), update)
+		outcome, err = collection.UpdateOne(ctx, one.Filter(), update,
+			options.UpdateOne().SetUpsert(upsert))
 	}
 	if err != nil {
 		return driver.QueryResult{}, translateError(err)

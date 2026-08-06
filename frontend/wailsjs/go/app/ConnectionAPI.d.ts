@@ -6,6 +6,10 @@ export function AddColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:app.Co
 
 export function AlterColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:app.ColumnInput):Promise<void>;
 
+export function ChooseTransferFile(arg1:string):Promise<string>;
+
+export function ChooseTransferFolder():Promise<string>;
+
 export function Connect(arg1:string,arg2:string):Promise<app.Session>;
 
 export function CreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<void>;
@@ -52,6 +56,12 @@ export function ListProfiles():Promise<Array<app.Profile>>;
 
 export function ListSchemas(arg1:string,arg2:string):Promise<Array<string>>;
 
+export function ListTransferEncodings():Promise<Array<app.TransferEncoding>>;
+
+export function ListTransferFormats():Promise<Array<app.TransferFormat>>;
+
+export function ListWorksheets(arg1:string):Promise<Array<string>>;
+
 export function LoadColumnValues(arg1:string,arg2:app.ColumnValuesInput):Promise<Array<string>>;
 
 export function LoadDatabaseOptions(arg1:string):Promise<app.DatabaseOptions>;
@@ -68,9 +78,17 @@ export function LoadTableStructure(arg1:string,arg2:app.Namespace,arg3:string):P
 
 export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<Array<string>>;
 
+export function PreviewImportFile(arg1:app.ImportSource):Promise<app.ImportPreview>;
+
 export function RenameColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function RenameTable(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
+
+export function ReviewImport(arg1:string,arg2:app.ImportInput):Promise<app.ImportReview>;
+
+export function RunExport(arg1:string,arg2:app.ExportJobInput):Promise<app.ExportJobResult>;
+
+export function RunImport(arg1:string,arg2:app.ImportInput):Promise<app.ImportResult>;
 
 export function SaveProfile(arg1:app.ProfileInput):Promise<app.Profile>;
 

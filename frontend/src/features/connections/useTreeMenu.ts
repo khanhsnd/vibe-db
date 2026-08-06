@@ -33,6 +33,10 @@ interface TreeMenuActions {
   onOpenRows: (target: TableTarget) => void
   /** Opens the designer on a table, or on a new one when the table is empty. */
   onDesign: (target: TableTarget) => void
+  /** Raises the wizard that reads a file into a table. An empty table is one not chosen yet. */
+  onImport: (target: TableTarget) => void
+  /** Raises the wizard that writes tables out as files. An empty table means all of them. */
+  onExport: (target: TableTarget) => void
 }
 
 /**
@@ -58,7 +62,16 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
   const ask = useSchemaStore((s) => s.ask)
   const askAddField = useSchemaStore((s) => s.askAddField)
 
-  const { onConnect, onEditConnection, onConsole, onExecuteFile, onOpenRows, onDesign } = actions
+  const {
+    onConnect,
+    onEditConnection,
+    onConsole,
+    onExecuteFile,
+    onOpenRows,
+    onDesign,
+    onImport,
+    onExport,
+  } = actions
 
   return useCallback(
     (node: TreeNode): MenuItem[] => {
@@ -133,6 +146,27 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
         ],
       })
 
+      // The two wizards are offered wherever a dump is, and cover the same subject: one table, or
+      // `''` for every table the namespace holds — which the import reads as "not chosen yet", a
+      // file having to land in exactly one table, and the export reads as all of them.
+      //
+      // They sit beside `Dump` because all three carry a table out of this server, and apart from it
+      // because a dump carries *statements* — it is for putting the table back on a server, and
+      // these are for everything that is not one.
+      const wizards = (table: string): MenuItem[] => [
+        {
+          label: 'Import Wizard…',
+          icon: ICON.importWizard,
+          separatorBefore: true,
+          onSelect: () => onImport({ profileId: node.profileId, namespace: ns, table }),
+        },
+        {
+          label: 'Export Wizard…',
+          icon: ICON.exportWizard,
+          onSelect: () => onExport({ profileId: node.profileId, namespace: ns, table }),
+        },
+      ]
+
       // One read fills all three folders, so Refresh means the same thing wherever it is asked
       // for under a namespace.
       const refreshObjectList: MenuItem = {
@@ -146,7 +180,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
         case 'database':
         case 'schema': {
           const own = ownsObjects(node)
-            ? [newTable, dumpItems(''), refreshObjectList]
+            ? [newTable, dumpItems(''), ...wizards(''), refreshObjectList]
             : [
                 {
                   label: 'Refresh',
@@ -184,7 +218,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
         }
 
         case 'tables':
-          return [newTable, dumpItems(''), refreshObjectList]
+          return [newTable, dumpItems(''), ...wizards(''), refreshObjectList]
 
         case 'views':
         case 'routines':
@@ -195,6 +229,7 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
             on,
             () => void refreshStructure(node.profileId, ns, node.label),
             dumpItems(node.label),
+            wizards(node.label),
             words,
             info.hasTruncate,
           )
@@ -278,6 +313,8 @@ export function useTreeMenu(actions: TreeMenuActions): (node: TreeNode) => MenuI
       onExecuteFile,
       onOpenRows,
       onDesign,
+      onImport,
+      onExport,
     ],
   )
 }
@@ -402,8 +439,9 @@ function connectionItems(
 /**
  * The whole of what a table is offered, in the order the tree lists it.
  *
- * `dump` arrives built rather than being made here, because the same item is offered on a namespace
- * as well and differs between the two only in what it names — one table, or all of them.
+ * `dump` and `wizards` arrive built rather than being made here, because the same items are offered
+ * on a namespace as well and differ between the two only in what they name — one table, or all of
+ * them.
  *
  * Truncate is left out where it is not a second thing: on a document store every document has to be
  * deleted to empty a collection, so Empty and Truncate would be one command under two names — see
@@ -413,6 +451,7 @@ export function tableItems(
   on: TableActions,
   refresh: () => void,
   dump: MenuItem,
+  wizards: MenuItem[],
   words: EngineWords = engineWords(''),
   truncates = true,
 ): MenuItem[] {
@@ -434,6 +473,7 @@ export function tableItems(
     // Beside Duplicate rather than beside Delete: both copy the table, and the only difference is
     // whether the copy lands on this server or in a file.
     dump,
+    ...wizards,
     { label: `Empty ${words.table}`, icon: ICON.empty, separatorBefore: true, onSelect: on.empty },
     ...(truncates
       ? [{ label: `Truncate ${words.table}`, icon: ICON.truncate, onSelect: on.truncate }]

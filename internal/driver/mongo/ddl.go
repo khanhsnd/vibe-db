@@ -338,33 +338,137 @@ func (*session) DropForeignKey(context.Context, driver.Namespace, string, string
 	return domain.Unsupported("a foreign key")
 }
 
-// InsertStatements spells documents as the commands that would put them back, which is what an
-// export is. An absent value is left out of the document rather than written as null, because that
-// is the difference a document store keeps: a field nobody wrote is not a field holding nothing.
+// RowStatements spells documents as the commands that write them into a collection, which is what
+// an export, the data half of a dump and an import all are.
 //
-// Every value is written with `literal`, the same renderer the grid drew it with, so what is exported
-// is what was shown and what is imported is what was exported.
-func (s *session) InsertStatements(
+// An absent value is **left out of the document** rather than written as null, because that is the
+// difference a document store keeps: a field nobody wrote is not a field holding nothing. A filter
+// is the one place that reverses — a key holding NULL has to be matched as `null`, or the command
+// would look for documents by fewer fields than the reader named.
+//
+// Every value is written with `valueText`, the same renderer the grid drew it with, so what is
+// exported is what was shown and what is imported is what was exported.
+func (s *session) RowStatements(
 	_ driver.Namespace,
 	table string,
-	columns []string,
-	rows [][]*string,
+	write driver.RowWrite,
 ) []string {
-	statements := make([]string, 0, len(rows))
+	collection := "db." + key(table) + "."
+	if write.Mode == driver.WriteAppend || write.Mode == "" {
+		return insertCommands(collection, write)
+	}
 
-	for _, row := range rows {
-		fields := make([]string, 0, len(row))
-		for at, value := range row {
-			if value == nil || at >= len(columns) {
-				continue
-			}
-			fields = append(fields, key(columns[at])+": "+valueText(shellValue(*value)))
+	statements := make([]string, 0, len(write.Rows))
+	for _, row := range write.Rows {
+		switch write.Mode {
+		case driver.WriteDelete:
+			statements = append(statements,
+				collection+"deleteMany("+filterDocument(write, row)+")")
+
+		case driver.WriteUpdate:
+			statements = append(statements, collection+"updateMany("+
+				filterDocument(write, row)+", { $set: "+setDocument(write, row)+" })")
+
+		case driver.WriteUpsert:
+			statements = append(statements, collection+"updateOne("+
+				filterDocument(write, row)+", { $set: "+setDocument(write, row)+
+				" }, { upsert: true })")
+
+		default:
+			// `$setOnInsert` writes the fields only where the document is being made, which is
+			// exactly "add it if the key is not there and leave it alone if it is".
+			statements = append(statements, collection+"updateOne("+
+				filterDocument(write, row)+", { $setOnInsert: "+setDocument(write, row)+
+				" }, { upsert: true })")
 		}
-		statements = append(statements,
-			"db."+key(table)+".insertOne({ "+strings.Join(fields, ", ")+" })")
 	}
 
 	return statements
+}
+
+// insertCommands is an append, and the one mode a document store carries several rows of in a single
+// command. A batch of one stays `insertOne`, which is what a dump and an export are read as — a file
+// of `insertMany([…])` a thousand documents wide is not one anybody reads back.
+func insertCommands(collection string, write driver.RowWrite) []string {
+	batch := max(write.Batch, 1)
+	statements := make([]string, 0, (len(write.Rows)+batch-1)/batch)
+
+	for at := 0; at < len(write.Rows); at += batch {
+		chunk := write.Rows[at:min(at+batch, len(write.Rows))]
+		if batch == 1 {
+			statements = append(statements,
+				collection+"insertOne("+fieldsDocument(write.Columns, chunk[0], nil)+")")
+			continue
+		}
+
+		documents := make([]string, 0, len(chunk))
+		for _, row := range chunk {
+			documents = append(documents, fieldsDocument(write.Columns, row, nil))
+		}
+		statements = append(statements,
+			collection+"insertMany(["+strings.Join(documents, ", ")+"])")
+	}
+	return statements
+}
+
+// filterDocument is the `{ … }` that finds the documents this row stands for. A row with no key at
+// all matches nothing rather than everything: `deleteMany({})` empties a collection, and a mistake
+// in the wizard's key list must not be the command that does it.
+func filterDocument(write driver.RowWrite, row []*string) string {
+	at := map[string]int{}
+	for index, name := range write.Columns {
+		at[name] = index
+	}
+
+	fields := make([]string, 0, len(write.Keys))
+	for _, name := range write.Keys {
+		index, known := at[name]
+		if !known || index >= len(row) {
+			continue
+		}
+		fields = append(fields, key(name)+": "+valueText(cellValue(row[index])))
+	}
+
+	if len(fields) == 0 {
+		return `{ _id: null, $expr: false }`
+	}
+	return "{ " + strings.Join(fields, ", ") + " }"
+}
+
+// setDocument is everything the row carries that is not part of the key. The key is what the
+// document was found by, so setting it again says nothing — and on an upsert the server writes it
+// from the filter itself.
+func setDocument(write driver.RowWrite, row []*string) string {
+	return fieldsDocument(write.Columns, row, write.Keys)
+}
+
+func fieldsDocument(columns []string, row []*string, except []string) string {
+	skip := make(map[string]bool, len(except))
+	for _, name := range except {
+		skip[name] = true
+	}
+
+	fields := make([]string, 0, len(row))
+	for at, value := range row {
+		if value == nil || at >= len(columns) || skip[columns[at]] {
+			continue
+		}
+		fields = append(fields, key(columns[at])+": "+valueText(shellValue(*value)))
+	}
+
+	if len(fields) == 0 {
+		return "{}"
+	}
+	return "{ " + strings.Join(fields, ", ") + " }"
+}
+
+// cellValue is a cell as a value to *match* on, where a NULL is the `null` a document may genuinely
+// hold rather than a field to leave out.
+func cellValue(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return shellValue(*value)
 }
 
 // CreateStatements spells a collection as the commands that would make it again, which is the

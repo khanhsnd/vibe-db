@@ -37,6 +37,11 @@ type Dialect struct {
 	// OverridesIdentity says a write has to declare it is supplying a value for an identity
 	// column, which PostgreSQL refuses the row without and MySQL has no clause for. See CopyRows.
 	OverridesIdentity bool
+	// MergesOnConflict says an insert that meets a row already there says so in a clause *after*
+	// the values, naming the columns it conflicts on — PostgreSQL's `ON CONFLICT`. MySQL says it
+	// in the verb (`INSERT IGNORE`) and in a clause that names no columns at all, leaving the
+	// server to find whichever key was broken. See InsertVerb and MergeClause.
+	MergesOnConflict bool
 	// TextType is what this engine calls text in a CAST, which is how a column of any type is
 	// compared as text — see Where's `contains`.
 	TextType string
@@ -55,6 +60,7 @@ var (
 		DollarQuotes:      true,
 		LikeInColumnList:  true,
 		OverridesIdentity: true,
+		MergesOnConflict:  true,
 		TextType:          "TEXT",
 	}
 	// Shell is the lexical half of a document store's own language, and is a Dialect for one

@@ -36,6 +36,8 @@ internal/app  ->  session / profile / secret / history  ->  internal/driver  -> 
   credentials. Nothing here is ever stored — a credential good for a quarter of an hour is not a
   secret worth keeping — and no SDK is pulled in for either: one is a documented signing algorithm
   and the other is a documented token exchange.
+- **`internal/transfer`** — the file formats a table travels as, and nothing about either end of the
+  journey. See [carrying a table to a file](#carrying-a-table-to-a-file).
 - **`internal/fonts`** — the font families the host machine has, read from the Windows font registry
   (both the machine-wide hive and the reader's own, since a per-user install is registered only
   there). Bound through `SystemAPI`, the one API that answers about the *machine* rather than about a
@@ -107,12 +109,12 @@ identifiers are quoted and only free text (`Dialect.QuoteString`) is written as 
 
 **A statement the UI shows is asked for rather than spelled twice.** The New Database dialog's SQL
 Preview calls `CreateDatabaseSQL`, which is exactly the list `CreateDatabase` runs, so what is shown
-and what runs cannot drift; a SQL export calls `InsertStatements` for the same reason. Each returns
+and what runs cannot drift; a SQL export calls `RowStatements` for the same reason. Each returns
 `[]driver.DatabaseStatement` or `[]string` rather than one string, because a create is several
 statements and some of them — an extension — can only be run inside the database just made.
 
 **A dump is those two methods and nothing else.** `CreateStatements` is its structure half and
-`InsertStatements` its data half, and both are the driver's because only the engine knows how it
+`RowStatements` its data half, and both are the driver's because only the engine knows how it
 declares a table and quotes a value. The one difference between them is that a declaration has to be
 *read*, so an engine that can answer for itself is **asked** rather than described: MySQL's whole
 dump is one `SHOW CREATE TABLE`, storage engine and charset and constraints included, which no read
@@ -123,6 +125,43 @@ a default reading from it, and would otherwise name a sequence the dump never cr
 `createCollection` and a `createIndex` per index, and nothing about the fields, because a collection
 declares none. `internal/app/dump.go` owns only the file: it opens it, asks for those statements, and
 **streams** the rows into it batch by batch, so a dump of a million rows costs one batch of memory.
+
+**`RowStatements` is one method and not five.** A SQL export, the data half of a dump and every mode
+of an import are the same question asked with different `driver.RowWrite`s: an export is `WriteAppend`
+with a batch of one, and an import is whichever mode the wizard picked with a batch of two hundred.
+Only three things about it vary by engine, and all three are on `sqlkit.Dialect` — the verb
+(`INSERT IGNORE` on MySQL, unchanged on PostgreSQL), the clause after the values (`ON DUPLICATE KEY
+UPDATE` against `ON CONFLICT (…) DO UPDATE SET`), and whether the conflicting columns are named at
+all. MongoDB writes its own: `insertOne`/`insertMany`, and `updateOne` with `upsert` for a merge,
+because a document store's merge is a *command* and not a clause.
+
+Two rules about it are not the driver's and must not migrate there. **A row with nothing to find it by
+matches nothing** — `WHERE 1 = 0`, and a filter no document satisfies — because the alternative is a
+`DELETE` with no `WHERE`. And **whether the run has to be answered for first is `domain`'s**:
+`ImportHazard` is the third grammar for one rule, beside `StatementHazard` and `MongoHazard`.
+
+## Carrying a table to a file
+
+`internal/transfer` is the file formats and nothing else. It knows no databases: a row here is
+`[]*string` — the shape a driver hands rows over in — and `nil` is a NULL in every format that can
+tell one from an empty string. What a row *means* to a server is the driver's, and how it is quoted
+into a statement is `sqlkit.Dialect`'s.
+
+**Both halves stream.** A `Reader` hands rows over as it reads them and a `Writer` takes them as they
+arrive, so an import of a million rows and an export of one each cost a batch of memory rather than a
+table's worth — the same bargain `dump.go` already struck.
+
+| | |
+|---|---|
+| `text.go` | Delimited and fixed-width, one scanner for both. The record delimiter is **detected** — LF, CRLF and CR all end a record — because a file written on one machine and read on another is the normal case and a wrong answer there reads the file as a single row. |
+| `json.go`, `xml.go` | An array of objects, and a root of row elements. Neither declares its fields, so they are **inferred from a sample** of the first hundred — the same rule `mongo.fields` follows, and for the same reason. |
+| `xlsx.go`, `xlsxwrite.go` | A workbook, written and read by hand. **No dependency is taken**, for the reason `internal/cloudauth` takes none: SpreadsheetML is a documented format and a grid of cells uses a small, well-trodden part of it. What is written is deliberately narrow — inline strings, one sheet, no styles, no shared-string table, which is what lets the writer stream. What is **read** is wider, because a workbook to import is one Excel wrote: shared strings, formula results, booleans, and a number that a style says is a date. |
+| `document.go` | HTML and Markdown, written and never read — see [features.md](features.md#the-import-and-export-wizards). |
+| `encoding.go` | The encodings the whole app reads files as, one list. UTF-8 is `UTF8BOM`: its decoder strips a mark a Windows tool left, and its encoder writes one, which is what makes Excel open a UTF-8 CSV as UTF-8. |
+
+`internal/app/transfer.go` mirrors the format and encoding lists onto the wire so the wizard draws a
+list the Go side decides, `import.go` maps a file's fields onto a table's columns and runs what
+`RowStatements` builds, and `export_job.go` streams each table into a file of its own.
 
 A table is addressed by a `driver.Namespace` — `(database, schema)` — and how many of its parts an
 engine fills is the one structural difference between the SQL adapters. MySQL fills `Database`

@@ -391,6 +391,39 @@ type CellEdit struct {
 	Key    map[string]string
 }
 
+// RowWriteMode is what a row arriving from outside does to the table it is written into. The list
+// is closed and a mode this side does not know is refused rather than guessed at, exactly as a
+// filter's operator is.
+type RowWriteMode string
+
+const (
+	// WriteAppend adds every row. A row the table already holds is a failure the *server* reports,
+	// which is the honest outcome: only it knows what a key collision is.
+	WriteAppend RowWriteMode = "append"
+	// WriteUpdate changes the rows the key names and adds none.
+	WriteUpdate RowWriteMode = "update"
+	// WriteUpsert changes the rows the key names and adds the ones it does not.
+	WriteUpsert RowWriteMode = "upsert"
+	// WriteSkip adds a row the key does not already name and leaves the ones it does alone.
+	WriteSkip RowWriteMode = "skip"
+	// WriteDelete removes the rows the key names, and reads no other column at all.
+	WriteDelete RowWriteMode = "delete"
+)
+
+// RowWrite is a batch of rows and what they are to do to a table.
+//
+// Keys names the columns that identify a stored row, and every mode but Append needs them: without
+// one there is nothing to change, skip or remove. Batch is how many rows one statement may carry,
+// for the modes whose statement can carry more than one — it is the caller's number because only
+// the caller knows what the server will accept, which on MySQL is `max_allowed_packet`.
+type RowWrite struct {
+	Mode    RowWriteMode
+	Columns []string
+	Keys    []string
+	Rows    [][]*string
+	Batch   int
+}
+
 // RowInsert carries only the columns a new row actually filled in, so a column left alone
 // takes the server's own default instead of an explicit NULL.
 type RowInsert struct {
@@ -504,13 +537,18 @@ type Schema interface {
 	DropIndex(ctx context.Context, ns Namespace, table, index string) error
 	CreateForeignKey(ctx context.Context, ns Namespace, table string, spec ForeignKeySpec) error
 	DropForeignKey(ctx context.Context, ns Namespace, table, constraint string) error
-	// InsertStatements spells rows as the statements that would put them back, which is what a
-	// SQL export is. It is the driver's for the reason every other statement is: only it knows
-	// how this engine quotes a name and a string.
-	InsertStatements(ns Namespace, table string, columns []string, rows [][]*string) []string
+	// RowStatements spells rows as the statements that write them into a table the way the caller
+	// asked: appended, merged on a key, or removed by one. It is the driver's for the reason every
+	// other statement is — only it knows how this engine quotes a name and a string, and MySQL's
+	// `ON DUPLICATE KEY`, PostgreSQL's `ON CONFLICT` and a document store's upsert are three
+	// statements for one intention.
+	//
+	// One method rather than two, because a SQL export, the data half of a dump and an import are
+	// the same question asked with different modes: an export is `WriteAppend` with a batch of one.
+	RowStatements(ns Namespace, table string, write RowWrite) []string
 	// CreateStatements spells an object as the statements that would make it again: the table and
 	// its key, then its indexes, then its constraints. It is the structure half of a dump and
-	// InsertStatements is the data half, and it is the driver's for the same reason — only the
+	// RowStatements is the data half, and it is the driver's for the same reason — only the
 	// engine knows how it declares one.
 	//
 	// It is a *read* rather than a render because an engine that can answer for itself is asked

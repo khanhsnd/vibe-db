@@ -62,6 +62,52 @@ func StatementHazard(keyword string, filtered bool) Hazard {
 	}
 }
 
+// ImportMode is what an import does to the rows a table already holds. It is a domain type rather
+// than a wire one for the reason the two grammars below are: what a mode is going to do decides
+// whether it has to be answered for before it runs, and that decision is one rule wherever it is
+// asked — a typed statement, a shell command, or a wizard.
+type ImportMode string
+
+const (
+	// ImportAppend adds every row of the file and changes none of the table's.
+	ImportAppend ImportMode = "append"
+	// ImportUpdate changes the rows the key names, and adds none.
+	ImportUpdate ImportMode = "update"
+	// ImportUpsert changes the rows the key names and adds the ones it does not.
+	ImportUpsert ImportMode = "upsert"
+	// ImportSkip adds a row the key does not already name and leaves the ones it does alone.
+	ImportSkip ImportMode = "skip"
+	// ImportDelete removes the rows the key names.
+	ImportDelete ImportMode = "delete"
+	// ImportCopy empties the table and then appends, which is the one mode that destroys rows the
+	// file says nothing about.
+	ImportCopy ImportMode = "copy"
+)
+
+// NeedsKey says this mode finds stored rows before it does anything to them, and so cannot run
+// without being told which columns identify one. Appending needs none: it names nothing.
+func (m ImportMode) NeedsKey() bool {
+	return m == ImportUpdate || m == ImportUpsert || m == ImportSkip || m == ImportDelete
+}
+
+// ImportHazard is StatementHazard for an import — the third grammar for one rule, and here for the
+// reason MongoHazard is: what is dangerous to run is a domain rule and only its spelling changes.
+//
+// Copy is destructive: it takes every row the table held, whether or not the file mentions it, which
+// is a TRUNCATE by another name. A mode that reaches for rows *by* a key and was given none is
+// unfiltered in exactly the sense a `DELETE` with no `WHERE` is — it names no row and so names all
+// of them — and is answered for on a laptop as well as on production.
+func ImportHazard(mode ImportMode, keyed bool) Hazard {
+	switch {
+	case mode == ImportCopy:
+		return HazardDestructive
+	case mode.NeedsKey() && !keyed:
+		return HazardUnfiltered
+	default:
+		return HazardWrite
+	}
+}
+
 // mongoHazards is the *method* of a shell command against what it will do, which is where a
 // document store keeps the verb SQL keeps in its first word. A method that is not here reads,
 // and so does everything this side cannot tell apart from a read.

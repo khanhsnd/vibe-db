@@ -63,6 +63,21 @@ func (e StatementError) Unwrap() error {
 	return ErrStatementFailed
 }
 
+// FileError is a file on this machine that could not be opened, read or written, carrying the
+// reason the operating system gave. It unwraps to ErrFileUnreadable, which is what the UI switches
+// on: *which* file and *why* is detail, and the reader answers all of it in the same picker.
+type FileError struct {
+	Err error
+}
+
+func (e FileError) Error() string {
+	return ErrFileUnreadable.Error() + ": " + e.Err.Error()
+}
+
+func (e FileError) Unwrap() error {
+	return ErrFileUnreadable
+}
+
 // UnsupportedError names the thing this engine has no concept of, so the reader is told which
 // one rather than only that something was refused.
 type UnsupportedError struct {

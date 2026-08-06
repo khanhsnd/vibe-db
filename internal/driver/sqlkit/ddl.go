@@ -142,34 +142,135 @@ func (d Dialect) Referenced(ns driver.Namespace, spec driver.ForeignKeySpec) str
 	return d.Table(target, spec.ReferencedTable)
 }
 
-// InsertStatements spells rows as the statements that would put them back. A NULL travels as
-// the keyword rather than as an empty string, so what is written out means what was read; every
-// other value is quoted as a literal, which both engines read back into a column of any type.
-func (x DDL) InsertStatements(
+// RowStatements spells rows as the statements that write them into a table.
+//
+// A NULL travels as the keyword rather than as an empty string, so what is written out means what
+// was read; every other value is quoted as a literal, which both engines read back into a column of
+// any type. Nothing is bound, for the reason no DDL here binds anything: these statements are also
+// what a dump and a SQL export *are*, and a file of placeholders is a file nothing can run.
+func (x DDL) RowStatements(
 	ns driver.Namespace,
 	table string,
-	columns []string,
-	rows [][]*string,
+	write driver.RowWrite,
 ) []string {
 	target := x.Dialect.Table(ns, table)
-	names := strings.Join(x.Dialect.QuoteAll(columns), ", ")
 
-	statements := make([]string, 0, len(rows))
-	for _, row := range rows {
-		values := make([]string, len(row))
-		for at, value := range row {
-			if value == nil {
-				values[at] = "NULL"
+	switch write.Mode {
+	case driver.WriteDelete:
+		return x.rowsRemoved(target, write)
+	case driver.WriteUpdate:
+		return x.rowsChanged(target, write)
+	default:
+		return x.rowsAdded(target, write)
+	}
+}
+
+// rowsAdded is the three modes that are an INSERT: appending, merging on a key, and skipping what
+// is already there. They differ only in the verb and in the clause after the values, which is why
+// they are one method — and all three carry `Batch` rows to a statement, since an insert is the one
+// write a server takes several rows of at once.
+func (x DDL) rowsAdded(target string, write driver.RowWrite) []string {
+	head := x.Dialect.InsertVerb(write.Mode) + " INTO " + target +
+		" (" + strings.Join(x.Dialect.QuoteAll(write.Columns), ", ") + ") VALUES "
+	tail := x.Dialect.MergeClause(write.Mode, write.Keys, write.Columns)
+
+	batch := max(write.Batch, 1)
+	statements := make([]string, 0, (len(write.Rows)+batch-1)/batch)
+
+	for at := 0; at < len(write.Rows); at += batch {
+		tuples := make([]string, 0, batch)
+		for _, row := range write.Rows[at:min(at+batch, len(write.Rows))] {
+			tuples = append(tuples, "("+strings.Join(x.literals(row), ", ")+")")
+		}
+		statements = append(statements, head+strings.Join(tuples, ", ")+tail)
+	}
+	return statements
+}
+
+// rowsChanged is one UPDATE per row. It cannot be batched the way an insert can — every row sets
+// different values on a different key — and a key column is left out of the SET, since changing the
+// thing a row is found by is a rename rather than an update.
+func (x DDL) rowsChanged(target string, write driver.RowWrite) []string {
+	keys := set(write.Keys)
+
+	statements := make([]string, 0, len(write.Rows))
+	for _, row := range write.Rows {
+		assignments := []string{}
+		for at, name := range write.Columns {
+			if keys[name] || at >= len(row) {
 				continue
 			}
-			values[at] = x.Dialect.QuoteString(*value)
+			assignments = append(assignments, x.Dialect.QuoteIdent(name)+" = "+x.literal(row[at]))
 		}
+		if len(assignments) == 0 {
+			continue
+		}
+		statements = append(statements, "UPDATE "+target+" SET "+strings.Join(assignments, ", ")+
+			" WHERE "+x.match(write, row))
+	}
+	return statements
+}
 
-		statements = append(statements,
-			"INSERT INTO "+target+" ("+names+") VALUES ("+strings.Join(values, ", ")+")")
+func (x DDL) rowsRemoved(target string, write driver.RowWrite) []string {
+	statements := make([]string, 0, len(write.Rows))
+	for _, row := range write.Rows {
+		statements = append(statements, "DELETE FROM "+target+" WHERE "+x.match(write, row))
+	}
+	return statements
+}
+
+// match is the WHERE that finds the one stored row this row stands for. A key holding NULL is
+// compared with IS NULL, because `= NULL` is true of nothing at all and would silently match no row
+// — which on a delete reads as "it worked" and on an update as "nothing needed changing".
+func (x DDL) match(write driver.RowWrite, row []*string) string {
+	at := map[string]int{}
+	for index, name := range write.Columns {
+		at[name] = index
 	}
 
-	return statements
+	conditions := make([]string, 0, len(write.Keys))
+	for _, key := range write.Keys {
+		index, known := at[key]
+		if !known || index >= len(row) {
+			continue
+		}
+		if row[index] == nil {
+			conditions = append(conditions, x.Dialect.QuoteIdent(key)+" IS NULL")
+			continue
+		}
+		conditions = append(conditions,
+			x.Dialect.QuoteIdent(key)+" = "+x.Dialect.QuoteString(*row[index]))
+	}
+
+	// A row with nothing to find it by would otherwise become a statement that matched the whole
+	// table, so it matches nothing instead: the run reports it, and no other row is touched.
+	if len(conditions) == 0 {
+		return "1 = 0"
+	}
+	return strings.Join(conditions, " AND ")
+}
+
+func (x DDL) literals(row []*string) []string {
+	values := make([]string, len(row))
+	for at, value := range row {
+		values[at] = x.literal(value)
+	}
+	return values
+}
+
+func (x DDL) literal(value *string) string {
+	if value == nil {
+		return "NULL"
+	}
+	return x.Dialect.QuoteString(*value)
+}
+
+func set(names []string) map[string]bool {
+	held := make(map[string]bool, len(names))
+	for _, name := range names {
+		held[name] = true
+	}
+	return held
 }
 
 // TableSpecOf reads a table's stored shape back as the declaration that would make it, which is what
@@ -329,6 +430,81 @@ func (d Dialect) CopyRows(ns driver.Namespace, table, name string) string {
 		statement += " OVERRIDING SYSTEM VALUE"
 	}
 	return statement + " SELECT * FROM " + d.Table(ns, table)
+}
+
+// InsertVerb is how this engine opens an insert that is not to fail on a row already there. MySQL
+// has a verb for it; PostgreSQL says the same thing in a clause at the other end of the statement,
+// so its verb never changes — see MergeClause.
+func (d Dialect) InsertVerb(mode driver.RowWriteMode) string {
+	if mode == driver.WriteSkip && !d.MergesOnConflict {
+		return "INSERT IGNORE"
+	}
+	return "INSERT"
+}
+
+// MergeClause is what follows the values to say what a row already in the table should do, and is
+// empty for a plain append — which is what leaves the collision to be reported as the failure it is.
+//
+// The two engines disagree about *what is already there*. PostgreSQL has to be told which columns
+// to watch, and they must carry a unique constraint or it refuses the statement; MySQL is told
+// nothing and applies whichever unique key the row broke. So the key list reaches one and not the
+// other, and a reader who names the wrong columns is answered by the server rather than here.
+func (d Dialect) MergeClause(mode driver.RowWriteMode, keys, columns []string) string {
+	if mode != driver.WriteUpsert && mode != driver.WriteSkip {
+		return ""
+	}
+
+	if d.MergesOnConflict {
+		target := ""
+		if len(keys) > 0 {
+			target = " (" + strings.Join(d.QuoteAll(keys), ", ") + ")"
+		}
+		if mode == driver.WriteSkip {
+			return " ON CONFLICT" + target + " DO NOTHING"
+		}
+		return " ON CONFLICT" + target + " DO UPDATE SET " +
+			strings.Join(d.assignments(keys, columns, "EXCLUDED."), ", ")
+	}
+
+	if mode == driver.WriteSkip {
+		// Already said in the verb. See InsertVerb.
+		return ""
+	}
+	return " ON DUPLICATE KEY UPDATE " + strings.Join(d.assignments(keys, columns, ""), ", ")
+}
+
+// assignments is the SET of a merge: every column that is not part of the key, taking the value the
+// row *would* have been inserted with. A key column is left out because it is what the collision was
+// found by, and setting it to itself is at best noise and on PostgreSQL is refused outright.
+//
+// `from` is how each engine names that would-be value: PostgreSQL has a pseudo-table, and MySQL has
+// a function that reads the same way in every version from 5.7 onwards.
+func (d Dialect) assignments(keys, columns []string, from string) []string {
+	key := set(keys)
+
+	out := make([]string, 0, len(columns))
+	for _, name := range columns {
+		if key[name] {
+			continue
+		}
+		quoted := d.QuoteIdent(name)
+		if from == "" {
+			out = append(out, quoted+" = VALUES("+quoted+")")
+			continue
+		}
+		out = append(out, quoted+" = "+from+quoted)
+	}
+
+	// Every column being part of the key leaves nothing to change, so the merge becomes the skip it
+	// already is — a row that is entirely its own key is the row that is already there.
+	if len(out) == 0 && len(columns) > 0 {
+		first := d.QuoteIdent(columns[0])
+		if from == "" {
+			return []string{first + " = VALUES(" + first + ")"}
+		}
+		return []string{first + " = " + from + first}
+	}
+	return out
 }
 
 // ColumnClause is a column as it reads inside CREATE TABLE or ADD COLUMN. A column that is

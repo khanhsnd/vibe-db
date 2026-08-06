@@ -37,7 +37,13 @@ engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL 
    app through `driver.Text`, and **`sqlkit.Lex` is the only scanner there is**. The SQL engines put
    the whole of `driver.Text` on `sqlkit.Dialect`; MongoDB writes its own `Format` and `Review` (a
    document store has no clauses and no keywords) but still reads its tokens from `sqlkit.Lex`
-   through `sqlkit.Shell`. Never write a second scanner, in Go or in TypeScript.
+   through `sqlkit.Shell`. Never write a second scanner, in Go or in TypeScript. **A data file is
+   not a script** — `internal/transfer` reads CSV, JSON, XML and XLSX and is not covered by this:
+   nothing it reads is ever a statement, and nothing in it reaches a server except as a value.
+11. **A row leaves for a server through one method.** `driver.Schema.RowStatements` is what a SQL
+    export, the data half of a dump and every mode of an import all call — there is no second way to
+    turn rows into statements, and nothing outside a driver ever quotes a value. What is *dangerous*
+    about a mode is a `domain` rule (`domain.ImportHazard`), and the wizard receives its answer.
 9. **A document store is not a table store, and the app says so rather than pretending.** A field
    is inferred from the documents, never declared (`mongo.fields`, and see [docs/grid.md](docs/grid.md)
    for what a sample costs); a filter is a `bson.D` and never text, so nothing in that package quotes
@@ -58,6 +64,7 @@ engine, and `internal/driver/mongo` is the proof the port is not secretly a SQL 
 | Touch anything MongoDB | [docs/architecture.md](docs/architecture.md#the-document-store) |
 | Add or change a failure mode | [docs/errors.md](docs/errors.md) |
 | Change UI behaviour, or find out what exists | [docs/features.md](docs/features.md) |
+| Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file) |
 | Touch any table, grid, cell or selection | [docs/grid.md](docs/grid.md) |
 | Touch the SQL editor or completion | [docs/editor.md](docs/editor.md) |
 | Write a component, a store, or a style | [docs/frontend.md](docs/frontend.md) |

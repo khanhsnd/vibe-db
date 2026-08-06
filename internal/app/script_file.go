@@ -1,16 +1,13 @@
 package app
 
 import (
-	"fmt"
 	"os"
 	"time"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/transfer"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
-	"golang.org/x/text/encoding/unicode"
 )
 
 // scriptFileTimeout is what a whole file is given, rather than the minute one statement gets: a
@@ -22,27 +19,6 @@ const scriptFileTimeout = 2 * time.Hour
 // it reports what each statement *did* — so reading a SELECT's whole result would be carrying
 // megabytes across the bridge for a grid that is not there.
 const scriptFileRows = 1
-
-// scriptEncoding is one way of reading a file's bytes as text. The list is closed and the frontend
-// mirrors it, exactly as the engine and TLS lists are mirrored: a name that is not here is refused
-// rather than guessed at.
-type scriptEncoding struct {
-	name    string
-	label   string
-	decoder encoding.Encoding
-}
-
-// The UTF-8 entry is UTF8BOM rather than UTF8: its decoder strips a leading byte order mark, and a
-// file exported by a Windows tool nearly always carries one — left in place it would become part
-// of the first statement's first keyword.
-var scriptEncodings = []scriptEncoding{
-	{"utf-8", "UTF-8", unicode.UTF8BOM},
-	{"utf-16le", "UTF-16 LE", unicode.UTF16(unicode.LittleEndian, unicode.UseBOM)},
-	{"utf-16be", "UTF-16 BE", unicode.UTF16(unicode.BigEndian, unicode.UseBOM)},
-	{"windows-1252", "Windows-1252 (Western European)", charmap.Windows1252},
-	{"windows-1258", "Windows-1258 (Vietnamese)", charmap.Windows1258},
-	{"iso-8859-1", "ISO-8859-1 (Latin 1)", charmap.ISO8859_1},
-}
 
 // ScriptFileInput is a file on this machine and where to run it. The path is the reader's own —
 // see ChooseScriptFile, which is how one is picked — and nothing but the statements inside it
@@ -150,33 +126,18 @@ func (a *QueryAPI) RunFile(sessionID string, input ScriptFileInput) (ScriptFileR
 // readScriptFile reads the file as the named encoding. A file that cannot be opened and one whose
 // bytes are not that encoding fail the same way and for the same reason: the reader picked the
 // wrong file or the wrong encoding, and both are answered in the dialog they picked them in.
+//
+// The encoding list is `transfer.Encodings` and not one of its own. Every file this app opens asks
+// the same question — a script to run, a CSV to import, a workbook to write — and one list is what
+// keeps the answer the same in all three places.
 func readScriptFile(path, name string) (string, error) {
 	if path == "" {
 		return "", domain.ValidationError{Field: "path", Message: "is required"}
 	}
 
-	chosen, err := scriptEncodingNamed(name)
-	if err != nil {
-		return "", err
-	}
-
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", domain.ErrFileUnreadable, err)
+		return "", domain.FileError{Err: err}
 	}
-
-	decoded, err := chosen.decoder.NewDecoder().Bytes(raw)
-	if err != nil {
-		return "", fmt.Errorf("%w: not %s", domain.ErrFileUnreadable, chosen.label)
-	}
-	return string(decoded), nil
-}
-
-func scriptEncodingNamed(name string) (scriptEncoding, error) {
-	for _, candidate := range scriptEncodings {
-		if candidate.name == name {
-			return candidate, nil
-		}
-	}
-	return scriptEncoding{}, domain.ValidationError{Field: "encoding", Message: "is not supported"}
+	return transfer.Decode(raw, name)
 }

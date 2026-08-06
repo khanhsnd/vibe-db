@@ -158,6 +158,167 @@ export namespace app {
 	        this.rows = source["rows"];
 	    }
 	}
+	export class TransferOptions {
+	    encoding: string;
+	    delimiter: string;
+	    qualifier: string;
+	    widths: number[];
+	    headerRow: boolean;
+	    skip: number;
+	    limit: number;
+	    emptyIsNull: boolean;
+	    null: string;
+	    sheet: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TransferOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.encoding = source["encoding"];
+	        this.delimiter = source["delimiter"];
+	        this.qualifier = source["qualifier"];
+	        this.widths = source["widths"];
+	        this.headerRow = source["headerRow"];
+	        this.skip = source["skip"];
+	        this.limit = source["limit"];
+	        this.emptyIsNull = source["emptyIsNull"];
+	        this.null = source["null"];
+	        this.sheet = source["sheet"];
+	    }
+	}
+	export class ExportJobInput {
+	    database: string;
+	    schema: string;
+	    runId: string;
+	    format: string;
+	    tables: string[];
+	    folder: string;
+	    options: TransferOptions;
+	    maxRows: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportJobInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.runId = source["runId"];
+	        this.format = source["format"];
+	        this.tables = source["tables"];
+	        this.folder = source["folder"];
+	        this.options = this.convertValues(source["options"], TransferOptions);
+	        this.maxRows = source["maxRows"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TransferMessage {
+	    text: string;
+	    error: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TransferMessage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	        this.error = source["error"];
+	    }
+	}
+	export class ExportedFile {
+	    table: string;
+	    path: string;
+	    rows: number;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportedFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.table = source["table"];
+	        this.path = source["path"];
+	        this.rows = source["rows"];
+	        this.error = source["error"];
+	    }
+	}
+	export class ExportJobResult {
+	    files: ExportedFile[];
+	    rows: number;
+	    failed: number;
+	    elapsedMs: number;
+	    messages: TransferMessage[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportJobResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.files = this.convertValues(source["files"], ExportedFile);
+	        this.rows = source["rows"];
+	        this.failed = source["failed"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.messages = this.convertValues(source["messages"], TransferMessage);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class FieldMapping {
+	    source: string;
+	    target: string;
+	    key: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new FieldMapping(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.target = source["target"];
+	        this.key = source["key"];
+	    }
+	}
 	export class ForeignKeyInfo {
 	    name: string;
 	    columns: string[];
@@ -237,6 +398,162 @@ export namespace app {
 	        this.runs = source["runs"];
 	        this.ranAt = source["ranAt"];
 	    }
+	}
+	export class ImportInput {
+	    database: string;
+	    schema: string;
+	    format: string;
+	    path: string;
+	    options: TransferOptions;
+	    runId: string;
+	    table: string;
+	    mode: string;
+	    mappings: FieldMapping[];
+	    batch: number;
+	    continueOnError: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.format = source["format"];
+	        this.path = source["path"];
+	        this.options = this.convertValues(source["options"], TransferOptions);
+	        this.runId = source["runId"];
+	        this.table = source["table"];
+	        this.mode = source["mode"];
+	        this.mappings = this.convertValues(source["mappings"], FieldMapping);
+	        this.batch = source["batch"];
+	        this.continueOnError = source["continueOnError"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ImportPreview {
+	    columns: string[];
+	    rows: string[][];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = source["columns"];
+	        this.rows = source["rows"];
+	    }
+	}
+	export class ImportResult {
+	    read: number;
+	    statements: number;
+	    written: number;
+	    failed: number;
+	    elapsedMs: number;
+	    messages: TransferMessage[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.read = source["read"];
+	        this.statements = source["statements"];
+	        this.written = source["written"];
+	        this.failed = source["failed"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.messages = this.convertValues(source["messages"], TransferMessage);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ImportReview {
+	    hazard: string;
+	    confirm: boolean;
+	    environment: string;
+	    statement: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportReview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hazard = source["hazard"];
+	        this.confirm = source["confirm"];
+	        this.environment = source["environment"];
+	        this.statement = source["statement"];
+	    }
+	}
+	export class ImportSource {
+	    format: string;
+	    path: string;
+	    options: TransferOptions;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportSource(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.format = source["format"];
+	        this.path = source["path"];
+	        this.options = this.convertValues(source["options"], TransferOptions);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class IndexInfo {
 	    name: string;
@@ -1187,6 +1504,45 @@ export namespace app {
 	        this.latencyMs = source["latencyMs"];
 	    }
 	}
+	export class TransferEncoding {
+	    value: string;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TransferEncoding(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.label = source["label"];
+	    }
+	}
+	export class TransferFormat {
+	    value: string;
+	    label: string;
+	    extension: string;
+	    delimited: boolean;
+	    text: boolean;
+	    reads: boolean;
+	    writes: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TransferFormat(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.label = source["label"];
+	        this.extension = source["extension"];
+	        this.delimited = source["delimited"];
+	        this.text = source["text"];
+	        this.reads = source["reads"];
+	        this.writes = source["writes"];
+	    }
+	}
+	
 
 }
 

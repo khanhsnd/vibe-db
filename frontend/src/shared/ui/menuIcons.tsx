@@ -7,6 +7,7 @@ import {
   Copy,
   CopyPlus,
   Database,
+  Download,
   Eraser,
   Eye,
   EyeOff,
@@ -30,6 +31,7 @@ import {
   TextCursorInput,
   Trash2,
   Unplug,
+  Upload,
   Zap,
 } from 'lucide-react'
 
@@ -49,6 +51,10 @@ export const ICON = {
   console: <SquareTerminal size={SIZE} />,
   executeFile: <FileCode2 size={SIZE} />,
   dump: <FileDown size={SIZE} />,
+  // The two wizards point the way the data moves, which is the one thing a reader has to be sure
+  // of before they open either: `import` fills a table, `export` empties one into files.
+  importWizard: <Upload size={SIZE} />,
+  exportWizard: <Download size={SIZE} />,
   colour: <Palette size={SIZE} />,
 
   newDatabase: <Database size={SIZE} />,
