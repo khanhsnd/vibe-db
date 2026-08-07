@@ -4,6 +4,7 @@ import {
   CONNECTION_COLOURS,
   engineInfo,
   engineWords,
+  hasToolkit,
   type EngineInfo,
   type EngineWords,
   type Namespace,
@@ -20,6 +21,7 @@ import { tableActions, type TableActions } from '@/features/schema/tableActions'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { useBackupsStore } from '@/stores/backups'
 import { tableKey, useConnectionsStore, type ChangeSchema } from '@/stores/connections'
+import { useToolsStore } from '@/stores/dbtool'
 import { useSchemaStore, type SchemaRequest } from '@/stores/schema'
 import {
   COMPARE_ARROW,
@@ -133,6 +135,7 @@ export function useTreeMenu(
   const reportError = useConnectionsStore((s) => s.reportError)
   const askBackup = useBackupsStore((s) => s.ask)
   const askRestore = useBackupsStore((s) => s.askRestore)
+  const askTool = useToolsStore((s) => s.ask)
   const ask = useSchemaStore((s) => s.ask)
   const askAddField = useSchemaStore((s) => s.askAddField)
 
@@ -248,6 +251,23 @@ export function useTreeMenu(
         },
       ]
 
+      // The engine's **own** pair of programs, named after themselves: a reader who has installed
+      // MongoDB Database Tools is looking for the word `mongodump`, not for "Dump".
+      //
+      // They sit below the wizards because all four carry this namespace somewhere, and apart from
+      // them because what these write is not this app's — it is the vendor's own format, and it
+      // goes back with that vendor's own program and with nothing else. Both are drawn whether or
+      // not the program is on this machine: an item nobody can see is a feature nobody finds, and
+      // the dialog is where a missing program is said and answered.
+      const toolItems: MenuItem[] = hasToolkit(info)
+        ? (['dump', 'restore'] as const).map((mode, at) => ({
+            label: `${mode === 'dump' ? info.dumpTool : info.restoreTool}…`,
+            icon: mode === 'dump' ? ICON.toolDump : ICON.toolRestore,
+            separatorBefore: at === 0,
+            onSelect: () => askTool({ profileId: node.profileId, namespace: ns, mode }),
+          }))
+        : []
+
       // Offered wherever a namespace's tables are — the level that owns them, and the folder that
       // lists them — because that is the whole subject of a search: every table of one namespace.
       // It only ever reads, so nothing is confirmed and nothing is asked twice.
@@ -287,7 +307,7 @@ export function useTreeMenu(
         case 'database':
         case 'schema': {
           const own = ownsObjects(node)
-            ? [...newTable, findInSchema, dumpItems(''), ...wizards(''), refreshObjectList]
+            ? [...newTable, findInSchema, dumpItems(''), ...wizards(''), ...toolItems, refreshObjectList]
             : [
                 {
                   label: 'Refresh',
@@ -326,7 +346,7 @@ export function useTreeMenu(
         }
 
         case 'tables':
-          return [...newTable, findInSchema, dumpItems(''), ...wizards(''), refreshObjectList]
+          return [...newTable, findInSchema, dumpItems(''), ...wizards(''), ...toolItems, refreshObjectList]
 
         // A folder offers what goes in it, which on `Routines` is both kinds — no engine has a
         // folder for a function alone. Neither is offered where this engine's objects are not
@@ -492,6 +512,7 @@ export function useTreeMenu(
       reportError,
       askBackup,
       askRestore,
+      askTool,
       ask,
       askAddField,
       onConnect,

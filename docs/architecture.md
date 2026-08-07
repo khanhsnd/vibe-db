@@ -287,6 +287,43 @@ Which engines have one is a `domain` rule — `Engine.Backups`, true where state
 and write a row — and the frontend receives its answer as `hasBackups` rather than comparing names.
 Everything else is `domain.Unsupported` naming what is missing.
 
+## Running the engine's own programs
+
+`internal/dbtool` is the one place in this app that runs something that is not this app: mongodump
+and mongorestore, mysqldump and the mysql client, pg_dump and pg_restore. It sits beside `backup`
+in the dependency rule — `app` → `dbtool` → `domain` — and it is not a driver: it opens no
+connection, speaks no protocol, and reads not one byte of what the programs write.
+
+**Which pair an engine has is a `domain` rule**, `Engine.Toolkit`, and so is every option the pair
+offers: whether a dump has a structure half, whether a restore can drop what is there, whether
+either compresses. The dialog draws boxes from those flags, so a box that is not there is a thing
+the program has not got rather than one that does nothing.
+
+**What each program is *called* is `command.go`'s and nowhere else's.** The app says "put the rows
+back and drop what is there first"; pg_restore hears `--clean --if-exists` and mongorestore hears
+`--drop`. It is `sqlkit.Dialect`'s arrangement applied to three programs instead of five engines:
+one request, three spellings, no second speller anywhere.
+
+Three rules are the package's and are not negotiable:
+
+- **No secret is ever an argument.** A command line is readable by every process on the machine, so
+  a password is written to a file at `0600` and removed the moment the run ends. That is also what
+  lets the log open with the command line itself, which is the whole truth about what ran.
+- **A program is found, never guessed** — the `PATH`, and the *file* the reader pointed at, kept
+  per program in `tools.json`. A folder cannot say which of the things in it was meant, so the
+  picker asks for the file, and choosing one sets **that one alone**: filling in its pair from the
+  same directory would be a path nobody chose, which is the kind nobody thinks to check when the
+  wrong version runs. A chosen file that has gone comes back **not found but still named**, rather
+  than falling back quietly to a different copy. Anything else is `domain.ToolNotFoundError` naming
+  which of the two, rather than a run that fails with something the shell said.
+- **What the program prints is what the reader is shown**, in order, as it prints it. mongorestore
+  knows why it refused a document and this app does not.
+
+Two profiles are refused rather than run wrongly, both `domain.Unsupported`: a connection over an
+**SSH tunnel**, because that tunnel is an in-process dialer and listens on nothing, so there is no
+address to give a child process; and one signing in with a **cloud identity**, whose token is minted
+for one connection at the moment it is made. See [features/tools.md](features/tools.md).
+
 ## Comparing two tables
 
 `internal/compare` is the whole of the difference between two tables and knows nothing about how

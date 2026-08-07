@@ -16,7 +16,8 @@ foreign key, drop a view or a routine — **reading and writing the definition o
 or a procedure**, table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
 or SQL**, **backing a SQL namespace up into a folder the app keeps, and restoring
-one**, query tabs with completion that **run a whole script**, **a console that runs one statement
+one**, **running the engine's own mongodump, mysqldump or pg_dump — and putting one of those files
+back**, query tabs with completion that **run a whole script**, **a console that runs one statement
 at a time and keeps the transcript**, **running a file of statements against a connection**,
 **marking a connection with a colour that washes down the sidebar**, **a history of every statement
 run, kept on disk and put back in the editor by a double-click**, **a log of everything the window
@@ -51,6 +52,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | A view's or a routine's definition: reading it, declaring one, and saving it back | [features/definitions.md](features/definitions.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |
 | Backing a namespace up, the list of backups, and restoring one | [features/backup.md](features/backup.md) |
+| Running the engine's own mongodump, mysqldump or pg_dump — and putting one back | [features/tools.md](features/tools.md) |
 | The table tab: opening it, paging it, and its two panels | [features/table-tab.md](features/table-tab.md) |
 | Query tabs, Explain, a MongoDB tab, a Redis tab, running a whole script | [features/query-tab.md](features/query-tab.md) |
 | `Format`, what the editor says before anything runs, and the log every statement is kept in | [features/script.md](features/script.md) |

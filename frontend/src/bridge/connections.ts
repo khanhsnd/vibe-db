@@ -312,6 +312,14 @@ export interface EngineInfo {
   // that would put the database back, so the engines that have one are the engines whose statements
   // declare a table and write a row — see `domain.Engine.Backups`, which is where the rule lives.
   hasBackups: boolean
+  // What this engine's vendor calls its own dump and restore programs, and `''` where it ships no
+  // such pair. They are *names* rather than a boolean because the menu says them: a reader who has
+  // installed MongoDB Database Tools is looking for the word `mongodump`. Whether either is on
+  // this machine is not knowable here — that is `tools.toolkit`, which asks the Go side.
+  //
+  // These mirror `domain.Engine.Toolkit`, which is where the rule lives.
+  dumpTool: string
+  restoreTool: string
 }
 
 /**
@@ -397,6 +405,10 @@ export const ENGINES = [
     hasRoutines: true,
     hasTruncate: true,
     hasBackups: true,
+    dumpTool: 'mysqldump',
+    // The ordinary client, because mysqldump writes a plain script and running one is all it takes
+    // to put it back. It is the one of the three whose restore is not a program of its own.
+    restoreTool: 'mysql',
   },
   {
     value: 'postgres',
@@ -421,6 +433,8 @@ export const ENGINES = [
     hasRoutines: true,
     hasTruncate: true,
     hasBackups: true,
+    dumpTool: 'pg_dump',
+    restoreTool: 'pg_restore',
   },
   {
     // A SQLite database is a file, so there is no host, no port and nobody to be — the Database box
@@ -448,6 +462,10 @@ export const ENGINES = [
     hasRoutines: false,
     hasTruncate: false,
     hasBackups: true,
+    // A SQLite database is one file, so copying it *is* the dump. There is no client program to
+    // run and nothing for one to do that Explorer does not already.
+    dumpTool: '',
+    restoreTool: '',
   },
   {
     // SQL Server names a table by its database *and* its schema, so the tree has both levels the
@@ -475,6 +493,10 @@ export const ENGINES = [
     hasRoutines: true,
     hasTruncate: true,
     hasBackups: true,
+    // SQL Server's own backup is a statement the *server* runs, writing to a path the server can
+    // see rather than one this machine has. There is no client program that carries a database out.
+    dumpTool: '',
+    restoreTool: '',
   },
   {
     // Oracle has no level between a connection and a schema: the Database box holds the *service*
@@ -503,6 +525,10 @@ export const ENGINES = [
     hasRoutines: true,
     hasTruncate: true,
     hasBackups: true,
+    // Oracle's Data Pump runs *inside* the instance and writes to a directory object the database
+    // owns, so `expdp` is not a program that carries anything to this machine.
+    dumpTool: '',
+    restoreTool: '',
   },
   {
     // A MongoDB server started without access control takes no credentials at all, which is why
@@ -530,7 +556,12 @@ export const ENGINES = [
     hasForeignKeys: false,
     hasRoutines: false,
     hasTruncate: false,
+    // A backup here is a file of statements, and a document store's are commands rather than a
+    // declaration and a row — but its *vendor* ships a pair of programs that carry the BSON
+    // itself, which is what these two are and why this engine has the second without the first.
     hasBackups: false,
+    dumpTool: 'mongodump',
+    restoreTool: 'mongorestore',
   },
   {
     // A Redis database is *numbered* rather than named — `0` to `15` on a default install — so the
@@ -558,11 +589,24 @@ export const ENGINES = [
     hasRoutines: false,
     hasTruncate: false,
     hasBackups: false,
+    // Redis persists itself — an RDB file the server writes where the server is — and there is no
+    // client program that pulls one back to this machine.
+    dumpTool: '',
+    restoreTool: '',
   },
 ] as const satisfies readonly EngineInfo[]
 
 export function engineInfo(engine: string): EngineInfo {
   return ENGINES.find((info) => info.value === engine) ?? ENGINES[0]
+}
+
+/**
+ * Whether this engine's vendor ships a dump and a restore program of its own. It is what decides
+ * whether the tree draws the two items at all — never whether they are *usable*, which is a fact
+ * about this machine and comes from `tools.toolkit`.
+ */
+export function hasToolkit(info: EngineInfo): boolean {
+  return info.dumpTool !== ''
 }
 
 // Switching engine brings the defaults of the new one with it, but only where the field

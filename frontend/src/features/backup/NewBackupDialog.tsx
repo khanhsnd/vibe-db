@@ -5,13 +5,13 @@ import { backups as api, defaultBackupRequest, type BackupResult } from '@/bridg
 import { engineWords, namespaceLabel } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { TransferLog } from '@/features/transfer/TransferLog'
-import { cn } from '@/lib/cn'
 import { Banner } from '@/shared/ui/Banner'
 import { Button } from '@/shared/ui/Button'
 import { Checkbox, TextArea } from '@/shared/ui/Field'
 import { Dialog } from '@/shared/ui/Dialog'
 import { Empty } from '@/shared/ui/Empty'
 import { Loading } from '@/shared/ui/Loading'
+import { TabStrip } from '@/shared/ui/TabStrip'
 import { useBackupsStore, type BackupTarget } from '@/stores/backups'
 import { namespaceKey, useConnectionsStore } from '@/stores/connections'
 
@@ -144,7 +144,7 @@ function NewBackupForm({ target, onClose, onDone }: NewBackupFormProps) {
 
   return (
     <div className="flex flex-col">
-      <TabStrip at={at} onMove={setAt} />
+      <TabStrip tabs={TABS} at={at} onMove={setAt} />
 
       {/* The panel is what scrolls, not the dialog: the footer holds Backup and has to stay
           reachable however long the table list under Object Selection runs. */}
@@ -203,31 +203,6 @@ function NewBackupForm({ target, onClose, onDone }: NewBackupFormProps) {
           Backup
         </Button>
       </div>
-    </div>
-  )
-}
-
-/** The strip across the top. Every tab is reachable at any time — see the dialog's own comment. */
-function TabStrip({ at, onMove }: { at: TabName; onMove: (to: TabName) => void }) {
-  return (
-    <div role="tablist" className="flex shrink-0 gap-1 border-b border-line bg-bar px-2 pt-1.5">
-      {TABS.map((tab) => (
-        <button
-          key={tab}
-          type="button"
-          role="tab"
-          aria-selected={tab === at}
-          onClick={() => onMove(tab)}
-          className={cn(
-            '-mb-px rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-medium',
-            tab === at
-              ? 'border-line bg-elevated text-fg'
-              : 'border-transparent text-muted hover:text-fg',
-          )}
-        >
-          {tab}
-        </button>
-      ))}
     </div>
   )
 }

@@ -64,6 +64,7 @@ answers [`UNSUPPORTED`](../errors.md) naming which — never a statement left fo
 | Read and write a definition | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Explain a statement | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Back up and restore | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| Its vendor's own dump program | ✓ | ✓ | | | | ✓ | |
 
 Four of those blanks are worth the sentence:
 
@@ -83,6 +84,11 @@ Four of those blanks are worth the sentence:
   the collection it reads and the pipeline over it — rather than by a statement, so there is
   nothing for an editor to open and nothing for a Save to put back. See
   [definitions.md](definitions.md#what-a-definition-is).
+- **Three engines have no dump program of their own, and MongoDB has one without having a backup.**
+  A SQLite database is one file, so copying it is the dump; SQL Server's backup is a statement the
+  *server* runs, writing where the server can see; Oracle's Data Pump runs inside the instance. And
+  a backup here is a file of *statements*, which a document store's commands are not — but its
+  vendor ships mongodump, which carries the BSON itself. See [tools.md](tools.md).
 - **Oracle makes no schema.** A schema there *is* a user, and making one is `CREATE USER … IDENTIFIED
   BY …` — an account with a password, a quota and a set of privileges. That is administration rather
   than the New Database dialog's business, and there is nowhere on the dialog for a password to go.

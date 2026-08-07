@@ -17,7 +17,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 ## Rules that must not be broken
 
 1. **The dependency rule is one-way:**
-   `internal/app` → `session / profile / secret / history / transfer / compare / backup` →
+   `internal/app` → `session / profile / secret / history / transfer / compare / backup / dbtool` →
    `internal/driver` → `internal/domain`.
    Business rules live in `domain`, not in the API layer. `internal/app` speaks `dto.go` wire types,
    never domain types. `frontend/src/bridge` is the only frontend directory allowed to import
@@ -93,6 +93,17 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     statement — MongoDB's view, a Redis key space — answers `domain.Unsupported` and says so to the
     frontend as `hasSource`.
 
+18. **An engine's own programs are run by `internal/dbtool`, and no secret is ever an argument.**
+    mongodump, mysqldump and pg_dump are the *vendor's* — this app opens no connection for them,
+    reads not one byte of what they write, and is not on the machine's hook for installing them.
+    Which pair an engine has and which of the four options that pair offers are `domain` rules
+    (`Engine.Toolkit`), so a box the dialog does not draw is a thing the program has not got. What
+    each program is *called* is `command.go`'s alone — one request, three spellings, the
+    `sqlkit.Dialect` arrangement applied to programs. A command line is readable by every process on
+    the machine, so a password goes in a file written at `0600` and removed when the run ends, which
+    is what lets the log open with the command line itself. A **tunnelled** profile and a **cloud
+    identity** are `domain.Unsupported` naming which, never run against the wrong host.
+
 14. **What a search matches is a `domain` rule; how many rows hold it is the driver's.**
     `domain.TextMatch` is the one rule — a pattern, an expression and a compiled matcher spelled from
     the same text — so `Contains` means the same thing of a row as of a column name. The data half is
@@ -139,6 +150,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Change a table tab, its paging, filtering or values | [docs/features/table-tab.md](docs/features/table-tab.md), [docs/features/row-limit.md](docs/features/row-limit.md), [docs/features/filter-sort.md](docs/features/filter-sort.md), [docs/features/value-viewer.md](docs/features/value-viewer.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file), [docs/features/transfer.md](docs/features/transfer.md) |
 | Touch a backup or a restore | [docs/architecture.md](docs/architecture.md#backing-a-database-up), [docs/features/backup.md](docs/features/backup.md) |
+| Touch mongodump, mysqldump, pg_dump — or anything this app *runs* | [docs/architecture.md](docs/architecture.md#running-the-engines-own-programs), [docs/features/tools.md](docs/features/tools.md) |
 | Touch a comparison of two tables | [docs/architecture.md](docs/architecture.md#comparing-two-tables), [docs/features/compare.md](docs/features/compare.md) |
 | Touch a search across a schema | [docs/architecture.md](docs/architecture.md#looking-for-text-across-a-schema), [docs/features/search.md](docs/features/search.md) |
 | Touch any table, grid, cell or selection | [docs/grid.md](docs/grid.md) |
@@ -152,8 +164,9 @@ A new failure mode needs all four of: a `domain` sentinel, a mapping in `errmap.
 
 A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `documents`, `keys`,
-`isFile`, `createsTables`, `createsDatabases`, `hasViews`, `hasSource`, `hasBackups`, `needsUser`,
-`needsDatabase`, `databaseLabel` — and never a comparison against an engine's name in a component.
+`isFile`, `createsTables`, `createsDatabases`, `hasViews`, `hasSource`, `hasBackups`, `dumpTool`,
+`restoreTool`, `needsUser`, `needsDatabase`, `databaseLabel` — and never a comparison against an
+engine's name in a component.
 The two exceptions are the lists that *are* per-engine data rather than a capability: the types a
 designer offers (`features/schema/dataTypes.ts`) and the dialect the editor highlights with
 (`features/editor/sqlLanguage.ts`).

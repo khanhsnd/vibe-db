@@ -25,3 +25,15 @@ type RowsCounted struct {
 	RunID   string `json:"runId"`
 	Fetched int    `json:"fetched"`
 }
+
+// EventToolLine is one line an engine's own dump or restore program printed, pushed the moment it
+// printed it. The call itself answers with the whole log as well, so a dialog opened on a finished
+// run misses nothing — but a dump of a hundred gigabytes says nothing for an hour if nobody is
+// listening while it runs, which is exactly the run a reader wants to watch.
+const EventToolLine = "tool:line"
+
+// ToolLine is that line, and which run printed it.
+type ToolLine struct {
+	RunID string `json:"runId"`
+	Text  string `json:"text"`
+}

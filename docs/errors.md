@@ -69,6 +69,8 @@ layer, and the three transport rows are mapped once in `sqlkit.TransportError`.
 | `TUNNEL_CREDENTIALS` | The bastion refused the user, the key, or the pass phrase; also a key file that cannot be read, and an agent that is not running |
 | `TUNNEL_HOST_KEY` | The bastion is not in `known_hosts`, or the key there is not the one it presented. The one failure of the three that may mean something is *wrong* rather than mistyped, which is why it is its own code |
 | `TOKEN_UNAVAILABLE` | A cloud identity this machine could not produce a token from. Nothing was sent to a database, so it is not a rejection; `detail` names the variable to set or the command to run |
+| `TOOL_NOT_FOUND` | One of the engine's **own** programs is not on this machine — not on the `PATH`, and not in the folder the app was pointed at. `field` names which of the two, and the reader answers it with `Locate…` on the dialog that raised it. Nothing was run — see [features/tools.md](features/tools.md#finding-the-program) |
+| `TOOL_FAILED` | One of those programs ran and ended badly. `message` is **its own last line**, because mongorestore knows why it refused a document and this app does not; `detail` is the program and the status it exited with. The whole of what it printed is in the dialog's Message Log rather than in the error |
 | `INTERNAL` | Anything unmapped; `detail` carries the original message |
 
 **The three tunnel codes are raised before the database is reached at all.** They come from

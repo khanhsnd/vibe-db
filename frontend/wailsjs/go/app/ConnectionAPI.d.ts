@@ -10,6 +10,10 @@ export function ApplyRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<void>;
 
 export function ApplyTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<app.TableChangeInput>):Promise<void>;
 
+export function ChooseToolFile(arg1:string,arg2:boolean,arg3:string):Promise<string>;
+
+export function ChooseToolProgram(arg1:string,arg2:string):Promise<app.Toolkit>;
+
 export function ChooseTransferFile(arg1:string):Promise<string>;
 
 export function ChooseTransferFolder():Promise<string>;
@@ -64,6 +68,8 @@ export function ExtractBackupSQL(arg1:string,arg2:app.Namespace,arg3:string):Pro
 
 export function FindInSchema(arg1:string,arg2:app.SearchInput):Promise<app.SearchResult>;
 
+export function ForgetToolProgram(arg1:string,arg2:string):Promise<app.Toolkit>;
+
 export function InsertRow(arg1:string,arg2:app.RowInsertInput):Promise<void>;
 
 export function ListBackups(arg1:string,arg2:app.Namespace):Promise<Array<app.Backup>>;
@@ -98,6 +104,8 @@ export function LoadTableSchemas(arg1:string,arg2:app.Namespace):Promise<Array<a
 
 export function LoadTableStructure(arg1:string,arg2:app.Namespace,arg3:string):Promise<app.TableStructure>;
 
+export function LoadToolkit(arg1:string):Promise<app.Toolkit>;
+
 export function NewSource(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<string>;
 
 export function OpenBackupFolder(arg1:string,arg2:app.Namespace):Promise<void>;
@@ -128,6 +136,10 @@ export function RunExport(arg1:string,arg2:app.ExportJobInput):Promise<app.Expor
 
 export function RunImport(arg1:string,arg2:app.ImportInput):Promise<app.ImportResult>;
 
+export function RunToolDump(arg1:string,arg2:app.ToolDumpInput):Promise<app.ToolResult>;
+
+export function RunToolRestore(arg1:string,arg2:app.ToolRestoreInput):Promise<app.ToolResult>;
+
 export function SaveProfile(arg1:app.ProfileInput):Promise<app.Profile>;
 
 export function SaveSource(arg1:string,arg2:app.Namespace,arg3:app.SourceSaveInput):Promise<void>;
@@ -137,6 +149,8 @@ export function SetPrimaryKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:Ar
 export function StopSearch(arg1:string):Promise<void>;
 
 export function StopTableRows(arg1:string):Promise<void>;
+
+export function StopTool(arg1:string):Promise<void>;
 
 export function TestConnection(arg1:app.ProfileInput):Promise<app.TestResult>;
 

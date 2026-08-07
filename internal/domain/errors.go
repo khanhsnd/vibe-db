@@ -50,7 +50,50 @@ var (
 	// not a rejection by the database — nothing was sent to one — and the reader fixes it where
 	// their cloud credentials live rather than in the profile.
 	ErrTokenUnavailable = errors.New("no cloud credentials to sign in with")
+
+	// The two ways running one of an engine's own programs fails — see Toolkit. They are separate
+	// sentinels because a reader answers them in different places: the first is a program that is
+	// not on this machine, which is fixed by installing it or pointing the app at it, and the
+	// second is the program having run and refused, which is answered in whatever it printed.
+	ErrToolNotFound = errors.New("that program is not on this machine")
+	ErrToolFailed   = errors.New("the program refused")
 )
+
+// ToolNotFoundError names the program that could not be found, so the reader is told which of the
+// two to install rather than only that something is missing.
+type ToolNotFoundError struct {
+	Tool string
+}
+
+func (e ToolNotFoundError) Error() string {
+	return e.Tool + ": " + ErrToolNotFound.Error()
+}
+
+func (e ToolNotFoundError) Unwrap() error {
+	return ErrToolNotFound
+}
+
+// ToolFailedError is one of an engine's own programs having run and ended badly. It carries the
+// program's *own* last words, which are the only useful ones: mongorestore knows why it refused a
+// document and this app does not.
+type ToolFailedError struct {
+	Tool string
+	// Status is what the program exited with, and 0 is a failure that was not an exit status at
+	// all — a cancelled run, or a program that could not be started.
+	Status  int
+	Message string
+}
+
+func (e ToolFailedError) Error() string {
+	if e.Message == "" {
+		return e.Tool + ": " + ErrToolFailed.Error()
+	}
+	return e.Tool + ": " + e.Message
+}
+
+func (e ToolFailedError) Unwrap() error {
+	return ErrToolFailed
+}
 
 // StatementError carries an engine's own rejection of a statement. Its message is
 // the only useful text for the user, so it survives the trip to the UI verbatim.

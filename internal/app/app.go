@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/khanhsnd/vibe-db/internal/backup"
+	"github.com/khanhsnd/vibe-db/internal/dbtool"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/mongo"
 	"github.com/khanhsnd/vibe-db/internal/driver/mysql"
@@ -44,6 +45,11 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("resolve config path: %w", err)
 	}
 
+	toolPath, err := dbtool.DefaultPath()
+	if err != nil {
+		return nil, fmt.Errorf("resolve config path: %w", err)
+	}
+
 	sessions := session.NewManager(engines())
 
 	return &App{
@@ -52,6 +58,7 @@ func New() (*App, error) {
 			keyring.New(),
 			sessions,
 			backup.New(backupRoot),
+			dbtool.New(toolPath),
 		),
 		Queries:  NewQueryAPI(sessions, historyfile.New(historyPath), history.NewLog()),
 		System:   NewSystemAPI(),

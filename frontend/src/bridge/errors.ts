@@ -19,6 +19,10 @@ export type ErrorCode =
   | 'TLS_UNSUPPORTED'
   | 'TLS_NOT_VERIFIED'
   | 'PASSWORD_NOT_FOUND'
+  // The two ways one of an engine's *own* programs fails: it is not on this machine, or it ran and
+  // refused. Neither is a server saying anything — see `features/tools.md`.
+  | 'TOOL_NOT_FOUND'
+  | 'TOOL_FAILED'
   | 'INTERNAL'
 
 export class AppError extends Error {

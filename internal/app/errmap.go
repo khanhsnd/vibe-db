@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 )
@@ -41,6 +42,12 @@ const (
 	CodeTunnelCredentials ErrorCode = "TUNNEL_CREDENTIALS"
 	CodeTunnelHostKey     ErrorCode = "TUNNEL_HOST_KEY"
 	CodeTokenUnavailable  ErrorCode = "TOKEN_UNAVAILABLE"
+
+	// The two ways one of an engine's *own* programs fails. Neither is a server saying anything:
+	// the first is a program this machine has not got, and the second is that program's own
+	// verdict, carried through in its words.
+	CodeToolNotFound ErrorCode = "TOOL_NOT_FOUND"
+	CodeToolFailed   ErrorCode = "TOOL_FAILED"
 
 	CodeInternal ErrorCode = "INTERNAL"
 )
@@ -119,6 +126,35 @@ func wrapError(err error) error {
 		return wireError{
 			Code:    CodeUnsupported,
 			Message: "This database does not support " + unsupportedErr.What + ".",
+		}
+	}
+
+	// A program that is not on this machine is named, because the reader's next move is to install
+	// that one — or to point the app at where it already is.
+	var missingTool domain.ToolNotFoundError
+	if errors.As(err, &missingTool) {
+		return wireError{
+			Code:    CodeToolNotFound,
+			Message: missingTool.Tool + " is not on this machine. Install it, or say where it is.",
+			Field:   missingTool.Tool,
+		}
+	}
+
+	// A program that ran and refused answers in its own last words, for the same reason a rejected
+	// statement does: mongorestore knows why it stopped and this app does not.
+	var failedTool domain.ToolFailedError
+	if errors.As(err, &failedTool) {
+		// A program that ended badly without saying anything is rare and is still not nothing: its
+		// own sentence stands in, so the reader is never shown an empty failure.
+		message := failedTool.Message
+		if message == "" {
+			message = failedTool.Error()
+		}
+		return wireError{
+			Code:    CodeToolFailed,
+			Message: message,
+			Field:   failedTool.Tool,
+			Detail:  failedTool.Tool + " exited " + strconv.Itoa(failedTool.Status),
 		}
 	}
 

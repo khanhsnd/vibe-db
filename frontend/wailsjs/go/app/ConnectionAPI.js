@@ -18,6 +18,14 @@ export function ApplyTableChanges(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['ApplyTableChanges'](arg1, arg2, arg3, arg4);
 }
 
+export function ChooseToolFile(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['ChooseToolFile'](arg1, arg2, arg3);
+}
+
+export function ChooseToolProgram(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['ChooseToolProgram'](arg1, arg2);
+}
+
 export function ChooseTransferFile(arg1) {
   return window['go']['app']['ConnectionAPI']['ChooseTransferFile'](arg1);
 }
@@ -126,6 +134,10 @@ export function FindInSchema(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['FindInSchema'](arg1, arg2);
 }
 
+export function ForgetToolProgram(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['ForgetToolProgram'](arg1, arg2);
+}
+
 export function InsertRow(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['InsertRow'](arg1, arg2);
 }
@@ -194,6 +206,10 @@ export function LoadTableStructure(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['LoadTableStructure'](arg1, arg2, arg3);
 }
 
+export function LoadToolkit(arg1) {
+  return window['go']['app']['ConnectionAPI']['LoadToolkit'](arg1);
+}
+
 export function NewSource(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['NewSource'](arg1, arg2, arg3, arg4);
 }
@@ -254,6 +270,14 @@ export function RunImport(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['RunImport'](arg1, arg2);
 }
 
+export function RunToolDump(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['RunToolDump'](arg1, arg2);
+}
+
+export function RunToolRestore(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['RunToolRestore'](arg1, arg2);
+}
+
 export function SaveProfile(arg1) {
   return window['go']['app']['ConnectionAPI']['SaveProfile'](arg1);
 }
@@ -272,6 +296,10 @@ export function StopSearch(arg1) {
 
 export function StopTableRows(arg1) {
   return window['go']['app']['ConnectionAPI']['StopTableRows'](arg1);
+}
+
+export function StopTool(arg1) {
+  return window['go']['app']['ConnectionAPI']['StopTool'](arg1);
 }
 
 export function TestConnection(arg1) {

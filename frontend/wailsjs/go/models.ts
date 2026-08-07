@@ -2094,6 +2094,160 @@ export namespace app {
 	        this.latencyMs = source["latencyMs"];
 	    }
 	}
+	export class ToolDumpInput {
+	    database: string;
+	    schema: string;
+	    runId: string;
+	    path: string;
+	    tables: string[];
+	    withStructure: boolean;
+	    withData: boolean;
+	    compress: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ToolDumpInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.runId = source["runId"];
+	        this.path = source["path"];
+	        this.tables = source["tables"];
+	        this.withStructure = source["withStructure"];
+	        this.withData = source["withData"];
+	        this.compress = source["compress"];
+	    }
+	}
+	export class ToolProgram {
+	    name: string;
+	    path: string;
+	    chosen: string;
+	    found: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ToolProgram(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.chosen = source["chosen"];
+	        this.found = source["found"];
+	    }
+	}
+	export class ToolRestoreInput {
+	    database: string;
+	    schema: string;
+	    runId: string;
+	    path: string;
+	    tables: string[];
+	    drop: boolean;
+	    dryRun: boolean;
+	    stopOnError: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ToolRestoreInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.runId = source["runId"];
+	        this.path = source["path"];
+	        this.tables = source["tables"];
+	        this.drop = source["drop"];
+	        this.dryRun = source["dryRun"];
+	        this.stopOnError = source["stopOnError"];
+	    }
+	}
+	export class ToolResult {
+	    program: string;
+	    path: string;
+	    failed: boolean;
+	    elapsedMs: number;
+	    messages: TransferMessage[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ToolResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.program = source["program"];
+	        this.path = source["path"];
+	        this.failed = source["failed"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.messages = this.convertValues(source["messages"], TransferMessage);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Toolkit {
+	    engine: string;
+	    dump: ToolProgram;
+	    restore: ToolProgram;
+	    extension: string;
+	    format: string;
+	    splitsStructure: boolean;
+	    drops: boolean;
+	    dryRuns: boolean;
+	    compresses: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Toolkit(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.engine = source["engine"];
+	        this.dump = this.convertValues(source["dump"], ToolProgram);
+	        this.restore = this.convertValues(source["restore"], ToolProgram);
+	        this.extension = source["extension"];
+	        this.format = source["format"];
+	        this.splitsStructure = source["splitsStructure"];
+	        this.drops = source["drops"];
+	        this.dryRuns = source["dryRuns"];
+	        this.compresses = source["compresses"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class TransferEncoding {
 	    value: string;
 	    label: string;

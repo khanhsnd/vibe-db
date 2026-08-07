@@ -21,6 +21,8 @@ import {
   FolderOpen,
   GitCompareArrows,
   GitMerge,
+  HardDriveDownload,
+  HardDriveUpload,
   Palette,
   PanelBottom,
   Pencil,
@@ -69,6 +71,12 @@ export const ICON = {
   backup: <Archive size={SIZE} />,
   restoreBackup: <ArchiveRestore size={SIZE} />,
   openFolder: <FolderOpen size={SIZE} />,
+
+  // The engine's *own* pair of programs. They wear a different glyph from a backup on purpose:
+  // what they write is the vendor's own format rather than statements this app spelled, and the
+  // two are never the same file — see `features/tools.md`.
+  toolDump: <HardDriveDownload size={SIZE} />,
+  toolRestore: <HardDriveUpload size={SIZE} />,
 
   newDatabase: <Database size={SIZE} />,
 

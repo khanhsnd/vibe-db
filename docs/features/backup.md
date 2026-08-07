@@ -10,6 +10,10 @@ engines whose statements declare a table and write a row; MongoDB and Redis get 
 all rather than a node that could only refuse — see `hasBackups`, and
 [architecture.md](../architecture.md#backing-a-database-up) for where that rule lives.
 
+It is also not [the engine's own dump program](tools.md). Those write the *vendor's* format to a
+file the reader names and have to be installed first; this writes statements this app spelled, into
+a folder the app keeps. MongoDB has the second without the first, which is exactly the difference.
+
 ## Where a backup is reached
 
 Three places, all naming the same namespace:

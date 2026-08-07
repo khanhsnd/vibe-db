@@ -12,6 +12,7 @@ import {
 } from '@/bridge/connections'
 import { NewBackupDialog } from '@/features/backup/NewBackupDialog'
 import { RestoreBackupDialog } from '@/features/backup/RestoreBackupDialog'
+import { ToolDialog } from '@/features/dbtool/ToolDialog'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
 import { ExecuteFileDialog } from '@/features/connections/ExecuteFileDialog'
 import { PasswordPrompt } from '@/features/connections/PasswordPrompt'
@@ -464,6 +465,8 @@ export function App() {
       <NewBackupDialog />
 
       <RestoreBackupDialog />
+
+      <ToolDialog />
 
       <SchemaDialogs />
 

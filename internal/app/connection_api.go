@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/khanhsnd/vibe-db/internal/backup"
+	"github.com/khanhsnd/vibe-db/internal/dbtool"
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/profile"
@@ -33,7 +34,10 @@ type ConnectionAPI struct {
 	secrets  secret.Store
 	sessions *session.Manager
 	backups  *backup.Store
-	runs     *runRegistry
+	// tools is where an engine's own dump and restore programs are found on this machine. It is
+	// not a driver and not a session: nothing it runs is this app, and nothing it runs is SQL.
+	tools *dbtool.Locator
+	runs  *runRegistry
 }
 
 func NewConnectionAPI(
@@ -41,6 +45,7 @@ func NewConnectionAPI(
 	secrets secret.Store,
 	sessions *session.Manager,
 	backups *backup.Store,
+	tools *dbtool.Locator,
 ) *ConnectionAPI {
 	return &ConnectionAPI{
 		apiContext: newAPIContext(),
@@ -48,6 +53,7 @@ func NewConnectionAPI(
 		secrets:    secrets,
 		sessions:   sessions,
 		backups:    backups,
+		tools:      tools,
 		runs:       newRunRegistry(),
 	}
 }
