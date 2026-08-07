@@ -71,11 +71,15 @@ the statement was a `DELETE` or a `deleteMany`.
 
 Completion fires as you type and on `Ctrl`+`Space`. On SQL it has four sources:
 
-- **Tables** of the tab's namespace, with their column count as the hint.
-- **Qualified columns**, after `table.` or `alias.` — `FROM orders o … o.` resolves the alias.
+- **Tables** of the tab's namespace, with their column count as the hint, and the **sibling
+  namespaces** beside it by name.
+- **Qualified columns**, after `table.` or `alias.` — `FROM orders o … o.` resolves the alias. A
+  sibling namespace is one more level of the same thing: `warehouse.` offers its tables,
+  `warehouse.stock.` offers their columns, and `FROM warehouse.stock s … s.` resolves through both.
 - **Bare columns** anywhere else in the statement — after `SELECT`, after `WHERE`, after
   `ORDER BY` — drawn from every table that statement names, each labelled with its table. A join
-  offers both sides. This is a source of ours, not lang-sql's, which only completes behind a dot.
+  offers both sides, whichever namespace each side is in. This is a source of ours, not lang-sql's,
+  which only completes behind a dot.
 - **Keywords** of the dialect, offered upper-case, and **statement snippets** (`select`, `insert`,
   `join`, `group by`, `with`, …). `Tab` walks the snippet's fields.
 
@@ -86,6 +90,30 @@ schema has anything useful to say.
 `information_schema.columns` on MySQL, `pg_attribute` on PostgreSQL — cached per
 connection-and-namespace until disconnect. Switching the toolbar's database or schema reconfigures
 completion in place rather than rebuilding the editor.
+
+### Joining across namespaces
+
+A join whose two tables live apart is an ordinary statement — a qualified name is all it takes — so
+completion holds more than one namespace at a time, and `useQuerySchema` is what decides which.
+
+- A **sibling** is whatever varies below a connection: a *database* where a table is qualified by
+  one (MySQL, Oracle, SQLite), a *schema* where it is qualified by that instead (PostgreSQL, SQL
+  Server). A document store and a key space qualify nothing, so neither has siblings.
+- Every sibling is **offered by name** as soon as the connection knows it is there, which is what
+  makes the list a way of finding out what exists.
+- A sibling is only **read** once the script names it: each read is a catalogue scan and a server
+  can hold hundreds of databases, so reading all of them to open an empty tab is a cost nobody
+  asked for. The trigger is the name appearing **anywhere in the buffer**, not a dot after it —
+  which is what puts the tables in hand before the dot is typed.
+- A **three-part** name is not completed. SQL Server's `other_db.dbo.Orders` runs, but the schemas
+  of a database nothing is pointed at have never been listed, so there is nothing to offer under
+  them.
+
+`sqlLanguage` hands lang-sql **one** namespace whose keys are the sibling names, because lang-sql
+nests a namespace by splitting a key on the dot and resolves an alias through however many levels
+it finds — so nothing here walks a path or resolves an alias itself. A table of the tab's own
+namespace still wins the bare name, since that is what an unqualified name means, and is reachable
+qualified as well.
 
 **Completion inserts the form that will actually run.** PostgreSQL folds an unquoted identifier to
 lower case, so a table created as `AIFolders` reaches the server as `aifolders` and only resolves

@@ -6,12 +6,13 @@ import { AppError, toAppError } from '@/bridge/errors'
 import { NEW_SOURCE, schema, type SourceRef } from '@/bridge/schema'
 import { NO_DIAGNOSTICS } from '@/features/editor/diagnostics'
 import { EditorPane } from '@/features/editor/EditorPane'
+import { useQuerySchema } from '@/features/editor/useQuerySchema'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import { ResultTabs } from '@/features/results/ResultTabs'
 import { Banner } from '@/shared/ui/Banner'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
-import { namespaceKey, useConnectionsStore } from '@/stores/connections'
+import { useConnectionsStore } from '@/stores/connections'
 import { SOURCE_NOUN, useTabsStore } from '@/stores/tabs'
 
 import { changeRows } from './designerRows'
@@ -27,8 +28,6 @@ interface SourceEditorProps {
   /** Whether it is being declared rather than altered — see `SourceTab.creating`. */
   creating: boolean
 }
-
-const NO_SCHEMA: never[] = []
 
 /**
  * A view's or a routine's definition, edited as the statement it is. It is `TableDesigner`'s
@@ -55,12 +54,6 @@ export function SourceEditor({
   const engine = useConnectionsStore(
     (s) => s.profiles.find((profile) => profile.id === profileId)?.engine ?? '',
   )
-  // The same table names the query editor completes against, read the same way and cached until
-  // disconnect: a view's body is a query, and a query is what completion is for.
-  const tableSchemas = useConnectionsStore(
-    (s) => s.tableSchemas[namespaceKey(profileId, namespace)] ?? NO_SCHEMA,
-  )
-  const loadTableSchemas = useConnectionsStore((s) => s.loadTableSchemas)
   const changeSchema = useConnectionsStore((s) => s.changeSchema)
   const declared = useTabsStore((s) => s.declared)
 
@@ -69,9 +62,9 @@ export function SourceEditor({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<AppError | null>(null)
 
-  useEffect(() => {
-    void loadTableSchemas(profileId, namespace)
-  }, [loadTableSchemas, profileId, namespace])
+  // The same tables the query editor completes against, reaching the same way into the namespaces
+  // beside this one: a view's body is a query, and a query is what completion is for.
+  const querySchema = useQuerySchema(profileId, namespace, engine, definition ?? '')
 
   // A new object opens on the engine's own skeleton and an existing one on the server's own words.
   // Both are a *read*, and neither is spelled here — see `driver.Schema.NewSource` and `Source`.
@@ -183,7 +176,7 @@ export function SourceEditor({
               content: (
                 <EditorPane
                   value={definition}
-                  schema={tableSchemas}
+                  schema={querySchema}
                   engine={engine}
                   review={NO_DIAGNOSTICS}
                   onChange={setDefinition}

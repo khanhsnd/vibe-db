@@ -12,12 +12,12 @@ import {
 } from '@codemirror/view'
 import { useEffect, useImperativeHandle, useRef, type Ref } from 'react'
 
-import type { TableSchema } from '@/bridge/connections'
 import { useSettingsStore } from '@/stores/settings'
 
 import { diagnostics, position, showDiagnostics, type Diagnostics } from './diagnostics'
 import { editorTheme } from './editorTheme'
 import { queryLanguage } from './queryLanguage'
+import type { QuerySchema } from './sqlLanguage'
 
 // QueryWorkspace runs the query and lays it out from window listeners, so the editor only has to
 // keep defaultKeymap from inserting a blank line on the same chord.
@@ -56,7 +56,7 @@ interface EditorPaneProps {
   value: string
   onChange: (value: string) => void
   onSelectionChange: (selected: string) => void
-  schema: TableSchema[]
+  schema: QuerySchema
   engine: string
   /** What the last review found, marked in the text itself — see `diagnostics.ts`. */
   review: Diagnostics

@@ -1,11 +1,11 @@
 import type { Extension } from '@codemirror/state'
 import { placeholder } from '@codemirror/view'
 
-import { engineInfo, type TableSchema } from '@/bridge/connections'
+import { engineInfo } from '@/bridge/connections'
 
 import { commandLanguage } from './commandLanguage'
 import { shellLanguage } from './shellLanguage'
-import { sqlLanguage } from './sqlLanguage'
+import { sqlLanguage, type QuerySchema } from './sqlLanguage'
 
 /**
  * The language the editor is in, which is the engine's. Two of the four write SQL and differ only
@@ -17,14 +17,14 @@ import { sqlLanguage } from './sqlLanguage'
  * here decides what a command *does*** — that is the driver's `Review`, which the editor asks for
  * and never re-derives; see docs/editor.md.
  */
-export function queryLanguage(tables: TableSchema[], engine: string): Extension {
+export function queryLanguage(schema: QuerySchema, engine: string): Extension {
   const info = engineInfo(engine)
 
   if (info.keys) {
     return [placeholder('SCAN 0 MATCH * COUNT 100'), commandLanguage()]
   }
   if (info.documents) {
-    return [placeholder('db.collection.find({ ... })'), shellLanguage(tables)]
+    return [placeholder('db.collection.find({ ... })'), shellLanguage(schema.tables)]
   }
-  return [placeholder('SELECT * FROM ...'), sqlLanguage(tables, engine)]
+  return [placeholder('SELECT * FROM ...'), sqlLanguage(schema, engine)]
 }

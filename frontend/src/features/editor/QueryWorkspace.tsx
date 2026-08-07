@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { engineInfo, namespaceOf, type TableSchema } from '@/bridge/connections'
+import { engineInfo, namespaceOf } from '@/bridge/connections'
 import type { HistoryEntry } from '@/bridge/history'
 import { needsConfirming, queries, type ScriptReview } from '@/bridge/query'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
-import { namespaceKey, useConnectionsStore } from '@/stores/connections'
 import { IDLE_RUN, useQueriesStore } from '@/stores/queries'
 import { useTabsStore, type QueryTab } from '@/stores/tabs'
 
@@ -13,9 +12,8 @@ import { QueryOutput } from './QueryOutput'
 import { QueryToolbar } from './QueryToolbar'
 import { RunGuard } from './RunGuard'
 import { ScriptProblems } from './ScriptProblems'
+import { useQuerySchema } from './useQuerySchema'
 import { useScriptReview } from './useScriptReview'
-
-const NO_SCHEMA: TableSchema[] = []
 
 interface QueryWorkspaceProps {
   tab: QueryTab
@@ -42,22 +40,8 @@ export function QueryWorkspace({
   const { hasSchemas } = engineInfo(engine)
   const { database, schema } = tab.namespace
 
-  const tableSchemas = useConnectionsStore(
-    (s) => s.tableSchemas[namespaceKey(tab.profileId, tab.namespace)] ?? NO_SCHEMA,
-  )
-  const loadSchemas = useConnectionsStore((s) => s.loadSchemas)
-  const loadTableSchemas = useConnectionsStore((s) => s.loadTableSchemas)
-
-  // The toolbar's own schema list, for a database the tree may never have been expanded on.
-  useEffect(() => {
-    if (hasSchemas && database !== '') void loadSchemas(tab.profileId, database)
-  }, [hasSchemas, loadSchemas, tab.profileId, database])
-
-  useEffect(() => {
-    if (hasSchemas ? schema !== '' : database !== '') {
-      void loadTableSchemas(tab.profileId, tab.namespace)
-    }
-  }, [hasSchemas, loadTableSchemas, tab.profileId, tab.namespace, database, schema])
+  // The tables completion offers — this tab's namespace, and every other one the script joins to.
+  const querySchema = useQuerySchema(tab.profileId, tab.namespace, engine, tab.sql)
 
   // A selection narrows what runs, the way every other client works. It is a ref because
   // dragging over the text would otherwise re-render the whole workspace.
@@ -222,7 +206,7 @@ export function QueryWorkspace({
           <EditorPane
             ref={editor}
             value={tab.sql}
-            schema={tableSchemas}
+            schema={querySchema}
             engine={engine}
             review={review}
             onChange={(sql) => editQuery(tab.id, { sql })}

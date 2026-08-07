@@ -19,6 +19,18 @@ import type { EditorState, Extension } from '@codemirror/state'
 
 import type { TableSchema } from '@/bridge/connections'
 
+/**
+ * The tables one editor completes from. `tables` is the namespace it is pointed at, whose tables a
+ * statement reaches by name alone; `qualified` is every sibling namespace of the same connection,
+ * keyed by the name that qualifies a table living in it — a database on MySQL, a schema on
+ * PostgreSQL. That key is the whole of what makes `orders o JOIN warehouse.stock s` complete on
+ * both sides. Which namespaces are in it, and when they are read, is `useQuerySchema`'s.
+ */
+export interface QuerySchema {
+  tables: TableSchema[]
+  qualified: Record<string, TableSchema[]>
+}
+
 // `${…}` marks a field the caret jumps between with Tab. The label is what the user
 // types to reach the snippet, so it stays lower-case even though the body is not.
 const SNIPPETS: readonly Completion[] = [
@@ -73,12 +85,27 @@ function foldedBy(plain: RegExp): (name: string) => string {
   return (name) => (plain.test(name) ? name : `"${name.replaceAll('"', '""')}"`)
 }
 
-// lang-sql keys its namespace by table name and resolves `FROM users u` aliases itself,
-// so one flat map of the active namespace is the whole schema it needs.
-function toNamespace(tables: TableSchema[], quote: (name: string) => string): SQLNamespace {
+/**
+ * lang-sql resolves `FROM users u` aliases itself and nests a namespace by splitting its keys on
+ * the dot, so naming a sibling namespace at the top is the whole of cross-namespace completion:
+ * `warehouse.` offers its tables, `warehouse.stock.` offers their columns, and `FROM
+ * warehouse.stock s … s.` resolves through both.
+ */
+function toNamespace(schema: QuerySchema, quote: (name: string) => string): SQLNamespace {
+  const siblings = Object.entries(schema.qualified).map(([name, tables]) => [
+    escapeDots(name),
+    tablesOf(tables, quote),
+  ])
+
+  // A table of the editor's own namespace wins the bare name, because that is what an unqualified
+  // name means; a sibling's table of the same name is still reached through its qualifier.
+  return { ...Object.fromEntries(siblings), ...tablesOf(schema.tables, quote) }
+}
+
+function tablesOf(tables: TableSchema[], quote: (name: string) => string): SQLNamespace {
   return Object.fromEntries(
     tables.map((table) => [
-      table.name,
+      escapeDots(table.name),
       {
         self: {
           label: table.name,
@@ -93,6 +120,21 @@ function toNamespace(tables: TableSchema[], quote: (name: string) => string): SQ
       },
     ]),
   )
+}
+
+// A dot in a key is how lang-sql is told to nest one level inside another, so a name that holds
+// one of its own has to say that is what it is.
+const escapeDots = (name: string) => name.replaceAll('.', '\\.')
+
+// Every table the statement could be naming, written the way it would have to be written: a
+// sibling namespace's table is only reachable qualified, and that is what the reader sees.
+function reachable({ tables, qualified }: QuerySchema): TableSchema[] {
+  return [
+    ...tables,
+    ...Object.entries(qualified).flatMap(([name, siblings]) =>
+      siblings.map((table) => ({ name: `${name}.${table.name}`, columns: table.columns })),
+    ),
+  ]
 }
 
 // lang-sql only offers columns behind a `table.` prefix. Everywhere else in a statement
@@ -137,7 +179,14 @@ function dialectFor(engine: string): SQLDialect {
   return DIALECTS[engine] ?? MySQL
 }
 
-// Any word in the statement that names a table counts, rather than only the one after
+// A name is one word, or several joined by dots. Every quoting is read whatever the engine, since
+// only one of them can be an identifier in a given statement and the others cannot name a table
+// anyway.
+const PART = String.raw`\`[^\`]+\`|"[^"]+"|\[[^\]]+\]|[\w$]+`
+const PARTS = new RegExp(PART, 'g')
+const PATH = new RegExp(String.raw`(?:${PART})(?:\s*\.\s*(?:${PART}))*`, 'g')
+
+// Any name in the statement that names a table counts, rather than only the one after
 // FROM. That reads aliased and joined tables for free, and it also catches the tables
 // whose name is a reserved word, which the parser hands back as a keyword token.
 function tablesInStatement(
@@ -150,15 +199,24 @@ function tablesInStatement(
   const end = doc.indexOf(';', pos)
   const statement = doc.slice(start, end === -1 ? doc.length : end)
 
-  // Both quotings are read whatever the engine, since only one of them can be an
-  // identifier in a given statement and the other cannot name a table anyway.
   const found = new Map<string, TableSchema>()
-  for (const [word] of statement.matchAll(/`[^`]+`|"[^"]+"|[\w$]+/g)) {
-    const table = byName.get(word.replaceAll('`', '').replaceAll('"', '').toLowerCase())
-    if (table) found.set(table.name, table)
+  for (const [path] of statement.matchAll(PATH)) {
+    const parts = (path.match(PARTS) ?? []).map(unquote)
+
+    // A path is read longest first: `warehouse.stock.sku` names the table `warehouse.stock`, and
+    // `stock.sku` names `stock`.
+    for (let held = parts.length; held > 0; held--) {
+      const table = byName.get(parts.slice(0, held).join('.').toLowerCase())
+      if (table) {
+        found.set(table.name, table)
+        break
+      }
+    }
   }
   return [...found.values()]
 }
+
+const unquote = (part: string) => (/^[`"[]/.test(part) ? part.slice(1, -1) : part)
 
 // Neither source belongs where the schema is already answering — after `alias.`, inside
 // a string, inside a comment.
@@ -170,11 +228,11 @@ const OFF_LIMITS = [
   'BlockComment',
 ]
 
-export function sqlLanguage(tables: TableSchema[], engine: string): Extension {
+export function sqlLanguage(schema: QuerySchema, engine: string): Extension {
   const quote = quoterFor(engine)
   const support = sql({
     dialect: dialectFor(engine),
-    schema: toNamespace(tables, quote),
+    schema: toNamespace(schema, quote),
     upperCaseKeywords: true,
   })
 
@@ -184,7 +242,7 @@ export function sqlLanguage(tables: TableSchema[], engine: string): Extension {
       autocomplete: ifNotIn(OFF_LIMITS, completeFromList(SNIPPETS)),
     }),
     support.language.data.of({
-      autocomplete: ifNotIn(OFF_LIMITS, bareColumnSource(tables, quote)),
+      autocomplete: ifNotIn(OFF_LIMITS, bareColumnSource(reachable(schema), quote)),
     }),
   ]
 }
