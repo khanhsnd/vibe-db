@@ -18,14 +18,16 @@ type QueryAPI struct {
 
 	sessions *session.Manager
 	history  history.Repository
+	log      *history.Log
 	runs     *runRegistry
 }
 
-func NewQueryAPI(sessions *session.Manager, log history.Repository) *QueryAPI {
+func NewQueryAPI(sessions *session.Manager, kept history.Repository, log *history.Log) *QueryAPI {
 	return &QueryAPI{
 		apiContext: newAPIContext(),
 		sessions:   sessions,
-		history:    log,
+		history:    kept,
+		log:        log,
 		runs:       newRunRegistry(),
 	}
 }
@@ -67,6 +69,7 @@ func (a *QueryAPI) runScript(
 	statements []string,
 ) (ScriptResult, error) {
 	script := ScriptResult{Statements: make([]StatementOutcome, 0, len(statements))}
+	noting := newStatementLog(a.log, a.sessions, sessionID, input.Namespace)
 
 	for _, statement := range statements {
 		query := input.toDriver()
@@ -75,6 +78,7 @@ func (a *QueryAPI) runScript(
 		started := time.Now()
 		result, err := a.sessions.Query(ctx, sessionID, query)
 		elapsed := time.Since(started)
+		noting.note(statement, elapsed, err)
 
 		if err != nil {
 			if len(statements) == 1 {
@@ -170,6 +174,58 @@ func (a *QueryAPI) ListHistory() ([]HistoryEntry, error) {
 // reader who wants it gone wants it gone.
 func (a *QueryAPI) ClearHistory() error {
 	return wrapError(a.history.Clear())
+}
+
+// ListLog answers with the statements the app has run since it started, oldest first, and only the
+// ones numbered past `after` — which is how the viewer asks for what it has not already drawn
+// rather than being handed the whole log every second. Nothing here can fail: the log is memory,
+// and a bound method that cannot fail does not pretend it can.
+func (a *QueryAPI) ListLog(after int64) []LogEntry {
+	return toLogDTOs(a.log.Since(after))
+}
+
+// ClearLog empties the viewer's log. It forgets nothing a server did and nothing the *history*
+// holds — those are two different logs, kept for two different questions; see history.Log.
+func (a *QueryAPI) ClearLog() {
+	a.log.Clear()
+}
+
+// statementLog is where a run's statements are noted, and who ran them. The connection is read
+// once for the whole run rather than once a statement: a session's name and engine cannot change
+// while its statements do.
+type statementLog struct {
+	log *history.Log
+	// who is every field of an entry that is the run's rather than the statement's.
+	who domain.LogEntry
+}
+
+func newStatementLog(
+	log *history.Log,
+	sessions *session.Manager,
+	sessionID string,
+	ns Namespace,
+) statementLog {
+	who := domain.LogEntry{Database: ns.Database, Schema: ns.Schema}
+	// A session that has gone leaves the line unnamed rather than unwritten. What ran is the fact
+	// the log exists for, and it is not worth losing to a connection that closed underneath it.
+	if opened, err := sessions.Get(sessionID); err == nil {
+		who.Connection = opened.Profile.Name
+		who.Engine = opened.Profile.Engine
+	}
+	return statementLog{log: log, who: who}
+}
+
+// note keeps one statement whatever became of it, a statement the server refused being the one a
+// reader watching a log is most often looking for.
+func (s statementLog) note(sql string, elapsed time.Duration, err error) {
+	entry := s.who
+	entry.RanAt = time.Now()
+	entry.SQL = sql
+	entry.ElapsedMs = elapsed.Milliseconds()
+	if err != nil {
+		_, entry.Error = wireFields(err)
+	}
+	s.log.Note(entry)
 }
 
 // remember keeps the text the reader executed whatever became of it, a rejected statement being

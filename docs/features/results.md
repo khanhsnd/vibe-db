@@ -25,8 +25,12 @@ how anybody wants to quote an error.
 ### The history pane
 
 `History` is every statement **this connection** has run, newest first, in a `ResultGrid` like
-everything else that shows rows and columns: `When`, `Statement`, `Database`, `Runs`, `Rows`,
-`Time (ms)` and `Message`, which reads `OK` or the server's own wording exactly as `Messages` does.
+everything else that shows rows and columns. Its sibling is the
+[History Log](log.md), which answers the other question — every *run* in the order it happened,
+across every connection — and the table there is what tells the two apart.
+
+The columns are `When`, `Statement`, `Database`, `Runs`, `Rows`, `Time (ms)` and `Message`, which
+reads `OK` or the server's own wording exactly as `Messages` does.
 
 - **A double-click loads a row's statement into the editor**, which is what the log is for; the grid
   is read-only, so a click has nothing else to mean. It brings **the namespace it ran in** with it,

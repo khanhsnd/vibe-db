@@ -1,4 +1,6 @@
-// Package history keeps the statements a reader has run, so that one can be found and run again.
+// Package history keeps the statements a reader has run, twice over and for two different
+// questions: Repository holds one entry per statement so that one can be found and run again, and
+// Log holds every run of every statement in order so that a reader can watch what the app is doing.
 package history
 
 import "github.com/khanhsnd/vibe-db/internal/domain"

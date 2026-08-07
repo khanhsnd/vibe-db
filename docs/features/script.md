@@ -61,12 +61,16 @@ reader learned to ignore it, which costs more than the warning saved.
 
 ## Every statement run is kept
 
-**Execute writes what it ran into a log on disk**, and the `History` pane is that log — see
-[the history pane](results.md#the-history-pane). It is kept whatever became of the statement, a
-rejected one being among the likeliest to be wanted back, and it is written after the run rather
-than before, so what is remembered is what actually happened. A log that cannot be written is dropped rather than
-reported: it is not a failure the reader can act on, and certainly not one the query they just ran
-should be reported as.
+**Execute writes what it ran into two logs, which answer two different questions.** The one on disk
+is the `History` pane's and is described here; the other is the
+[History Log](log.md), which is every *run* in the order it happened, across every connection, and
+is where a reader goes to find out what the window has been doing rather than what to run again.
+
+The pane's log — see [the history pane](results.md#the-history-pane) — is kept whatever became of
+the statement, a rejected one being among the likeliest to be wanted back, and it is written after
+the run rather than before, so what is remembered is what actually happened. A log that cannot be
+written is dropped rather than reported: it is not a failure the reader can act on, and certainly
+not one the query they just ran should be reported as.
 
 - **The log is one entry per statement, not per Execute.** A statement run again is *moved* to the
   head with its `Runs` counted up, rather than added beside itself — five hundred copies of one

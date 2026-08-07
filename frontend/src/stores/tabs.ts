@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import { namespaceLabel, type Namespace } from '@/bridge/connections'
+import { namespaceLabel, NO_NAMESPACE, type Namespace } from '@/bridge/connections'
 
 import type { SearchMode, SearchScope } from '@/bridge/search'
 import type { SourceKind, SourceRef } from '@/bridge/schema'
@@ -20,6 +20,7 @@ export type TabKind =
   | 'compare'
   | 'find'
   | 'backups'
+  | 'log'
 
 /** Which half of two tables a comparison is reading: their shapes, or their rows. */
 export type CompareMode = 'structure' | 'data'
@@ -129,6 +130,16 @@ export interface BackupsTab extends TabBase {
   kind: 'backups'
 }
 
+/**
+ * Every statement the app has run since it started — what `Tools ▸ History Log` opens. It is the
+ * one tab that belongs to no connection: what it shows is the *window's* doing, across all of them,
+ * so its `profileId` and namespace are empty and the strip draws neither. There is one of it for
+ * the same reason.
+ */
+export interface LogTab extends TabBase {
+  kind: 'log'
+}
+
 export type Tab =
   | QueryTab
   | TableTab
@@ -139,6 +150,7 @@ export type Tab =
   | CompareTab
   | FindTab
   | BackupsTab
+  | LogTab
 export type NewTab =
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
@@ -149,6 +161,7 @@ export type NewTab =
   | Omit<CompareTab, 'id'>
   | Omit<FindTab, 'id'>
   | Omit<BackupsTab, 'id'>
+  | Omit<LogTab, 'id'>
 
 /** What names a table wherever one is opened: which connection, which namespace, which table. */
 export interface TableTarget {
@@ -216,6 +229,8 @@ interface TabsState {
   setCompareMode: (id: string, mode: CompareMode) => void
   /** Every table of a namespace searched for one piece of text. */
   openFind: (profileId: string, namespace: Namespace) => string
+  /** Every statement the app has run. One tab, belonging to no connection — see `LogTab`. */
+  openLog: () => string
   close: (id: string) => void
   activate: (id: string) => void
   /** Points a tab at another namespace, which is what the picker on its own strip does. */
@@ -357,6 +372,9 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       mode: 'contains',
       caseInsensitive: false,
     }),
+
+  openLog: () =>
+    get().open({ kind: 'log', title: 'History Log', profileId: '', namespace: NO_NAMESPACE }),
 
   close: (id) => {
     useQueriesStore.getState().discard(id)

@@ -14,12 +14,20 @@ export function ClearHistory() {
   return window['go']['app']['QueryAPI']['ClearHistory']();
 }
 
+export function ClearLog() {
+  return window['go']['app']['QueryAPI']['ClearLog']();
+}
+
 export function Format(arg1, arg2) {
   return window['go']['app']['QueryAPI']['Format'](arg1, arg2);
 }
 
 export function ListHistory() {
   return window['go']['app']['QueryAPI']['ListHistory']();
+}
+
+export function ListLog(arg1) {
+  return window['go']['app']['QueryAPI']['ListLog'](arg1);
 }
 
 export function Review(arg1, arg2) {

@@ -8,9 +8,13 @@ export function ChooseScriptFile():Promise<string>;
 
 export function ClearHistory():Promise<void>;
 
+export function ClearLog():Promise<void>;
+
 export function Format(arg1:string,arg2:string):Promise<string>;
 
 export function ListHistory():Promise<Array<app.HistoryEntry>>;
+
+export function ListLog(arg1:number):Promise<Array<app.LogEntry>>;
 
 export function Review(arg1:string,arg2:string):Promise<app.ScriptReview>;
 

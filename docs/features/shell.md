@@ -5,11 +5,14 @@
 ## The menu bar
 
 The strip above the command bar carries `File`, `Edit`, `View`, `Favorites`, `Tools`, `Window` and
-`Help`. **Only `Window` does anything yet** — the other six are names in the place a reader of a
-desktop client looks for them, and nothing behind them. Items are `MenuItem`s drawn by `MenuButton`,
-the same object the tree's right-click menu is built from, so an action offered both ways stays one
-object, and a menu given no items draws its name alone.
+`Help`. **Only `Tools` and `Window` do anything yet** — the other five are names in the place a
+reader of a desktop client looks for them, and nothing behind them. Items are `MenuItem`s drawn by
+`MenuButton`, the same object the tree's right-click menu is built from, so an action offered both
+ways stays one object, and a menu given no items draws its name alone.
 
+- **`Tools` opens the History Log**, which is asked for here and nowhere else: it belongs to the
+  window rather than to a connection, so there is no node in the tree it could hang off. What it
+  shows is [features/log.md](log.md).
 - **`Window` lists every open tab**, in the order the strip draws them, and picking one is exactly
   what clicking it in the strip is. It is the one place that names all of them at once: the strip
   truncates each title and scrolls the moment it holds more tabs than it can draw. Each row wears
@@ -72,6 +75,10 @@ therefore a deliberate list, kept in a store under the tab's id and dropped when
   rows: a search of a whole schema is far too long a read to lose by looking at another tab. What was
   *asked* — the text, `Look In`, `Search Mode`, the box — is the tab itself, exactly as a query tab's
   SQL is, and so is where it is pointed.
+- The **History Log** keeps both its lines and its switches (`stores/log.ts`), which no other tab
+  does: it is one log for the whole window rather than one per tab, and re-reading it on the way
+  back would lose the place the reader had scrolled to. See
+  [features/log.md](log.md#how-it-is-kept).
 - A **Backups tab** keeps nothing at all. The list is the tree's own — one folder, drawn twice —
   and it is read again on the way back for a stronger reason than a table's rows are: another
   window of this app, or the reader with a file manager, changes the folder without this one

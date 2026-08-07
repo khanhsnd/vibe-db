@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react'
+import { Check, ScrollText } from 'lucide-react'
 
 import { namespaceLabel, type Profile } from '@/bridge/connections'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
@@ -14,11 +14,15 @@ export function MenuBar() {
   const tabs = useTabsStore((s) => s.tabs)
   const activeId = useTabsStore((s) => s.activeId)
   const activate = useTabsStore((s) => s.activate)
+  const openLog = useTabsStore((s) => s.openLog)
   const profiles = useConnectionsStore((s) => s.profiles)
 
-  // A menu with no items is a name that does nothing, which is what the other six still are — see
+  // A menu with no items is a name that does nothing, which is what the other five still are — see
   // `MenuButton`, which draws its trigger alone when it is given none.
   const menus: Partial<Record<string, MenuItem[]>> = {
+    // The log belongs to the window rather than to a connection, so it is asked for here and
+    // nowhere else: there is no node in the tree it could hang off.
+    Tools: [{ label: 'History Log', icon: <ScrollText size={13} />, onSelect: openLog }],
     Window: windowItems(tabs, activeId, profiles, activate),
   }
 

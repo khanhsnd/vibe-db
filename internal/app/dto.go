@@ -468,6 +468,23 @@ type HistoryEntry struct {
 	RanAt        int64  `json:"ranAt"`
 }
 
+// LogEntry is one statement the app has run, as the History Log lists it — one entry per *run*,
+// where a HistoryEntry is one per statement. `ranAt` is epoch milliseconds, the clock the rest of
+// the wire counts in, so the viewer draws it in the reader's own time zone.
+//
+// `connection` is the profile's name rather than its id, because a log is read long after the tab
+// it was typed in has closed and an id names nothing to a person.
+type LogEntry struct {
+	Namespace
+	Seq        int64  `json:"seq"`
+	RanAt      int64  `json:"ranAt"`
+	Connection string `json:"connection"`
+	Engine     string `json:"engine"`
+	SQL        string `json:"sql"`
+	ElapsedMs  int64  `json:"elapsedMs"`
+	Error      string `json:"error"`
+}
+
 // A comparison's four statuses, spelled on the wire exactly as compare.Status spells them. They
 // are a string rather than a flag per kind because one word answers for a field, an index, a
 // constraint and a row alike, and the grid draws one colour per word.
@@ -856,6 +873,23 @@ func toHistoryDTOs(entries []domain.HistoryEntry) []HistoryEntry {
 			Error:        entry.Error,
 			Runs:         entry.Runs,
 			RanAt:        entry.RanAt.UnixMilli(),
+		})
+	}
+	return out
+}
+
+func toLogDTOs(entries []domain.LogEntry) []LogEntry {
+	out := make([]LogEntry, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, LogEntry{
+			Namespace:  Namespace{Database: entry.Database, Schema: entry.Schema},
+			Seq:        entry.Seq,
+			RanAt:      entry.RanAt.UnixMilli(),
+			Connection: entry.Connection,
+			Engine:     string(entry.Engine),
+			SQL:        entry.SQL,
+			ElapsedMs:  entry.ElapsedMs,
+			Error:      entry.Error,
 		})
 	}
 	return out

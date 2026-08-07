@@ -19,7 +19,8 @@ or SQL**, **backing a SQL namespace up into a folder the app keeps, and restorin
 one**, query tabs with completion that **run a whole script**, **a console that runs one statement
 at a time and keeps the transcript**, **running a file of statements against a connection**,
 **marking a connection with a colour that washes down the sidebar**, **a history of every statement
-run, kept on disk and put back in the editor by a double-click**, passwords in Windows Credential
+run, kept on disk and put back in the editor by a double-click**, **a log of everything the window
+has run, across every connection, on one clock**, passwords in Windows Credential
 Manager, and the full layout shell with dark and light themes and a **data font the reader picks**.
 
 Not there yet: a **materialised view** is not listed, because it is dropped by a statement of its
@@ -54,6 +55,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | Query tabs, Explain, a MongoDB tab, a Redis tab, running a whole script | [features/query-tab.md](features/query-tab.md) |
 | `Format`, what the editor says before anything runs, and the log every statement is kept in | [features/script.md](features/script.md) |
 | The console, and Execute SQL File | [features/console.md](features/console.md) |
+| The History Log: every statement the window has run, on one clock | [features/log.md](features/log.md) |
 | The two row-limit controls, and the streamed unbounded read | [features/row-limit.md](features/row-limit.md) |
 | The output panel, the history pane, editing a result, exporting a grid | [features/results.md](features/results.md) |
 | Filtering and sorting a table tab | [features/filter-sort.md](features/filter-sort.md) |

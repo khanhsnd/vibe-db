@@ -899,6 +899,34 @@ export namespace app {
 	        this.method = source["method"];
 	    }
 	}
+	export class LogEntry {
+	    database: string;
+	    schema: string;
+	    seq: number;
+	    ranAt: number;
+	    connection: string;
+	    engine: string;
+	    sql: string;
+	    elapsedMs: number;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LogEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.seq = source["seq"];
+	        this.ranAt = source["ranAt"];
+	        this.connection = source["connection"];
+	        this.engine = source["engine"];
+	        this.sql = source["sql"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.error = source["error"];
+	    }
+	}
 	export class Namespace {
 	    database: string;
 	    schema: string;

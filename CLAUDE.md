@@ -135,6 +135,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Change the tree, the table list or a schema change | [docs/features/schema-tree.md](docs/features/schema-tree.md), [docs/features/schema-changes.md](docs/features/schema-changes.md) |
 | Change a view's or a routine's definition | [docs/features/definitions.md](docs/features/definitions.md) |
 | Change a query tab, a console or a file run | [docs/features/query-tab.md](docs/features/query-tab.md), [docs/features/script.md](docs/features/script.md), [docs/features/console.md](docs/features/console.md) |
+| Change what is kept about a statement that has run | [docs/features/log.md](docs/features/log.md), [docs/features/results.md](docs/features/results.md#the-history-pane) |
 | Change a table tab, its paging, filtering or values | [docs/features/table-tab.md](docs/features/table-tab.md), [docs/features/row-limit.md](docs/features/row-limit.md), [docs/features/filter-sort.md](docs/features/filter-sort.md), [docs/features/value-viewer.md](docs/features/value-viewer.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file), [docs/features/transfer.md](docs/features/transfer.md) |
 | Touch a backup or a restore | [docs/architecture.md](docs/architecture.md#backing-a-database-up), [docs/features/backup.md](docs/features/backup.md) |

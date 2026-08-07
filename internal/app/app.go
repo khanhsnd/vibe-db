@@ -13,6 +13,7 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/driver/redis"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlite"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlserver"
+	"github.com/khanhsnd/vibe-db/internal/history"
 	historyfile "github.com/khanhsnd/vibe-db/internal/history/jsonfile"
 	profilefile "github.com/khanhsnd/vibe-db/internal/profile/jsonfile"
 	"github.com/khanhsnd/vibe-db/internal/secret/keyring"
@@ -52,7 +53,7 @@ func New() (*App, error) {
 			sessions,
 			backup.New(backupRoot),
 		),
-		Queries:  NewQueryAPI(sessions, historyfile.New(historyPath)),
+		Queries:  NewQueryAPI(sessions, historyfile.New(historyPath), history.NewLog()),
 		System:   NewSystemAPI(),
 		sessions: sessions,
 	}, nil

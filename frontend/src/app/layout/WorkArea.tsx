@@ -4,6 +4,7 @@ import { BackupListView } from '@/features/backup/BackupListView'
 import { CompareView } from '@/features/compare/CompareView'
 import { ConsoleView } from '@/features/console/ConsoleView'
 import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
+import { LogView } from '@/features/log/LogView'
 import { ObjectListView } from '@/features/objects/ObjectListView'
 import { SourceEditor } from '@/features/schema/SourceEditor'
 import { TableDesigner } from '@/features/schema/TableDesigner'
@@ -95,6 +96,9 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             schemas={schemas}
             engine={engine}
           />
+        ) : activeTab.kind === 'log' ? (
+          // It belongs to no connection and needs none: what it holds has already run.
+          <LogView key={activeTab.id} />
         ) : activeTab.kind === 'compare' ? (
           <CompareView key={activeTab.id} tab={activeTab} />
         ) : activeTab.kind === 'find' ? (
