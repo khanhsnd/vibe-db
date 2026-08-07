@@ -21,6 +21,27 @@ on the same connection without treading on each other. The toolbar picks the dat
   MongoDB it is decided by the *method*: `find` and `aggregate` answer with documents, `insertOne`
   and `deleteMany` with a count.
 
+## The tabs are still there next time
+
+**A query tab outlives the app closing.** Every query tab in the strip is written down as it is
+edited — its title, its connection, its namespace, its buffer and its row limit — and they are opened
+again, in order, the next time the app starts, with the one that was in front in front again. A query
+tab *is* its buffer: nothing else holds what was typed there, and closing the window is not asking for
+it to be thrown away.
+
+- **Only the question is kept, never the answer.** The rows a statement returned are not stored, for
+  the reason a table tab re-reads on the way back: a result restored from last week would be an
+  account of a server as it was, drawn as if it were now. A restored tab opens with an empty
+  `Result` and its statement ready to run.
+- **A tab is restored whether or not its connection is dialled**, and it simply cannot run until it
+  is — `Execute` is grey while there is no session, exactly as it is for a tab opened by hand against
+  a connection that has been closed.
+- **No other kind of tab is restored.** Every one of them names something on a server — a table, a
+  definition, a comparison, a list — and holds no text of its own, so it is opened again from the
+  tree in one press.
+- It is kept in `localStorage` under `vibe-db.queryTabs` by `stores/savedQueries.ts`, on its own
+  clock rather than on the keystroke's, so a burst of typing costs one write rather than one per key.
+
 ## What Explain shows
 
 **Explain runs the statement and asks about it as well.** `Result` therefore holds the statement's own

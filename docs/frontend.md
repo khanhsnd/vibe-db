@@ -104,6 +104,11 @@
   draws](features/schema-tree.md#filtering-a-connections-databases). Both are keyed by what they are
   about, both survive the app closing, and neither goes to the backend: a preference the *server*
   would have to be told about is a field on the profile, which is what a connection's colour is.
+- **What the reader was *doing* is kept the same way.** `stores/savedQueries.ts` writes the strip's
+  [query tabs down as they are edited](features/query-tab.md#the-tabs-are-still-there-next-time) and
+  `stores/tabs.ts` builds itself from them, so a buffer is where it was left. It differs from the
+  three above in what it costs to write — a keystroke changes a buffer and a script can be a megabyte
+  of them — so it writes on a timer rather than on the change, and flushes on `beforeunload`.
 - **State that must outlive a tab being looked away from belongs in a store keyed by the tab id**,
   never in the component: `WorkArea` mounts the tab in front and no other, so a component's own state
   goes down with it. `stores/queries.ts` keeps a query tab's rows that way and `stores/tableViews.ts`

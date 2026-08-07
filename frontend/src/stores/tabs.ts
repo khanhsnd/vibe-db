@@ -7,6 +7,7 @@ import type { SourceKind, SourceRef } from '@/bridge/schema'
 
 import { useConsoleStore } from './console'
 import { useQueriesStore } from './queries'
+import { loadQueryTabs, saveQueryTabs } from './savedQueries'
 import { useSearchesStore } from './searches'
 import { useTableViewsStore } from './tableViews'
 
@@ -288,9 +289,15 @@ const reusable = (tab: NewTab) =>
   !(tab.kind === 'design' && tab.table === '') &&
   !(tab.kind === 'source' && tab.creating)
 
+// The strip the app closed on, given fresh ids from the same counter every other tab takes one from.
+// A tab in front that was not a query is not one to be restored, so the first of them stands in:
+// tabs in the strip with nothing drawn under them would read as a window that had failed to open.
+const restored = loadQueryTabs()
+const restoredTabs: Tab[] = restored.tabs.map((saved) => ({ ...saved, kind: 'query', id: nextId() }))
+
 export const useTabsStore = create<TabsState>((set, get) => ({
-  tabs: [],
-  activeId: null,
+  tabs: restoredTabs,
+  activeId: (restoredTabs[restored.active] ?? restoredTabs[0])?.id ?? null,
 
   open: (tab) => {
     if (reusable(tab)) {
@@ -432,3 +439,14 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       tabs: s.tabs.map((tab) => (tab.id === id && tab.kind === 'find' ? { ...tab, ...edit } : tab)),
     })),
 }))
+
+// Every change to the strip is written down — one place rather than a call in each of the actions
+// above, so a kind of edit added later cannot be the one that forgets. See `stores/savedQueries.ts`.
+useTabsStore.subscribe((state) => {
+  const queries = state.tabs.filter((tab): tab is QueryTab => tab.kind === 'query')
+
+  saveQueryTabs({
+    tabs: queries.map(({ id: _id, kind: _kind, ...saved }) => saved),
+    active: queries.findIndex((tab) => tab.id === state.activeId),
+  })
+})

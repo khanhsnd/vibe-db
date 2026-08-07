@@ -67,7 +67,9 @@ therefore a deliberate list, kept in a store under the tab's id and dropped when
   something else has changed under it reads fresh rather than stale, and the status line says when.
   The column *order* is remembered against the table itself and outlives the tab entirely.
 - A **query tab** is the other way round and keeps its rows (`stores/queries.ts`), because a
-  statement cannot be re-run behind the reader's back: it may write, and it may be expensive.
+  statement cannot be re-run behind the reader's back: it may write, and it may be expensive. It is
+  also the one kind that outlives the *app* closing, buffer and all — see
+  [features/query-tab.md](query-tab.md#the-tabs-are-still-there-next-time).
 - A **compare tab** keeps only *which half* it was showing — its two tables and its mode are the
   tab itself. The diff is read again on the way back, for the reason a table's rows are: a
   comparison that had gone stale would be worse than the second read that replaces it.
