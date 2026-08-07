@@ -98,6 +98,15 @@ const (
 	FilterNotBetween TableFilterOp = "notbetween"
 	FilterInList     TableFilterOp = "inlist"
 	FilterNotInList  TableFilterOp = "notinlist"
+
+	// The two the filter builder does not offer, because they are the shape of an engine that
+	// matches text its own way rather than of a `WHERE`: Matches reads the value as a **pattern in
+	// the engine's own notation** — a glob on a key space, which is the one narrowing a Redis server
+	// will do — and ContainsFold is Contains with case folded away. An engine that has neither
+	// refuses them like any other operator it does not know, and nothing writes them there: the
+	// surface that does is the key space's own search bar.
+	FilterMatches      TableFilterOp = "matches"
+	FilterContainsFold TableFilterOp = "containsfold"
 )
 
 // TableConjunction joins the children of a group. There are two of them, and one this side does

@@ -327,6 +327,47 @@ func TestLiveAgainstARealServer(t *testing.T) {
 		}
 	})
 
+	// The three the search bar writes, against a real server: the glob is what narrows the scan, so
+	// each mode has to be a glob the server itself reads the way this side reads it.
+	t.Run("A name is matched the three ways the search bar offers", func(t *testing.T) {
+		run(t, live, ns, `SET user:EMAIL:9 "shouty"`)
+		t.Cleanup(func() { run(t, live, ns, `UNLINK user:EMAIL:9`) })
+
+		tests := []struct {
+			name  string
+			op    driver.TableFilterOp
+			text  string
+			glob  string
+			total int64
+		}{
+			{"a fragment, case ignored", driver.FilterContainsFold, "email", "*[eE][mM][aA][iI][lL]*", 2},
+			{"a fragment, letter for letter", driver.FilterContains, "email", "*email*", 1},
+			{"the reader's own glob", driver.FilterMatches, "*ser:?", "*ser:?", 2},
+			{"a glob with a class in it", driver.FilterMatches, "user:[12]", "user:[12]", 2},
+			// The two Contains modes escape, so a star typed there is a star and not a run.
+			{"a star that is not a wildcard", driver.FilterContains, "user:*", `*user:\**`, 0},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				rows, err := live.TableRows(ctx, driver.TablePage{
+					Namespace: ns,
+					Table:     keySpace,
+					Filter:    andGroup(keyFilter(tt.op, tt.text)),
+				})
+				if err != nil {
+					t.Fatalf("TableRows() error = %v", err)
+				}
+				if rows.Total != tt.total {
+					t.Errorf("Total = %d, want %d", rows.Total, tt.total)
+				}
+				if !strings.Contains(rows.Statement, "MATCH "+quoteArgument(tt.glob)) {
+					t.Errorf("Statement = %q, want %q in it", rows.Statement, tt.glob)
+				}
+			})
+		}
+	})
+
 	t.Run("A filter on the type is answered here", func(t *testing.T) {
 		rows, err := live.TableRows(ctx, driver.TablePage{
 			Namespace: ns,

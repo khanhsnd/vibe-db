@@ -73,11 +73,48 @@ narrows a read exactly one way — a glob against a key's name — so most of th
 operators would be twenty ways of asking for something that could only be answered by reading every
 value on the server.
 
-Underneath it is **the same conditions the builder would have written** — `Key contains …` and
-`Type = …` — so the read that follows is an ordinary read and the driver is unchanged by any of it. A
-name typed in the box becomes the server's own glob, so the narrowing happens *there* and the app
-never sees the rest: `SCAN 0 MATCH *user* COUNT 1000`, and the statement under the grid says so. The
-type is answered here, over the keys the glob let through.
+Underneath it is **an ordinary condition tree** — `Key contains …` and `Type = …` — so the read that
+follows is an ordinary read and the driver is unchanged by any of it. A name typed in the box becomes
+the server's own glob, so the narrowing happens *there* and the app never sees the rest:
+`SCAN 0 MATCH *user* COUNT 1000`, and the statement under the grid says so. The type is answered
+here, over the keys the glob let through.
+
+### How the name is read is picked in the box
+
+**The magnifier in front of the box opens a menu of three**, because the same three characters are
+three different questions and the box is where they are typed.
+
+| Mode | What is typed | The condition, and the glob it becomes |
+|---|---|---|
+| **Keys Contain** | a fragment of a name, case ignored | `Key containsfold email` → `*[eE][mM][aA][iI][lL]*` |
+| **Keys Contain (Match Case)** | a fragment, letter for letter | `Key contains email` → `*email*` |
+| **Keys Match Pattern** *(the default)* | the server's own glob | `Key matches *email*` → `*email*`, as typed |
+
+**The glob is what the box starts in**, because it is the notation the engine is already in: the
+statement under the grid is a `SCAN … MATCH`, and a reader who types `*email*` over a key space
+means the pattern rather than a key with stars in its name. The two Contains modes are for the
+reader who means the characters.
+
+All three are **one mechanism**: a condition on `Key` differing only in its operator, spelled as the
+glob the scan is narrowed by and applied again here to the keys that came back. Two of those
+operators are ones the [filter builder](filter-sort.md) does not offer, and deliberately:
+`matches` reads its value as a pattern in the **engine's own** notation, which a key space has and a
+SQL table has not, so an engine that does not know them refuses them like any other operator it has
+not got.
+
+**Only Match Pattern lets a wildcard through.** In the two Contains modes a `*` is a star and
+nothing more — a key called `report*2024` is a key that can be searched for — because a reader
+typing a fragment is typing a name. In Match Pattern nothing is escaped: `*`, `?`, `[0-9]` and
+`[^a]` are the server's own, `\*` is a star itself, and what the statement shows is what was typed.
+
+**Case is folded into the pattern rather than asked of the server**, Redis having no
+case-insensitive matching of its own: `user` becomes `[uU][sS][eE][rR]`. It is exact rather than
+approximate, which is what lets the server keep doing the narrowing for a search that ignores case —
+the same spelling [Find in Schema](#what-a-right-click-on-a-key-offers) uses.
+
+**Which mode it is, is the tab's** and survives being looked away from, like Flatten and everything
+else it was set up with. It is held there rather than in the condition it writes because an empty
+box writes no condition at all, and a mode picked before a word is typed would go with it.
 
 The rest of what the driver can be asked is still what it always was, and is worth knowing because it
 is why the bar is only two boxes. A filter on `Key` — begins, contains, ends or equals — becomes the

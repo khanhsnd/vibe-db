@@ -35,7 +35,9 @@ There are **three ways in**, and they hold the same conditions:
 `is not empty`, `is between`, `is not between`, `is in list`, `is not in list`. How many values one
 takes is its own business — none, one, two, or any number — and a condition short of what its
 operator needs narrows nothing until it is filled in. `is empty` asks about the empty string and
-`is NULL` about the absence of a value; they are different questions.
+`is NULL` about the absence of a value; they are different questions. Two more exist and are not
+offered here, being the shape of an engine that matches text its own way rather than of a `WHERE` —
+see [browsing a key space](key-space.md#how-the-name-is-read-is-picked-in-the-box).
 
 **Each part opens a small panel under itself, never a dialog over the grid** — the table stays in
 sight while it is being narrowed. The **column** panel and the **value** panel are both searched

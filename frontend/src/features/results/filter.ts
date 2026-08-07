@@ -35,6 +35,12 @@ export type FilterOp =
   | 'notbetween'
   | 'inlist'
   | 'notinlist'
+  // The two the builder does not offer, and so the two that are not in `FILTER_OPS`: `matches`
+  // reads the value as a pattern in the **engine's own** notation and `containsfold` is `contains`
+  // with case folded away. A key space is the surface that writes them — see `keySpace.ts` — and an
+  // engine that has neither refuses them, which is why they are not on a menu every engine draws.
+  | 'matches'
+  | 'containsfold'
 
 /** How many values an operator compares against. `list` is any number above none. */
 export type Arity = 0 | 1 | 2 | 'list'

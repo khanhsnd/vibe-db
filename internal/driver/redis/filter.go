@@ -115,6 +115,7 @@ var operands = map[driver.TableFilterOp]int{
 	driver.FilterContains: 1, driver.FilterNotContains: 1,
 	driver.FilterBegins: 1, driver.FilterNotBegins: 1,
 	driver.FilterEnds: 1, driver.FilterNotEnds: 1,
+	driver.FilterMatches: 1, driver.FilterContainsFold: 1,
 	driver.FilterNull: 0, driver.FilterNotNull: 0,
 	driver.FilterEmpty: 0, driver.FilterNotEmpty: 0,
 	driver.FilterBetween: 2, driver.FilterNotBetween: 2,
@@ -169,36 +170,27 @@ func glob(filter driver.TableGroup) string {
 			continue
 		}
 
-		text := escapeGlob(one.Values[0])
+		text := one.Values[0]
 		switch one.Op {
 		case driver.FilterEqual:
-			return text
+			return escapeGlob(text)
 		case driver.FilterContains:
-			return "*" + text + "*"
+			return "*" + escapeGlob(text) + "*"
+		case driver.FilterContainsFold:
+			return "*" + foldGlob(text) + "*"
 		case driver.FilterBegins:
-			return text + "*"
+			return escapeGlob(text) + "*"
 		case driver.FilterEnds:
-			return "*" + text
+			return "*" + escapeGlob(text)
+		case driver.FilterMatches:
+			// The one operator whose value is **not** escaped, that being the whole of what it says:
+			// the reader is spelling the server's own glob, and `*email*` is three characters of
+			// pattern and five of text.
+			return text
 		}
 	}
 
 	return "*"
-}
-
-// escapeGlob makes a reader's text stand for itself. A key holding `user[1]` is a key a reader can
-// filter for, which it would not be if the brackets were left to the server to read as a class.
-func escapeGlob(text string) string {
-	var out strings.Builder
-	for i := 0; i < len(text); i++ {
-		switch character := text[i]; character {
-		case '*', '?', '[', ']', '\\', '^', '-':
-			out.WriteByte('\\')
-			out.WriteByte(character)
-		default:
-			out.WriteByte(character)
-		}
-	}
-	return out.String()
 }
 
 // field is one column of a row as a filter reads it: nil where the row holds nothing, which is a key
@@ -311,6 +303,10 @@ func matchesFilter(row keyRow, filter driver.TableFilter) (bool, error) {
 		return compare(filter.Values[0]) <= 0, nil
 	case driver.FilterContains:
 		return strings.Contains(value, filter.Values[0]), nil
+	case driver.FilterContainsFold:
+		return strings.Contains(strings.ToLower(value), strings.ToLower(filter.Values[0])), nil
+	case driver.FilterMatches:
+		return globMatch(filter.Values[0], value), nil
 	case driver.FilterNotContains:
 		return !strings.Contains(value, filter.Values[0]), nil
 	case driver.FilterBegins:

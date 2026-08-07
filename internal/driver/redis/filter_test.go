@@ -31,6 +31,19 @@ func TestGlobIsTakenOnlyFromWhatNarrowsTheRead(t *testing.T) {
 			`user\[1\]*`,
 		},
 		{
+			// The one operator that does not escape: the reader is spelling the glob itself.
+			"a glob the reader spelled",
+			andGroup(keyFilter(driver.FilterMatches, "*email*")),
+			"*email*",
+		},
+		{
+			// Redis has no case-insensitive matching, so the case goes into the pattern and the
+			// server does the narrowing all the same.
+			"a contains that ignores case",
+			andGroup(keyFilter(driver.FilterContainsFold, "User")),
+			"*[uU][sS][eE][rR]*",
+		},
+		{
 			// A filter on another column narrows nothing the server can do.
 			"a type filter",
 			andGroup(driver.TableFilter{Column: columnType, Op: driver.FilterEqual, Values: []string{"hash"}}),
@@ -158,6 +171,9 @@ func TestMatchesAppliesTheWholeTree(t *testing.T) {
 			},
 			false,
 		},
+		{"a glob", andGroup(keyFilter(driver.FilterMatches, "user:*")), true},
+		{"a glob that misses", andGroup(keyFilter(driver.FilterMatches, "order:*")), false},
+		{"a contains that ignores case", andGroup(keyFilter(driver.FilterContainsFold, "USER")), true},
 		{"a list", andGroup(keyFilter(driver.FilterInList, "user:1", "user:2")), true},
 		{"not in a list", andGroup(keyFilter(driver.FilterNotInList, "user:2")), true},
 	}

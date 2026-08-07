@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { DEFAULT_PAGE_SIZE } from '@/bridge/rows'
 import { NO_FILTER, type Group } from '@/features/results/filter'
 import { NO_SORT, type SortKey } from '@/features/results/resultSet'
+import { DEFAULT_KEY_MATCH, type KeyMatch } from '@/features/table/keySpace'
 import type { PanelKind } from '@/features/table/TableToolbar'
 
 import { useSettingsStore } from './settings'
@@ -41,6 +42,12 @@ export interface TableView {
   flatten: boolean
   /** The branches of that tree the reader has folded shut, by their prefix — see `keyTree.ts`. */
   shut: ReadonlySet<string>
+  /**
+   * How the **key space** search bar reads what is typed in it — see `keySpace.ts`. It is here
+   * rather than in the condition it writes because an empty box writes no condition at all, and a
+   * reader who picks a mode before typing a word would otherwise lose it to the next keystroke.
+   */
+  keyMatch: KeyMatch
 }
 
 const NO_PANELS: ReadonlySet<PanelKind> = new Set()
@@ -62,6 +69,7 @@ export const IDLE_VIEW: TableView = {
   criteria: NO_FILTER,
   flatten: false,
   shut: NOTHING_SHUT,
+  keyMatch: DEFAULT_KEY_MATCH,
 }
 
 interface TableViewsState {

@@ -129,7 +129,7 @@ export function TableDataView({
 
   // How the tab was set up is the tab's and survives it being looked away from; the selection is
   // not — it names rows of a read this mount is about to make again.
-  const { panels, hidden, filterShown, flatten, shut } = useTableViewsStore(
+  const { panels, hidden, filterShown, flatten, shut, keyMatch } = useTableViewsStore(
     (s) => s.views[tabId] ?? IDLE_VIEW,
   )
   const change = useTableViewsStore((s) => s.change)
@@ -382,9 +382,13 @@ export function TableDataView({
     changeCriteria(next)
   }
 
-  /** The same conditions from the other spelling, and no panel to open — see `writeSearch`. */
+  /**
+   * The same conditions from the other spelling, and no panel to open — see `writeSearch`. How the
+   * text is matched travels with the tab rather than with the conditions, an empty box writing none.
+   */
   const changeSearch = (next: KeySearch) => {
     setSelection(null)
+    change(tabId, { keyMatch: next.match })
     changeCriteria(writeSearch(next))
   }
 
@@ -488,7 +492,7 @@ export function TableDataView({
         keySpace={
           keySpace
             ? {
-                search: readSearch(criteria),
+                search: readSearch(criteria, keyMatch),
                 onSearchChange: changeSearch,
                 flatten,
                 onFlattenToggle: () => change(tabId, { flatten: !flatten }),
