@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
@@ -269,6 +270,99 @@ func (a *ConnectionAPI) DropRoutine(sessionID string, ns Namespace, routine Rout
 
 	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
 		return schema.DropRoutine(ctx, ns.toDriver(), routine.toDriver())
+	})
+}
+
+// LoadSource reads one view or one routine as the statement that declares it, which is what the
+// designer opens on.
+func (a *ConnectionAPI) LoadSource(sessionID string, ns Namespace, ref SourceRef) (Source, error) {
+	schema, err := a.sessions.Schema(sessionID)
+	if err != nil {
+		return Source{}, wrapError(err)
+	}
+	// The kind is checked before it is quoted into the message, so a word that came off the wire
+	// as something else is answered as the kind it is not rather than echoed back.
+	wanted, err := ref.toDriver()
+	if err != nil {
+		return Source{}, wrapError(err)
+	}
+	if err := domain.RequireName(string(wanted.Kind), wanted.Name); err != nil {
+		return Source{}, wrapError(err)
+	}
+
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	source, err := schema.Source(ctx, ns.toDriver(), wanted)
+	if err != nil {
+		return Source{}, wrapError(err)
+	}
+	return toSourceDTO(source), nil
+}
+
+// NewSource is the declaration a reader starts from when they are declaring one of these rather
+// than altering it. It runs nothing and asks no server anything — it is the engine's own shape for
+// that kind of object — and an engine that has none answers with an empty string, which is what
+// the tab reads as there being nothing to start from.
+func (a *ConnectionAPI) NewSource(sessionID string, ns Namespace, kind, name string) (string, error) {
+	schema, err := a.sessions.Schema(sessionID)
+	if err != nil {
+		return "", wrapError(err)
+	}
+
+	wanted, err := SourceRef{Kind: kind, Name: name}.toDriver()
+	if err != nil {
+		return "", wrapError(err)
+	}
+	return schema.NewSource(ns.toDriver(), wanted.Kind, name), nil
+}
+
+// PreviewSource is exactly what SaveSource will run, so the editor's Changes pane shows the
+// statements rather than a guess at them — the arrangement PreviewCreateDatabase has, and the one
+// that matters most here: a definition being replaced is **dropped first**, and the reader is owed
+// that in front of them before they press Save.
+//
+// An editor with nothing in it previews nothing rather than failing, since a blank buffer is a
+// question not yet asked.
+func (a *ConnectionAPI) PreviewSource(
+	sessionID string,
+	ns Namespace,
+	save SourceSaveInput,
+) ([]string, error) {
+	schema, err := a.sessions.Schema(sessionID)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	planned, err := save.toDriver()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	statements := schema.SourceStatements(ns.toDriver(), planned)
+	if statements == nil {
+		return []string{}, nil
+	}
+	return statements, nil
+}
+
+// SaveSource runs what PreviewSource showed. A blank definition is refused here rather than at the
+// server: it would otherwise spell the drop alone, which is the one thing a Save must never mean.
+func (a *ConnectionAPI) SaveSource(sessionID string, ns Namespace, save SourceSaveInput) error {
+	if strings.TrimSpace(save.Definition) == "" {
+		return wrapError(domain.ValidationError{
+			Field:   "definition",
+			Message: "must not be empty",
+		})
+	}
+
+	planned, err := save.toDriver()
+	if err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.SaveSource(ctx, ns.toDriver(), planned)
 	})
 }
 

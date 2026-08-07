@@ -288,6 +288,12 @@ export interface EngineInfo {
   // Whether this engine has views at all, which is what decides if the tree draws a folder that
   // could only ever be empty.
   hasViews: boolean
+  // Whether a view or a routine of this engine is declared by a *statement* the app can read back
+  // and put again. It is what decides whether the definition editor is offered at all: MongoDB's
+  // view is a pipeline over a collection rather than a statement, and a Redis key space is not
+  // declared, so both answer `domain.Unsupported` and neither is offered a New or a Design that
+  // could only fail.
+  hasSource: boolean
   // Whether a new database of this engine has to be given its first collection. MongoDB has no
   // CREATE DATABASE — a database exists exactly as long as it holds a collection — so making one
   // is making that collection, and the dialog asks which.
@@ -385,6 +391,7 @@ export const ENGINES = [
     createsDatabases: true,
     createsTables: true,
     hasViews: true,
+    hasSource: true,
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
@@ -408,6 +415,7 @@ export const ENGINES = [
     createsDatabases: true,
     createsTables: true,
     hasViews: true,
+    hasSource: true,
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
@@ -434,6 +442,7 @@ export const ENGINES = [
     createsDatabases: false,
     createsTables: true,
     hasViews: true,
+    hasSource: true,
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: false,
@@ -460,6 +469,7 @@ export const ENGINES = [
     createsDatabases: true,
     createsTables: true,
     hasViews: true,
+    hasSource: true,
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
@@ -487,6 +497,7 @@ export const ENGINES = [
     createsDatabases: false,
     createsTables: true,
     hasViews: true,
+    hasSource: true,
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
@@ -512,6 +523,9 @@ export const ENGINES = [
     createsDatabases: true,
     createsTables: true,
     hasViews: true,
+    // A MongoDB view is a collection declared by a *document* — the collection it reads and the
+    // pipeline over it — rather than by a statement, so there is no definition to read or put back.
+    hasSource: false,
     databaseNeedsCollection: true,
     hasForeignKeys: false,
     hasRoutines: false,
@@ -538,6 +552,7 @@ export const ENGINES = [
     createsDatabases: false,
     createsTables: false,
     hasViews: false,
+    hasSource: false,
     databaseNeedsCollection: false,
     hasForeignKeys: false,
     hasRoutines: false,

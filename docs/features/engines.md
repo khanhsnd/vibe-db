@@ -61,6 +61,7 @@ answers [`UNSUPPORTED`](../errors.md) naming which — never a statement left fo
 | Truncate as well as empty | ✓ | ✓ | | ✓ | ✓ | | |
 | Views | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Stored routines | ✓ | ✓ | | ✓ | ✓ | | |
+| Read and write a definition | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Explain a statement | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Back up and restore | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 
@@ -76,7 +77,12 @@ Four of those blanks are worth the sentence:
   optimisation that makes `DELETE FROM t` drop the pages wholesale happens by itself. Offering both
   would be offering one command under two names.
 - **SQLite has no stored routine.** A function there belongs to the program that opened the file —
-  this app registers one, `regexp`, and it is gone the moment the file is closed.
+  this app registers one, `regexp`, and it is gone the moment the file is closed. Its *views* are
+  read and written like any other engine's: the file stores the statement that made each one.
+- **MongoDB has no definition to read.** A view there is a collection declared by a *document* —
+  the collection it reads and the pipeline over it — rather than by a statement, so there is
+  nothing for an editor to open and nothing for a Save to put back. See
+  [definitions.md](definitions.md#what-a-definition-is).
 - **Oracle makes no schema.** A schema there *is* a user, and making one is `CREATE USER … IDENTIFIED
   BY …` — an account with a password, a quota and a set of privileges. That is administration rather
   than the New Database dialog's business, and there is nowhere on the dialog for a password to go.

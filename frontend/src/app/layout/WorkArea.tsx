@@ -5,6 +5,7 @@ import { CompareView } from '@/features/compare/CompareView'
 import { ConsoleView } from '@/features/console/ConsoleView'
 import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
 import { ObjectListView } from '@/features/objects/ObjectListView'
+import { SourceEditor } from '@/features/schema/SourceEditor'
 import { TableDesigner } from '@/features/schema/TableDesigner'
 import { FindInSchemaView } from '@/features/search/FindInSchemaView'
 import { TableDataView } from '@/features/table/TableDataView'
@@ -111,6 +112,20 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
               profileId={activeTab.profileId}
               namespace={activeTab.namespace}
               table={activeTab.table}
+            />
+          )
+        ) : activeTab.kind === 'source' ? (
+          sessionId === null ? (
+            <Empty title="Not connected" hint="Reconnect this connection to read the definition." />
+          ) : (
+            <SourceEditor
+              key={activeTab.id}
+              tabId={activeTab.id}
+              sessionId={sessionId}
+              profileId={activeTab.profileId}
+              namespace={activeTab.namespace}
+              source={activeTab.ref}
+              creating={activeTab.creating}
             />
           )
         ) : (

@@ -437,3 +437,61 @@ func TestQueryMarksASingleTableReadWritable(t *testing.T) {
 		t.Errorf("table = %q, want none: a join maps onto no single stored row", joined.Table)
 	}
 }
+
+// The file stores the statement that made the view, so what a designer opens on is the reader's
+// own declaration rather than a description of it — and saving it back is a drop and that same
+// text, which has to leave the view readable again.
+func TestSourceReadsAViewAndSavesItBack(t *testing.T) {
+	s, ns := openTestFile(t)
+	ctx := context.Background()
+	ref := dbdriver.SourceRef{Kind: dbdriver.SourceView, Name: "recent"}
+
+	source, err := s.Source(ctx, ns, ref)
+	if err != nil {
+		t.Fatalf("Source: %v", err)
+	}
+	if source.Definition != "CREATE VIEW recent AS SELECT * FROM orders" {
+		t.Errorf("Definition = %q", source.Definition)
+	}
+
+	statements := s.SourceStatements(ns, dbdriver.SourceSave{
+		Replaces:   ref,
+		Definition: source.Definition,
+	})
+	want := []string{`DROP VIEW "main"."recent"`, source.Definition}
+	if len(statements) != 2 || statements[0] != want[0] || statements[1] != want[1] {
+		t.Fatalf("SourceStatements = %#v, want %#v", statements, want)
+	}
+
+	err = s.SaveSource(ctx, ns, dbdriver.SourceSave{Replaces: ref, Definition: source.Definition})
+	if err != nil {
+		t.Fatalf("SaveSource: %v", err)
+	}
+	if _, err := s.Source(ctx, ns, ref); err != nil {
+		t.Fatalf("Source after save: %v", err)
+	}
+}
+
+// A view that is not there is said to be missing rather than answered with an empty definition,
+// which is what a save would then have wiped the real one out with.
+func TestSourceRefusesAViewThatIsNotThere(t *testing.T) {
+	s, ns := openTestFile(t)
+
+	ref := dbdriver.SourceRef{Kind: dbdriver.SourceView, Name: "absent"}
+	_, err := s.Source(context.Background(), ns, ref)
+	if !errors.Is(err, domain.ErrUnknownDefinition) {
+		t.Fatalf("Source = %v, want ErrUnknownDefinition", err)
+	}
+}
+
+// There is no stored routine in a SQLite file — a function belongs to the program that opened it —
+// so a definition for one says which thing is missing rather than coming back blank.
+func TestSourceRefusesARoutine(t *testing.T) {
+	s, ns := openTestFile(t)
+
+	ref := dbdriver.SourceRef{Kind: dbdriver.SourceFunction, Name: "tax"}
+	_, err := s.Source(context.Background(), ns, ref)
+	if !errors.Is(err, domain.ErrUnsupported) {
+		t.Fatalf("Source = %v, want ErrUnsupported", err)
+	}
+}

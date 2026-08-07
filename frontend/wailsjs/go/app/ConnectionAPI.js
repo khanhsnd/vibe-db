@@ -174,6 +174,10 @@ export function LoadObjects(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadObjects'](arg1, arg2);
 }
 
+export function LoadSource(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['LoadSource'](arg1, arg2, arg3);
+}
+
 export function LoadTableList(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadTableList'](arg1, arg2);
 }
@@ -190,6 +194,10 @@ export function LoadTableStructure(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['LoadTableStructure'](arg1, arg2, arg3);
 }
 
+export function NewSource(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['ConnectionAPI']['NewSource'](arg1, arg2, arg3, arg4);
+}
+
 export function OpenBackupFolder(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['OpenBackupFolder'](arg1, arg2);
 }
@@ -204,6 +212,10 @@ export function PreviewImportFile(arg1) {
 
 export function PreviewRowWrite(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['PreviewRowWrite'](arg1, arg2);
+}
+
+export function PreviewSource(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['PreviewSource'](arg1, arg2, arg3);
 }
 
 export function PreviewTableChanges(arg1, arg2, arg3, arg4) {
@@ -244,6 +256,10 @@ export function RunImport(arg1, arg2) {
 
 export function SaveProfile(arg1) {
   return window['go']['app']['ConnectionAPI']['SaveProfile'](arg1);
+}
+
+export function SaveSource(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['SaveSource'](arg1, arg2, arg3);
 }
 
 export function SetPrimaryKey(arg1, arg2, arg3, arg4) {

@@ -126,3 +126,32 @@ func (*session) DatabaseOptions(context.Context) (driver.DatabaseOptions, error)
 func (*session) DropRoutine(context.Context, driver.Namespace, driver.Routine) error {
 	return domain.Unsupported("a stored routine")
 }
+
+// Source is the same read CreateStatements is, and is exact for the same reason: the file stores
+// the statement that made the view, so what a reader is shown is the declaration they wrote rather
+// than a description of it.
+//
+// A routine is refused here rather than read as nothing, since there is none to read — see above.
+func (s *session) Source(
+	ctx context.Context,
+	_ driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	if ref.Kind != driver.SourceView {
+		return driver.Source{}, domain.Unsupported("a stored routine")
+	}
+
+	const query = `
+		SELECT sql
+		FROM sqlite_master
+		WHERE type = 'view' AND name = ? AND sql IS NOT NULL`
+
+	found, err := s.names(ctx, query, ref.Name)
+	if err != nil {
+		return driver.Source{}, err
+	}
+	if len(found) == 0 {
+		return driver.Source{}, domain.ErrUnknownDefinition
+	}
+	return driver.Source{SourceRef: ref, Definition: found[0]}, nil
+}

@@ -51,6 +51,7 @@ export function App() {
   const openTab = useTabsStore((s) => s.open)
   const openTable = useTabsStore((s) => s.openTable)
   const openDesign = useTabsStore((s) => s.openDesign)
+  const openSource = useTabsStore((s) => s.openSource)
   const openTables = useTabsStore((s) => s.openTables)
   const openBackups = useTabsStore((s) => s.openBackups)
   const openConsole = useTabsStore((s) => s.openConsole)
@@ -236,6 +237,7 @@ export function App() {
       onExecuteFile: setFileFor,
       onOpenRows: openTable,
       onDesign: openDesign,
+      onOpenSource: openSource,
       onImport: setImportInto,
       onExport: setExportFrom,
       onCompare: openCompare,

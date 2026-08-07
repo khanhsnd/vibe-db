@@ -134,6 +134,94 @@ func (s *session) CreateStatements(
 	return statements, nil
 }
 
+// Source reads a definition out of the two dictionary views that answer in ordinary character
+// columns: `all_source`, which keeps a routine's body a line at a time, and `all_views`, which
+// keeps a view's query.
+//
+// `DBMS_METADATA.GET_DDL` is not used, for a second reason on top of the one CreateStatements
+// gives: it answers with a CLOB, and a definition arriving as a locator is a definition this
+// adapter would have to read in pieces to hand back whole.
+//
+// Neither view answers with the whole statement. A routine's source opens at its kind — `FUNCTION
+// f (…) RETURN …` — and a view's is its query alone, so the `CREATE OR REPLACE` in front of both is
+// spelled here, which is the driver's to do like every other statement.
+func (s *session) Source(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	if ref.Kind == driver.SourceView {
+		const query = `SELECT text FROM all_views WHERE owner = :1 AND view_name = :2`
+
+		body, err := s.sourceText(ctx, query, ns.Database, ref.Name)
+		if err != nil {
+			return driver.Source{}, err
+		}
+
+		definition := "CREATE OR REPLACE VIEW " + dialect.Table(ns, ref.Name) + " AS\n" +
+			strings.TrimSpace(body)
+		return driver.Source{SourceRef: ref, Definition: definition}, nil
+	}
+
+	const query = `
+		SELECT text
+		FROM all_source
+		WHERE owner = :1 AND name = :2 AND type = :3
+		ORDER BY line`
+
+	lines, err := s.names(ctx, query, ns.Database, ref.Name, ref.Kind.Keyword())
+	if err != nil {
+		return driver.Source{}, err
+	}
+	if len(lines) == 0 {
+		return driver.Source{}, domain.ErrUnknownDefinition
+	}
+
+	body := strings.TrimSpace(strings.Join(lines, ""))
+	return driver.Source{
+		SourceRef:  ref,
+		Definition: "CREATE OR REPLACE " + qualified(ns, ref.Name, body),
+	}, nil
+}
+
+// qualified names the owner in a source the dictionary answered with, which names the object
+// alone: a body is kept as it was compiled and a compilation is always inside one schema. Left as
+// it came, a save would drop the routine it was read from and make a new one under whichever user
+// the connection happens to be — the one arrangement a reader could not have meant.
+//
+// The name is spliced at its first occurrence **after the kind**, which is the one in the header;
+// starting the search past the first word is what keeps a routine called `FUN` from being found
+// inside the `FUNCTION` in front of it. A name that is not there leaves the source unchanged: this
+// can fail to qualify a definition but never make it something else.
+func qualified(ns driver.Namespace, name, source string) string {
+	head := strings.IndexAny(source, " \t\r\n")
+	if head < 0 {
+		return source
+	}
+
+	at := strings.Index(source[head:], name)
+	if at < 0 {
+		return source
+	}
+	at += head
+
+	return source[:at] + dialect.Table(ns, name) + source[at+len(name):]
+}
+
+// sourceText runs a read that answers with one definition, and reports an object that is not there
+// as one rather than as an empty definition — which is what a save would then wipe it out with.
+func (s *session) sourceText(ctx context.Context, query string, args ...any) (string, error) {
+	var text string
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&text)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", domain.ErrUnknownDefinition
+	}
+	if err != nil {
+		return "", translateError(err)
+	}
+	return text, nil
+}
+
 // A schema on Oracle is a *user*, and making one is `CREATE USER … IDENTIFIED BY …` — an account
 // with a password, a quota and a set of privileges. That is administration rather than the New
 // Database dialog's business, and there is nowhere in a DatabaseSpec for a password to go, so this

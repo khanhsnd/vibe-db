@@ -15,6 +15,12 @@ var (
 	ErrTLSNotVerified    = errors.New("server TLS certificate could not be verified")
 	ErrPasswordNotFound  = errors.New("no stored password for profile")
 	ErrUnknownTable      = errors.New("table does not exist")
+	// ErrUnknownDefinition is a view or a routine that is no longer there. It is its own sentinel
+	// rather than ErrUnknownTable because a reader is answered by *which* thing is missing, and
+	// "that table no longer exists" is the wrong sentence about a procedure. It is also what an
+	// adapter answers instead of an empty definition, since a save would then have spelled the
+	// drop with nothing after it.
+	ErrUnknownDefinition = errors.New("view or routine does not exist")
 	ErrTableNotEditable  = errors.New("table has no primary key")
 	ErrEmptyStatement    = errors.New("no statement to run")
 	ErrStatementFailed   = errors.New("statement rejected by the server")

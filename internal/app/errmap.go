@@ -19,6 +19,7 @@ const (
 	CodeUnknownDatabase  ErrorCode = "UNKNOWN_DATABASE"
 	CodeUnknownSchema    ErrorCode = "UNKNOWN_SCHEMA"
 	CodeUnknownTable     ErrorCode = "UNKNOWN_TABLE"
+	CodeUnknownSource    ErrorCode = "UNKNOWN_DEFINITION"
 	CodeTableNotEditable ErrorCode = "TABLE_NOT_EDITABLE"
 	CodeEmptyStatement   ErrorCode = "EMPTY_STATEMENT"
 	CodeSQLError         ErrorCode = "SQL_ERROR"
@@ -70,6 +71,7 @@ var sentinelToWire = []struct {
 	{domain.ErrUnknownDatabase, CodeUnknownDatabase, "That database does not exist on the server."},
 	{domain.ErrUnknownSchema, CodeUnknownSchema, "That schema no longer exists. Refresh the database."},
 	{domain.ErrUnknownTable, CodeUnknownTable, "That table no longer exists. Refresh the table list."},
+	{domain.ErrUnknownDefinition, CodeUnknownSource, "That view or routine no longer exists. Refresh the folder it was in."},
 	{domain.ErrTableNotEditable, CodeTableNotEditable, "This table has no primary key, so a single row cannot be identified for editing."},
 	{domain.ErrEmptyStatement, CodeEmptyStatement, "There is no statement to run."},
 	{domain.ErrQueryCancelled, CodeQueryCancelled, "The query was cancelled."},

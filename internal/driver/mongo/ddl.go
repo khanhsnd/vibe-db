@@ -601,3 +601,34 @@ func (s *session) DropView(ctx context.Context, ns driver.Namespace, view string
 func (*session) DropRoutine(context.Context, driver.Namespace, driver.Routine) error {
 	return domain.Unsupported("a stored routine")
 }
+
+// A definition is what this engine has not got, and the reason is the one at the top of this file:
+// a MongoDB view is a collection declared by a *document* — the collection it reads and the pipeline
+// it runs over it — rather than by a statement, and nothing in this package quotes anything into
+// one. So it is `domain.Unsupported` naming which, exactly as a foreign key is, rather than a
+// definition answered as empty that a save would then wipe the view out with.
+func (*session) Source(
+	context.Context,
+	driver.Namespace,
+	driver.SourceRef,
+) (driver.Source, error) {
+	return driver.Source{}, domain.Unsupported(
+		"a definition: a MongoDB view is a pipeline over a collection rather than a statement")
+}
+
+// SourceStatements spells nothing, which is what a preview of a definition this engine has no
+// concept of honestly is — the arrangement AlterStatements has here for a change it cannot make.
+func (*session) SourceStatements(driver.Namespace, driver.SourceSave) []string {
+	return nil
+}
+
+func (*session) SaveSource(context.Context, driver.Namespace, driver.SourceSave) error {
+	return domain.Unsupported(
+		"a definition: a MongoDB view is a pipeline over a collection rather than a statement")
+}
+
+// NewSource has no skeleton to give: a MongoDB view is not declared by a statement, so there is
+// no shape of one for a reader to start from — see Source.
+func (*session) NewSource(driver.Namespace, driver.SourceKind, string) string {
+	return ""
+}

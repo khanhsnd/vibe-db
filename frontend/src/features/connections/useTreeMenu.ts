@@ -11,16 +11,23 @@ import {
 } from '@/bridge/connections'
 import { databases } from '@/bridge/databases'
 import { ICON } from '@/shared/ui/menuIcons'
-import { schema } from '@/bridge/schema'
+import { NEW_SOURCE, schema, type SourceKind, type SourceRef } from '@/bridge/schema'
 import type { TableColumn } from '@/bridge/tables'
 import { backupActions, type BackupActions } from '@/features/backup/backupActions'
 import { fieldActions, type FieldActions } from '@/features/schema/fieldActions'
+import { newSourceItems, sourceActions } from '@/features/schema/sourceActions'
 import { tableActions, type TableActions } from '@/features/schema/tableActions'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { useBackupsStore } from '@/stores/backups'
 import { tableKey, useConnectionsStore, type ChangeSchema } from '@/stores/connections'
 import { useSchemaStore, type SchemaRequest } from '@/stores/schema'
-import { COMPARE_ARROW, type CompareMode, type TableTarget } from '@/stores/tabs'
+import {
+  COMPARE_ARROW,
+  SOURCE_NOUN,
+  type CompareMode,
+  type SourceTarget,
+  type TableTarget,
+} from '@/stores/tabs'
 
 import { colourSwatch } from './ConnectionColour'
 import { ownsObjects, type TreeNode } from './tree'
@@ -36,6 +43,8 @@ interface TreeMenuActions {
   onOpenRows: (target: TableTarget) => void
   /** Opens the designer on a table, or on a new one when the table is empty. */
   onDesign: (target: TableTarget) => void
+  /** Opens a definition, read from the server or — with `creating` — declared from a skeleton. */
+  onOpenSource: (target: SourceTarget) => void
   /** Raises the wizard that reads a file into a table. An empty table is one not chosen yet. */
   onImport: (target: TableTarget) => void
   /** Raises the wizard that writes tables out as files. An empty table means all of them. */
@@ -133,6 +142,7 @@ export function useTreeMenu(
     onExecuteFile,
     onOpenRows,
     onDesign,
+    onOpenSource,
     onImport,
     onExport,
     onCompare,
@@ -317,9 +327,22 @@ export function useTreeMenu(
         case 'tables':
           return [...newTable, findInSchema, dumpItems(''), ...wizards(''), refreshObjectList]
 
+        // A folder offers what goes in it, which on `Routines` is both kinds — no engine has a
+        // folder for a function alone. Neither is offered where this engine's objects are not
+        // declared by a statement at all; see `hasSource`.
         case 'views':
-        case 'routines':
-          return [{ ...refreshObjectList, separatorBefore: false }]
+        case 'routines': {
+          if (!info.hasSource) return [{ ...refreshObjectList, separatorBefore: false }]
+
+          const kinds = node.kind === 'views' ? VIEW_KIND : ROUTINE_KINDS
+          const on = sourceActions(
+            node.profileId,
+            ns,
+            { ...NEW_SOURCE, kind: kinds[0] },
+            { ask, changeSchema, openSource: onOpenSource },
+          )
+          return [...newSourceItems(kinds, on.create), refreshObjectList]
+        }
 
         // The one folder under a namespace whose menu asks no server anything. Restore is not here:
         // a restore is addressed to *one* file, and the file is what carries it — the folder offers
@@ -362,9 +385,16 @@ export function useTreeMenu(
             info,
           )
 
-        // A view has rows and a shape like a table, so it compares like one. Everything else it
-        // is offered is shorter, because a view is not a thing this app alters.
-        case 'view':
+        // A view has rows and a shape like a table, so it compares like one — and it has a
+        // *definition*, which is the one thing about it no grid could ever draw.
+        case 'view': {
+          const on = sourceActions(
+            node.profileId,
+            ns,
+            { kind: 'view', name: node.label, arguments: '' },
+            { ask, changeSchema, openSource: onOpenSource },
+          )
+
           return [
             {
               label: 'Open View',
@@ -372,30 +402,49 @@ export function useTreeMenu(
               onSelect: () =>
                 onOpenRows({ profileId: node.profileId, namespace: ns, table: node.label }),
             },
+            ...sourceItems(info, 'view', on),
             compareItem(picked, onCompare),
             {
               label: 'Delete View',
               icon: ICON.delete,
               danger: true,
               separatorBefore: true,
-              onSelect: () =>
-                ask({
-                  kind: 'confirm',
-                  title: 'Delete View',
-                  message:
-                    `Drop the view ${node.label}? The rows it read stay where they are; ` +
-                    `anything selecting from it stops working.`,
-                  submitLabel: 'Delete',
-                  danger: true,
-                  onSubmit: change((sessionId) => schema.dropView(sessionId, ns, node.label)),
-                }),
+              onSelect: on.remove,
             },
             refreshObjectList,
           ]
+        }
 
+        // A routine is addressed by the whole of what the tree holds for it and never by its name:
+        // on PostgreSQL two functions may share one and be told apart only by what they take.
         case 'procedure':
-        case 'function':
-          return routineItems(node, ns, { change, ask, refresh: refreshObjectList })
+        case 'function': {
+          const routine = node.routine
+          if (!routine) return [{ ...refreshObjectList, separatorBefore: false }]
+
+          const ref: SourceRef = {
+            kind: routine.procedure ? 'procedure' : 'function',
+            name: routine.name,
+            arguments: routine.arguments,
+          }
+          const on = sourceActions(node.profileId, ns, ref, {
+            ask,
+            changeSchema,
+            openSource: onOpenSource,
+          })
+
+          return [
+            ...sourceItems(info, ref.kind, on),
+            {
+              label: `Delete ${SOURCE_NOUN[ref.kind]}`,
+              icon: ICON.delete,
+              danger: true,
+              separatorBefore: true,
+              onSelect: on.remove,
+            },
+            refreshObjectList,
+          ]
+        }
 
         case 'fields':
         case 'field': {
@@ -449,6 +498,7 @@ export function useTreeMenu(
       onExecuteFile,
       onOpenRows,
       onDesign,
+      onOpenSource,
       onImport,
       onExport,
       onCompare,
@@ -495,40 +545,26 @@ export function backupItems(
   ]
 }
 
-/**
- * A routine is dropped by the whole of what the tree holds for it, not by its name: on
- * PostgreSQL two functions may share a name and be told apart only by what they take.
- */
-function routineItems(
-  node: TreeNode,
-  ns: Namespace,
-  deps: {
-    change: (run: ChangeSchema, table?: string) => () => Promise<void>
-    ask: (request: SchemaRequest) => void
-    refresh: MenuItem
-  },
-): MenuItem[] {
-  const routine = node.routine
-  if (!routine) return [{ ...deps.refresh, separatorBefore: false }]
+/** The kinds each object folder holds: no engine has a folder for a function alone. */
+const VIEW_KIND = ['view'] as const satisfies readonly SourceKind[]
+const ROUTINE_KINDS = ['function', 'procedure'] as const satisfies readonly SourceKind[]
 
-  const kind = routine.procedure ? 'Procedure' : 'Function'
+/**
+ * Opening one of these definitions, and declaring another beside it — the pair every object with a
+ * definition is offered, and neither where this engine's objects are not declared by a statement.
+ * It is one function because the two always travel together: a reader who can open a definition
+ * can write one.
+ */
+function sourceItems(
+  info: EngineInfo,
+  kind: SourceKind,
+  on: ReturnType<typeof sourceActions>,
+): MenuItem[] {
+  if (!info.hasSource) return []
 
   return [
-    {
-      label: `Delete ${kind}`,
-      icon: ICON.delete,
-      danger: true,
-      onSelect: () =>
-        deps.ask({
-          kind: 'confirm',
-          title: `Delete ${kind}`,
-          message: `Drop ${node.label}? Anything that calls it stops working.`,
-          submitLabel: 'Delete',
-          danger: true,
-          onSubmit: deps.change((sessionId) => schema.dropRoutine(sessionId, ns, routine)),
-        }),
-    },
-    deps.refresh,
+    { label: `Design ${SOURCE_NOUN[kind]}`, icon: ICON.design, onSelect: on.design },
+    ...newSourceItems(kind === 'view' ? VIEW_KIND : ROUTINE_KINDS, on.create),
   ]
 }
 

@@ -80,6 +80,19 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     what differs between the engines is a **flag** on `Dialect`, never a second spelling. An Apply
     **stops at the first failure** and there is no transaction around it — the preview is what
     protects the reader, which is why it has to be exact.
+17. **A view and a routine are edited as the statement that declares them, and that statement is
+    the engine's own words.** `driver.Schema.Source` is a *read* wherever the engine will answer for
+    itself — `SHOW CREATE`, `pg_get_functiondef`, `sqlite_master`, `sys.sql_modules`, `all_source` —
+    for the reason `CreateStatements` is one, and where an engine answers with the body alone the
+    `CREATE` in front of it is the **adapter's** to spell. The buffer travels back **verbatim**: a
+    definition is one statement however many semicolons a routine body holds, so nothing re-lexes it
+    and no reader ever says `DELIMITER`. A save **drops before it creates**, there is no transaction
+    around the two, and `SourceStatements` previews exactly what `SaveSource` runs — rule 13 applied
+    where it matters most. The skeleton a *new* one starts from is a flag on `sqlkit.Dialect`
+    (`Starters`) and never a template in a component. An engine whose objects are not declared by a
+    statement — MongoDB's view, a Redis key space — answers `domain.Unsupported` and says so to the
+    frontend as `hasSource`.
+
 14. **What a search matches is a `domain` rule; how many rows hold it is the driver's.**
     `domain.TextMatch` is the one rule — a pattern, an expression and a compiled matcher spelled from
     the same text — so `Contains` means the same thing of a row as of a column name. The data half is
@@ -120,6 +133,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Find out what exists at all | [docs/features.md](docs/features.md) — the index, one file per feature under [docs/features/](docs/features/) |
 | Change how a connection is made or guarded | [docs/features/connections.md](docs/features/connections.md) |
 | Change the tree, the table list or a schema change | [docs/features/schema-tree.md](docs/features/schema-tree.md), [docs/features/schema-changes.md](docs/features/schema-changes.md) |
+| Change a view's or a routine's definition | [docs/features/definitions.md](docs/features/definitions.md) |
 | Change a query tab, a console or a file run | [docs/features/query-tab.md](docs/features/query-tab.md), [docs/features/script.md](docs/features/script.md), [docs/features/console.md](docs/features/console.md) |
 | Change a table tab, its paging, filtering or values | [docs/features/table-tab.md](docs/features/table-tab.md), [docs/features/row-limit.md](docs/features/row-limit.md), [docs/features/filter-sort.md](docs/features/filter-sort.md), [docs/features/value-viewer.md](docs/features/value-viewer.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file), [docs/features/transfer.md](docs/features/transfer.md) |
@@ -137,7 +151,7 @@ A new failure mode needs all four of: a `domain` sentinel, a mapping in `errmap.
 
 A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `documents`, `keys`,
-`isFile`, `createsTables`, `createsDatabases`, `hasViews`, `hasBackups`, `needsUser`,
+`isFile`, `createsTables`, `createsDatabases`, `hasViews`, `hasSource`, `hasBackups`, `needsUser`,
 `needsDatabase`, `databaseLabel` — and never a comparison against an engine's name in a component.
 The two exceptions are the lists that *are* per-engine data rather than a capability: the types a
 designer offers (`features/schema/dataTypes.ts`) and the dialect the editor highlights with

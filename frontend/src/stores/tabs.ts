@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { namespaceLabel, type Namespace } from '@/bridge/connections'
 
 import type { SearchMode, SearchScope } from '@/bridge/search'
+import type { SourceKind, SourceRef } from '@/bridge/schema'
 
 import { useConsoleStore } from './console'
 import { useQueriesStore } from './queries'
@@ -13,6 +14,7 @@ export type TabKind =
   | 'query'
   | 'table'
   | 'design'
+  | 'source'
   | 'objects'
   | 'console'
   | 'compare'
@@ -47,6 +49,25 @@ export interface TableTab extends TabBase {
 export interface DesignTab extends TabBase {
   kind: 'design'
   table: string
+}
+
+/**
+ * A view's or a routine's **definition** rather than its rows — what Design View and Design
+ * Function open, and what New View opens on the engine's own skeleton.
+ *
+ * The whole `CREATE` statement is the buffer, so there is no name box beside it: a definition
+ * addresses the object it declares, and a definition is *one* statement however many semicolons a
+ * routine body holds. Nothing on this side ever reads that text.
+ */
+export interface SourceTab extends TabBase {
+  kind: 'source'
+  ref: SourceRef
+  /**
+   * Whether the object is being **declared** rather than altered. It is a fact of its own rather
+   * than a blank name, because a new one is named before its tab opens — the skeleton has to carry
+   * the name — and what it decides is whether a Save drops anything first.
+   */
+  creating: boolean
 }
 
 /**
@@ -112,6 +133,7 @@ export type Tab =
   | QueryTab
   | TableTab
   | DesignTab
+  | SourceTab
   | ObjectsTab
   | ConsoleTab
   | CompareTab
@@ -121,6 +143,7 @@ export type NewTab =
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
   | Omit<DesignTab, 'id'>
+  | Omit<SourceTab, 'id'>
   | Omit<ObjectsTab, 'id'>
   | Omit<ConsoleTab, 'id'>
   | Omit<CompareTab, 'id'>
@@ -132,6 +155,27 @@ export interface TableTarget {
   profileId: string
   namespace: Namespace
   table: string
+}
+
+/** What names a definition wherever one is opened: a table target, plus what kind of thing it is. */
+export interface SourceTarget {
+  profileId: string
+  namespace: Namespace
+  ref: SourceRef
+  /** True for one being declared rather than altered. See `SourceTab.creating`. */
+  creating?: boolean
+}
+
+/** The word each kind reads as, wherever one is named to a person. */
+export const SOURCE_NOUN: Record<SourceKind, string> = {
+  view: 'View',
+  function: 'Function',
+  procedure: 'Procedure',
+}
+
+/** How a definition reads in the strip: the object's name, then what kind of thing it is. */
+export function sourceTitle(ref: SourceRef): string {
+  return `${ref.name} · ${SOURCE_NOUN[ref.kind]}`
 }
 
 /** How a table reads on a tab that names two of them: `shop.users`, or `users` on its own. */
@@ -155,6 +199,8 @@ interface TabsState {
   openTable: (target: TableTarget) => string
   /** A table's shape. An empty `table` designs one that does not exist yet. */
   openDesign: (target: TableTarget) => string
+  /** A view's or a routine's definition, read from the server or — with `creating` — declared. */
+  openSource: (target: SourceTarget) => string
   /** Every table of a namespace, with what the catalogue keeps about each. */
   openTables: (profileId: string, namespace: Namespace) => string
   /** Every backup kept for a namespace. */
@@ -182,12 +228,25 @@ interface TabsState {
   editQuery: (id: string, edit: QueryEdit) => void
   editFind: (id: string, edit: FindEdit) => void
   designed: (id: string, table: string) => void
+  /**
+   * A definition tab whose Save has just declared its object now **edits** it, so pressing Save
+   * again replaces it rather than declaring a second one and being refused for a name that is
+   * taken. It is `designed`'s sibling; the object was named before the tab opened, so only which
+   * of the two a Save is has changed.
+   */
+  declared: (id: string) => void
 }
 
 let seq = 0
 const nextId = () => `tab-${++seq}`
 
-const tableOf = (tab: Tab | NewTab) => ('table' in tab ? tab.table : '')
+// What a tab is *about*, for the one-tab-per-thing rule below. A definition is named by all three
+// of its facts, because on PostgreSQL two functions of one name differ only in what they take —
+// which is the same reason a drop carries the arguments.
+const subjectOf = (tab: Tab | NewTab) => {
+  if (tab.kind === 'source') return `${tab.ref.kind}:${tab.ref.name}(${tab.ref.arguments})`
+  return 'table' in tab ? tab.table : ''
+}
 
 const sameTable = (one: TableTarget, other: TableTarget) =>
   one.profileId === other.profileId &&
@@ -203,13 +262,16 @@ const sameTarget = (tab: Tab, target: NewTab) =>
   tab.profileId === target.profileId &&
   tab.namespace.database === target.namespace.database &&
   tab.namespace.schema === target.namespace.schema &&
-  tableOf(tab) === tableOf(target) &&
+  subjectOf(tab) === subjectOf(target) &&
   (tab.kind !== 'compare' || sameTable(tab.right, (target as CompareTab).right))
 
 // A query is never reused — two of them are two buffers — and neither is a table being designed
-// that has no name yet, because two of those are two tables.
+// that has no name yet, because two of those are two tables. An object being *declared* is the
+// same case: it is not on the server for a second tab to be pointed at.
 const reusable = (tab: NewTab) =>
-  tab.kind !== 'query' && !(tab.kind === 'design' && tab.table === '')
+  tab.kind !== 'query' &&
+  !(tab.kind === 'design' && tab.table === '') &&
+  !(tab.kind === 'source' && tab.creating)
 
 export const useTabsStore = create<TabsState>((set, get) => ({
   tabs: [],
@@ -245,6 +307,9 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       namespace,
       table,
     }),
+
+  openSource: ({ profileId, namespace, ref, creating = false }) =>
+    get().open({ kind: 'source', title: sourceTitle(ref), profileId, namespace, ref, creating }),
 
   // The namespace is not in the title: every tab in the strip draws the one it belongs to, and a
   // title that repeated it would say `hirec.public` twice on one tab.
@@ -329,6 +394,13 @@ export const useTabsStore = create<TabsState>((set, get) => ({
         tab.id === id && tab.kind === 'design'
           ? { ...tab, table, title: `${table} · Design` }
           : tab,
+      ),
+    })),
+
+  declared: (id) =>
+    set((s) => ({
+      tabs: s.tabs.map((tab) =>
+        tab.id === id && tab.kind === 'source' ? { ...tab, creating: false } : tab,
       ),
     })),
 

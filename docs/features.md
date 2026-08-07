@@ -12,7 +12,8 @@ the JSON, GeoJSON, array or blob it holds**, **creating and dropping a database*
 each table**, **a table's fields, indexes and foreign keys in
 the tree and in a designer tab**, **schema changes from the tree's context menu** — new / rename /
 empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index or a
-foreign key, drop a view or a routine — table data browsing with pagination, cell editing plus row
+foreign key, drop a view or a routine — **reading and writing the definition of a view, a function
+or a procedure**, table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
 or SQL**, **backing a SQL namespace up into a folder the app keeps, and restoring
 one**, query tabs with completion that **run a whole script**, **a console that runs one statement
@@ -22,8 +23,10 @@ run, kept on disk and put back in the editor by a double-click**, passwords in W
 Manager, and the full layout shell with dark and light themes and a **data font the reader picks**.
 
 Not there yet: a **materialised view** is not listed, because it is dropped by a statement of its
-own and a list that cannot be acted on is worse than one that does not claim it. A routine can be
-dropped but not read or written — there is no body editor. A column's **comment** is neither read
+own and a list that cannot be acted on is worse than one that does not claim it. A routine is
+declared and edited but not **run** with its arguments filled in — that is a query tab's business.
+A MongoDB view has no definition to open, being declared by a document rather than by a statement.
+A column's **comment** is neither read
 nor written, so the designer has no column for one rather than a column that quietly drops what is
 typed into it. An export writes what the grid holds rather than replaying the statement for
 everything behind it.
@@ -44,6 +47,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | Finding text across a schema | [features/search.md](features/search.md) |
 | Comparing two tables, and making them agree | [features/compare.md](features/compare.md) |
 | The tree's schema changes, `New Database`, and the designer | [features/schema-changes.md](features/schema-changes.md) |
+| A view's or a routine's definition: reading it, declaring one, and saving it back | [features/definitions.md](features/definitions.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |
 | Backing a namespace up, the list of backups, and restoring one | [features/backup.md](features/backup.md) |
 | The table tab: opening it, paging it, and its two panels | [features/table-tab.md](features/table-tab.md) |

@@ -65,6 +65,30 @@ export interface ForeignKeySpec {
   onDelete: string
 }
 
+/**
+ * Which of the three declared objects a definition belongs to. It is the same word the Go side
+ * checks against before anything spells a `DROP` with it, so nothing else may be sent.
+ */
+export type SourceKind = 'view' | 'function' | 'procedure'
+
+/**
+ * One view or one routine, named. `arguments` is PostgreSQL's overload discriminator — two of its
+ * functions may share a name and differ only in what they take — and is empty everywhere else.
+ */
+export interface SourceRef {
+  kind: SourceKind
+  name: string
+  arguments: string
+}
+
+/** A definition as the server keeps it: the whole statement that declares the object. */
+export interface Source extends SourceRef {
+  definition: string
+}
+
+/** A reference to nothing, which is what an object being declared replaces. */
+export const NEW_SOURCE: SourceRef = { kind: 'view', name: '', arguments: '' }
+
 export function emptyFieldSpec(): FieldSpec {
   return { name: '', type: '', nullable: true, default: null, primaryKey: false }
 }
@@ -148,6 +172,40 @@ export const schema = {
   /** The whole routine, not its name: on PostgreSQL two functions may share one name. */
   dropRoutine: (sessionId: string, ns: Namespace, routine: Routine) =>
     call(() => api.DropRoutine(sessionId, ns, routine)),
+
+  /**
+   * The declaration a reader starts a *new* one of these from. It asks the server nothing — a
+   * routine's body is grammar and so the engine's own — and answers with `''` where this engine
+   * has no such object to start.
+   */
+  newSource: (sessionId: string, ns: Namespace, kind: SourceKind, name: string): Promise<string> =>
+    call(() => api.NewSource(sessionId, ns, kind, name)) as Promise<string>,
+
+  /** One view or one routine as the statement that declares it — what the editor opens on. */
+  loadSource: (sessionId: string, ns: Namespace, ref: SourceRef): Promise<Source> =>
+    call(() =>
+      api.LoadSource(sessionId, ns, ref as unknown as app.SourceRef),
+    ) as unknown as Promise<Source>,
+
+  /**
+   * Exactly what `saveSource` will run. A definition being replaced is **dropped first**, so this
+   * is the one place a reader sees that before it happens.
+   */
+  previewSource: (
+    sessionId: string,
+    ns: Namespace,
+    replaces: SourceRef,
+    definition: string,
+  ): Promise<string[]> =>
+    call(() =>
+      api.PreviewSource(sessionId, ns, { replaces, definition } as unknown as app.SourceSaveInput),
+    ) as unknown as Promise<string[]>,
+
+  /** A blank name in `replaces` declares the object rather than replacing one. */
+  saveSource: (sessionId: string, ns: Namespace, replaces: SourceRef, definition: string) =>
+    call(() =>
+      api.SaveSource(sessionId, ns, { replaces, definition } as unknown as app.SourceSaveInput),
+    ),
 }
 
 // A field with no default leaves the key out rather than sending null, so Go reads a nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
@@ -55,20 +56,79 @@ func (s *session) CreateStatements(
 	if err := s.db.QueryRowContext(ctx, query).Scan(&name, &declaration); err != nil {
 		return nil, translateError(err)
 	}
-	return []string{qualified(ns, table, declaration)}, nil
+	return []string{qualified(ns, "CREATE TABLE", table, declaration)}, nil
 }
 
-// qualified names the database in the declaration the server answered with, which names the table
-// alone — CREATE TABLE and then the bare name — where the rows written after it are qualified. Left
-// as it came, a replayed dump would make the table in whatever database the connection was on and
-// put the rows in the one they came from, which is the one arrangement a reader could not have meant.
+// Source asks MySQL for its own words, exactly as CreateStatements does and for the same reason:
+// `SHOW CREATE VIEW` and `SHOW CREATE PROCEDURE` / `FUNCTION` report the whole declaration — the
+// algorithm, the definer, the SQL security, the parameter list and the body — and no read of
+// information_schema puts all of that back together.
+//
+// **The answer's columns differ by statement and by version**, so the row is scanned into as many
+// strings as it turned out to have and the declaration is taken by the name of its column: every
+// one of these statements calls it `Create <something>`, and nothing else here has to know which.
+func (s *session) Source(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	query := "SHOW CREATE " + ref.Kind.Keyword() + " " + dialect.Table(ns, ref.Name)
+
+	rows, err := s.db.QueryContext(ctx, query)
+	if err != nil {
+		return driver.Source{}, translateError(err)
+	}
+	defer rows.Close()
+
+	names, err := rows.Columns()
+	if err != nil {
+		return driver.Source{}, translateError(err)
+	}
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return driver.Source{}, translateError(err)
+		}
+		return driver.Source{}, domain.ErrUnknownDefinition
+	}
+
+	// A definition the account may not read comes back NULL rather than missing, which is why
+	// every column is scanned as a pointer: the answer is then "there is one and you cannot see
+	// it" rather than a crash on the way past it.
+	cells := make([]*string, len(names))
+	into := make([]any, len(names))
+	for at := range cells {
+		into[at] = &cells[at]
+	}
+	if err := rows.Scan(into...); err != nil {
+		return driver.Source{}, translateError(err)
+	}
+
+	for at, column := range names {
+		if !strings.HasPrefix(column, "Create ") || cells[at] == nil {
+			continue
+		}
+		return driver.Source{
+			SourceRef:  ref,
+			Definition: qualified(ns, ref.Kind.Keyword(), ref.Name, *cells[at]),
+		}, nil
+	}
+	return driver.Source{}, domain.Unsupported("reading this definition: the server did not answer with one")
+}
+
+// qualified names the database in a declaration the server answered with, which names the object
+// alone — `CREATE TABLE` and then the bare name — where everything written after it is qualified.
+// Left as it came, a replayed dump would make the table in whatever database the connection was on
+// and put the rows in the one they came from, which is the one arrangement a reader could not have
+// meant; and a routine put back would land wherever the pool happened to be pointed rather than
+// where it was read from.
 //
 // A prefix the server ever stopped spelling this way simply is not found, and the answer then
-// travels unchanged: this can leave the declaration as it was but never make it something else.
-func qualified(ns driver.Namespace, table, declaration string) string {
+// travels unchanged: this can leave the declaration as it was but never make it something else. A
+// view already arrives qualified, so its own keyword finds nothing and nothing is done.
+func qualified(ns driver.Namespace, keyword, name, declaration string) string {
 	return strings.Replace(declaration,
-		"CREATE TABLE "+dialect.QuoteIdent(table),
-		"CREATE TABLE "+dialect.Table(ns, table), 1)
+		keyword+" "+dialect.QuoteIdent(name),
+		keyword+" "+dialect.Table(ns, name), 1)
 }
 
 // RenameTable qualifies the new name with the same database as the old one, because MySQL

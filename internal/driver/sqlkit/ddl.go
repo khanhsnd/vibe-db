@@ -600,24 +600,63 @@ func ForeignKeySpecOf(key driver.ForeignKey) driver.ForeignKeySpec {
 	}
 }
 
-func (x DDL) DropView(ctx context.Context, ns driver.Namespace, view string) error {
-	return x.Run(ctx, ns.Database, "DROP VIEW "+x.Dialect.Table(ns, view))
+// DropSource removes a view or a routine, and is one statement for all three: what differs
+// between them is the word naming the kind, which the kind itself supplies.
+//
+// The arguments are named only where the engine needs them to tell two routines of one name
+// apart, which is PostgreSQL and not MySQL — and both spell the drop the same way once that
+// difference travels in the reference itself.
+func (d Dialect) DropSource(ns driver.Namespace, ref driver.SourceRef) string {
+	statement := "DROP " + ref.Kind.Keyword() + " " + d.Table(ns, ref.Name)
+	if ref.Arguments != "" {
+		statement += "(" + ref.Arguments + ")"
+	}
+	return statement
 }
 
-// DropRoutine names the arguments only where the engine needs them to tell two routines of one
-// name apart, which is PostgreSQL and not MySQL — and both spell the drop the same way once
-// that difference travels in the routine itself.
-func (x DDL) DropRoutine(ctx context.Context, ns driver.Namespace, routine driver.Routine) error {
-	kind := "FUNCTION"
-	if routine.Procedure {
-		kind = "PROCEDURE"
-	}
+func (x DDL) DropView(ctx context.Context, ns driver.Namespace, view string) error {
+	ref := driver.SourceRef{Kind: driver.SourceView, Name: view}
+	return x.Run(ctx, ns.Database, x.Dialect.DropSource(ns, ref))
+}
 
-	statement := "DROP " + kind + " " + x.Dialect.Table(ns, routine.Name)
-	if routine.Arguments != "" {
-		statement += "(" + routine.Arguments + ")"
+func (x DDL) DropRoutine(ctx context.Context, ns driver.Namespace, routine driver.Routine) error {
+	return x.Run(ctx, ns.Database, x.Dialect.DropSource(ns, routine.Source()))
+}
+
+// SourceStatements spells saving a definition: the drop of whatever is there now, and then the
+// reader's own declaration. Two statements rather than a `CREATE OR REPLACE` because the second
+// of them is the reader's text and nothing here rewrites it — an engine that can replace in place
+// does so because the definition it answered with already said so, not because this added a word.
+//
+// A definition that is blank spells **nothing**, which is what the preview of an empty editor
+// honestly is; what refuses to save one is the API layer, in front of this.
+func (x DDL) SourceStatements(ns driver.Namespace, save driver.SourceSave) []string {
+	definition := strings.TrimSpace(save.Definition)
+	if definition == "" {
+		return nil
 	}
-	return x.Run(ctx, ns.Database, statement)
+	if strings.TrimSpace(save.Replaces.Name) == "" {
+		return []string{definition}
+	}
+	return []string{x.Dialect.DropSource(ns, save.Replaces), definition}
+}
+
+// NewSource is the skeleton this engine declares one of these with — see Dialect.Starters, which
+// is where the three shapes live.
+func (x DDL) NewSource(ns driver.Namespace, kind driver.SourceKind, name string) string {
+	return x.Dialect.NewSource(ns, kind, name)
+}
+
+// SaveSource runs what SourceStatements showed, in order and stopping at the first failure. A
+// drop that succeeded in front of a create that did not leaves the object gone, which is why the
+// preview shows both statements and why the reader sees the drop before pressing Save.
+func (x DDL) SaveSource(ctx context.Context, ns driver.Namespace, save driver.SourceSave) error {
+	for _, statement := range x.SourceStatements(ns, save) {
+		if err := x.Run(ctx, ns.Database, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (x DDL) alter(ns driver.Namespace, table string) string {

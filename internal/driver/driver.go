@@ -220,6 +220,71 @@ type Routine struct {
 	Arguments string
 }
 
+// Source is the routine as the thing a definition is read and written by, which is the same
+// three facts under the name every statement about one uses.
+func (r Routine) Source() SourceRef {
+	kind := SourceFunction
+	if r.Procedure {
+		kind = SourceProcedure
+	}
+	return SourceRef{Kind: kind, Name: r.Name, Arguments: r.Arguments}
+}
+
+// SourceKind is which of the three declared objects a definition belongs to. It is one value
+// rather than a flag beside a flag because the three differ in exactly one word — the one that
+// drops them — and a caller that has the kind has the word.
+type SourceKind string
+
+const (
+	SourceView      SourceKind = "view"
+	SourceFunction  SourceKind = "function"
+	SourceProcedure SourceKind = "procedure"
+)
+
+// Keyword is the word the engines name this kind of object by, and is total on purpose: a kind
+// that arrived as something else is a view rather than text on its way into a statement. What
+// refuses an unknown kind outright is the API layer, before it ever reaches here.
+func (k SourceKind) Keyword() string {
+	switch k {
+	case SourceProcedure:
+		return "PROCEDURE"
+	case SourceFunction:
+		return "FUNCTION"
+	default:
+		return "VIEW"
+	}
+}
+
+// SourceRef names one view or one routine. Arguments is PostgreSQL's overload discriminator and
+// is empty wherever a name already identifies one — the same field, for the same reason, that
+// Routine carries.
+type SourceRef struct {
+	Kind      SourceKind
+	Name      string
+	Arguments string
+}
+
+// Source is one view or one routine as the statement that declares it: what a reader is shown,
+// and — edited — what a save runs.
+//
+// The definition is the **server's own words** wherever the engine has them, for the reason
+// CreateStatements is a read rather than a render: a declaration put back together out of a
+// catalogue is only ever as complete as the catalogue's columns. Where an engine keeps the body
+// alone — PostgreSQL and Oracle both answer for a view with its SELECT and nothing else — the
+// adapter puts the CREATE in front of it, which is the driver's to spell like every other statement.
+type Source struct {
+	SourceRef
+	Definition string
+}
+
+// SourceSave is a definition on its way back to a server. `Replaces` is what is there now, and a
+// blank name in it means there is nothing there yet — which is the whole difference between
+// declaring an object and altering one, a definition being replaced by being dropped and made again.
+type SourceSave struct {
+	Replaces   SourceRef
+	Definition string
+}
+
 // Objects is everything a namespace holds that the tree draws a folder for. They are read
 // together for the reason a table's shape is: expanding any one folder needs every folder's
 // count, so one read answers all three.
@@ -656,6 +721,33 @@ type Schema interface {
 	// DropRoutine takes the whole routine rather than its name, because on PostgreSQL the
 	// name alone does not identify one: two functions may share it and differ in arguments.
 	DropRoutine(ctx context.Context, ns Namespace, routine Routine) error
+	// Source reads one view or one routine as the statement that declares it. It is the read a
+	// designer opens on, and it is the driver's for the reason every other declaration is: only
+	// the engine knows where it keeps one, and four of the five will answer for themselves.
+	//
+	// An engine that has no such object says `domain.Unsupported` naming which, rather than
+	// answering with an empty definition a save would then wipe the object out with.
+	Source(ctx context.Context, ns Namespace, ref SourceRef) (Source, error)
+	// SourceStatements spells saving a definition as the statements that would make it, and
+	// **runs none of them** — the arrangement AlterStatements has, for the same reason: the
+	// preview is what protects a reader from a save that drops an object before it makes it.
+	//
+	// The definition itself travels **verbatim**. It is one statement however many semicolons are
+	// inside it, so a routine body needs no DELIMITER and nothing here re-lexes what the reader
+	// typed; where it is not the whole statement is where the adapter's own read already said so.
+	SourceStatements(ns Namespace, save SourceSave) []string
+	// SaveSource runs exactly what SourceStatements showed, in that order, stopping at the first
+	// failure. There is no transaction around it, which is why the preview has to be exact.
+	SaveSource(ctx context.Context, ns Namespace, save SourceSave) error
+	// NewSource is the declaration a reader **starts from** when they are making one of these
+	// rather than altering it: the shape of the statement with nothing in it yet. It is the
+	// driver's for the reason every other statement is — a routine's body is grammar, and MySQL's
+	// `BEGIN … END`, PostgreSQL's language-tagged string and Oracle's `IS` are one intention
+	// spelled three ways.
+	//
+	// It runs nothing and needs no connection. An engine with no such object answers with the
+	// empty string, which is what the frontend reads as there being nothing to start.
+	NewSource(ns Namespace, kind SourceKind, name string) string
 }
 
 type Session interface {

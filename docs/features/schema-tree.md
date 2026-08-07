@@ -60,6 +60,12 @@ view is a primary key, so no single stored row can be named. A **function or a p
 its argument list as its badge, because on PostgreSQL two of them may share a name and be told apart
 only by what they take — which is also why dropping one sends the whole routine and not its name.
 
+All three have a **definition**, which is the one thing about them no grid could draw, and it is
+opened from the same right-click: `Design View`, `Design Function`, `Design Procedure`, and a `New …`
+beside each — on the object and on the folder that holds it. What that tab is, and why a Save drops
+before it creates, is [definitions.md](definitions.md). It is not offered where an engine's objects
+are not declared by a statement at all (`EngineInfo.hasSource`), which is MongoDB and Redis.
+
 A field carries its **bare** type as a badge and a key icon when it is part of the primary key; an
 index carries its columns, and a foreign key the table it points at. The badge is the bare type and
 not the declared one because six levels of indent leave no room for `character varying(255)` — the

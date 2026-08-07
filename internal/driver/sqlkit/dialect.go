@@ -7,6 +7,8 @@ package sqlkit
 import (
 	"strconv"
 	"strings"
+
+	"github.com/khanhsnd/vibe-db/internal/driver"
 )
 
 // Dialect is the lexical difference between engines: the character that quotes an
@@ -154,6 +156,45 @@ type Dialect struct {
 	// piece of that syntax the engines spell differently: `\b` on MySQL's ICU and in Go, and `\y` on
 	// PostgreSQL, where `\b` is a backspace.
 	WordBoundary string
+	// Starters is what a reader begins a *new* view or routine from — see SourceStarter.
+	Starters SourceStarter
+}
+
+// SourceStarter is the skeleton a reader starts a new view or routine from: the shape of the
+// declaration with nothing in it yet. It is a **flag** in the sense every other difference here is
+// — three strings per engine — and it is the dialect's rather than the frontend's for the reason
+// nothing outside a driver ever spells a statement.
+//
+// The three differ in *grammar* rather than in quoting, which is why one speller could not do it:
+// MySQL wraps a routine's body in `BEGIN … END`, PostgreSQL puts it in a string tagged with the
+// language it is written in, SQL Server opens with `AS`, and Oracle says `IS`. No reader should
+// have to remember which, and an engine with no routines at all leaves both blank.
+//
+// Each holds one `%s`, which is the qualified name — the same name every other statement here is
+// addressed by. Nothing runs one of these: what a Save runs is the reader's own buffer, which
+// SourceStatements previews whole.
+type SourceStarter struct {
+	View      string
+	Function  string
+	Procedure string
+}
+
+// NewSource is the starter for this kind, addressed to a name. An engine that has no such object
+// answers with nothing, which is what the frontend reads as "there is no starter" — it does not
+// offer a New for a kind this engine has not got in the first place.
+func (d Dialect) NewSource(ns driver.Namespace, kind driver.SourceKind, name string) string {
+	starter := d.Starters.View
+	switch kind {
+	case driver.SourceFunction:
+		starter = d.Starters.Function
+	case driver.SourceProcedure:
+		starter = d.Starters.Procedure
+	}
+
+	if starter == "" {
+		return ""
+	}
+	return strings.ReplaceAll(starter, "%s", d.Table(ns, name))
 }
 
 // PatternIgnoresCase says this engine's own collation already makes LIKE blind to case, so a match
@@ -178,6 +219,12 @@ var (
 		RegexIsFunction:   true,
 		SensitiveCast:     "BINARY",
 		WordBoundary:      `\b`,
+		Starters: SourceStarter{
+			View: "CREATE VIEW %s AS\nSELECT 1",
+			Function: "CREATE FUNCTION %s()\n" +
+				"RETURNS INT\nDETERMINISTIC\nBEGIN\n  RETURN 0;\nEND",
+			Procedure: "CREATE PROCEDURE %s()\nBEGIN\n  SELECT 1;\nEND",
+		},
 	}
 	Postgres = Dialect{
 		IdentQuote:             '"',
@@ -193,6 +240,13 @@ var (
 		ForeignKeyIsConstraint: true,
 		TextType:               "TEXT",
 		WordBoundary:           `\y`,
+		Starters: SourceStarter{
+			View: "CREATE OR REPLACE VIEW %s AS\nSELECT 1",
+			Function: "CREATE OR REPLACE FUNCTION %s()\nRETURNS integer\nLANGUAGE plpgsql\n" +
+				"AS $$\nBEGIN\n  RETURN 0;\nEND;\n$$",
+			Procedure: "CREATE OR REPLACE PROCEDURE %s()\nLANGUAGE plpgsql\n" +
+				"AS $$\nBEGIN\n  NULL;\nEND;\n$$",
+		},
 	}
 	// SQLite is one file and therefore one namespace: `main`, which every name is qualified by
 	// exactly as a MySQL name is qualified by its database. Its upsert is PostgreSQL's word for
@@ -213,6 +267,9 @@ var (
 		RegexFlagsInPattern:    true,
 		MatchesByRegex:         true,
 		WordBoundary:           `\b`,
+		// A function here belongs to the program that opened the file, so there is no routine to
+		// start — which is the same thing `hasRoutines` says on the frontend.
+		Starters: SourceStarter{View: "CREATE VIEW %s AS\nSELECT 1"},
 	}
 	// SQLServer names a table by its database *and* its schema, which is what lets one pool read
 	// the whole server. A default there is a constraint rather than a fact of the column, so an
@@ -239,6 +296,11 @@ var (
 		RegexIsFunction:        true,
 		SensitiveCollation:     "Latin1_General_BIN2",
 		WordBoundary:           `\b`,
+		Starters: SourceStarter{
+			View:      "CREATE VIEW %s AS\nSELECT 1 AS one",
+			Function:  "CREATE FUNCTION %s()\nRETURNS int\nAS\nBEGIN\n  RETURN 0\nEND",
+			Procedure: "CREATE PROCEDURE %s\nAS\nBEGIN\n  SET NOCOUNT ON;\nEND",
+		},
 	}
 	// Oracle has no databases below its service, so the schema *is* what a Namespace's Database
 	// holds and a name is qualified by one level exactly as MySQL's is. Everything else here is
@@ -259,6 +321,13 @@ var (
 		TextType:               "VARCHAR2(4000)",
 		RegexIsFunction:        true,
 		WordBoundary:           `\b`,
+		// A PL/SQL block ends at its own `END;`, and that semicolon is part of the statement rather
+		// than a terminator after it — which is why nothing anywhere here trims one.
+		Starters: SourceStarter{
+			View:      "CREATE OR REPLACE VIEW %s AS\nSELECT 1 FROM dual",
+			Function:  "CREATE OR REPLACE FUNCTION %s\nRETURN NUMBER\nIS\nBEGIN\n  RETURN 0;\nEND;",
+			Procedure: "CREATE OR REPLACE PROCEDURE %s\nIS\nBEGIN\n  NULL;\nEND;",
+		},
 	}
 	// Shell is the lexical half of a document store's own language, and is a Dialect for one
 	// reason: so `Lex` reads it rather than a second scanner being written. `//` opens a comment,

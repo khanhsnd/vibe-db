@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
@@ -157,4 +158,43 @@ func (s *session) CreateStatements(
 	}
 
 	return statements, nil
+}
+
+// Source asks the server for its own words, which is the one declaration SQL Server *does* keep:
+// `sys.sql_modules` holds the text of the statement that made every view, function and procedure,
+// exactly as it was submitted. That is why this is a read where CreateStatements above is a
+// description — a table's shape is derived from a dozen catalogue views, and a module is not.
+//
+// `OBJECT_DEFINITION` is not used. It reads an object id in whatever database the connection is
+// pointed at, and this adapter has one pool for the whole server — so the read is qualified the
+// way every other statement here is, by naming the database in front of `sys`.
+func (s *session) Source(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	catalogue := dialect.QuoteIdent(ns.Database)
+
+	query := `
+		SELECT m.definition
+		FROM ` + catalogue + `.sys.sql_modules m
+		JOIN ` + catalogue + `.sys.objects o ON o.object_id = m.object_id
+		JOIN ` + catalogue + `.sys.schemas s ON s.schema_id = o.schema_id
+		WHERE s.name = @p1 AND o.name = @p2`
+
+	// The definition is NULL for a module the account may not read, and for an encrypted one. Both
+	// are "there is one and you cannot see it", which is not the same answer as "there is none".
+	var definition *string
+	err := s.db.QueryRowContext(ctx, query, ns.Schema, ref.Name).Scan(&definition)
+	if errors.Is(err, sql.ErrNoRows) {
+		return driver.Source{}, domain.ErrUnknownDefinition
+	}
+	if err != nil {
+		return driver.Source{}, translateError(err)
+	}
+	if definition == nil {
+		return driver.Source{}, domain.Unsupported("reading this definition: the server keeps it encrypted")
+	}
+
+	return driver.Source{SourceRef: ref, Definition: strings.TrimSpace(*definition)}, nil
 }

@@ -88,6 +88,8 @@ export function LoadDatabaseOptions(arg1:string):Promise<app.DatabaseOptions>;
 
 export function LoadObjects(arg1:string,arg2:app.Namespace):Promise<app.Objects>;
 
+export function LoadSource(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<app.Source>;
+
 export function LoadTableList(arg1:string,arg2:app.Namespace):Promise<app.TableList>;
 
 export function LoadTableRows(arg1:string,arg2:app.TablePageInput):Promise<app.TableRows>;
@@ -96,6 +98,8 @@ export function LoadTableSchemas(arg1:string,arg2:app.Namespace):Promise<Array<a
 
 export function LoadTableStructure(arg1:string,arg2:app.Namespace,arg3:string):Promise<app.TableStructure>;
 
+export function NewSource(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<string>;
+
 export function OpenBackupFolder(arg1:string,arg2:app.Namespace):Promise<void>;
 
 export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<Array<string>>;
@@ -103,6 +107,8 @@ export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Pr
 export function PreviewImportFile(arg1:app.ImportSource):Promise<app.ImportPreview>;
 
 export function PreviewRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<Array<string>>;
+
+export function PreviewSource(arg1:string,arg2:app.Namespace,arg3:app.SourceSaveInput):Promise<Array<string>>;
 
 export function PreviewTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<app.TableChangeInput>):Promise<Array<string>>;
 
@@ -123,6 +129,8 @@ export function RunExport(arg1:string,arg2:app.ExportJobInput):Promise<app.Expor
 export function RunImport(arg1:string,arg2:app.ImportInput):Promise<app.ImportResult>;
 
 export function SaveProfile(arg1:app.ProfileInput):Promise<app.Profile>;
+
+export function SaveSource(arg1:string,arg2:app.Namespace,arg3:app.SourceSaveInput):Promise<void>;
 
 export function SetPrimaryKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<string>):Promise<void>;
 

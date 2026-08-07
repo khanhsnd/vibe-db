@@ -1,6 +1,7 @@
 import {
   Archive,
   Columns3,
+  FileCode2,
   GitCompareArrows,
   List,
   Plus,
@@ -30,6 +31,9 @@ export const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: str
   query: { label: 'Query', icon: Terminal, tint: 'text-kind-routine' },
   table: { label: 'Table', icon: Table2, tint: 'text-kind-table' },
   design: { label: 'Design', icon: Columns3, tint: 'text-kind-field' },
+  // A definition wears the view's colour whichever of the three it is: what the tab holds is a
+  // *declaration*, and the title beside it already says which kind.
+  source: { label: 'Definition', icon: FileCode2, tint: 'text-kind-view' },
   objects: { label: 'Tables', icon: List, tint: 'text-kind-database' },
   console: { label: 'Console', icon: SquareTerminal, tint: 'text-kind-routine' },
   compare: { label: 'Compare', icon: GitCompareArrows, tint: 'text-kind-schema' },

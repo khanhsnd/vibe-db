@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"time"
 
 	"github.com/khanhsnd/vibe-db/internal/compare"
@@ -205,6 +206,33 @@ type RoutineInfo struct {
 	Name      string `json:"name"`
 	Procedure bool   `json:"procedure"`
 	Arguments string `json:"arguments"`
+}
+
+// SourceRef names one view or one routine on the wire. `Kind` is `view`, `function` or
+// `procedure` and is checked against those three before anything spells a statement with it —
+// see toSourceKind, which is what keeps a word off the wire out of a DROP.
+type SourceRef struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// Source is one view or one routine as the statement that declares it.
+type Source struct {
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+	// Definition is the whole statement, which on four of the five engines is the server's own
+	// words for it. It carries its own semicolons and is still one statement, so nothing that
+	// runs it splits it and no reader has to say DELIMITER.
+	Definition string `json:"definition"`
+}
+
+// SourceSaveInput is a definition on its way back. A blank name in `replaces` means there is
+// nothing there yet, which is what the editor sends for an object being declared.
+type SourceSaveInput struct {
+	Replaces   SourceRef `json:"replaces"`
+	Definition string    `json:"definition"`
 }
 
 // Objects is everything the tree draws a folder for under a namespace, read in one call
@@ -1092,6 +1120,50 @@ func (in RoutineInfo) toDriver() driver.Routine {
 		Name:      in.Name,
 		Procedure: in.Procedure,
 		Arguments: in.Arguments,
+	}
+}
+
+// sourceKinds is the whole of what a definition may be about, and the map is what a kind off the
+// wire is checked against: `Kind` reaches a DROP as the word naming the object, so a value nothing
+// vouched for would be text on its way into a statement.
+var sourceKinds = map[string]driver.SourceKind{
+	string(driver.SourceView):      driver.SourceView,
+	string(driver.SourceFunction):  driver.SourceFunction,
+	string(driver.SourceProcedure): driver.SourceProcedure,
+}
+
+func (in SourceRef) toDriver() (driver.SourceRef, error) {
+	kind, known := sourceKinds[in.Kind]
+	if !known {
+		return driver.SourceRef{}, domain.ValidationError{
+			Field:   "kind",
+			Message: "must be view, function or procedure",
+		}
+	}
+	return driver.SourceRef{Kind: kind, Name: in.Name, Arguments: in.Arguments}, nil
+}
+
+// toDriver on a save reads its `replaces` the same way, except that a blank name is an object
+// being declared rather than one being altered — and there is then no kind to check, nothing
+// being dropped in front of the create.
+func (in SourceSaveInput) toDriver() (driver.SourceSave, error) {
+	if strings.TrimSpace(in.Replaces.Name) == "" {
+		return driver.SourceSave{Definition: in.Definition}, nil
+	}
+
+	replaces, err := in.Replaces.toDriver()
+	if err != nil {
+		return driver.SourceSave{}, err
+	}
+	return driver.SourceSave{Replaces: replaces, Definition: in.Definition}, nil
+}
+
+func toSourceDTO(source driver.Source) Source {
+	return Source{
+		Kind:       string(source.Kind),
+		Name:       source.Name,
+		Arguments:  source.Arguments,
+		Definition: source.Definition,
 	}
 }
 

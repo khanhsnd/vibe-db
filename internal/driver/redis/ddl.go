@@ -146,3 +146,27 @@ func (*session) DropView(context.Context, driver.Namespace, string) error {
 func (*session) DropRoutine(context.Context, driver.Namespace, driver.Routine) error {
 	return domain.Unsupported("a stored routine")
 }
+
+// A key space declares nothing, so there is no definition to read and none to put back. Both halves
+// say so for the reason every other refusal in this file does: a reader answers "this engine has not
+// got one" by not asking again.
+func (*session) Source(
+	context.Context,
+	driver.Namespace,
+	driver.SourceRef,
+) (driver.Source, error) {
+	return driver.Source{}, domain.Unsupported("a definition: a Redis key space is not declared")
+}
+
+func (*session) SourceStatements(driver.Namespace, driver.SourceSave) []string {
+	return nil
+}
+
+func (*session) SaveSource(context.Context, driver.Namespace, driver.SourceSave) error {
+	return domain.Unsupported("a definition: a Redis key space is not declared")
+}
+
+// NewSource has no skeleton to give, a key space being declared by nothing at all.
+func (*session) NewSource(driver.Namespace, driver.SourceKind, string) string {
+	return ""
+}

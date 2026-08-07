@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
@@ -138,6 +139,93 @@ func (s *session) CreateStatements(
 	}
 
 	return statements, nil
+}
+
+// Source reads a definition the way PostgreSQL keeps one, which is two different ways.
+//
+// A **routine** is answered for whole: `pg_get_functiondef` writes the entire `CREATE OR REPLACE
+// FUNCTION`, its arguments, its language, its volatility and its body inside dollar quotes, and
+// that is the server's own words in the sense CreateStatements means. It is found by its identity
+// arguments as well as its name, because on this engine two functions may share the name — the
+// same reason a drop carries them.
+//
+// A **view** is not: `pg_get_viewdef` answers with the SELECT and nothing else, there being no
+// catalogue function that writes the CREATE. So the CREATE is put in front of it here, which is
+// the driver's to spell like every other statement — and it is spelled `OR REPLACE`, since that is
+// what makes a save of an unaltered view a statement that changes nothing rather than a drop.
+func (s *session) Source(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	if ref.Kind == driver.SourceView {
+		return s.viewSource(ctx, ns, ref)
+	}
+	return s.routineSource(ctx, ns, ref)
+}
+
+func (s *session) viewSource(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	const query = `
+		SELECT pg_catalog.pg_get_viewdef(c.oid, true)
+		FROM pg_catalog.pg_class c
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind IN ('v', 'm')`
+
+	body, err := s.sourceText(ctx, ns.Database, query, ns.Schema, ref.Name)
+	if err != nil {
+		return driver.Source{}, err
+	}
+
+	definition := "CREATE OR REPLACE VIEW " + dialect.Table(ns, ref.Name) + " AS\n" +
+		strings.TrimSpace(body)
+	return driver.Source{SourceRef: ref, Definition: definition}, nil
+}
+
+func (s *session) routineSource(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	const query = `
+		SELECT pg_catalog.pg_get_functiondef(p.oid)
+		FROM pg_catalog.pg_proc p
+		JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+		WHERE n.nspname = $1 AND p.proname = $2
+		  AND pg_catalog.pg_get_function_identity_arguments(p.oid) = $3
+		  AND p.prokind IN ('f', 'p')`
+
+	definition, err := s.sourceText(ctx, ns.Database, query, ns.Schema, ref.Name, ref.Arguments)
+	if err != nil {
+		return driver.Source{}, err
+	}
+	return driver.Source{SourceRef: ref, Definition: strings.TrimSpace(definition)}, nil
+}
+
+// sourceText runs a read that answers with one definition, and reports an object that is not there
+// as one rather than as an empty definition — which is what a save would then wipe it out with.
+func (s *session) sourceText(
+	ctx context.Context,
+	database, query string,
+	args ...any,
+) (string, error) {
+	db, err := s.pool(database)
+	if err != nil {
+		return "", err
+	}
+
+	var text string
+	err = db.QueryRowContext(ctx, query, args...).Scan(&text)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", domain.ErrUnknownDefinition
+	}
+	if err != nil {
+		return "", translateError(err)
+	}
+	return text, nil
 }
 
 // sequenceDefault is how a column that reads from a sequence spells its default.
