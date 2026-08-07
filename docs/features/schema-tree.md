@@ -104,6 +104,37 @@ and **opens every folder above a hit** so the hit is on the screen rather than b
   nobody has opened holds no names yet, so nothing in it can be found; the empty state says exactly
   that rather than claiming the table does not exist.
 
+### Filtering a connection's databases
+
+A server with three hundred databases is a server whose branch nobody can read, so **every
+connection row carries a funnel**, and it opens a small panel hung off that row: a box, and a line
+saying what is being matched. What is typed there is the part of the database list that connection
+draws, and it narrows **as it is typed** — a panel rather than a dialog for that reason, a modal over
+the sidebar covering the very rows the reader is aiming at.
+
+- **One notation, and it is the tree's own.** A name that *holds* the text, case-insensitively, which
+  is what the box above the tree already means by a pattern — so there is nothing to pick between and
+  no mode to be in. Nothing typed here goes near a server: what it matches is names this app has
+  already listed.
+- **It is kept, and it outlives the app.** A reader names the part of a big server they work on once.
+  The patterns live in one `localStorage` entry keyed by connection (`databaseFilter.ts`), beside the
+  [column orders](../grid.md) and for the same reason: it is a fact about how somebody reads rather
+  than about the connection, so it is not in `connections.json` and no server hears about it.
+- **It narrows the tree and nothing else.** The list the store holds is still the server's whole one,
+  so a namespace picker, a restore and a dump still offer every database. Nothing extra is read
+  either — the filter is applied where the branch is built, and asks the server nothing.
+- **Emptying the box is how a filter comes off** — the cross inside it, as in the box above the tree.
+  The panel closes on `Enter`, on `Escape` and on a press outside it, and there is nothing to confirm
+  because every keystroke was already kept.
+- **A filtered connection says so.** The funnel stays lit in the accent colour where every other
+  row's is a hover control, and the panel names how many databases are being drawn — a connection
+  narrowed to nothing looks exactly like a connection with nothing on it, and that is the one thing
+  the rows under it cannot say. A **shut** connection is told apart from both: it has listed nothing
+  yet, so the panel says the pattern applies when the connection is opened rather than reporting a
+  zero it cannot know.
+- The tree's own filter box searches **what is left**: this one decides what the connection has, that
+  one finds a name inside it.
+
 ## The table list
 
 Clicking the `Tables` folder opens a tab of **every table of that namespace with what the

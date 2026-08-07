@@ -96,6 +96,14 @@
   `s.settings.<field>`; `useTheme` is a thin hook over the same store. What a *new* tab starts with is
   read with `getState()` in a `useState` initialiser rather than subscribed to, because a default that
   followed an open tab around would not be a default.
+- **A preference about *one thing* is kept per thing, by the module that owns it.** What the Options
+  dialog edits is everybody's and lives in the settings store; what a reader has done to one table or
+  one connection is that thing's, and is stored under its own key beside the code that reads it —
+  `features/results/columnOrder.ts` for a table's column order,
+  `features/connections/databaseFilter.ts` for [which databases a connection
+  draws](features/schema-tree.md#filtering-a-connections-databases). Both are keyed by what they are
+  about, both survive the app closing, and neither goes to the backend: a preference the *server*
+  would have to be told about is a field on the profile, which is what a connection's colour is.
 - **State that must outlive a tab being looked away from belongs in a store keyed by the tab id**,
   never in the component: `WorkArea` mounts the tab in front and no other, so a component's own state
   goes down with it. `stores/queries.ts` keeps a query tab's rows that way and `stores/tableViews.ts`

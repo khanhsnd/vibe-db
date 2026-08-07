@@ -25,6 +25,7 @@ import { TREE_ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 
 import { colourTint } from './ConnectionColour'
+import { DatabaseFilterButton } from './DatabaseFilterPanel'
 import { EngineIcon } from './EngineIcon'
 import { EnvironmentStripe } from './EnvironmentDot'
 import { StatusDot } from './StatusDot'
@@ -115,9 +116,12 @@ interface ObjectTreeProps {
    */
   pickedIds: ReadonlySet<string>
   focusedId: string | null
+  /** What each connection draws of its databases, keyed by connection — see `databaseFilter.ts`. */
+  databaseFilters: Record<string, string>
   onToggle: (node: TreeNode) => void
   onSelect: (node: TreeNode, how: PickHow) => void
   onActivate: (node: TreeNode) => void
+  onDatabaseFilter: (profileId: string, pattern: string) => void
   menuItemsFor?: (node: TreeNode) => MenuItem[]
 }
 
@@ -126,9 +130,11 @@ export function ObjectTree({
   expanded,
   pickedIds,
   focusedId,
+  databaseFilters,
   onToggle,
   onSelect,
   onActivate,
+  onDatabaseFilter,
   menuItemsFor,
 }: ObjectTreeProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -182,7 +188,7 @@ export function ObjectTree({
                 // not draw is still readable by hovering it.
                 title={node.badge ? `${node.label} — ${node.badge}` : node.label}
                 className={cn(
-                  'absolute top-0 left-0 flex w-full items-center gap-1 pr-1.5',
+                  'group absolute top-0 left-0 flex w-full items-center gap-1 pr-1.5',
                   'cursor-default text-xs whitespace-nowrap',
                   picked ? 'bg-selected text-fg' : 'text-fg hover:bg-hover',
                 )}
@@ -274,6 +280,18 @@ export function ObjectTree({
                       {node.badge}
                     </span>
                   )
+                ) : null}
+
+                {/* Only a connection carries one: what it narrows is that connection's database
+                    list, and every level below is under one database already. */}
+                {node.kind === 'connection' ? (
+                  <DatabaseFilterButton
+                    pattern={databaseFilters[node.profileId] ?? ''}
+                    // A shut connection has listed nothing, so it has no number rather than a zero:
+                    // its branch is empty for a reason no pattern is responsible for.
+                    shown={node.status === 'connected' ? (node.children?.length ?? 0) : null}
+                    onChange={(typed) => onDatabaseFilter(node.profileId, typed)}
+                  />
                 ) : null}
 
                 {node.status ? <StatusDot status={node.status} /> : null}

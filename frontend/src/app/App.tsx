@@ -70,6 +70,8 @@ export function App() {
   const backups = useConnectionsStore((s) => s.backups)
   const structures = useConnectionsStore((s) => s.structures)
   const activeNamespace = useConnectionsStore((s) => s.activeNamespace)
+  const databaseFilters = useConnectionsStore((s) => s.databaseFilters)
+  const setDatabaseFilter = useConnectionsStore((s) => s.setDatabaseFilter)
   const expanded = useConnectionsStore((s) => s.expanded)
   const error = useConnectionsStore((s) => s.error)
   const loadProfiles = useConnectionsStore((s) => s.loadProfiles)
@@ -93,8 +95,19 @@ export function App() {
         backups,
         structures,
         activeNamespace,
+        databaseFilters,
       }),
-    [profiles, statuses, databases, schemas, objects, backups, structures, activeNamespace],
+    [
+      profiles,
+      statuses,
+      databases,
+      schemas,
+      objects,
+      backups,
+      structures,
+      activeNamespace,
+      databaseFilters,
+    ],
   )
 
   /**
@@ -422,9 +435,11 @@ export function App() {
             focusedId={selected?.id ?? null}
             filter={filter}
             onFilterChange={setFilter}
+            databaseFilters={databaseFilters}
             onToggle={toggleTreeNode}
             onSelect={selectNode}
             onActivate={activateNode}
+            onDatabaseFilter={setDatabaseFilter}
             onNewConnection={openNewConnection}
             menuItemsFor={menuItemsFor}
           />

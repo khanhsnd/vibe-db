@@ -19,6 +19,11 @@ import {
 } from '@/bridge/connections'
 import { objectDump, type DumpRequest } from '@/bridge/export'
 import { schema, type TableStructure } from '@/bridge/schema'
+import {
+  filterDatabases,
+  loadDatabaseFilters,
+  saveDatabaseFilters,
+} from '@/features/connections/databaseFilter'
 import type { ConnectionStatus, NodeKind, TreeNode } from '@/features/connections/tree'
 
 export const connectionNodeId = (profileId: string) => `conn:${profileId}`
@@ -56,6 +61,11 @@ interface ConnectionsState {
    */
   backups: Record<string, Backup[]>
   activeNamespace: Record<string, Namespace>
+  /**
+   * Which databases each connection draws, keyed by connection: the part of a big server a reader
+   * works on. It outlives the app rather than the session — see `databaseFilter.ts`.
+   */
+  databaseFilters: Record<string, string>
   expanded: ReadonlySet<string>
   loading: boolean
   error: AppError | null
@@ -68,6 +78,12 @@ interface ConnectionsState {
   connect: (profileId: string, password: string) => Promise<void>
   disconnect: (profileId: string) => Promise<void>
   selectNamespace: (profileId: string, ns: Namespace) => void
+  /**
+   * Narrows what a connection's branch draws to the databases whose name holds `pattern`, or draws
+   * every one of them again where nothing was typed. It narrows the **tree** and nothing else: the
+   * list itself is untouched, so a namespace picker, a restore and a dump still offer the whole of it.
+   */
+  setDatabaseFilter: (profileId: string, pattern: string) => void
   loadSchemas: (profileId: string, database: string) => Promise<void>
   loadObjects: (profileId: string, ns: Namespace) => Promise<void>
   loadTableSchemas: (profileId: string, ns: Namespace) => Promise<void>
@@ -143,6 +159,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   tableSchemas: {},
   structures: {},
   activeNamespace: {},
+  databaseFilters: loadDatabaseFilters(),
   expanded: new Set<string>(),
   loading: false,
   error: null,
@@ -175,6 +192,9 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   deleteProfile: async (profileId) => {
     if (get().sessions[profileId]) await get().disconnect(profileId)
     await connections.deleteProfile(profileId)
+    // A connection that is gone takes its narrowing with it, or a connection saved later under the
+    // same id would open already filtered by a pattern nobody typed for it.
+    get().setDatabaseFilter(profileId, '')
     await get().loadProfiles()
   },
 
@@ -245,6 +265,18 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   // fight: the tree's caret both selects and toggles, and an expand hidden in here would undo it.
   selectNamespace: (profileId, ns) =>
     set((s) => ({ activeNamespace: { ...s.activeNamespace, [profileId]: ns } })),
+
+  setDatabaseFilter: (profileId, pattern) =>
+    set((s) => {
+      const databaseFilters = { ...s.databaseFilters }
+      // An emptied box is a connection with no filter, not one filtered by nothing: a stored empty
+      // pattern would read as a narrowing in the entry and light the funnel for ever.
+      if (pattern.trim() === '') delete databaseFilters[profileId]
+      else databaseFilters[profileId] = pattern
+
+      saveDatabaseFilters(databaseFilters)
+      return { databaseFilters }
+    }),
 
   loadSchemas: async (profileId, database) => {
     const { sessions, schemas } = get()
@@ -477,6 +509,7 @@ interface TreeInput {
   backups: Record<string, Backup[]>
   structures: Record<string, TableStructure>
   activeNamespace: Record<string, Namespace>
+  databaseFilters: Record<string, string>
 }
 
 export function buildTree(input: TreeInput): TreeNode[] {
@@ -496,7 +529,13 @@ export function buildTree(input: TreeInput): TreeNode[] {
       // alike differ only in their server — so the row that carries the name carries the server
       // too, and the reader never has to open a dialog to tell them apart.
       badge: `${profile.host}:${profile.port}`,
-      children: (input.databases[profile.id] ?? []).map((database) =>
+      // The reader's own narrowing, applied where the branch is built and nowhere else: what the
+      // *tree* draws of a big server is a reading preference, and the list the store holds is still
+      // the whole one — see `setDatabaseFilter`.
+      children: filterDatabases(
+        input.databases[profile.id] ?? [],
+        input.databaseFilters[profile.id] ?? '',
+      ).map((database) =>
         info.hasSchemas
           ? schemaParentNode(input, info, profile.id, database)
           : namespaceNode(input, info, profile.id, 'database', namespaceOf(database), database),

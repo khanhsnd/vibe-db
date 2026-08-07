@@ -15,9 +15,12 @@ interface SidebarProps {
   focusedId: string | null
   filter: string
   onFilterChange: (value: string) => void
+  /** What each connection draws of its databases, which is the tree's own control — see `ObjectTree`. */
+  databaseFilters: Record<string, string>
   onToggle: (node: TreeNode) => void
   onSelect: (node: TreeNode, how: PickHow) => void
   onActivate: (node: TreeNode) => void
+  onDatabaseFilter: (profileId: string, pattern: string) => void
   onNewConnection: () => void
   menuItemsFor: (node: TreeNode) => MenuItem[]
 }
@@ -29,9 +32,11 @@ export function Sidebar({
   focusedId,
   filter,
   onFilterChange,
+  databaseFilters,
   onToggle,
   onSelect,
   onActivate,
+  onDatabaseFilter,
   onNewConnection,
   menuItemsFor,
 }: SidebarProps) {
@@ -74,9 +79,11 @@ export function Sidebar({
             expanded={expanded}
             pickedIds={pickedIds}
             focusedId={focusedId}
+            databaseFilters={databaseFilters}
             onToggle={onToggle}
             onSelect={onSelect}
             onActivate={onActivate}
+            onDatabaseFilter={onDatabaseFilter}
             menuItemsFor={menuItemsFor}
           />
         ) : filter ? (
