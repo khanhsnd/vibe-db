@@ -6,6 +6,7 @@ export namespace app {
 	    modifiedAt: string;
 	    size: number;
 	    comment: string;
+	    tables: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Backup(source);
@@ -18,6 +19,7 @@ export namespace app {
 	        this.modifiedAt = source["modifiedAt"];
 	        this.size = source["size"];
 	        this.comment = source["comment"];
+	        this.tables = source["tables"];
 	    }
 	}
 	export class BackupInput {
@@ -1185,6 +1187,7 @@ export namespace app {
 	    database: string;
 	    schema: string;
 	    name: string;
+	    tables: string[];
 	    runId: string;
 	
 	    static createFrom(source: any = {}) {
@@ -1196,6 +1199,7 @@ export namespace app {
 	        this.database = source["database"];
 	        this.schema = source["schema"];
 	        this.name = source["name"];
+	        this.tables = source["tables"];
 	        this.runId = source["runId"];
 	    }
 	}

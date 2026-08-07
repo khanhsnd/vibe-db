@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Archive, Loader2, Play } from 'lucide-react'
 
 import { backups as api, defaultBackupRequest, type BackupResult } from '@/bridge/backup'
@@ -14,6 +14,8 @@ import { Empty } from '@/shared/ui/Empty'
 import { Loading } from '@/shared/ui/Loading'
 import { useBackupsStore, type BackupTarget } from '@/stores/backups'
 import { namespaceKey, useConnectionsStore } from '@/stores/connections'
+
+import { ObjectPicker, useObjectPicker } from './ObjectPicker'
 
 const TABS = ['General', 'Object Selection', 'Advanced', 'Message Log'] as const
 type TabName = (typeof TABS)[number]
@@ -85,8 +87,6 @@ function NewBackupForm({ target, onClose, onDone }: NewBackupFormProps) {
   const [comment, setComment] = useState('')
   const [withStructure, setWithStructure] = useState(true)
   const [withData, setWithData] = useState(true)
-  /** The tables *left out*, so a table added to the server after this opened is still included. */
-  const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set())
 
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<BackupResult | null>(null)
@@ -94,25 +94,14 @@ function NewBackupForm({ target, onClose, onDone }: NewBackupFormProps) {
 
   const tables = objects?.tables ?? NO_TABLES
   const words = engineWords(profile?.engine ?? '')
+  const picked = useObjectPicker(tables)
+  const chosen = picked.chosen
 
   // The list is the one thing here that has to be read from the server, and it is the same read the
   // tree's own folders are filled by — so a namespace already opened in the tree costs nothing.
   useEffect(() => {
     void loadObjects(profileId, namespace)
   }, [loadObjects, profileId, namespace])
-
-  const chosen = useMemo(
-    () => tables.filter((table) => !excluded.has(table)),
-    [tables, excluded],
-  )
-
-  const toggle = (table: string) =>
-    setExcluded((current) => {
-      const next = new Set(current)
-      if (next.has(table)) next.delete(table)
-      else next.add(table)
-      return next
-    })
 
   // What stops the button, said in one line rather than left for the server to refuse.
   const blocked =
@@ -137,7 +126,7 @@ function NewBackupForm({ target, onClose, onDone }: NewBackupFormProps) {
         ...defaultBackupRequest(namespace),
         // Every table is sent as `[]`, which the Go side reads as all of them — so a backup of a
         // whole namespace covers whatever it holds at the moment it runs.
-        tables: chosen.length === tables.length ? [] : chosen,
+        tables: picked.wire,
         withStructure,
         withData,
         comment,
@@ -170,12 +159,12 @@ function NewBackupForm({ target, onClose, onDone }: NewBackupFormProps) {
         ) : at === 'Object Selection' ? (
           <ObjectSelection
             tables={tables}
-            excluded={excluded}
+            excluded={picked.excluded}
             loading={objects === null}
             words={words.tables}
-            onToggle={toggle}
-            onAll={() => setExcluded(new Set())}
-            onNone={() => setExcluded(new Set(tables))}
+            onToggle={picked.toggle}
+            onAll={picked.all}
+            onNone={picked.none}
           />
         ) : at === 'Advanced' ? (
           <Advanced
@@ -316,28 +305,13 @@ function ObjectSelection({
   }
 
   return (
-    <div className="flex h-full flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <Button variant="subtle" onClick={onAll}>
-          Select All
-        </Button>
-        <Button variant="subtle" onClick={onNone}>
-          Select None
-        </Button>
-      </div>
-
-      <div className="scroll-thin max-h-[15rem] flex-1 overflow-auto rounded-md border border-line p-2">
-        {tables.map((table) => (
-          <div key={table} className="py-0.5">
-            <Checkbox
-              label={table}
-              checked={!excluded.has(table)}
-              onChange={() => onToggle(table)}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
+    <ObjectPicker
+      tables={tables}
+      excluded={excluded}
+      onToggle={onToggle}
+      onAll={onAll}
+      onNone={onNone}
+    />
   )
 }
 

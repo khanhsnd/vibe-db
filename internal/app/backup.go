@@ -37,10 +37,14 @@ type BackupInput struct {
 	Comment string `json:"comment"`
 }
 
-// RestoreInput is which backup to run back at the server.
+// RestoreInput is which backup to run back at the server, and how much of it.
 type RestoreInput struct {
 	Namespace
 	Name string `json:"name"`
+	// Tables is which of the backup's tables to run back, and **empty is all of them** — the same
+	// thing an empty `BackupInput.Tables` means at the other end. What the file holds is on its
+	// first line, so offering the choice costs no read.
+	Tables []string `json:"tables"`
 	// RunID is minted by the caller so a restore already going can be stopped — Cancel takes it.
 	RunID string `json:"runId"`
 }
@@ -53,6 +57,10 @@ type Backup struct {
 	ModifiedAt string `json:"modifiedAt"`
 	Size       int64  `json:"size"`
 	Comment    string `json:"comment"`
+	// Tables is what the file holds, read off its own header. It rides on the listing because the
+	// listing already read that line: the restore dialog offers a selection without a read of its
+	// own, and a file with no header of ours simply names nothing and restores whole.
+	Tables []string `json:"tables"`
 }
 
 // BackupResult is what a backup or a restore did, in the lines the Message Log shows. It carries
@@ -86,6 +94,9 @@ func (a *ConnectionAPI) ListBackups(sessionID string, ns Namespace) ([]Backup, e
 			ModifiedAt: file.Modified.Format(time.RFC3339),
 			Size:       file.Size,
 			Comment:    file.Comment,
+			// Copied into a slice that is never nil, so a file naming no tables reaches the dialog
+			// as an empty list rather than as `null` for it to guard against.
+			Tables: append([]string{}, file.Tables...),
 		})
 	}
 	return out, nil
@@ -140,6 +151,7 @@ func (a *ConnectionAPI) RunBackup(sessionID string, input BackupInput) (BackupRe
 		Database: namespaceText(input.Namespace),
 		Created:  started,
 		Comment:  input.Comment,
+		Tables:   tables,
 	})
 	if err != nil {
 		return BackupResult{}, wrapError(err)
@@ -188,6 +200,13 @@ func (a *ConnectionAPI) writeBackup(
 
 	writer := bufio.NewWriter(file)
 	for _, table := range tables {
+		// The line naming the table goes in ahead of its statements, which is the whole of what a
+		// narrowed restore reads — see internal/backup. A dump gets none: it is carried somewhere
+		// and run whole, and there is nothing at the far end to narrow it with.
+		if err := backup.MarkTable(writer, table); err != nil {
+			return err
+		}
+
 		rows, err := a.dumpTable(ctx, sessionID, schema, writer, ns, table, what)
 		if err != nil {
 			return err
@@ -201,11 +220,16 @@ func (a *ConnectionAPI) writeBackup(
 	return file.Close()
 }
 
-// RestoreBackup runs a backup's statements back at the server.
+// RestoreBackup runs a backup's statements back at the server, or the statements of the tables the
+// reader picked out of it.
 //
 // It is **a file run and reads as one**: the file's own text, split where the driver says a
 // statement ends, run in order. Nothing here spells a statement and nothing re-reads what the backup
 // holds, which is the whole reason a backup is a script rather than a format of its own.
+//
+// A narrowing is applied to the **text**, ahead of the split: the file already says where each table
+// begins, so keeping some of it is keeping lines. What is left is still a script, and it is still
+// the driver that reads where a statement in it ends.
 //
 // A rejected statement **stops it**, and there is no transaction around it — a restore's statements
 // depend on each other, and a table that failed to be created has nothing for the thousand inserts
@@ -229,7 +253,7 @@ func (a *ConnectionAPI) RestoreBackup(sessionID string, input RestoreInput) (Bac
 		return BackupResult{}, wrapError(err)
 	}
 
-	statements, err := a.sessions.Split(sessionID, text)
+	statements, err := a.sessions.Split(sessionID, backup.Only(text, input.Tables))
 	if err != nil {
 		return BackupResult{}, wrapError(err)
 	}
@@ -248,7 +272,7 @@ func (a *ConnectionAPI) RestoreBackup(sessionID string, input RestoreInput) (Bac
 		Failed:    ran.Failed,
 		ElapsedMs: ran.ElapsedMs,
 		Messages: []TransferMessage{
-			transferMessage("Restoring " + path + " · " + statementsText(len(statements))),
+			transferMessage("Restoring " + restoringText(path, input.Tables, len(statements))),
 		},
 	}
 
@@ -382,11 +406,29 @@ func namespaceText(ns Namespace) string {
 	return ns.Database + "/" + ns.Schema
 }
 
+// restoringText is the log's first line: which file, how much of it, and how many statements that
+// came to. A restore of the whole file says nothing about tables — there is nothing to say — so the
+// line only ever names a narrowing where there was one.
+func restoringText(path string, tables []string, statements int) string {
+	line := path + " · " + statementsText(statements)
+	if len(tables) == 0 {
+		return line
+	}
+	return line + " · " + tablesText(len(tables))
+}
+
 func statementsText(count int) string {
 	if count == 1 {
 		return "1 statement"
 	}
 	return strconv.Itoa(count) + " statements"
+}
+
+func tablesText(count int) string {
+	if count == 1 {
+		return "1 table"
+	}
+	return strconv.Itoa(count) + " tables"
 }
 
 func copyFile(source, destination string) error {

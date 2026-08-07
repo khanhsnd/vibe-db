@@ -270,9 +270,18 @@ already taken is stepped past — a second backup inside one second becomes `…
 to lose another.
 
 **The header is in the file, not in an index beside it.** One line, a SQL comment carrying JSON — the
-server, the namespace, the moment, and the reader's comment — which is what makes a backup one thing:
-copied to another machine or dropped in by hand, it still says what it is, and a listing reads that
-line alone rather than a gigabyte of inserts. A file with no header still lists and still restores.
+server, the namespace, the moment, the reader's comment, and which tables it holds — which is what
+makes a backup one thing: copied to another machine or dropped in by hand, it still says what it is,
+and a listing reads that line alone rather than a gigabyte of inserts. A file with no header still
+lists and still restores.
+
+**A restore is narrowed by lines and not by statements.** A second comment above each table names
+it, so `backup.Only` keeps the parts the reader picked by *reading lines* — nothing parses a
+statement to find out which table it touches, and what is left is still a script for the driver's own
+`Split` to read. The header is what the dialog offers the choice from, so the choice costs no read;
+`Only` with nothing picked, or over a file holding no markers, answers with the whole text. Both
+lines being comments is what keeps this free: the engine's splitter carries them along as the leading
+comment of the statement under them, exactly as it has always carried the header.
 
 Which engines have one is a `domain` rule — `Engine.Backups`, true where statements declare a table
 and write a row — and the frontend receives its answer as `hasBackups` rather than comparing names.

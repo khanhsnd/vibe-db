@@ -2,8 +2,10 @@ package backup
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -281,6 +283,76 @@ func TestRenameRefusesANameAlreadyTaken(t *testing.T) {
 		if name == "one" {
 			t.Fatalf("the old name is still there: %v", names)
 		}
+	}
+}
+
+// The header is what the restore dialog reads its table list off, so it has to survive the round
+// trip whole — a name that is not an identifier included.
+func TestHeaderCarriesWhatTheFileHolds(t *testing.T) {
+	store := New(t.TempDir())
+
+	file, err := store.Create(target, "20260429110321", Header{
+		Tables: []string{"users", `odd "name"`},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	file.Close()
+
+	files, err := store.List(target)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("listed %d files, want 1", len(files))
+	}
+	if got := files[0].Tables; len(got) != 2 || got[0] != "users" || got[1] != `odd "name"` {
+		t.Fatalf("tables = %q", got)
+	}
+}
+
+func TestOnlyKeepsThePartsTheTablesNamed(t *testing.T) {
+	var written strings.Builder
+	written.WriteString("-- vibe-db-backup {\"comment\":\"x\"}\n\n")
+	for _, table := range []string{"users", `odd "name"`, "orders"} {
+		if err := MarkTable(&written, table); err != nil {
+			t.Fatalf("mark: %v", err)
+		}
+		fmt.Fprintf(&written, "INSERT INTO %s VALUES (1);\n\n", table)
+	}
+	text := written.String()
+
+	// Empty is every table, which is what a restore the reader narrowed nothing of asks for.
+	if Only(text, nil) != text {
+		t.Fatal("Only(nil) did not answer with the whole file")
+	}
+
+	kept := Only(text, []string{"users", "orders"})
+	if !strings.Contains(kept, "INSERT INTO users") || !strings.Contains(kept, "INSERT INTO orders") {
+		t.Fatalf("a chosen table was dropped: %q", kept)
+	}
+	if strings.Contains(kept, `INSERT INTO odd "name"`) {
+		t.Fatalf("an unchosen table was kept: %q", kept)
+	}
+	// The header runs whatever was picked: it is what the file says about itself, and it is above
+	// every marker there is.
+	if !strings.HasPrefix(kept, marker) {
+		t.Fatalf("the header was dropped: %q", kept)
+	}
+
+	// A name that is not an identifier is matched exactly, the marker having carried it as JSON.
+	if odd := Only(text, []string{`odd "name"`}); !strings.Contains(odd, `INSERT INTO odd "name"`) {
+		t.Fatalf("an odd name did not match its own marker: %q", odd)
+	}
+}
+
+// A file this app did not write has no markers to narrow by. It still restores — whole — which is
+// the same answer a listing gives it.
+func TestOnlyLeavesAFileWithNoMarkersAlone(t *testing.T) {
+	text := "SELECT 1;\nSELECT 2;\n"
+
+	if got := Only(text, []string{"users"}); got != text {
+		t.Fatalf("Only = %q, want the file untouched", got)
 	}
 }
 

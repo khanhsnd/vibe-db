@@ -132,6 +132,7 @@ export function useTreeMenu(
   const changeBackups = useConnectionsStore((s) => s.changeBackups)
   const reportError = useConnectionsStore((s) => s.reportError)
   const askBackup = useBackupsStore((s) => s.ask)
+  const askRestore = useBackupsStore((s) => s.askRestore)
   const ask = useSchemaStore((s) => s.ask)
   const askAddField = useSchemaStore((s) => s.askAddField)
 
@@ -260,8 +261,8 @@ export function useTreeMenu(
       // from the same call. A failure with no dialog behind it goes where a dump's does: the bar.
       const backup = backupActions(node.profileId, ns, node.label, {
         ask,
+        askRestore,
         changeBackups,
-        changeSchema,
         report: reportError,
       })
 
@@ -490,6 +491,7 @@ export function useTreeMenu(
       changeBackups,
       reportError,
       askBackup,
+      askRestore,
       ask,
       askAddField,
       onConnect,

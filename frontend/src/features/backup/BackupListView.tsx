@@ -41,8 +41,8 @@ export function BackupListView({ sessionId, profileId, namespace }: BackupListVi
 
   const ask = useSchemaStore((s) => s.ask)
   const askBackup = useBackupsStore((s) => s.ask)
+  const askRestore = useBackupsStore((s) => s.askRestore)
   const changeBackups = useConnectionsStore((s) => s.changeBackups)
-  const changeSchema = useConnectionsStore((s) => s.changeSchema)
 
   const focus = focusOf(selection)
   const picked = focus ? (files?.[focus.row] ?? null) : null
@@ -52,8 +52,8 @@ export function BackupListView({ sessionId, profileId, namespace }: BackupListVi
   // to try the next one.
   const on = backupActions(profileId, namespace, picked?.name ?? '', {
     ask,
+    askRestore,
     changeBackups,
-    changeSchema,
     report: (thrown) => setFailure(toAppError(thrown)),
   })
 

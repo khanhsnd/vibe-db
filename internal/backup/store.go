@@ -6,8 +6,12 @@
 // thing: copied to another machine, moved between folders or written by an older build, it still
 // says which server it came off and what the reader wrote about it.
 //
+// A line above each table names it, which is what lets a restore be narrowed to some of them: the
+// file says where each table begins, so nothing ever reads a statement to work out what it touches.
+//
 // Nothing here talks to a database. What goes into the file is the driver's and what runs it back
-// is the session's; this package is only where the file lives and what its first line says.
+// is the session's; this package is only where the file lives, what its first line says, and which
+// of its lines are whose.
 package backup
 
 import (
@@ -34,6 +38,12 @@ const (
 	// marker opens a backup's first line. It is a SQL comment, so a file carrying a header is still
 	// an ordinary script: anything that can run the statements can run the whole file unchanged.
 	marker = "-- vibe-db-backup "
+
+	// tableMarker opens the line that says whose statements the ones under it are. It is a SQL
+	// comment for the same reason the header is one, and it is the whole of how a restore is
+	// narrowed: nothing has to read a statement to find out which table it touches, because the
+	// file already said so where the table began.
+	tableMarker = "-- vibe-db-table "
 
 	// headerLimit is how far into a file the header is looked for. A backup's second line may be a
 	// single insert of a million values, and reading a listing must not pull one into memory.
@@ -73,6 +83,11 @@ type Header struct {
 	Database string    `json:"database"`
 	Created  time.Time `json:"created"`
 	Comment  string    `json:"comment"`
+	// Tables is what the file holds, in the order it holds it, so **what a restore can be narrowed
+	// to is read off the first line** rather than by scanning a gigabyte of inserts for the markers.
+	// Empty is a file written before there were any, or one dropped in by hand: it still restores,
+	// and it restores whole.
+	Tables []string `json:"tables,omitempty"`
 }
 
 // File is one backup as the list draws a row for it.
@@ -82,6 +97,7 @@ type File struct {
 	Modified time.Time
 	Size     int64
 	Comment  string
+	Tables   []string
 }
 
 // Store is the folder every backup lives under.
@@ -207,6 +223,7 @@ func (s *Store) List(target Target) ([]File, error) {
 			Modified: info.ModTime(),
 			Size:     info.Size(),
 			Comment:  header.Comment,
+			Tables:   header.Tables,
 		})
 	}
 
@@ -291,6 +308,72 @@ func (s *Store) Remove(target Target, name string) error {
 		return domain.FileError{Err: err}
 	}
 	return nil
+}
+
+// MarkTable says that the statements after it are this table's, and goes in ahead of them. The name
+// is written as JSON, so a table called anything at all — one holding a quote, a newline, a name
+// from another script — comes back off the line exactly as it went on.
+func MarkTable(out io.Writer, table string) error {
+	encoded, err := json.Marshal(table)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(out, "%s%s\n", tableMarker, encoded); err != nil {
+		return domain.FileError{Err: err}
+	}
+	return nil
+}
+
+// Only is the part of a backup's text these tables contribute, and **the whole of it when `tables`
+// is empty** — which is what a restore the reader has narrowed nothing of asks for.
+//
+// What comes back is still a backup: the header is on it and every marker it kept is still in it, so
+// a narrowed restore runs exactly the lines a whole one would have run for those tables, and the
+// text could be written back out as a smaller backup of the same namespace.
+//
+// A file holding no markers at all — one written before there were any, or one dropped in by hand —
+// has no parts to keep, so it comes back whole. That is the answer `List` gives such a file too: it
+// still restores, and nothing here quietly restores less of it than the reader asked for.
+func Only(text string, tables []string) string {
+	if len(tables) == 0 {
+		return text
+	}
+
+	wanted := make(map[string]bool, len(tables))
+	for _, table := range tables {
+		wanted[table] = true
+	}
+
+	// Everything ahead of the first marker is the header, which every restore runs.
+	keeping, marked := true, false
+	var kept strings.Builder
+
+	for _, line := range strings.SplitAfter(text, "\n") {
+		if table, found := markedTable(line); found {
+			keeping, marked = wanted[table], true
+		}
+		if keeping {
+			kept.WriteString(line)
+		}
+	}
+
+	if !marked {
+		return text
+	}
+	return kept.String()
+}
+
+// markedTable is which table a line says the ones under it belong to, and whether it says so at all.
+func markedTable(line string) (string, bool) {
+	if !strings.HasPrefix(line, tableMarker) {
+		return "", false
+	}
+
+	var table string
+	if err := json.Unmarshal([]byte(strings.TrimSpace(line[len(tableMarker):])), &table); err != nil {
+		return "", false
+	}
+	return table, true
 }
 
 // ReadHeader reads a backup's first line and nothing else — see headerLimit for why the rest of the

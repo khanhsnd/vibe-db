@@ -40,7 +40,7 @@ the list's toolbar runs:
 
 | | |
 |---|---|
-| `Restore Backup…` | Runs its statements back at the server. Asked for first. |
+| `Restore Backup…` | Runs its statements back at the server, or the tables picked out of it. Asked for first — see [what a restore does](#what-a-restore-does). |
 | `Extract SQL…` | Writes a copy wherever the reader points. |
 | `Copy <name>` | A second file beside it, named `<name>-copy`. The name is not asked for: the original's is a *moment*, and a copy of it has no new one. |
 | `Rename…` | Only the file moves. A name already taken is refused rather than written over. |
@@ -90,6 +90,13 @@ The tables of the one namespace, and nothing else — no views, no functions, no
 table's declaration, then its rows, exactly as a dump writes them: the rows are **streamed**, so a
 table of a million rows costs one batch of memory rather than a table's worth.
 
+**The file says which table each part of it is.** A comment line above each one names it, and the
+header names them all — so a restore can be narrowed without anything reading a statement to work
+out what it touches, and without the file being scanned to find out what is in it. Both lines are
+SQL comments, so a backup carrying them is still an ordinary script: `psql` restoring one has no
+idea they are there. A dump gets none — it is carried somewhere and run whole, and there is nothing
+at the far end to narrow it with.
+
 A table the server refuses **stops the backup, and the half-written file is removed**. A backup
 missing a table is the one kind of file whose existence is a lie worth avoiding — it would sit in
 the list looking exactly like a whole one, and be found out only by a restore.
@@ -98,6 +105,20 @@ the list looking exactly like a whole one, and be found out only by a restore.
 
 Runs the file, in order, through the same reader and the same `Split` a picked script goes through.
 Nothing about it knows what a backup is.
+
+**One screen, and not a wizard.** A restore has two answers — which file, and which of its tables —
+and the first was given by the row it was raised on, so there is nothing to page through: the tables
+are listed on the same screen as the warning, and `Restore` is under both. The log fills in below
+them as it runs, in the same lines the Message Log shows.
+
+The list is **read off the file's own header**, which the backup listing already read — so the
+choice costs no read of the file and asks no server anything. All of them are ticked, and what the
+reader unticks is dropped from the text before a statement is split out of it. A file that names no
+tables — one written before there were any, or dropped into the folder by hand — offers no narrowing
+and restores whole, which is what it did before there was a line to read.
+
+A narrowed restore is still exactly the statements a whole one would have run for those tables:
+nothing is re-spelled, and what is left after the narrowing is still a script.
 
 A rejected statement **stops it, and there is no transaction around it**: a restore's statements
 depend on each other, and a table that failed to be created has nothing for the thousand inserts

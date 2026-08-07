@@ -26,9 +26,11 @@ export interface BackupRequest {
   comment: string
 }
 
+/** Which backup to run back, and how much of it. An empty `tables` is everything the file holds. */
 export interface RestoreRequest {
   namespace: Namespace
   name: string
+  tables: string[]
   runId: string
 }
 

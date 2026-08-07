@@ -1,18 +1,18 @@
 import { backups } from '@/bridge/backup'
-import { namespaceLabel, type Namespace } from '@/bridge/connections'
-import { AppError } from '@/bridge/errors'
-import type { ChangeSchema, SchemaTarget } from '@/stores/connections'
+import type { Namespace } from '@/bridge/connections'
+import type { RestoreTarget } from '@/stores/backups'
+import type { ChangeSchema } from '@/stores/connections'
 import type { SchemaRequest } from '@/stores/schema'
 
 export interface BackupDeps {
   ask: (request: SchemaRequest) => void
+  /**
+   * Raises the restore dialog. A restore is the one action here with a *form* behind it — which of
+   * the backup's tables to put back — so it is not a `SchemaRequest`, which holds none.
+   */
+  askRestore: (target: RestoreTarget) => void
   /** Runs something against the backup folder and re-reads it. Throws, for a dialog to catch. */
   changeBackups: (profileId: string, ns: Namespace, change: ChangeSchema) => Promise<void>
-  /**
-   * Runs something that changed the *server* and re-reads the catalogue. A restore is one: it
-   * creates tables, and the tree beside it would otherwise still be showing the ones from before.
-   */
-  changeSchema: (profileId: string, target: SchemaTarget, change: ChangeSchema) => Promise<void>
   /** Where a failure goes when nothing is waiting on it — the two items that raise no dialog. */
   report: (thrown: unknown) => void
 }
@@ -50,34 +50,9 @@ export function backupActions(
   }
 
   return {
-    restore: () =>
-      deps.ask({
-        kind: 'confirm',
-        title: 'Restore Backup',
-        message:
-          `Run ${name} back into ${namespaceLabel(namespace)}? Its statements are applied to the ` +
-          `server as they are — tables it declares are created and its records are added to ` +
-          `whatever is already there. It stops at the first statement the server refuses, and ` +
-          `what has already run stays run.`,
-        submitLabel: 'Restore',
-        danger: true,
-        // The *catalogue* is what a restore made stale, not the folder — see `changeSchema`.
-        onSubmit: () =>
-          deps.changeSchema(profileId, { namespace }, async (sessionId) => {
-            const ran = await backups.restore(sessionId, {
-              namespace,
-              name,
-              runId: `restore-${name}`,
-            })
-            // A restore that stopped part way is not an exception on the wire — the Go side answers
-            // with the log and lets the caller read it — so the first refusal is raised here, which
-            // is what keeps the confirmation open with the server's own wording on it.
-            if (ran.failed > 0) {
-              const first = ran.messages.find((message) => message.error)
-              throw new AppError('SQL_ERROR', first?.text ?? 'The restore did not finish.')
-            }
-          }),
-      }),
+    // The only one that is a dialog of its own rather than a confirmation: what it asks — which of
+    // the file's tables to put back — is a list, and the warning is on the same screen as the list.
+    restore: () => deps.askRestore({ profileId, namespace, name }),
 
     extractSQL: quietly(async (sessionId) => {
       await backups.extractSQL(sessionId, namespace, name)
