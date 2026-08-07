@@ -1,5 +1,99 @@
 export namespace app {
 	
+	export class Backup {
+	    name: string;
+	    path: string;
+	    modifiedAt: string;
+	    size: number;
+	    comment: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Backup(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.modifiedAt = source["modifiedAt"];
+	        this.size = source["size"];
+	        this.comment = source["comment"];
+	    }
+	}
+	export class BackupInput {
+	    database: string;
+	    schema: string;
+	    tables: string[];
+	    withStructure: boolean;
+	    withData: boolean;
+	    comment: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BackupInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.tables = source["tables"];
+	        this.withStructure = source["withStructure"];
+	        this.withData = source["withData"];
+	        this.comment = source["comment"];
+	    }
+	}
+	export class TransferMessage {
+	    text: string;
+	    error: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TransferMessage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.text = source["text"];
+	        this.error = source["error"];
+	    }
+	}
+	export class BackupResult {
+	    name: string;
+	    path: string;
+	    failed: number;
+	    elapsedMs: number;
+	    messages: TransferMessage[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BackupResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.failed = source["failed"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.messages = this.convertValues(source["messages"], TransferMessage);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class CellEditInput {
 	    database: string;
 	    schema: string;
@@ -341,20 +435,6 @@ export namespace app {
 		    }
 		    return a;
 		}
-	}
-	export class TransferMessage {
-	    text: string;
-	    error: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new TransferMessage(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.text = source["text"];
-	        this.error = source["error"];
-	    }
 	}
 	export class ExportedFile {
 	    table: string;
@@ -1071,6 +1151,24 @@ export namespace app {
 	        this.sql = source["sql"];
 	        this.maxRows = source["maxRows"];
 	        this.explain = source["explain"];
+	    }
+	}
+	export class RestoreInput {
+	    database: string;
+	    schema: string;
+	    name: string;
+	    runId: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RestoreInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.name = source["name"];
+	        this.runId = source["runId"];
 	    }
 	}
 	

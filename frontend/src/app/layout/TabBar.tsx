@@ -1,4 +1,5 @@
 import {
+  Archive,
   Columns3,
   GitCompareArrows,
   List,
@@ -33,6 +34,7 @@ export const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: str
   console: { label: 'Console', icon: SquareTerminal, tint: 'text-kind-routine' },
   compare: { label: 'Compare', icon: GitCompareArrows, tint: 'text-kind-schema' },
   find: { label: 'Find in Schema', icon: Search, tint: 'text-kind-database' },
+  backups: { label: 'Backups', icon: Archive, tint: 'text-kind-backup' },
 }
 
 export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {

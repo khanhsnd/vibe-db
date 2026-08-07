@@ -13,7 +13,8 @@ the tree and in a designer tab**, **schema changes from the tree's context menu*
 empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index or a
 foreign key, drop a view or a routine — table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
-or SQL**, query tabs with completion that **run a whole script**, **a console that runs one statement
+or SQL**, **backing a MySQL or PostgreSQL namespace up into a folder the app keeps, and restoring
+one**, query tabs with completion that **run a whole script**, **a console that runs one statement
 at a time and keeps the transcript**, **running a file of statements against a connection**,
 **marking a connection with a colour that washes down the sidebar**, **a history of every statement
 run, kept on disk and put back in the editor by a double-click**, passwords in Windows Credential
@@ -42,6 +43,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | Comparing two tables, and making them agree | [features/compare.md](features/compare.md) |
 | The tree's schema changes, `New Database`, and the designer | [features/schema-changes.md](features/schema-changes.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |
+| Backing a namespace up, the list of backups, and restoring one | [features/backup.md](features/backup.md) |
 | The table tab: opening it, paging it, and its two panels | [features/table-tab.md](features/table-tab.md) |
 | Query tabs, Explain, a MongoDB tab, a Redis tab, running a whole script | [features/query-tab.md](features/query-tab.md) |
 | `Format`, what the editor says before anything runs, and the log every statement is kept in | [features/script.md](features/script.md) |

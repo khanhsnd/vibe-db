@@ -20,6 +20,8 @@ export function CompareStructure(arg1:app.CompareSide,arg2:app.CompareSide):Prom
 
 export function Connect(arg1:string,arg2:string):Promise<app.Session>;
 
+export function CopyBackup(arg1:string,arg2:app.Namespace,arg3:string):Promise<string>;
+
 export function CreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<void>;
 
 export function CreateForeignKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:app.ForeignKeyInput):Promise<void>;
@@ -27,6 +29,8 @@ export function CreateForeignKey(arg1:string,arg2:app.Namespace,arg3:string,arg4
 export function CreateIndex(arg1:string,arg2:app.Namespace,arg3:string,arg4:app.IndexInput):Promise<void>;
 
 export function CreateTable(arg1:string,arg2:app.TableSpecInput):Promise<void>;
+
+export function DeleteBackup(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
 
 export function DeleteProfile(arg1:string):Promise<void>;
 
@@ -56,9 +60,13 @@ export function EmptyTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<v
 
 export function ExportRows(arg1:string,arg2:app.ExportInput):Promise<string>;
 
+export function ExtractBackupSQL(arg1:string,arg2:app.Namespace,arg3:string):Promise<string>;
+
 export function FindInSchema(arg1:string,arg2:app.SearchInput):Promise<app.SearchResult>;
 
 export function InsertRow(arg1:string,arg2:app.RowInsertInput):Promise<void>;
+
+export function ListBackups(arg1:string,arg2:app.Namespace):Promise<Array<app.Backup>>;
 
 export function ListDatabases(arg1:string):Promise<Array<string>>;
 
@@ -88,6 +96,8 @@ export function LoadTableSchemas(arg1:string,arg2:app.Namespace):Promise<Array<a
 
 export function LoadTableStructure(arg1:string,arg2:app.Namespace,arg3:string):Promise<app.TableStructure>;
 
+export function OpenBackupFolder(arg1:string,arg2:app.Namespace):Promise<void>;
+
 export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<Array<string>>;
 
 export function PreviewImportFile(arg1:app.ImportSource):Promise<app.ImportPreview>;
@@ -96,11 +106,17 @@ export function PreviewRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<Arra
 
 export function PreviewTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<app.TableChangeInput>):Promise<Array<string>>;
 
+export function RenameBackup(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
+
 export function RenameColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:string):Promise<void>;
 
 export function RenameTable(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
 
+export function RestoreBackup(arg1:string,arg2:app.RestoreInput):Promise<app.BackupResult>;
+
 export function ReviewImport(arg1:string,arg2:app.ImportInput):Promise<app.ImportReview>;
+
+export function RunBackup(arg1:string,arg2:app.BackupInput):Promise<app.BackupResult>;
 
 export function RunExport(arg1:string,arg2:app.ExportJobInput):Promise<app.ExportJobResult>;
 

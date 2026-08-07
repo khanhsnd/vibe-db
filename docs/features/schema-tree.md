@@ -10,10 +10,16 @@ The tree has as many levels, and as many folders, as the engine does:
 MySQL         connection → database →          Tables       → table      → Fields       → field
 PostgreSQL    connection → database → schema →  Views        → view              Indexes      → index
                                                 Functions    → function          Foreign Keys → foreign key
+                                                Backups      → backup
 
 MongoDB       connection → database →          Collections  → collection → Fields  → field
                                                 Views        → view              Indexes → index
 ```
+
+**`Backups` is the one folder under a namespace that stands for nothing on the server**: what is in
+it is files on this machine. It asks the server nothing, it is **not filled by the read the other
+three share** — so it has a Refresh of its own — and a press on it both expands the branch and opens
+the list beside it. See [features/backup.md](backup.md#the-branch).
 
 **A folder for something the engine has not got is not drawn.** MongoDB has no stored routines —
 server-side JavaScript was removed from the server — and no referential constraints of any kind, so
@@ -63,9 +69,9 @@ whole of it is in the row's tooltip, and in the designer.
 
 | Gesture | What happens |
 |---|---|
-| Click a row | Picks it **alone**, and names the active namespace if that row owns tables. Reads nothing — except on the **`Tables` folder**, which also opens [the table list](#the-table-list): what that folder *is* to a reader is the tables and their numbers, and the tree has room for the names alone. |
+| Click a row | Picks it **alone**, and names the active namespace if that row owns tables. Reads nothing — except on the **`Tables` folder**, which also opens [the table list](#the-table-list), and the **`Backups` folder**, which opens [its list](backup.md#the-branch) *and* expands. What either folder is to a reader is what is inside it, and the tree has room for the names alone. |
 | **`Ctrl`/`Cmd`-click a row** | Picks it **beside** whatever is picked already, or takes it back out. It reads nothing and travels nowhere: picking a second table is not opening it. Two tables picked this way is the whole precondition for [Compare](compare.md#comparing-two-tables-and-making-them-agree). |
-| Click the caret | Picks the node **and** opens or closes it, loading that level on first open. |
+| Click the caret | Picks the node **and** opens or closes it, loading that level on first open. The caret does its own expanding, so a folder a plain press also expands — `Backups` — must not expand again here: that would be two toggles and no movement, which is what `PickHow.caret` exists to prevent. |
 | Double-click a row | The same open — except on a **table**, which opens a data tab. A table has folders under it now, but double-clicking one has always meant "show me the rows", and the caret is what expands. |
 | Right-click a row | The menu, on a pick it left alone if it landed **inside** one of several — so a pair can be acted on whole — and on that row alone otherwise. It is the rule the grid's own cell menu already sets. |
 | Open a closed connection | Dials it, whichever gesture asked. A disconnected connection node still carries an empty child list, so expanding it would otherwise spin the caret over nothing. The store expands the node when the session lands, and a failed connect leaves the caret shut. |

@@ -99,6 +99,9 @@
   --kind-field: #79c0ff;
   --kind-index: #d2a8ff;
   --kind-relation: #f778ba;
+  /** A backup is not a thing the catalogue holds — it is a file on this machine — so it is the one
+      entry here that is deliberately off the palette the server's own objects share. */
+  --kind-backup: #8b949e;
 
   /** One per class of column type, so a grid header says what a column *holds* before its name is
       read. They are the same seven `columnType.tsx` sorts a type into, and nothing else may take
@@ -205,6 +208,7 @@
   --kind-field: #0550ae;
   --kind-index: #8250df;
   --kind-relation: #bf3989;
+  --kind-backup: #57606a;
 
   --type-text: #1a7f37;
   --type-numeric: #0550ae;
@@ -283,6 +287,7 @@
   --color-kind-field: var(--kind-field);
   --color-kind-index: var(--kind-index);
   --color-kind-relation: var(--kind-relation);
+  --color-kind-backup: var(--kind-backup);
 
   --color-type-text: var(--type-text);
   --color-type-numeric: var(--type-numeric);

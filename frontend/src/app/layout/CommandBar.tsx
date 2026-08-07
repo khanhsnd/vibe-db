@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Database, Moon, PanelLeft, Plus, Settings, Sun, Terminal } from 'lucide-react'
+import { Archive, Database, Moon, PanelLeft, Plus, Settings, Sun, Terminal } from 'lucide-react'
 
 import { SettingsDialog } from '@/features/settings/SettingsDialog'
 import { IconButton } from '@/shared/ui/IconButton'
@@ -11,9 +11,16 @@ import { useUIStore } from '@/stores/ui'
 interface CommandBarProps {
   onNewConnection: () => void
   onNewQuery: () => void
+  /**
+   * Takes a backup of wherever the reader is. It is `null` — and the button dead — where there is
+   * nothing to back up: no live connection, or one whose engine has no such thing. The bar does not
+   * work that out for itself, because which namespace it would be *of* is the shell's answer and
+   * not this strip's.
+   */
+  onBackup: (() => void) | null
 }
 
-export function CommandBar({ onNewConnection, onNewQuery }: CommandBarProps) {
+export function CommandBar({ onNewConnection, onNewQuery, onBackup }: CommandBarProps) {
   const { theme, toggleTheme } = useTheme()
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
   const [options, setOptions] = useState(false)
@@ -42,6 +49,15 @@ export function CommandBar({ onNewConnection, onNewQuery }: CommandBarProps) {
 
       <Button variant="subtle" icon={<Terminal size={14} />} onClick={onNewQuery}>
         New Query
+      </Button>
+
+      <Button
+        variant="subtle"
+        icon={<Archive size={14} />}
+        disabled={onBackup === null}
+        onClick={() => onBackup?.()}
+      >
+        Backup
       </Button>
 
       <div className="flex-1" />

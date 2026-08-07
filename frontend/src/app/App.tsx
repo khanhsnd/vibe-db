@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   authInfo,
+  engineInfo,
   namespaceLabel,
   namespaceOf,
   NO_NAMESPACE,
@@ -9,6 +10,7 @@ import {
   type Profile,
   type ProfileInput,
 } from '@/bridge/connections'
+import { NewBackupDialog } from '@/features/backup/NewBackupDialog'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
 import { ExecuteFileDialog } from '@/features/connections/ExecuteFileDialog'
 import { PasswordPrompt } from '@/features/connections/PasswordPrompt'
@@ -26,6 +28,7 @@ import { SchemaDialogs } from '@/features/schema/SchemaDialogs'
 import { ExportWizard, type ExportTarget } from '@/features/transfer/ExportWizard'
 import { ImportWizard, type ImportTarget } from '@/features/transfer/ImportWizard'
 import { Split, SplitHandle, SplitPanel, usePanelRef } from '@/shared/ui/Split'
+import { useBackupsStore } from '@/stores/backups'
 import { buildTree, useConnectionsStore } from '@/stores/connections'
 import { useSettingsStore } from '@/stores/settings'
 import { useTabsStore } from '@/stores/tabs'
@@ -49,6 +52,7 @@ export function App() {
   const openTable = useTabsStore((s) => s.openTable)
   const openDesign = useTabsStore((s) => s.openDesign)
   const openTables = useTabsStore((s) => s.openTables)
+  const openBackups = useTabsStore((s) => s.openBackups)
   const openConsole = useTabsStore((s) => s.openConsole)
   const openCompare = useTabsStore((s) => s.openCompare)
   const openFind = useTabsStore((s) => s.openFind)
@@ -60,6 +64,7 @@ export function App() {
   const databases = useConnectionsStore((s) => s.databases)
   const schemas = useConnectionsStore((s) => s.schemas)
   const objects = useConnectionsStore((s) => s.objects)
+  const backups = useConnectionsStore((s) => s.backups)
   const structures = useConnectionsStore((s) => s.structures)
   const activeNamespace = useConnectionsStore((s) => s.activeNamespace)
   const expanded = useConnectionsStore((s) => s.expanded)
@@ -69,8 +74,10 @@ export function App() {
   const selectNamespace = useConnectionsStore((s) => s.selectNamespace)
   const loadSchemas = useConnectionsStore((s) => s.loadSchemas)
   const loadObjects = useConnectionsStore((s) => s.loadObjects)
+  const loadBackups = useConnectionsStore((s) => s.loadBackups)
   const loadStructure = useConnectionsStore((s) => s.loadStructure)
   const toggleNode = useConnectionsStore((s) => s.toggleNode)
+  const askBackup = useBackupsStore((s) => s.ask)
 
   const roots = useMemo(
     () =>
@@ -80,10 +87,11 @@ export function App() {
         databases,
         schemas,
         objects,
+        backups,
         structures,
         activeNamespace,
       }),
-    [profiles, statuses, databases, schemas, objects, structures, activeNamespace],
+    [profiles, statuses, databases, schemas, objects, backups, structures, activeNamespace],
   )
 
   /**
@@ -176,9 +184,12 @@ export function App() {
         void loadSchemas(node.profileId, ns.database)
       }
       if (ownsObjects(node) || isObjectFolder(node)) void loadObjects(node.profileId, ns)
+      // Backups is not one of those three folders and is not filled by their read: it is a folder
+      // on this machine, and nothing the catalogue answered with would ever mention it.
+      if (node.kind === 'backups') void loadBackups(node.profileId, ns)
       if (node.table !== undefined) void loadStructure(node.profileId, ns, node.table)
     },
-    [loadSchemas, loadObjects, loadStructure],
+    [loadSchemas, loadObjects, loadBackups, loadStructure],
   )
 
   // Opening a closed connection means dialling it: a disconnected connection node still carries
@@ -229,6 +240,7 @@ export function App() {
       onExport: setExportFrom,
       onCompare: openCompare,
       onFind: openFind,
+      onBackups: openBackups,
     },
     pickedTables,
   )
@@ -258,11 +270,23 @@ export function App() {
       // The node that owns tables is the one a query tab can run against. A PostgreSQL
       // database is not that node — its schemas are — so selecting one names nothing.
       if (node.namespace && ownsObjects(node)) selectNamespace(node.profileId, node.namespace)
-      if (how === 'replace' && node.kind === 'tables' && node.namespace) {
-        openTables(node.profileId, node.namespace)
+
+      // Neither of the two folders that open a list is opened by picking a *second* row, and
+      // neither is opened twice by the caret, which does its own expanding — see `PickHow`.
+      const opens = (how === 'replace' || how === 'caret') && node.namespace !== undefined
+      if (!opens || !node.namespace) return
+
+      if (node.kind === 'tables') openTables(node.profileId, node.namespace)
+
+      // Backups is the one folder a plain press also *expands*: the tree has room for the names
+      // and the grid beside it has room for the date, the size and the comment, and a reader
+      // reaching for a backup wants whichever of the two is nearer.
+      if (node.kind === 'backups') {
+        openBackups(node.profileId, node.namespace)
+        if (how === 'replace') toggleTreeNode(node)
       }
     },
-    [picked.length, pickedIds, selectNamespace, openTables],
+    [picked.length, pickedIds, selectNamespace, openTables, openBackups, toggleTreeNode],
   )
 
   // A table opens its data rather than its folders, even though it now has folders to open: the
@@ -291,6 +315,27 @@ export function App() {
       rowLimit: useSettingsStore.getState().settings.queryRows,
     })
   }, [openTab, selected, sessions, activeNamespace])
+
+  /**
+   * Taking a backup from the bar, of wherever the reader already is — the selected row's namespace,
+   * falling back to whichever connection is open, exactly as New Query picks its target.
+   *
+   * It is `null` where there is nothing to back up, which is what greys the button: no live
+   * connection, or one whose engine has no such thing — see `hasBackups`. A button that opened a
+   * dialog only to have the Go side refuse it would be asking the reader to find that out twice.
+   */
+  const newBackup = useMemo(() => {
+    const profileId = selected?.profileId ?? Object.keys(sessions)[0] ?? ''
+    if (profileId === '' || !sessions[profileId]) return null
+
+    const engine = profiles.find((profile) => profile.id === profileId)?.engine ?? ''
+    if (!engineInfo(engine).hasBackups) return null
+
+    const namespace = selected?.namespace ?? activeNamespace[profileId] ?? NO_NAMESPACE
+    if (namespace.database === '') return null
+
+    return () => askBackup({ profileId, namespace })
+  }, [selected, sessions, profiles, activeNamespace, askBackup])
 
   // The bar reports the connection the reader is *looking at* — the tab in front, or the row they
   // have selected where no tab is open. Reporting whichever session happened to be first would
@@ -342,7 +387,11 @@ export function App() {
     <div className="flex h-full flex-col overflow-hidden">
       <MenuBar />
 
-      <CommandBar onNewConnection={openNewConnection} onNewQuery={newQuery} />
+      <CommandBar
+        onNewConnection={openNewConnection}
+        onNewQuery={newQuery}
+        onBackup={newBackup}
+      />
 
       <Split
         id="vibe-db.shell"
@@ -408,6 +457,8 @@ export function App() {
           if (!open) setExportFrom(null)
         }}
       />
+
+      <NewBackupDialog />
 
       <SchemaDialogs />
 

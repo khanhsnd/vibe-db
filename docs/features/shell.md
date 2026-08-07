@@ -72,6 +72,10 @@ therefore a deliberate list, kept in a store under the tab's id and dropped when
   rows: a search of a whole schema is far too long a read to lose by looking at another tab. What was
   *asked* — the text, `Look In`, `Search Mode`, the box — is the tab itself, exactly as a query tab's
   SQL is, and so is where it is pointed.
+- A **Backups tab** keeps nothing at all. The list is the tree's own — one folder, drawn twice —
+  and it is read again on the way back for a stronger reason than a table's rows are: another
+  window of this app, or the reader with a file manager, changes the folder without this one
+  hearing. See [features/backup.md](backup.md#the-list).
 
 **A tab is named by what it shows, and a comparison by both sides**: `users ⇄ users_v2`, and the
 tooltip carries `Against:` as well, because two tabs comparing `users` against two different servers

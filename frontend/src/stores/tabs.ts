@@ -9,7 +9,15 @@ import { useQueriesStore } from './queries'
 import { useSearchesStore } from './searches'
 import { useTableViewsStore } from './tableViews'
 
-export type TabKind = 'query' | 'table' | 'design' | 'objects' | 'console' | 'compare' | 'find'
+export type TabKind =
+  | 'query'
+  | 'table'
+  | 'design'
+  | 'objects'
+  | 'console'
+  | 'compare'
+  | 'find'
+  | 'backups'
 
 /** Which half of two tables a comparison is reading: their shapes, or their rows. */
 export type CompareMode = 'structure' | 'data'
@@ -90,7 +98,25 @@ export interface FindTab extends TabBase {
   caseInsensitive: boolean
 }
 
-export type Tab = QueryTab | TableTab | DesignTab | ObjectsTab | ConsoleTab | CompareTab | FindTab
+/**
+ * Every backup kept for a namespace — what the Backups node opens. It is the one tab in the strip
+ * whose rows are **files on this machine** rather than anything a server answered with, and it
+ * holds no state of its own: the folder on disk is the state, and the list is re-read rather than
+ * remembered, a backup taken from another window being one this one has to show.
+ */
+export interface BackupsTab extends TabBase {
+  kind: 'backups'
+}
+
+export type Tab =
+  | QueryTab
+  | TableTab
+  | DesignTab
+  | ObjectsTab
+  | ConsoleTab
+  | CompareTab
+  | FindTab
+  | BackupsTab
 export type NewTab =
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
@@ -99,6 +125,7 @@ export type NewTab =
   | Omit<ConsoleTab, 'id'>
   | Omit<CompareTab, 'id'>
   | Omit<FindTab, 'id'>
+  | Omit<BackupsTab, 'id'>
 
 /** What names a table wherever one is opened: which connection, which namespace, which table. */
 export interface TableTarget {
@@ -130,6 +157,8 @@ interface TabsState {
   openDesign: (target: TableTarget) => string
   /** Every table of a namespace, with what the catalogue keeps about each. */
   openTables: (profileId: string, namespace: Namespace) => string
+  /** Every backup kept for a namespace. */
+  openBackups: (profileId: string, namespace: Namespace) => string
   /** A console on one connection. One per connection and namespace, like every other tab. */
   openConsole: (profileId: string, namespace: Namespace) => string
   /**
@@ -221,6 +250,9 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   // title that repeated it would say `hirec.public` twice on one tab.
   openTables: (profileId, namespace) =>
     get().open({ kind: 'objects', title: 'Tables', profileId, namespace }),
+
+  openBackups: (profileId, namespace) =>
+    get().open({ kind: 'backups', title: 'Backups', profileId, namespace }),
 
   openConsole: (profileId, namespace) =>
     get().open({ kind: 'console', title: 'Console', profileId, namespace }),

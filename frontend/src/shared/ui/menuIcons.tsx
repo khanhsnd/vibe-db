@@ -1,4 +1,6 @@
 import {
+  Archive,
+  ArchiveRestore,
   ArrowDownNarrowWide,
   ArrowUpDown,
   ArrowUpNarrowWide,
@@ -16,6 +18,7 @@ import {
   Filter,
   FilterX,
   Fingerprint,
+  FolderOpen,
   GitCompareArrows,
   GitMerge,
   Palette,
@@ -59,6 +62,13 @@ export const ICON = {
   importWizard: <Upload size={SIZE} />,
   exportWizard: <Download size={SIZE} />,
   colour: <Palette size={SIZE} />,
+
+  // A backup goes into a shelf this app keeps and a restore comes back off it, which is what the
+  // pair of glyphs says. `Extract SQL` deliberately wears `dump`'s: both write the same statements
+  // to a file the reader names, and only where they were read from differs.
+  backup: <Archive size={SIZE} />,
+  restoreBackup: <ArchiveRestore size={SIZE} />,
+  openFolder: <FolderOpen size={SIZE} />,
 
   newDatabase: <Database size={SIZE} />,
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/khanhsnd/vibe-db/internal/backup"
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/profile"
@@ -31,6 +32,7 @@ type ConnectionAPI struct {
 	profiles profile.Repository
 	secrets  secret.Store
 	sessions *session.Manager
+	backups  *backup.Store
 	runs     *runRegistry
 }
 
@@ -38,12 +40,14 @@ func NewConnectionAPI(
 	profiles profile.Repository,
 	secrets secret.Store,
 	sessions *session.Manager,
+	backups *backup.Store,
 ) *ConnectionAPI {
 	return &ConnectionAPI{
 		apiContext: newAPIContext(),
 		profiles:   profiles,
 		secrets:    secrets,
 		sessions:   sessions,
+		backups:    backups,
 		runs:       newRunRegistry(),
 	}
 }

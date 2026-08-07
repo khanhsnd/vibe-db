@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 
+import { backups as backupFiles, type Backup } from '@/bridge/backup'
 import { type AppError, toAppError } from '@/bridge/errors'
 import {
   connections,
@@ -47,6 +48,13 @@ interface ConnectionsState {
   tableSchemas: Record<string, TableSchema[]>
   /** Keyed by connection, namespace and table: the fields, indexes and keys of one table. */
   structures: Record<string, TableStructure>
+  /**
+   * The backups kept for a namespace, keyed like its objects are. They are files on this machine
+   * rather than anything a catalogue answered with, and they live here anyway because **the tree
+   * draws them**: the Backups folder opens onto the names, and a second copy of the folder held
+   * somewhere else would be two lists to keep in step.
+   */
+  backups: Record<string, Backup[]>
   activeNamespace: Record<string, Namespace>
   expanded: ReadonlySet<string>
   loading: boolean
@@ -66,7 +74,16 @@ interface ConnectionsState {
   loadStructure: (profileId: string, ns: Namespace, table: string) => Promise<void>
   /** Re-reads a table's shape whether or not it is already cached, which Refresh needs. */
   refreshStructure: (profileId: string, ns: Namespace, table: string) => Promise<void>
+  loadBackups: (profileId: string, ns: Namespace) => Promise<void>
   refreshObjects: (profileId: string, ns: Namespace) => Promise<void>
+  /** Re-reads a namespace's backup folder whether or not it is already cached. */
+  refreshBackups: (profileId: string, ns: Namespace) => Promise<void>
+  /**
+   * Runs one change to the backup folder — a backup taken, deleted, copied or renamed — and
+   * re-reads it. It is `changeSchema`'s sibling and throws for the same reason: what asked is a
+   * dialog, and a rejection belongs in the dialog rather than in the status bar.
+   */
+  changeBackups: (profileId: string, ns: Namespace, change: ChangeSchema) => Promise<void>
   refreshSchemas: (profileId: string, database: string) => Promise<void>
   /** Re-reads the database list and forgets everything under a database it no longer carries. */
   refreshDatabases: (profileId: string) => Promise<void>
@@ -87,7 +104,18 @@ interface ConnectionsState {
    * the way a read's is rather than thrown the way `changeSchema` throws one.
    */
   dump: (profileId: string, request: DumpRequest) => Promise<void>
+  /**
+   * Shows a namespace's backup folder in the host's own file manager. It is a dump's sibling here
+   * for the same reason: nothing on the server changes, and nothing is waiting on the answer — so
+   * a failure is parked in `error` rather than thrown at a dialog that is not there.
+   */
+  openBackupFolder: (profileId: string, namespace: Namespace) => Promise<void>
   toggleNode: (nodeId: string) => void
+  /**
+   * Puts a failure in the bar. It is what an action raised from a *menu* has instead of a dialog:
+   * nothing is waiting on the answer, so there is nowhere else for the reader to be told.
+   */
+  reportError: (thrown: unknown) => void
   clearError: () => void
 }
 
@@ -111,6 +139,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   databases: {},
   schemas: {},
   objects: {},
+  backups: {},
   tableSchemas: {},
   structures: {},
   activeNamespace: {},
@@ -203,6 +232,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
           expanded,
           schemas: drop(s.schemas),
           objects: drop(s.objects),
+          backups: drop(s.backups),
           tableSchemas: drop(s.tableSchemas),
           structures: drop(s.structures),
           statuses: { ...s.statuses, [profileId]: 'idle' },
@@ -233,6 +263,11 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   loadObjects: async (profileId, ns) => {
     if (get().objects[namespaceKey(profileId, ns)]) return
     await get().refreshObjects(profileId, ns)
+  },
+
+  loadBackups: async (profileId, ns) => {
+    if (get().backups[namespaceKey(profileId, ns)]) return
+    await get().refreshBackups(profileId, ns)
   },
 
   // Cached until disconnect, like tables: a schema read costs one catalogue scan, and the
@@ -285,6 +320,32 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     } catch (thrown) {
       set({ error: toAppError(thrown) })
     }
+  },
+
+  refreshBackups: async (profileId, ns) => {
+    const session = get().sessions[profileId]
+    if (!session) return
+
+    // A folder that could not be read is recorded as **empty, with the reason in the bar** rather
+    // than left unset: unset is what "nobody has looked yet" means here, and a list still waiting
+    // on a read that already failed would spin for ever.
+    try {
+      const files = await backupFiles.list(session.id, ns)
+      set((s) => ({ backups: { ...s.backups, [namespaceKey(profileId, ns)]: files } }))
+    } catch (thrown) {
+      set((s) => ({
+        backups: { ...s.backups, [namespaceKey(profileId, ns)]: [] },
+        error: toAppError(thrown),
+      }))
+    }
+  },
+
+  changeBackups: async (profileId, ns, change) => {
+    const session = get().sessions[profileId]
+    if (!session) return
+
+    await change(session.id)
+    await get().refreshBackups(profileId, ns)
   },
 
   refreshSchemas: async (profileId, database) => {
@@ -378,6 +439,18 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     }
   },
 
+  openBackupFolder: async (profileId, namespace) => {
+    const session = get().sessions[profileId]
+    if (!session) return
+
+    try {
+      await backupFiles.openFolder(session.id, namespace)
+      set({ error: null })
+    } catch (thrown) {
+      set({ error: toAppError(thrown) })
+    }
+  },
+
   toggleNode: (nodeId) =>
     set((s) => {
       const expanded = new Set(s.expanded)
@@ -385,6 +458,8 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
       else expanded.add(nodeId)
       return { expanded }
     }),
+
+  reportError: (thrown) => set({ error: toAppError(thrown) }),
 
   clearError: () => set({ error: null }),
 }))
@@ -399,6 +474,7 @@ interface TreeInput {
   databases: Record<string, string[]>
   schemas: Record<string, string[]>
   objects: Record<string, Objects>
+  backups: Record<string, Backup[]>
   structures: Record<string, TableStructure>
   activeNamespace: Record<string, Namespace>
 }
@@ -465,15 +541,24 @@ function namespaceNode(
   label: string,
 ): TreeNode {
   const held = input.objects[namespaceKey(profileId, ns)]
+  const kept = input.backups[namespaceKey(profileId, ns)]
   const active = input.activeNamespace[profileId] ?? NO_NAMESPACE
 
-  const folder = (folderKind: NodeKind, name: string, children: TreeNode[]): TreeNode => ({
+  // `read` is whether this folder's own source has been looked at, which is what decides if it
+  // carries a number: a folder nobody has opened has no badge, not a zero. It defaults to the
+  // catalogue read, which fills three of the four; Backups is read separately and says so.
+  const folder = (
+    folderKind: NodeKind,
+    name: string,
+    children: TreeNode[],
+    read = held !== undefined,
+  ): TreeNode => ({
     id: folderNodeId(folderKind, profileId, ns),
     kind: folderKind,
     label: name,
     profileId,
     namespace: ns,
-    ...(held ? { badge: String(children.length) } : {}),
+    ...(read ? { badge: String(children.length) } : {}),
     children,
   })
 
@@ -525,6 +610,21 @@ function namespaceNode(
                   ...(routine.arguments ? { badge: routine.arguments } : {}),
                 }),
               ),
+            ),
+          ]
+        : []),
+      // Under the catalogue's own folders, because it is not one of them: what is in here is files
+      // on this machine. It is filled by a read of its own rather than by the one the other three
+      // share — a folder on disk is not something the server was asked about — which is why it is
+      // the one folder whose badge can be there while theirs are not, and the other way round.
+      // See `hasBackups`.
+      ...(info.hasBackups
+        ? [
+            folder(
+              'backups',
+              'Backups',
+              (kept ?? []).map((file) => objectNode('backup', file.name)),
+              kept !== undefined,
             ),
           ]
         : []),

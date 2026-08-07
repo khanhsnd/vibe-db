@@ -15,8 +15,8 @@ engine, `internal/driver/mongo` is the proof the port is not secretly a SQL one,
 ## Rules that must not be broken
 
 1. **The dependency rule is one-way:**
-   `internal/app` → `session / profile / secret / history / transfer / compare` → `internal/driver`
-   → `internal/domain`.
+   `internal/app` → `session / profile / secret / history / transfer / compare / backup` →
+   `internal/driver` → `internal/domain`.
    Business rules live in `domain`, not in the API layer. `internal/app` speaks `dto.go` wire types,
    never domain types. `frontend/src/bridge` is the only frontend directory allowed to import
    `frontend/wailsjs/**`. **What is dangerous to run is a `domain` rule**
@@ -111,6 +111,7 @@ engine, `internal/driver/mongo` is the proof the port is not secretly a SQL one,
 | Change a query tab, a console or a file run | [docs/features/query-tab.md](docs/features/query-tab.md), [docs/features/script.md](docs/features/script.md), [docs/features/console.md](docs/features/console.md) |
 | Change a table tab, its paging, filtering or values | [docs/features/table-tab.md](docs/features/table-tab.md), [docs/features/row-limit.md](docs/features/row-limit.md), [docs/features/filter-sort.md](docs/features/filter-sort.md), [docs/features/value-viewer.md](docs/features/value-viewer.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file), [docs/features/transfer.md](docs/features/transfer.md) |
+| Touch a backup or a restore | [docs/architecture.md](docs/architecture.md#backing-a-database-up), [docs/features/backup.md](docs/features/backup.md) |
 | Touch a comparison of two tables | [docs/architecture.md](docs/architecture.md#comparing-two-tables), [docs/features/compare.md](docs/features/compare.md) |
 | Touch a search across a schema | [docs/architecture.md](docs/architecture.md#looking-for-text-across-a-schema), [docs/features/search.md](docs/features/search.md) |
 | Touch any table, grid, cell or selection | [docs/grid.md](docs/grid.md) |
@@ -124,8 +125,8 @@ A new failure mode needs all four of: a `domain` sentinel, a mapping in `errmap.
 
 A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `documents`, `keys`,
-`createsTables`, `createsDatabases`, `hasViews`, `needsUser` — and never a comparison against an
-engine's name in a component.
+`createsTables`, `createsDatabases`, `hasViews`, `hasBackups`, `needsUser` — and never a comparison
+against an engine's name in a component.
 
 ## How the docs are written
 

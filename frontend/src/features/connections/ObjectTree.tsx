@@ -1,6 +1,7 @@
 import { useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  Archive,
   ArrowDownAZ,
   Boxes,
   ChevronDown,
@@ -40,6 +41,10 @@ const ICONS: Record<NodeKind, typeof Table2> = {
   tables: Folder,
   views: Folder,
   routines: Folder,
+  // Drawn as a folder, being one, and its files as the archives they are — the one branch of the
+  // tree whose leaves are on this machine rather than on the server.
+  backups: Folder,
+  backup: Archive,
   table: Table2,
   view: Eye,
   procedure: Terminal,
@@ -64,6 +69,8 @@ const COLOURS: Record<NodeKind, string> = {
   tables: 'text-kind-table',
   views: 'text-kind-view',
   routines: 'text-kind-routine',
+  backups: 'text-kind-backup',
+  backup: 'text-kind-backup',
   table: 'text-kind-table',
   view: 'text-kind-view',
   procedure: 'text-kind-routine',
@@ -205,7 +212,7 @@ export function ObjectTree({
                     aria-label={isOpen ? 'Collapse' : 'Expand'}
                     onClick={(e) => {
                       e.stopPropagation()
-                      onSelect(node, 'replace')
+                      onSelect(node, 'caret')
                       onToggle(node)
                     }}
                     onDoubleClick={(e) => e.stopPropagation()}

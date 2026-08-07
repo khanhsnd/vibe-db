@@ -3,7 +3,7 @@
 Ports and adapters, with a strictly one-way dependency rule:
 
 ```
-internal/app  ->  session / profile / secret / history / transfer / compare  ->  internal/driver  ->  internal/domain
+internal/app  ->  session / profile / secret / history / transfer / compare / backup  ->  internal/driver  ->  internal/domain
 ```
 
 - **`internal/domain`** — `ConnectionProfile`, `Validate()`, sentinel errors. Pure; imports nothing
@@ -46,6 +46,12 @@ internal/app  ->  session / profile / secret / history / transfer / compare  -> 
   matched by position** — a field by its name, a row by its key — because a column inserted in the
   middle would otherwise report every column below it as changed. See
   [comparing two tables](#comparing-two-tables).
+- **`internal/backup`** — where a database's backups live on this machine, and nothing about what is
+  in one. A backup is a file of statements under a header line, so this package makes the folder,
+  names the file, reads that one line back and lists what is there; the statements are the driver's
+  and running them back is the session's. It sits beside `transfer` and for the same reason: a shelf
+  of files is a rule about this machine rather than about a server. See
+  [backing a database up](#backing-a-database-up).
 - **`internal/fonts`** — the font families the host machine has, read from the Windows font registry
   (both the machine-wide hive and the reader's own, since a per-user install is registered only
   there). Bound through `SystemAPI`, the one API that answers about the *machine* rather than about a
@@ -198,6 +204,33 @@ engine fills is the one structural difference between the SQL adapters. MySQL fi
 alone; PostgreSQL fills both and needs a connection pool per database to do it, because a session
 cannot leave the database it was opened with. MongoDB fills `Database` alone and needs one pool for
 the *server*, a single connection reading every database on it. See [decisions.md](decisions.md).
+
+## Backing a database up
+
+**A backup is a dump into a folder this app owns, and that is the whole of the design.** It is not a
+format: the file holds the statements `Schema.CreateStatements` and `Schema.RowStatements` already
+spell, written by `dump.go`'s own `dumpTable`, so there is no second way for a row to leave for a
+server ([rule 11](../CLAUDE.md#rules-that-must-not-be-broken)) and no second speller to keep in step.
+Restoring is running the file — `runStatements`, which `RunFile` also calls — so nothing about a
+restore knows what a backup is either.
+
+What is left is the shelf, and that is `internal/backup`: `<config>/vibe-db/backups/<profile
+id>/<database[@schema]>/<yyyymmddhhmmss>.sql`. Every name that reaches a path goes through one
+`segment`, so a database called `a/b` is one directory and a profile called `..` is not the parent.
+
+**Nothing here ever writes over a backup.** Every file is made with `O_EXCL` and every name that is
+already taken is stepped past — a second backup inside one second becomes `…-2`, a copy becomes
+`…-copy` — except a rename, which refuses instead, the reader having asked to move one file and not
+to lose another.
+
+**The header is in the file, not in an index beside it.** One line, a SQL comment carrying JSON — the
+server, the namespace, the moment, and the reader's comment — which is what makes a backup one thing:
+copied to another machine or dropped in by hand, it still says what it is, and a listing reads that
+line alone rather than a gigabyte of inserts. A file with no header still lists and still restores.
+
+Which engines have one is a `domain` rule — `Engine.Backups`, true where statements declare a table
+and write a row — and the frontend receives its answer as `hasBackups` rather than comparing names.
+Everything else is `domain.Unsupported` naming what is missing.
 
 ## Comparing two tables
 

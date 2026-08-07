@@ -285,6 +285,10 @@ export interface EngineInfo {
   // deletes the rows and the other resets the storage; a collection has no storage to reset, so
   // offering both would be offering the same command twice under two names.
   hasTruncate: boolean
+  // Whether a database of this engine can be backed up. A backup here is a file of the statements
+  // that would put the database back, so the engines that have one are the engines whose statements
+  // declare a table and write a row — see `domain.Engine.Backups`, which is where the rule lives.
+  hasBackups: boolean
 }
 
 /**
@@ -365,6 +369,7 @@ export const ENGINES = [
     hasForeignKeys: true,
     hasRoutines: true,
     hasTruncate: true,
+    hasBackups: true,
   },
   {
     value: 'postgres',
@@ -384,6 +389,7 @@ export const ENGINES = [
     hasForeignKeys: true,
     hasRoutines: true,
     hasTruncate: true,
+    hasBackups: true,
   },
   {
     // A MongoDB server started without access control takes no credentials at all, which is why
@@ -405,6 +411,7 @@ export const ENGINES = [
     hasForeignKeys: false,
     hasRoutines: false,
     hasTruncate: false,
+    hasBackups: false,
   },
   {
     // A Redis database is *numbered* rather than named — `0` to `15` on a default install — so the
@@ -427,6 +434,7 @@ export const ENGINES = [
     hasForeignKeys: false,
     hasRoutines: false,
     hasTruncate: false,
+    hasBackups: false,
   },
 ] as const satisfies readonly EngineInfo[]
 

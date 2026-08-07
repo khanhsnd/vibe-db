@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/khanhsnd/vibe-db/internal/backup"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/mongo"
 	"github.com/khanhsnd/vibe-db/internal/driver/mysql"
@@ -34,14 +35,24 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("resolve config path: %w", err)
 	}
 
+	backupRoot, err := backup.DefaultRoot()
+	if err != nil {
+		return nil, fmt.Errorf("resolve config path: %w", err)
+	}
+
 	registry := driver.NewRegistry(mysql.New(), postgres.New(), mongo.New(), redis.New())
 	sessions := session.NewManager(registry)
 
 	return &App{
-		Connections: NewConnectionAPI(profilefile.New(profilePath), keyring.New(), sessions),
-		Queries:     NewQueryAPI(sessions, historyfile.New(historyPath)),
-		System:      NewSystemAPI(),
-		sessions:    sessions,
+		Connections: NewConnectionAPI(
+			profilefile.New(profilePath),
+			keyring.New(),
+			sessions,
+			backup.New(backupRoot),
+		),
+		Queries:  NewQueryAPI(sessions, historyfile.New(historyPath)),
+		System:   NewSystemAPI(),
+		sessions: sessions,
 	}, nil
 }
 

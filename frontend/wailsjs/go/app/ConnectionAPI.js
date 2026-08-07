@@ -38,6 +38,10 @@ export function Connect(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['Connect'](arg1, arg2);
 }
 
+export function CopyBackup(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['CopyBackup'](arg1, arg2, arg3);
+}
+
 export function CreateDatabase(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['CreateDatabase'](arg1, arg2);
 }
@@ -52,6 +56,10 @@ export function CreateIndex(arg1, arg2, arg3, arg4) {
 
 export function CreateTable(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['CreateTable'](arg1, arg2);
+}
+
+export function DeleteBackup(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['DeleteBackup'](arg1, arg2, arg3);
 }
 
 export function DeleteProfile(arg1) {
@@ -110,12 +118,20 @@ export function ExportRows(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ExportRows'](arg1, arg2);
 }
 
+export function ExtractBackupSQL(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['ExtractBackupSQL'](arg1, arg2, arg3);
+}
+
 export function FindInSchema(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['FindInSchema'](arg1, arg2);
 }
 
 export function InsertRow(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['InsertRow'](arg1, arg2);
+}
+
+export function ListBackups(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['ListBackups'](arg1, arg2);
 }
 
 export function ListDatabases(arg1) {
@@ -174,6 +190,10 @@ export function LoadTableStructure(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['LoadTableStructure'](arg1, arg2, arg3);
 }
 
+export function OpenBackupFolder(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['OpenBackupFolder'](arg1, arg2);
+}
+
 export function PreviewCreateDatabase(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['PreviewCreateDatabase'](arg1, arg2);
 }
@@ -190,6 +210,10 @@ export function PreviewTableChanges(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['PreviewTableChanges'](arg1, arg2, arg3, arg4);
 }
 
+export function RenameBackup(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['ConnectionAPI']['RenameBackup'](arg1, arg2, arg3, arg4);
+}
+
 export function RenameColumn(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['ConnectionAPI']['RenameColumn'](arg1, arg2, arg3, arg4, arg5);
 }
@@ -198,8 +222,16 @@ export function RenameTable(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['RenameTable'](arg1, arg2, arg3, arg4);
 }
 
+export function RestoreBackup(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['RestoreBackup'](arg1, arg2);
+}
+
 export function ReviewImport(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ReviewImport'](arg1, arg2);
+}
+
+export function RunBackup(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['RunBackup'](arg1, arg2);
 }
 
 export function RunExport(arg1, arg2) {

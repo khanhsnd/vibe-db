@@ -1,11 +1,13 @@
 package app
 
 import (
+	"context"
 	"os"
 	"time"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/session"
 	"github.com/khanhsnd/vibe-db/internal/transfer"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -84,18 +86,32 @@ func (a *QueryAPI) RunFile(sessionID string, input ScriptFileInput) (ScriptFileR
 	ctx, release := a.runs.begin(a.ctx, input.RunID, scriptFileTimeout)
 	defer release()
 
+	ns := input.Namespace.toDriver()
+	return runStatements(ctx, a.sessions, sessionID, ns, statements, input.ContinueOnError), nil
+}
+
+// runStatements runs each statement against one session in the order it was given them, and answers
+// with what every one of them did.
+//
+// It is shared because a file run and a restore are the same job under two names: a list of
+// statements, run one after another, stopping where the reader asked it to. Neither of them spells a
+// statement and neither reads a row back — see scriptFileRows.
+func runStatements(
+	ctx context.Context,
+	sessions *session.Manager,
+	sessionID string,
+	ns driver.Namespace,
+	statements []string,
+	continueOnError bool,
+) ScriptFileResult {
 	started := time.Now()
 	result := ScriptFileResult{Statements: make([]StatementOutcome, 0, len(statements))}
 
 	for _, statement := range statements {
-		query := driver.Query{
-			Namespace: input.Namespace.toDriver(),
-			SQL:       statement,
-			MaxRows:   scriptFileRows,
-		}
+		query := driver.Query{Namespace: ns, SQL: statement, MaxRows: scriptFileRows}
 
 		at := time.Now()
-		ran, err := a.sessions.Query(ctx, sessionID, query)
+		ran, err := sessions.Query(ctx, sessionID, query)
 		elapsed := time.Since(at)
 
 		if err == nil {
@@ -114,13 +130,13 @@ func (a *QueryAPI) RunFile(sessionID string, input ScriptFileInput) (ScriptFileR
 
 		// A cancelled run stops whatever was asked for: Continue on error is about statements the
 		// *server* refused, and carrying on would ignore the reader's own Stop.
-		if !input.ContinueOnError || ctx.Err() != nil {
+		if !continueOnError || ctx.Err() != nil {
 			break
 		}
 	}
 
 	result.ElapsedMs = time.Since(started).Milliseconds()
-	return result, nil
+	return result
 }
 
 // readScriptFile reads the file as the named encoding. A file that cannot be opened and one whose

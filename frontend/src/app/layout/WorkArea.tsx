@@ -1,5 +1,6 @@
 import { Terminal } from 'lucide-react'
 
+import { BackupListView } from '@/features/backup/BackupListView'
 import { CompareView } from '@/features/compare/CompareView'
 import { ConsoleView } from '@/features/console/ConsoleView'
 import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
@@ -67,6 +68,17 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             <Empty title="Not connected" hint="Reconnect this connection to list its tables." />
           ) : (
             <ObjectListView
+              key={activeTab.id}
+              sessionId={sessionId}
+              profileId={activeTab.profileId}
+              namespace={activeTab.namespace}
+            />
+          )
+        ) : activeTab.kind === 'backups' ? (
+          sessionId === null ? (
+            <Empty title="Not connected" hint="Reconnect this connection to read its backups." />
+          ) : (
+            <BackupListView
               key={activeTab.id}
               sessionId={sessionId}
               profileId={activeTab.profileId}

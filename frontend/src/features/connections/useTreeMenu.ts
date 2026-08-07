@@ -13,9 +13,11 @@ import { databases } from '@/bridge/databases'
 import { ICON } from '@/shared/ui/menuIcons'
 import { schema } from '@/bridge/schema'
 import type { TableColumn } from '@/bridge/tables'
+import { backupActions, type BackupActions } from '@/features/backup/backupActions'
 import { fieldActions, type FieldActions } from '@/features/schema/fieldActions'
 import { tableActions, type TableActions } from '@/features/schema/tableActions'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
+import { useBackupsStore } from '@/stores/backups'
 import { tableKey, useConnectionsStore, type ChangeSchema } from '@/stores/connections'
 import { useSchemaStore, type SchemaRequest } from '@/stores/schema'
 import { COMPARE_ARROW, type CompareMode, type TableTarget } from '@/stores/tabs'
@@ -42,6 +44,8 @@ interface TreeMenuActions {
   onCompare: (left: TableTarget, right: TableTarget, mode: CompareMode) => void
   /** Searches every table of a namespace for one piece of text. */
   onFind: (profileId: string, namespace: Namespace) => void
+  /** Opens the list of backups kept for a namespace. */
+  onBackups: (profileId: string, namespace: Namespace) => void
 }
 
 /**
@@ -114,6 +118,11 @@ export function useTreeMenu(
   const changeSchema = useConnectionsStore((s) => s.changeSchema)
   const changeDatabases = useConnectionsStore((s) => s.changeDatabases)
   const dump = useConnectionsStore((s) => s.dump)
+  const openBackupFolder = useConnectionsStore((s) => s.openBackupFolder)
+  const refreshBackups = useConnectionsStore((s) => s.refreshBackups)
+  const changeBackups = useConnectionsStore((s) => s.changeBackups)
+  const reportError = useConnectionsStore((s) => s.reportError)
+  const askBackup = useBackupsStore((s) => s.ask)
   const ask = useSchemaStore((s) => s.ask)
   const askAddField = useSchemaStore((s) => s.askAddField)
 
@@ -128,6 +137,7 @@ export function useTreeMenu(
     onExport,
     onCompare,
     onFind,
+    onBackups,
   } = actions
 
   return useCallback(
@@ -236,6 +246,23 @@ export function useTreeMenu(
         onSelect: () => onFind(node.profileId, ns),
       }
 
+      // Everything a backup is offered, wherever it is offered — the toolbar over the list builds
+      // from the same call. A failure with no dialog behind it goes where a dump's does: the bar.
+      const backup = backupActions(node.profileId, ns, node.label, {
+        ask,
+        changeBackups,
+        changeSchema,
+        report: reportError,
+      })
+
+      // The backup folder has a read of its own, so it has a Refresh of its own: the catalogue
+      // read below would not notice a file appearing on disk, and this one asks no server anything.
+      const refreshBackupList: MenuItem = {
+        label: 'Refresh',
+        icon: ICON.refresh,
+        onSelect: () => void refreshBackups(node.profileId, ns),
+      }
+
       // One read fills all three folders, so Refresh means the same thing wherever it is asked
       // for under a namespace.
       const refreshObjectList: MenuItem = {
@@ -293,6 +320,37 @@ export function useTreeMenu(
         case 'views':
         case 'routines':
           return [{ ...refreshObjectList, separatorBefore: false }]
+
+        // The one folder under a namespace whose menu asks no server anything. Restore is not here:
+        // a restore is addressed to *one* file, and the file is what carries it — the folder offers
+        // the list instead, which is where the reader sees which files there are.
+        case 'backups':
+          return [
+            {
+              label: 'New Backup…',
+              icon: ICON.add,
+              onSelect: () => askBackup({ profileId: node.profileId, namespace: ns }),
+            },
+            {
+              label: 'Backup List',
+              icon: ICON.open,
+              onSelect: () => onBackups(node.profileId, ns),
+            },
+            {
+              label: 'Open Containing Folder',
+              icon: ICON.openFolder,
+              separatorBefore: true,
+              onSelect: () => void openBackupFolder(node.profileId, ns),
+            },
+            { ...refreshBackupList, separatorBefore: true },
+          ]
+
+        case 'backup':
+          return backupItems(node.label, {
+            ...backup,
+            refresh: refreshBackupList,
+            openFolder: () => void openBackupFolder(node.profileId, ns),
+          })
 
         case 'table':
           return tableItems(
@@ -378,6 +436,11 @@ export function useTreeMenu(
       changeSchema,
       changeDatabases,
       dump,
+      openBackupFolder,
+      refreshBackups,
+      changeBackups,
+      reportError,
+      askBackup,
       ask,
       askAddField,
       onConnect,
@@ -390,9 +453,46 @@ export function useTreeMenu(
       onExport,
       onCompare,
       onFind,
+      onBackups,
       picked,
     ],
   )
+}
+
+/**
+ * Everything one backup is offered, in the order a reader reaches for it: put it back, take it
+ * somewhere, keep a second copy, retitle it, throw it away — then the folder it is in.
+ *
+ * Restore is the only one that touches a server, so it is alone above the first divider and is the
+ * only one drawn as a change. Delete is the only one that loses anything, so it is alone above the
+ * last one and is drawn in the danger colour, exactly as every other Delete in the tree is.
+ */
+export function backupItems(
+  name: string,
+  on: BackupActions & { refresh: MenuItem; openFolder: () => void },
+): MenuItem[] {
+  return [
+    { label: 'Restore Backup…', icon: ICON.restoreBackup, onSelect: on.restore },
+    { label: 'Extract SQL…', icon: ICON.dump, separatorBefore: true, onSelect: on.extractSQL },
+    // A copy is named after the original rather than asked for, the original's name being a
+    // moment and a moment being the one thing a copy of it does not have a new one of.
+    { label: `Copy ${name}`, icon: ICON.duplicate, onSelect: on.copy },
+    { label: 'Rename…', icon: ICON.rename, onSelect: on.rename },
+    {
+      label: 'Delete Backup',
+      icon: ICON.delete,
+      danger: true,
+      separatorBefore: true,
+      onSelect: on.remove,
+    },
+    {
+      label: 'Open Containing Folder',
+      icon: ICON.openFolder,
+      separatorBefore: true,
+      onSelect: on.openFolder,
+    },
+    on.refresh,
+  ]
 }
 
 /**

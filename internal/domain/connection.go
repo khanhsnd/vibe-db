@@ -62,6 +62,15 @@ func (e Engine) Keys() bool {
 	return e == EngineRedis
 }
 
+// Backups says a database of this engine can be written out as a file that would put it back.
+// A backup here *is* that file — the dump's own statements, under a header — so the engines that
+// have one are exactly the engines whose statements declare a table and write a row. A document
+// store's commands and a key space's keys are neither, and claiming a backup for them would be
+// promising a restore nothing could perform.
+func (e Engine) Backups() bool {
+	return e == EngineMySQL || e == EnginePostgres
+}
+
 // NeedsUser says every connection to this engine is made *as* somebody the server knows. A MongoDB
 // server started without access control and a Redis server with no ACL both take none at all, so
 // insisting on a user name for either would be refusing a profile that connects perfectly well.

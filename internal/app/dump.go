@@ -26,6 +26,14 @@ type DumpInput struct {
 	WithData bool `json:"withData"`
 }
 
+// dumpWhat is which halves of a table go into a file: what would declare it, and the rows it holds.
+// A dump from the menu always writes the first and asks about the second; a backup's Advanced tab is
+// where either of them can be left out.
+type dumpWhat struct {
+	structure bool
+	data      bool
+}
+
 // dumpFile is what a dump of an engine is a file *of*. It is read off `domain.Engine.Documents`
 // rather than off the engine's name: a document store's statements are commands and not SQL, so a
 // file of them is a script the shell runs and calling it `.sql` would be a lie about its contents.
@@ -105,9 +113,12 @@ func (a *ConnectionAPI) writeDump(
 	}
 	defer out.Close()
 
+	what := dumpWhat{structure: true, data: input.WithData}
+
 	writer := bufio.NewWriter(out)
 	for _, table := range tables {
-		if err := a.dumpTable(ctx, sessionID, schema, writer, input, table); err != nil {
+		ns := input.Namespace.toDriver()
+		if _, err := a.dumpTable(ctx, sessionID, schema, writer, ns, table, what); err != nil {
 			return err
 		}
 	}
@@ -132,15 +143,28 @@ func (a *ConnectionAPI) dumpTables(
 	if input.Table != "" {
 		return []string{input.Table}, nil
 	}
+	return a.namespaceTables(ctx, sessionID, input.Namespace)
+}
 
-	objects, err := a.sessions.Objects(ctx, sessionID, input.Namespace.toDriver())
+// namespaceTables is every table a namespace holds, which is what a dump of one covers and what a
+// backup covers when the reader has narrowed nothing.
+func (a *ConnectionAPI) namespaceTables(
+	ctx context.Context,
+	sessionID string,
+	ns Namespace,
+) ([]string, error) {
+	objects, err := a.sessions.Objects(ctx, sessionID, ns.toDriver())
 	if err != nil {
 		return nil, err
 	}
 	return objects.Tables, nil
 }
 
-// dumpTable writes one table: its shape, then its rows where they were asked for.
+// dumpTable writes one table — its shape, then its rows, as far as `what` asks for — and answers
+// with how many rows it wrote, which is what a backup's log reports per table.
+//
+// It is the one place a table becomes a file of statements: a dump from the tree and a backup both
+// come through here, so a backup restores by exactly the same statements a dump re-runs.
 //
 // The rows are **streamed rather than paged**. A page counts the table again for every page it cuts,
 // and a dump wants each row once in one pass — so the read is unbounded and each batch is written on
@@ -151,20 +175,21 @@ func (a *ConnectionAPI) dumpTable(
 	sessionID string,
 	schema driver.Schema,
 	out *bufio.Writer,
-	input DumpInput,
+	ns driver.Namespace,
 	table string,
-) error {
-	ns := input.Namespace.toDriver()
-
-	statements, err := schema.CreateStatements(ctx, ns, table)
-	if err != nil {
-		return err
+	what dumpWhat,
+) (int, error) {
+	if what.structure {
+		statements, err := schema.CreateStatements(ctx, ns, table)
+		if err != nil {
+			return 0, err
+		}
+		if err := writeStatements(out, statements); err != nil {
+			return 0, err
+		}
 	}
-	if err := writeStatements(out, statements); err != nil {
-		return err
-	}
-	if !input.WithData {
-		return endTable(out)
+	if !what.data {
+		return 0, endTable(out)
 	}
 
 	// The column names have to be known before the first batch arrives, so they are read from the
@@ -172,7 +197,7 @@ func (a *ConnectionAPI) dumpTable(
 	// are ordered by on all three engines, so a value cannot land under another column's name.
 	structure, err := schema.TableStructure(ctx, ns, table)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	columns := make([]string, 0, len(structure.Columns))
 	for _, column := range structure.Columns {
@@ -183,18 +208,23 @@ func (a *ConnectionAPI) dumpTable(
 	// the read is over — and no further batch is written after one, which would put statements into
 	// the file after the one that could not be written.
 	var failed error
+	rows := 0
 	page := driver.TablePage{
 		Namespace: ns,
 		Table:     table,
 		Stream: &driver.RowStream{
 			Rows: func(batch [][]*string) {
+				if failed != nil {
+					return
+				}
+				failed = writeStatements(out, schema.RowStatements(ns, table, driver.RowWrite{
+					Mode:    driver.WriteAppend,
+					Columns: columns,
+					Rows:    batch,
+					Batch:   1,
+				}))
 				if failed == nil {
-					failed = writeStatements(out, schema.RowStatements(ns, table, driver.RowWrite{
-						Mode:    driver.WriteAppend,
-						Columns: columns,
-						Rows:    batch,
-						Batch:   1,
-					}))
+					rows += len(batch)
 				}
 			},
 			Counted: func(int) {},
@@ -202,12 +232,12 @@ func (a *ConnectionAPI) dumpTable(
 	}
 
 	if _, err := a.sessions.TableRows(ctx, sessionID, page); err != nil {
-		return err
+		return rows, err
 	}
 	if failed != nil {
-		return failed
+		return rows, failed
 	}
-	return endTable(out)
+	return rows, endTable(out)
 }
 
 // writeStatements puts each statement on its own lines and terminates it with a semicolon, which is

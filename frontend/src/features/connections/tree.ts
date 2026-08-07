@@ -11,6 +11,10 @@ export type NodeKind =
   | 'tables'
   | 'views'
   | 'routines'
+  // The one folder under a namespace that stands for nothing on the server, and the files in it:
+  // a shelf on this machine. It is filled by a read of its own — see `isObjectFolder`.
+  | 'backups'
+  | 'backup'
   | 'table'
   | 'view'
   | 'procedure'
@@ -63,8 +67,12 @@ export interface TreeNode {
  * The tree differs from the grid in one way and deliberately: `Ctrl` **toggles**. A rectangle
  * cannot be split, which is why the grid only ever adds; a list of rows can, and taking the wrong
  * table back out of a pair is the commonest correction there is.
+ *
+ * `caret` is a press on the chevron, which picks the row exactly as a press on it does and differs
+ * in one thing: the caret **does its own expanding**, so anything that opens a branch on a plain
+ * press must not open it again here — that would be two toggles and no movement.
  */
-export type PickHow = 'replace' | 'add' | 'menu'
+export type PickHow = 'replace' | 'add' | 'menu' | 'caret'
 
 export interface FlatNode {
   node: TreeNode
@@ -84,6 +92,9 @@ const OBJECT_FOLDERS: ReadonlySet<NodeKind> = new Set(['tables', 'views', 'routi
 /**
  * Whether this node is one of a namespace's object folders. All three are filled by one read,
  * so opening any of them asks for the same thing.
+ *
+ * `backups` is deliberately not one. Nothing about it comes off the catalogue, so opening it must
+ * not make the read the other three share — a folder of files does not go to the server.
  */
 export function isObjectFolder(node: TreeNode): boolean {
   return OBJECT_FOLDERS.has(node.kind)
@@ -108,15 +119,18 @@ const FOLDERS: ReadonlySet<NodeKind> = new Set([
   'tables',
   'views',
   'routines',
+  'backups',
   'fields',
   'indexes',
   'foreignKeys',
 ])
 
 /**
- * Whether this node holds others rather than standing for something in the catalogue. It is what
- * decides how a badge reads: a folder's is how many are inside, and a leaf's is a fact about the
- * thing itself — a field's type, an index's columns, the table a key points at.
+ * Whether this node is a heading rather than something in the catalogue. It is what decides how a
+ * badge reads — a folder's is how many are inside, and a leaf's is a fact about the thing itself:
+ * a field's type, an index's columns, the table a key points at — and it is what keeps a folder out
+ * of the filter, `Tables` sitting under every namespace and so matching nothing worth showing.
+ *
  */
 export function isFolder(node: TreeNode): boolean {
   return FOLDERS.has(node.kind)

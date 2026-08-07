@@ -11,6 +11,7 @@ export type ErrorCode =
   | 'EMPTY_STATEMENT'
   | 'SQL_ERROR'
   | 'FILE_UNREADABLE'
+  | 'UNSUPPORTED'
   | 'QUERY_CANCELLED'
   | 'HOST_UNREACHABLE'
   | 'TIMEOUT'
