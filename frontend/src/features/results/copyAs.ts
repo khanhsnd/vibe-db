@@ -3,7 +3,7 @@ import { cellText, selectedBlocks, type CellBlock, type GridData, type Selection
 /**
  * The shapes a selection can be copied in beyond a plain tab-separated block. They are the
  * clipboard's half of what `ExportMenu` writes to a file, and treat a NULL the same way: an
- * empty CSV field, a JSON `null` — see features.md, *Exporting a grid*.
+ * empty CSV field, a JSON `null` — see docs/features/results.md, *Exporting a grid*.
  */
 export type CopyFormat = 'names' | 'csv' | 'json'
 

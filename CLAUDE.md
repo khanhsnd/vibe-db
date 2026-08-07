@@ -102,12 +102,16 @@ engine, `internal/driver/mongo` is the proof the port is not secretly a SQL one,
 | Build, test, run against a real database | [docs/development.md](docs/development.md) |
 | Touch a layer boundary, or add an engine | [docs/architecture.md](docs/architecture.md) |
 | Touch anything MongoDB | [docs/architecture.md](docs/architecture.md#the-document-store) |
-| Touch anything Redis | [docs/architecture.md](docs/architecture.md#the-key-value-store) |
+| Touch anything Redis | [docs/architecture.md](docs/architecture.md#the-key-value-store), [docs/features/key-space.md](docs/features/key-space.md) |
 | Add or change a failure mode | [docs/errors.md](docs/errors.md) |
-| Change UI behaviour, or find out what exists | [docs/features.md](docs/features.md) |
-| Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file) |
-| Touch a comparison of two tables | [docs/architecture.md](docs/architecture.md#comparing-two-tables) |
-| Touch a search across a schema | [docs/architecture.md](docs/architecture.md#looking-for-text-across-a-schema) |
+| Find out what exists at all | [docs/features.md](docs/features.md) — the index, one file per feature under [docs/features/](docs/features/) |
+| Change how a connection is made or guarded | [docs/features/connections.md](docs/features/connections.md) |
+| Change the tree, the table list or a schema change | [docs/features/schema-tree.md](docs/features/schema-tree.md), [docs/features/schema-changes.md](docs/features/schema-changes.md) |
+| Change a query tab, a console or a file run | [docs/features/query-tab.md](docs/features/query-tab.md), [docs/features/script.md](docs/features/script.md), [docs/features/console.md](docs/features/console.md) |
+| Change a table tab, its paging, filtering or values | [docs/features/table-tab.md](docs/features/table-tab.md), [docs/features/row-limit.md](docs/features/row-limit.md), [docs/features/filter-sort.md](docs/features/filter-sort.md), [docs/features/value-viewer.md](docs/features/value-viewer.md) |
+| Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file), [docs/features/transfer.md](docs/features/transfer.md) |
+| Touch a comparison of two tables | [docs/architecture.md](docs/architecture.md#comparing-two-tables), [docs/features/compare.md](docs/features/compare.md) |
+| Touch a search across a schema | [docs/architecture.md](docs/architecture.md#looking-for-text-across-a-schema), [docs/features/search.md](docs/features/search.md) |
 | Touch any table, grid, cell or selection | [docs/grid.md](docs/grid.md) |
 | Touch the SQL editor or completion | [docs/editor.md](docs/editor.md) |
 | Write a component, a store, or a style | [docs/frontend.md](docs/frontend.md) |
@@ -121,6 +125,29 @@ A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `documents`, `keys`,
 `createsTables`, `createsDatabases`, `hasViews`, `needsUser` — and never a comparison against an
 engine's name in a component.
+
+## How the docs are written
+
+A change to behaviour is a change to the document that describes it, in the **same commit**. Which
+document that is follows five rules:
+
+1. **One feature to a file, named after the feature.** [docs/features.md](docs/features.md) is an
+   index and holds no behaviour of its own; every feature lives in its own file under
+   [docs/features/](docs/features/).
+2. **About 250 lines is the ceiling.** A feature document past it is holding more than one feature:
+   split it by feature, name the parts, and add their rows to the index — never add a fourth `##`
+   to a file that is already long.
+3. **A document that is one contract stays whole**, however long it runs.
+   [docs/grid.md](docs/grid.md) is the grid's specification and [docs/errors.md](docs/errors.md) is
+   the error table; splitting either would mean two files to read before one change, which is the
+   cost these rules exist to avoid.
+4. **One fact in one place, reached by a link.** A fact written in two files is a fact that will
+   disagree with itself. The file that owns it is the one whose feature it is, and everything else
+   links to `features/<file>.md#the-heading` — a file *and* a heading, so a reader lands on the
+   paragraph rather than at the top of a document. From inside `docs/features/`, a sibling document
+   is `../grid.md`.
+5. **A new feature is a new file, a row in the index, and — if it is a place a change starts — a row
+   in the table above.** Not a section appended to the nearest existing document.
 
 Commands, in short: `wails dev`, `wails build`, `go test ./...`, `go vet ./...`,
 `gofmt -l internal main.go`, and `pnpm typecheck` in `frontend/`.

@@ -42,7 +42,7 @@ Full prerequisites, the command table and how to drive the backend from a browse
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | Layers, the one-way dependency rule, adding an engine, the two Wails constraints |
 | [docs/errors.md](docs/errors.md) | The error envelope and the full error-code table |
-| [docs/features.md](docs/features.md) | What works and how it behaves — schema tree, query tabs, row limit, output panel, grid |
+| [docs/features.md](docs/features.md) | What works, as an index over [docs/features/](docs/features/) — one file per feature: connections, the tree, query tabs, the table tab, the grid's panels |
 | [docs/editor.md](docs/editor.md) | CodeMirror setup, the four completion sources, the load-bearing colours |
 | [docs/frontend.md](docs/frontend.md) | Path aliases, theme tokens, `Split`, TypeScript strictness, Zustand selectors |
 | [docs/decisions.md](docs/decisions.md) | Deliberate choices that should not be "fixed" |

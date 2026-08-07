@@ -14,7 +14,7 @@
   rectangle cannot be split and a list of rows can. A right-click that lands *inside* a pick of
   several leaves it standing, which is the rule the cell menu already sets and the whole reason a
   pair survives being right-clicked. Today the one thing that reads the pair is
-  [Compare](features.md#comparing-two-tables).
+  [Compare](features/compare.md).
 - **A grid may be writable in one column and read-only in every other** (`ResultColumn.readOnly`).
   It exists for the one arrangement a single `onEditCell` cannot express: rows that are *read*, with
   one column that is acted on. A comparison is that grid — a **Take** tick beside the columns of
@@ -102,7 +102,7 @@
   keeps a table tab's — the panels it has open, the columns it hides, and what its read was asked for.
   Both are dropped by `tabs.close`, which is the one place a tab's belongings are let go, and a table
   tab's view is started by `tabs.open` so a tab cannot exist without one. What each kind of tab keeps,
-  and why the two differ, is in [features.md](features.md#tabs).
+  and why the two differ, is in [features/shell.md](features/shell.md#tabs).
 - **A new kind of tab adds state, not a second way of running things.** `stores/console.ts` keeps a
   console's transcript and nothing else: the run goes through `stores/queries.ts` under the same tab
   id, which is why a console's rows are paged, exported, edited and stopped by the code that already

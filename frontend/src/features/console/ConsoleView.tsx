@@ -30,7 +30,7 @@ interface ConsoleViewProps {
  *
  * What it does not have is the editor: no completion, no formatting, no reviewing a whole script
  * before it runs. A console is for one line at a time, and a reader with a script to think about
- * wants a query tab — see [features.md](../../../../docs/features.md).
+ * wants a query tab — see [console.md](../../../../docs/features/console.md).
  */
 export function ConsoleView({ tab, sessionId, databases, schemas, engine }: ConsoleViewProps) {
   const run = useQueriesStore((s) => s.runs[tab.id] ?? IDLE_RUN)

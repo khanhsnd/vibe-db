@@ -77,7 +77,7 @@
   than streamed unbounded into the UI. That bound is the mechanism keeping the memory claims in
   [memory.md](memory.md) true. A toolbar can lift it, through an explicit `All` or a typed count,
   but the *default* must stay bounded and nothing may opt in on the user's behalf. See
-  [features.md](features.md#the-row-limit) for how the sentinel keeps the two apart on the wire.
+  [features/row-limit.md](features/row-limit.md) for how the sentinel keeps the two apart on the wire.
 - **Passwords never enter `connections.json`.** Profile metadata goes to
   `%APPDATA%/vibe-db/connections.json`, written atomically via temp-file + rename so a failed write
   leaves the previous file intact. The secret goes to the OS credential store via `internal/secret`.

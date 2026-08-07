@@ -50,7 +50,7 @@ the statement was a `DELETE` or a `deleteMany`.
 - **`Ctrl`+`Shift`+`F`** formats, bound on the *window* alongside `F5` — the editor does not own the
   keyboard when the reader is in the output pane, and a shortcut that only works with the caret in
   the text is a shortcut readers stop reaching for. What it does to a script, and the rules it
-  follows, are in [features.md](features.md#laying-a-script-out).
+  follows, are in [features/script.md](features/script.md#laying-a-script-out).
 - **`diagnostics.ts`** is the marking: one `StateField` holding a `DecorationSet`, updated by a
   `StateEffect` when a fresh review lands and **mapped through every change between** — a squiggle a
   character behind the typing is worse than none. It is a field rather than a compartment because
@@ -110,7 +110,7 @@ the schema rather than trusting the parser's token types, and it reads both quot
   `z-index: -2`, behind the lines, so an opaque active-line background paints over the selection.
 
 **`editorTheme` has a second reader.** The value viewer's laid-out view is CodeMirror too —
-`DocumentView`, see [features.md](features.md#reading-a-value-whole) — and wears this same theme, so
+`DocumentView`, see [features/value-viewer.md](features/value-viewer.md) — and wears this same theme, so
 one editor and one laid-out document cannot drift apart. Its own token, `propertyName`, is the one
 the shared syntax style deliberately leaves unset: the shell's documents keep their keys the colour
 of the data they name, while a document being *read* is nothing but keys and values.

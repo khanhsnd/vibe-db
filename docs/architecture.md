@@ -186,7 +186,7 @@ table's worth — the same bargain `dump.go` already struck.
 | `text.go` | Delimited and fixed-width, one scanner for both. The record delimiter is **detected** — LF, CRLF and CR all end a record — because a file written on one machine and read on another is the normal case and a wrong answer there reads the file as a single row. |
 | `json.go`, `xml.go` | An array of objects, and a root of row elements. Neither declares its fields, so they are **inferred from a sample** of the first hundred — the same rule `mongo.fields` follows, and for the same reason. |
 | `xlsx.go`, `xlsxwrite.go` | A workbook, written and read by hand. **No dependency is taken**, for the reason `internal/cloudauth` takes none: SpreadsheetML is a documented format and a grid of cells uses a small, well-trodden part of it. What is written is deliberately narrow — inline strings, one sheet, no styles, no shared-string table, which is what lets the writer stream. What is **read** is wider, because a workbook to import is one Excel wrote: shared strings, formula results, booleans, and a number that a style says is a date. |
-| `document.go` | HTML and Markdown, written and never read — see [features.md](features.md#the-import-and-export-wizards). |
+| `document.go` | HTML and Markdown, written and never read — see [features/transfer.md](features/transfer.md#the-import-and-export-wizards). |
 | `encoding.go` | The encodings the whole app reads files as, one list. UTF-8 is `UTF8BOM`: its decoder strips a mark a Windows tool left, and its encoder writes one, which is what makes Excel open a UTF-8 CSV as UTF-8. |
 
 `internal/app/transfer.go` mirrors the format and encoding lists onto the wire so the wizard draws a
@@ -393,7 +393,7 @@ the bar over it is two boxes rather than the filter builder — and not one of t
 into the driver. The tree is a *reading* of the page this side already holds, the members are read out
 of the JSON `value.go` wrote and go back as the JSON `parseValue` reads, and the two boxes write the
 same `Key contains …` / `Type = …` conditions the builder would have. See
-[features.md](features.md#browsing-a-key-space).
+[features/key-space.md](features/key-space.md).
 
 **A command is argv, not a sentence.** `command.go` rebuilds each argument from the tokens
 `sqlkit.Lex` already produced — an argument is a *run of adjacent tokens*, since `user:1` is three

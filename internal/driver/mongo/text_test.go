@@ -279,7 +279,8 @@ func TestFormatLeavesAnUnterminatedScriptAlone(t *testing.T) {
 
 // Format lays out a *value* and not only a command, because the value viewer shows one field of one
 // document and asks this side to lay it out: a bare key, an `ObjectId(…)` and where a line breaks
-// are this grammar's, and there is no second formatter on the frontend. See docs/features.md.
+// are this grammar's, and there is no second formatter on the frontend. See
+// docs/features/value-viewer.md.
 func TestFormatLaysOutABareValue(t *testing.T) {
 	tests := []struct {
 		name  string
