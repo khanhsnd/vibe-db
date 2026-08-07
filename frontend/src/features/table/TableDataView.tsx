@@ -45,7 +45,7 @@ import { IDLE_VIEW, useTableViewsStore } from '@/stores/tableViews'
 
 import { ColumnPicker } from './ColumnPicker'
 import { KeyEditor, KEY_EDITOR_HEIGHT, KEY_EDITOR_MIN_HEIGHT, type KeyEdit } from './KeyEditor'
-import { keyLabel, keyRows } from './keyTree'
+import { keyBadge, keyRows, KEY_SEPARATOR, type KeyRow } from './keyTree'
 import { keyMenuItems } from './keyMenu'
 import {
   cellAt,
@@ -177,6 +177,10 @@ export function TableDataView({
               const branch = tree[row]?.branch
               if (branch !== undefined) change(tabId, { shut: toggled(shut, branch) })
             },
+            badge: (row) => {
+              const held = tree[row]
+              return held === undefined ? undefined : keyBadge(held)
+            },
           },
     [tree, shut, change, tabId],
   )
@@ -199,7 +203,9 @@ export function TableDataView({
       rows: tree.map((row) => {
         const held = row.source < 0 ? undefined : edits.rows[row.source]
         return visible.map((entry) => {
-          if (entry.index === keyColumn) return keyLabel(row)
+          // The bare segment, the prefix being on the row above. How many keys are under it is the
+          // grid's own pill beside the name and never part of this text — see `GridOutline.badge`.
+          if (entry.index === keyColumn) return row.label
           // A branch stands for a prefix and not for a key, so it has no type, value or clock — and
           // is drawn **blank** rather than as `(Null)`, which is the word for a value the server said
           // was absent. There is no such value here: there is no key.
@@ -237,23 +243,33 @@ export function TableDataView({
 
   /**
    * The key the panel below is showing: a whole row rather than one cell, because that is what a
-   * Redis row is. A branch of the tree names none, and neither does a grid nobody has clicked in.
+   * Redis row is.
+   *
+   * **A branch names none, and a grid nobody has clicked in names none.** A prefix is a folder the
+   * reader is walking through rather than a key they picked, so clicking one opens nothing below — and
+   * nothing opens before the first click either, there being no key the reader has asked about yet. A
+   * key that is *also* a prefix is reached with **Flatten**, where every row is a key.
    */
   const keyTarget = useMemo(() => {
     if (!keySpace) return null
 
-    const source = realRow(focusOf(selection)?.row ?? 0)
+    const picked = focusOf(selection)?.row
+    if (picked === undefined || isBranch(tree, picked)) return null
+
+    const source = realRow(picked)
     const row = source < 0 ? undefined : edits.rows[source]
     if (!row) return null
 
     return {
       source,
+      /** A key not on the server yet, which is the one state whose type is the reader's to pick. */
+      isNew: source >= (data?.rows.length ?? 0),
       name: cellAt(row, columnAt(columns, KEY_COLUMN)) ?? '',
       type: cellAt(row, columnAt(columns, TYPE_COLUMN)) ?? '',
       value: cellAt(row, columnAt(columns, VALUE_COLUMN)),
       ttl: cellAt(row, columnAt(columns, TTL_COLUMN)),
     }
-  }, [keySpace, selection, edits.rows, columns, tree])
+  }, [keySpace, selection, edits.rows, columns, tree, data])
 
   /**
    * Where the reader is in the whole table. The rows are paged on the server, so the grid's first
@@ -270,10 +286,25 @@ export function TableDataView({
     change(tabId, { hidden: toggled(hidden, name) })
   }
 
-  /** The draft lands after every fetched row, and is selected so a paste that follows means it. */
+  /**
+   * The draft lands after every fetched row, and is selected so a paste that follows means it.
+   *
+   * On a key space it opens with **the key that was selected in the box**: a key is added beside
+   * another one — a sibling under the same prefix — so retyping the prefix would be the reader's first
+   * act every time. A branch hands over its prefix and the separator, which is the same intent one
+   * level up.
+   */
   const addRow = () => {
     setSelection(oneRange(rowRange(grid.rows.length, visible.length)))
-    edits.addRow()
+    edits.addRow(keyColumn >= 0 ? { [keyColumn]: addedFrom() } : undefined)
+  }
+
+  /** The name a fresh key opens with: the picked key, or the prefix the reader is looking inside. */
+  const addedFrom = (): string => {
+    const picked = focusOf(selection)?.row
+    const branch = picked === undefined ? undefined : tree?.[picked]?.branch
+    if (branch !== undefined) return `${branch}${KEY_SEPARATOR}`
+    return keyTarget?.name ?? ''
   }
 
   const showAllColumns = () => {
@@ -342,9 +373,12 @@ export function TableDataView({
       edits.setCell({ row: keyTarget.source, column }, value)
     }
 
-    stage(KEY_COLUMN, edit.name, keyTarget.name)
+    // The value first and the name last, which is also the order `useGridEdits` writes them in:
+    // every command names the key by the name it had, so a rename has to be the last of them.
+    stage(TYPE_COLUMN, edit.type, keyTarget.type)
     stage(VALUE_COLUMN, edit.value, keyTarget.value)
     stage(TTL_COLUMN, edit.ttl, keyTarget.ttl)
+    stage(KEY_COLUMN, edit.name, keyTarget.name)
   }
 
   /**
@@ -482,7 +516,13 @@ export function TableDataView({
                 <ResultGrid
                   result={grid}
                   selection={selection}
-                  onSelectionChange={setSelection}
+                  // On a key space what a press picks is the **key**, not the cell under the pointer:
+                  // a row there is one key and its five facts, so every range is widened to the whole
+                  // row exactly as a press in the row gutter already does anywhere. The band then runs
+                  // the width of the row rather than colouring one cell of it.
+                  onSelectionChange={(next) =>
+                    setSelection(keySpace ? wholeRows(next, grid.columns.length) : next)
+                  }
                   // A key space passes none, which is what makes its rows **read** rather than
                   // typed: one click there shows the key in the panel below and changes nothing.
                   // Inline editing is the right gesture on a table store — a cell is one of forty
@@ -579,6 +619,7 @@ export function TableDataView({
                     type={keyTarget.type}
                     value={keyTarget.value}
                     ttl={keyTarget.ttl}
+                    isNew={keyTarget.isNew}
                     busy={edits.saving}
                     onApply={applyKey}
                     formatValue={formatValue}
@@ -653,6 +694,31 @@ export function TableDataView({
       />
     </div>
   )
+}
+
+/**
+ * Whether the grid's row *n* is a **prefix** rather than a key. A branch has a caret, and a caret is
+ * exactly what a leaf has not got — so `open` is the question, and it is asked of the tree and not of
+ * `source`: a key that is also a prefix is a prefix here.
+ */
+function isBranch(tree: KeyRow[] | null, row: number): boolean {
+  return tree !== null && tree[row]?.open !== undefined
+}
+
+/**
+ * The same selection with every rectangle widened to the whole row. It is what the grid does for a
+ * press in the row gutter, said here for a surface whose unit is the row wherever it is pressed — and
+ * the focus lands on the last column, as a gutter press leaves it, so the arrows still walk rows.
+ */
+function wholeRows(selection: Selection, width: number): Selection {
+  const last = Math.max(0, width - 1)
+
+  return {
+    ranges: selection.ranges.map((range) => ({
+      anchor: { row: range.anchor.row, column: 0 },
+      focus: { row: range.focus.row, column: last },
+    })),
+  }
 }
 
 /** The same set with one member in or out, which is what every toggle in this view means. */

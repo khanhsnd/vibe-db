@@ -373,11 +373,19 @@ with it. **Empty Key Space** is `FLUSHDB`.
 
 **A key space is flat and a key is not.** `user:1:name` is a path, every server and library there is
 spells one with colons, and a reader looking at sixteen thousand keys is looking at a few dozen
-prefixes. So the grid **groups them**, on the colon and on nothing else: a prefix is a branch that
-carries how many keys are under it — `asynq (14)` — and a key is a leaf named by its **tail**, the
-prefix being on the row above it. A key with no colon in it is a leaf at the top, whole. A prefix that
-is *also* a key of its own is both: the row opens and still carries that key's own type, value and
-clock.
+prefixes. So the grid **groups them**, on the colon and on nothing else: a prefix is a branch, and a
+key is a leaf named by its **tail**, the prefix being on the row above it. A key with no colon in it is
+a leaf at the top, whole.
+
+How many keys a branch holds is a **pill beside its name** rather than part of it — the same pill the
+sidebar's own tree draws its counts as, muted mono against the name's own weight, so the number is read
+at a glance and never mistaken for the key. It is chrome and not the value: nothing copies it, nothing
+measures it, and nothing can rename a key into it.
+
+**A branch is a folder, not a key.** Clicking one opens nothing below — it is a prefix the reader is
+walking through, and there is no value to show. That holds even for a prefix that is *itself* a key,
+which is the one thing the tree cannot say in a row; **Flatten** is where such a key is reached, every
+row there being a key.
 
 It is the **default**, and **Flatten** on the toolbar is how it is turned off — that is the page
 exactly as it was read, one row per key, whole names. Which it is, and which branches are folded, is
@@ -423,17 +431,26 @@ pointing at the one value they came for; on a key space a click is how the keys 
 editor opening under every one of them is in the way. So editing has exactly one place here, and the
 footer still writes: **Add**, **Delete**, **Apply** and **Discard** are unchanged.
 
-It holds the four things a key is: its **name**, its **type**, its **value** and its **clock**. The
-type is shown and never picked, because a type is what the value *is* — the driver refuses to change
-one for the same reason. The clock is two controls and not one: **No expiry** and **Expire In
+**A click picks the key, so it bands the whole row** rather than filling the one cell under the
+pointer. A row here is one key and its five facts; picking the `Type` cell of it and picking the key are
+the same act, and the band says so.
+
+It holds the four things a key is: its **name**, its **type**, its **value** and its **clock**. Its
+layout is four fixed rows with the value taking the slack, so nothing rides over the clock however
+short the panel is dragged. The clock is two controls and not one: **No expiry** and **Expire In
 (seconds)**, because clearing the box is what takes a clock off and zero would delete the key.
 
-**A container is edited member by member**, which is what a hash or a sorted set actually is: a field
-and a value per row, `+` and `−` to add and take one out, and an index instead of a field on a list or
-a set, where the order is the meaning. The notation underneath is unchanged — the members are read out
-of the JSON the driver wrote and written back into the JSON it parses — so nothing here is a second
-spelling of a value. A **string** is read in the ordinary [value viewer](#reading-a-value-whole)
-instead, there being no members to draw.
+**The type is shown and not picked — except on a key that is not there yet.** A type is what the value
+*is*, so changing one on a key that exists is changing the value, and the driver refuses it. A key the
+reader has just **added** has nothing to contradict, and its type is what decides which command writes
+it, so there it is a list of the six.
+
+**The value is read and written as text**, in the ordinary [value viewer](#reading-a-value-whole) — laid
+out, syntax-coloured, and typed into in whichever view it is read in. It is not a table of fields, and
+that is deliberate twice over: the driver already spells a container as JSON precisely so that what is
+drawn is what an edit hands back, so a field table would be a second notation for the one thing the app
+has exactly one notation for — and it would be a second grid inside a panel, with a header, a gutter and
+an editor opening under every click, for a value that is usually a dozen short lines.
 
 **Apply stages, and the footer's Apply writes** — the same two steps the cell editor has on every
 other surface, and the reason it matters here is that a rename, a new value and a new clock are three
@@ -453,6 +470,12 @@ sorted scan. What is left is what a reader does to a key.
 **Edit Key** puts it in the panel below, **Add Key** appends one, **Delete Key** marks it — all three
 being the footer's own buttons reached without travelling to the bar — and then **View Value**,
 **Copy**, **Copy Field Name**, **Copy As**, **Save Data As** and **Refresh**.
+
+**A key is added beside another one**, so the box opens with the key that was picked rather than empty:
+a sibling shares its whole prefix, and retyping it would be the reader's first act every single time. A
+**branch** hands over its prefix and the colon, which is the same intent one level up — the reader is
+adding a key *in* that folder. It is a starting point and not a name: the insert refuses a key that is
+already there, which is what makes the suffix the only thing left to change.
 
 **The rows are in key order** before a page is cut from them, because `SCAN` has no order of its own
 and a page cut from an unordered list is a different page every time it is read. Sorting by any other

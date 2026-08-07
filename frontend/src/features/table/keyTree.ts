@@ -30,9 +30,13 @@ export interface KeyRow {
   source: number
   /** The prefix a fold is remembered under. A leaf has none, having nothing to fold. */
   branch: string | undefined
-  /** Open, shut, or `undefined` for a leaf — which is what the caret is drawn from. */
+  /**
+   * Open, shut, or `undefined` for a leaf — which is what the caret is drawn from, and what tells a
+   * **key** from a **prefix**: the panel under the grid answers for a leaf and never for a branch,
+   * a branch being a folder the reader is walking through rather than a key they picked.
+   */
   open: boolean | undefined
-  /** How many keys sit under this row, which is what a branch's own name carries. */
+  /** How many keys sit under this row, drawn as the pill beside its name. */
   count: number
 }
 
@@ -62,12 +66,12 @@ export function keyRows(keys: readonly Cell[], shut: ReadonlySet<string>): KeyRo
 }
 
 /**
- * What the key column draws for a row. Only a branch that is **no key of its own** says how many are
- * under it, and that is not a nicety: a row that is a key has to hand a rename back the name it was
- * given, and a count in the cell would rename the key to include it.
+ * How many keys a branch holds, for the grid to draw as a **pill beside** the name — see
+ * `GridOutline.badge`. It is deliberately not spelled into the cell: a count inside the text is one a
+ * copy writes out, a fit measures and a rename hands back as part of the name.
  */
-export function keyLabel(row: KeyRow): string {
-  return row.count > 0 ? `${row.label} (${row.count})` : row.label
+export function keyBadge(row: KeyRow): string | undefined {
+  return row.count > 0 ? String(row.count) : undefined
 }
 
 interface Node {
@@ -120,7 +124,7 @@ function emit(node: Node, depth: number, shut: ReadonlySet<string>, out: KeyRow[
       source: child.source,
       branch: branches ? child.path : undefined,
       open,
-      count: branches && child.source < 0 ? child.count : 0,
+      count: child.count,
     })
 
     if (open === true) emit(child, depth + 1, shut, out)

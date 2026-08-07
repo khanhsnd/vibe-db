@@ -43,6 +43,14 @@ export interface GridOutline {
   onToggle: (row: number) => void
   /** What the row *is*, drawn ahead of its name — a folder, a field, an index. */
   icon?: (row: number) => ReactNode
+  /**
+   * A number about the row rather than a value of it — how many things a branch holds — drawn after
+   * its name as the object tree draws one: a pill, in muted mono, clear of the name's own colour and
+   * weight. It is **chrome and not the cell**, which is the whole reason it exists: a count spelled
+   * into the cell's text is a count that a copy writes out, that a fit measures and that an edit
+   * would hand back as part of the name.
+   */
+  badge?: (row: number) => string | undefined
 }
 
 export interface ResultColumn {

@@ -92,8 +92,17 @@ export function useGridEdits(
     })
   }
 
-  const addRow = () =>
-    setDrafts((current) => [...current, Array.from({ length: width }, () => null)])
+  /**
+   * Appends a row, empty unless the surface can fill something in for the reader: `seed` is cells by
+   * column index, and it exists because on some engines the reader's first act would otherwise be to
+   * retype what they were already pointing at — a Redis key is added *beside* another one, so the
+   * key it was added from is the name the box opens with.
+   */
+  const addRow = (seed?: Record<number, Cell>) =>
+    setDrafts((current) => [
+      ...current,
+      Array.from({ length: width }, (_, at) => seed?.[at] ?? null),
+    ])
 
   /**
    * Marks the given stored rows for deletion, and drops outright a row that was only ever a

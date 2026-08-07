@@ -1,45 +1,29 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { Minus, Plus } from 'lucide-react'
+import { useState } from 'react'
 
 import type { Cell } from '@/bridge/tables'
-import { ResultGrid } from '@/features/results/ResultGrid'
-import {
-  focusOf,
-  selectedRows,
-  type ResultColumn,
-  type Selection,
-} from '@/features/results/resultSet'
 import { ValueViewer } from '@/features/results/ValueViewer'
 import { Button } from '@/shared/ui/Button'
-import { IconButton } from '@/shared/ui/IconButton'
 import { TOOLBAR_CONTROL } from '@/shared/ui/Field'
 import { cn } from '@/lib/cn'
 
-import {
-  freshField,
-  isSample,
-  readMembers,
-  renumbered,
-  shapeOf,
-  writeMembers,
-  type Member,
-  type ValueShape,
-} from './keyValue'
+import { KEY_TYPES } from './keySpace'
+import { refusedReason } from './keyValue'
 
 /**
  * What the panel opens at, and how far it may be dragged. It is taller than the cell editor's own
  * bounds because it holds four things and not one — a name, a type, a value and a clock — and the
- * floor is what leaves one row of the value readable under them.
+ * floor is what leaves a line or two of the value readable under them.
  */
-export const KEY_EDITOR_HEIGHT = 280
-export const KEY_EDITOR_MIN_HEIGHT = 176
+export const KEY_EDITOR_HEIGHT = 300
+export const KEY_EDITOR_MIN_HEIGHT = 180
 
 /** The width the four labels share, so their controls line up down the panel. */
 const LABEL_WIDTH = '5.5rem'
 
-/** What the reader hands back: the three columns of a key that can be written. */
+/** What the reader hands back: the columns of a key that can be written. */
 export interface KeyEdit {
   name: string
+  type: string
   value: Cell
   ttl: Cell
 }
@@ -50,13 +34,20 @@ interface KeyEditorProps {
   type: string
   value: Cell
   ttl: Cell
+  /**
+   * Whether this key is not on the server yet — a row the reader has just added. It is the one state
+   * in which the **type** is theirs to pick: a type is what a value *is*, so changing one on a key
+   * that exists is changing the value, and the driver refuses it. On a new key nothing exists to
+   * contradict, and the type is what decides which command writes it.
+   */
+  isNew: boolean
   busy: boolean
   /**
-   * Stages the three on the row, exactly as the cell editor stages one cell: the footer's Apply is
+   * Stages the columns on the row, exactly as the cell editor stages one cell: the footer's Apply is
    * still what writes, so a rename, a new value and a new clock are one write and one undo.
    */
   onApply: (edit: KeyEdit) => void
-  /** The engine's own layout, for the value viewer a string is read in. */
+  /** The engine's own layout, for the value viewer to lay a document out with. */
   formatValue?: ((value: string) => Promise<string>) | undefined
 }
 
@@ -65,153 +56,100 @@ interface KeyEditorProps {
  * value is the whole reason the reader opened the tab. On a table store a cell editor is one of
  * several ways to reach one cell of forty, so it is a panel the reader asks for; here there are five
  * columns, three of them one line long, and the fourth is a container — so there is nothing for a
- * toggle to save and a grid row is the wrong shape to edit one in.
+ * toggle to save and a grid row is the wrong shape to read one in.
  *
- * A container is edited **member by member**, which is what a hash or a sorted set actually is. The
- * notation underneath is unchanged: the members are read out of the JSON the driver wrote and written
- * back into the JSON it parses, so nothing here is a second spelling — see `keyValue.ts`.
+ * **The value is text and not a table of fields.** The driver already spells a container as JSON
+ * precisely so that what is drawn is what an edit hands back, and a field table over it would be a
+ * second notation for the one thing the app has exactly one notation for — plus a second grid inside a
+ * panel, with a header, a gutter and an editor opening under every click, for a value that is usually
+ * eleven short lines. `ValueViewer` is the one surface a value is read whole in, here as everywhere.
+ *
+ * Its layout is a **grid and not a scroller**: four rows, the value's taking the slack, so nothing can
+ * ride over the clock beneath it however short the panel is dragged.
  */
 export function KeyEditor({
   keyName,
   type,
   value,
   ttl,
+  isNew,
   busy,
   onApply,
   formatValue,
 }: KeyEditorProps) {
-  const shape = shapeOf(type)
   const text = value ?? ''
 
   const [name, setName] = useState(keyName)
+  const [kind, setKind] = useState(type === '' ? 'string' : type)
   const [draft, setDraft] = useState(text)
   const [clock, setClock] = useState(ttl ?? '')
-  const [selection, setSelection] = useState<Selection | null>(null)
 
-  /**
-   * Why the value cannot be written, where it cannot. Both reasons are the driver's own and are said
-   * *before* the reader types rather than after they press Apply: a sample would write away whatever
-   * the grid did not show, and a stream is the server's own ids and is append-only.
-   */
-  const refuses = isSample(text)
-    ? 'This value is a sample of a larger one. Writing it back would drop whatever the grid did not show.'
-    : shape === 'opaque'
-      ? `A ${type} value is read here and not written: its shape is the server's own.`
-      : undefined
-
+  const refuses = refusedReason(kind, text)
   const editable = refuses === undefined
-  const members = useMemo(() => readMembers(shape, draft), [shape, draft])
 
-  const next: KeyEdit = { name, value: draft, ttl: clock === '' ? null : clock }
-  const dirty = name !== keyName || draft !== text || (ttl ?? '') !== clock
+  const dirty = name !== keyName || kind !== type || draft !== text || (ttl ?? '') !== clock
 
   const discard = () => {
     setName(keyName)
+    setKind(type === '' ? 'string' : type)
     setDraft(text)
     setClock(ttl ?? '')
-    setSelection(null)
-  }
-
-  /** A member list is the value: every change to one is written straight back into the JSON. */
-  const changeMembers = (held: readonly Member[]) =>
-    setDraft(writeMembers(shape, renumbered(shape, held)))
-
-  const addMember = () => {
-    if (members === null) return
-    changeMembers([...members, { field: freshField(shape, members), value: '' }])
-  }
-
-  const removeMembers = () => {
-    if (members === null) return
-    const gone = new Set(selectedRows(selection))
-    setSelection(null)
-    changeMembers(members.filter((_, index) => !gone.has(index)))
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-canvas">
-      <div className="scroll-thin flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2">
-        <Row label="Key Name">
-          <input
-            spellCheck={false}
-            value={name}
+      <div
+        className="grid min-h-0 flex-1 items-center gap-x-2 gap-y-1.5 p-2"
+        style={{
+          gridTemplateColumns: `${LABEL_WIDTH} minmax(0, 1fr)`,
+          gridTemplateRows: 'auto auto minmax(0, 1fr) auto',
+        }}
+      >
+        <Label>Key Name</Label>
+        <input
+          spellCheck={false}
+          value={name}
+          disabled={busy}
+          onChange={(event) => setName(event.target.value)}
+          className={cn(TOOLBAR_CONTROL, 'data-font h-7 w-full')}
+        />
+
+        <Label>Key Type</Label>
+        {isNew ? (
+          <select
+            aria-label="Key type"
+            value={kind}
             disabled={busy}
-            onChange={(event) => setName(event.target.value)}
-            className={cn(TOOLBAR_CONTROL, 'data-font h-7 w-full')}
-          />
-        </Row>
-
-        {/* A type is what the value *is*, so it is shown and never picked: changing it would be
-            changing the value, which is the field below. The driver refuses the edit for the same
-            reason, and a dead dropdown here would only invite it. */}
-        <Row label="Key Type">
+            onChange={(event) => setKind(event.target.value)}
+            className={cn(TOOLBAR_CONTROL, 'h-7 w-40 justify-self-start')}
+          >
+            {KEY_TYPES.map((one) => (
+              <option key={one} value={one}>
+                {one}
+              </option>
+            ))}
+          </select>
+        ) : (
+          // A type is what the value *is*, so on a key that exists it is shown and never picked:
+          // changing it would be changing the value, which is the field below.
           <span className="data-font text-xs text-muted">{type}</span>
-        </Row>
+        )}
 
-        <Row label="Value" align="start">
-          <div className="flex min-h-24 flex-1 flex-col overflow-hidden rounded-md border border-line">
-            {members === null ? (
-              <ValueViewer
-                className="min-h-0 flex-1"
-                value={draft}
-                columnType={type}
-                onChange={editable ? setDraft : undefined}
-                formatValue={formatValue}
-              />
-            ) : (
-              <>
-                <div className="min-h-0 flex-1">
-                  <ResultGrid
-                    result={{ columns: memberColumns(shape), rows: memberRows(members) }}
-                    dense
-                    headStrip={false}
-                    selection={selection}
-                    onSelectionChange={setSelection}
-                    onEditCell={
-                      editable
-                        ? (ref, held) =>
-                            changeMembers(
-                              members.map((member, index) =>
-                                index !== ref.row
-                                  ? member
-                                  : ref.column === 0
-                                    ? { ...member, field: held ?? '' }
-                                    : { ...member, value: held ?? '' },
-                              ),
-                            )
-                        : undefined
-                    }
-                  />
-                </div>
+        <Label align="start">Value</Label>
+        <div className="flex min-h-0 self-stretch overflow-hidden rounded-md border border-line">
+          <ValueViewer
+            className="min-h-0 flex-1"
+            value={draft}
+            columnType={type}
+            onChange={editable && !busy ? setDraft : undefined}
+            formatValue={formatValue}
+          />
+        </div>
 
-                <div className="flex h-7 shrink-0 items-center gap-1 border-t border-line bg-bar px-1.5">
-                  <IconButton
-                    label="Add member"
-                    icon={<Plus size={13} />}
-                    disabled={!editable || busy}
-                    onClick={addMember}
-                  />
-                  <IconButton
-                    label="Remove member"
-                    icon={<Minus size={13} />}
-                    disabled={!editable || busy || focusOf(selection) === null}
-                    onClick={removeMembers}
-                  />
-
-                  <div className="min-w-2 flex-1" />
-
-                  <span className="font-mono text-2xs text-faint tabular-nums">
-                    {members.length} {members.length === 1 ? 'member' : 'members'}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-        </Row>
-
+        <Label>TTL</Label>
         {/* Two controls and not one, because "no expiry" is not a number of seconds: clearing the
             box is what takes a clock off, which is exactly what the driver reads an empty one as. */}
-        <Row label="TTL">
+        <div className="flex items-center gap-2">
           <select
             aria-label="Expiry"
             value={clock === '' ? 'none' : 'seconds'}
@@ -233,7 +171,7 @@ export function KeyEditor({
               className={cn(TOOLBAR_CONTROL, 'data-font h-7 w-32 shrink-0')}
             />
           )}
-        </Row>
+        </div>
       </div>
 
       {refuses === undefined ? null : (
@@ -246,7 +184,7 @@ export function KeyEditor({
         </Button>
         <Button
           variant="primary"
-          onClick={() => onApply(next)}
+          onClick={() => onApply({ name, type: kind, value: draft, ttl: clock === '' ? null : clock })}
           disabled={!dirty || !editable || busy}
         >
           Apply
@@ -256,47 +194,16 @@ export function KeyEditor({
   )
 }
 
-function Row({
-  label,
+function Label({
   align = 'center',
   children,
 }: {
-  label: string
   align?: 'center' | 'start'
-  children: ReactNode
+  children: string
 }) {
   return (
-    <div
-      className={cn('flex gap-2', align === 'start' ? 'min-h-0 flex-1 items-start' : 'items-center')}
-    >
-      <span
-        className={cn('shrink-0 text-xs text-muted', align === 'start' && 'pt-1')}
-        style={{ width: LABEL_WIDTH }}
-      >
-        {label}
-      </span>
+    <span className={cn('text-xs text-muted', align === 'start' && 'self-start pt-1.5')}>
       {children}
-    </div>
+    </span>
   )
-}
-
-/**
- * The two columns a member is. An array's field is its **index** and is not the reader's to type: a
- * list is ordered by where its elements sit, so renumbering it by hand would be renumbering nothing.
- */
-function memberColumns(shape: ValueShape): ResultColumn[] {
-  return [
-    {
-      name: shape === 'array' ? 'Index' : 'Field',
-      type: 'string',
-      fullType: 'string',
-      width: 160,
-      readOnly: shape === 'array',
-    },
-    { name: 'Value', type: 'string', fullType: 'string' },
-  ]
-}
-
-function memberRows(members: readonly Member[]): Cell[][] {
-  return members.map((member) => [member.field, member.value])
 }

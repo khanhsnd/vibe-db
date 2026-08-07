@@ -1452,6 +1452,7 @@ function CellView({
       ) : (
         <>
           <span className={cn('min-w-0 truncate', tone)}>{cellPreview(value)}</span>
+          {outline ? <OutlineBadge outline={outline} row={row} focused={focused} /> : null}
           {editor?.kind === 'choice' ? (
             <ChevronDown
               size={12}
@@ -1461,6 +1462,35 @@ function CellView({
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * How many things a branch holds, drawn after its name and never inside it — the same pill the object
+ * tree draws its counts as, so one number means one thing on both surfaces. A focused row takes the
+ * accent's own text colour, the pill's muted grey being unreadable on it.
+ */
+function OutlineBadge({
+  outline,
+  row,
+  focused,
+}: {
+  outline: GridOutline
+  row: number
+  focused: boolean
+}) {
+  const badge = outline.badge?.(row)
+  if (badge === undefined || badge === '') return null
+
+  return (
+    <span
+      className={cn(
+        'ml-1 shrink-0 rounded-full px-1.5 font-mono text-2xs tabular-nums',
+        focused ? 'bg-on-accent/20 text-on-accent' : 'bg-active text-muted',
+      )}
+    >
+      {badge}
+    </span>
   )
 }
 

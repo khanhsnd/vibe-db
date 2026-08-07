@@ -88,9 +88,11 @@ engine, `internal/driver/mongo` is the proof the port is not secretly a SQL one,
     `domain.RedisHazard`, the fourth grammar for one rule, and everything a key space has not got is
     `domain.Unsupported` naming which. **How that key space is read is the frontend's, and asks the
     server nothing extra**: `features/table` groups the page's keys on the colon into an
-    [outlined column](docs/grid.md), edits a container member by member out of the same JSON, and
-    replaces Filter & Sort with two boxes that write the same `Key contains …` / `Type = …`
-    conditions the builder would have. Never a second read, and never a second notation.
+    [outlined column](docs/grid.md), and replaces Filter & Sort with two boxes that write the same
+    `Key contains …` / `Type = …` conditions the builder would have. Never a second read, and never a
+    second notation — **the value is read and written as the driver's own JSON, in `ValueViewer`, not
+    as a table of fields**. Those rows are picked and never typed: the panel below is where a key is
+    edited, and a click on a branch edits nothing, a prefix being a folder.
 
 ## Where to read before changing something
 
