@@ -11,6 +11,9 @@ interface KeySearchProps {
   onChange: (search: Search_) => void
 }
 
+/** No type at all, which is every key: a menu says it as an item, having no empty value to hold. */
+const ALL_TYPES = 'All Types'
+
 /**
  * How a key space is narrowed: the type, and a fragment of the key's name. It stands where Filter &
  * Sort stands on every other table and replaces it outright, because the twenty operators of the
@@ -25,19 +28,33 @@ export function KeySearch({ search, onChange }: KeySearchProps) {
 
   return (
     <>
-      <select
-        aria-label="Key type"
-        value={search.type}
-        onChange={(event) => onChange({ ...search, type: event.target.value })}
-        className={cn(TOOLBAR_CONTROL, 'w-28 shrink-0')}
+      {/* A menu rather than a `<select>`, because a native one commits on the platform's own terms —
+          opened, walked, and applied on a second press — and a type here is one press: it narrows
+          the read the moment it is picked, like every other menu in the app. */}
+      <MenuButton
+        items={[
+          {
+            label: ALL_TYPES,
+            icon: search.type === '' ? <Check size={13} /> : undefined,
+            onSelect: () => onChange({ ...search, type: '' }),
+          },
+          ...KEY_TYPES.map((type, at) => ({
+            label: type,
+            icon: search.type === type ? <Check size={13} /> : undefined,
+            separatorBefore: at === 0,
+            onSelect: () => onChange({ ...search, type }),
+          })),
+        ]}
       >
-        <option value="">All Types</option>
-        {KEY_TYPES.map((type) => (
-          <option key={type} value={type}>
-            {type}
-          </option>
-        ))}
-      </select>
+        <button
+          type="button"
+          aria-label="Key type"
+          className={cn(TOOLBAR_CONTROL, 'flex w-28 shrink-0 items-center justify-between gap-1')}
+        >
+          {search.type === '' ? ALL_TYPES : search.type}
+          <ChevronDown size={11} className="shrink-0 text-faint" />
+        </button>
+      </MenuButton>
 
       {/* One box, and it searches the *name*: it is the only thing the server will narrow by, so a
           box that offered to search values would be promising a scan of every value on the server.

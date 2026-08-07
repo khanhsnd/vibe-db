@@ -79,6 +79,12 @@ the server's own glob, so the narrowing happens *there* and the app never sees t
 `SCAN 0 MATCH *user* COUNT 1000`, and the statement under the grid says so. The type is answered
 here, over the keys the glob let through.
 
+**Nothing in the bar waits to be applied**, which is the other half of leaving the builder out: a
+letter typed and a type picked each narrow the read as they happen, where the panel they replace
+stages a draft and commits it on Apply. The type is the app's own menu of the six and *All Types*
+rather than the platform's list box, so picking one is one press and not a press to open, a walk and
+a press to commit.
+
 ### How the name is read is picked in the box
 
 **The magnifier in front of the box opens a menu of three**, because the same three characters are
