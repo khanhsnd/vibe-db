@@ -9,21 +9,27 @@ import (
 type Engine string
 
 const (
-	EngineMySQL    Engine = "mysql"
-	EnginePostgres Engine = "postgres"
-	EngineMongo    Engine = "mongo"
-	EngineRedis    Engine = "redis"
+	EngineMySQL     Engine = "mysql"
+	EnginePostgres  Engine = "postgres"
+	EngineMongo     Engine = "mongo"
+	EngineRedis     Engine = "redis"
+	EngineSQLite    Engine = "sqlite"
+	EngineSQLServer Engine = "sqlserver"
+	EngineOracle    Engine = "oracle"
 )
 
 const (
-	DefaultMySQLPort    = 3306
-	DefaultPostgresPort = 5432
-	DefaultMongoPort    = 27017
-	DefaultRedisPort    = 6379
-	DefaultSSHPort      = 22
+	DefaultMySQLPort     = 3306
+	DefaultPostgresPort  = 5432
+	DefaultMongoPort     = 27017
+	DefaultRedisPort     = 6379
+	DefaultSQLServerPort = 1433
+	DefaultOraclePort    = 1521
+	DefaultSSHPort       = 22
 )
 
-// DefaultPort is the port an engine listens on when the profile names none.
+// DefaultPort is the port an engine listens on when the profile names none. A file engine has
+// none at all, and says so with a zero rather than borrowing somebody else's number.
 func (e Engine) DefaultPort() int {
 	switch e {
 	case EnginePostgres:
@@ -32,6 +38,12 @@ func (e Engine) DefaultPort() int {
 		return DefaultMongoPort
 	case EngineRedis:
 		return DefaultRedisPort
+	case EngineSQLServer:
+		return DefaultSQLServerPort
+	case EngineOracle:
+		return DefaultOraclePort
+	case EngineSQLite:
+		return 0
 	default:
 		return DefaultMySQLPort
 	}
@@ -39,7 +51,8 @@ func (e Engine) DefaultPort() int {
 
 func (e Engine) Valid() bool {
 	switch e {
-	case EngineMySQL, EnginePostgres, EngineMongo, EngineRedis:
+	case EngineMySQL, EnginePostgres, EngineMongo, EngineRedis,
+		EngineSQLite, EngineSQLServer, EngineOracle:
 		return true
 	default:
 		return false
@@ -62,20 +75,46 @@ func (e Engine) Keys() bool {
 	return e == EngineRedis
 }
 
+// File says the whole database is one file on this machine rather than a server somewhere: there
+// is nothing to dial and nobody to be, so the profile's Database is a *path* and a host, a port
+// and a user would each be a box asking for something that does not exist.
+func (e Engine) File() bool {
+	return e == EngineSQLite
+}
+
 // Backups says a database of this engine can be written out as a file that would put it back.
 // A backup here *is* that file — the dump's own statements, under a header — so the engines that
 // have one are exactly the engines whose statements declare a table and write a row. A document
 // store's commands and a key space's keys are neither, and claiming a backup for them would be
 // promising a restore nothing could perform.
 func (e Engine) Backups() bool {
-	return e == EngineMySQL || e == EnginePostgres
+	return !e.Documents() && !e.Keys()
 }
 
 // NeedsUser says every connection to this engine is made *as* somebody the server knows. A MongoDB
-// server started without access control and a Redis server with no ACL both take none at all, so
-// insisting on a user name for either would be refusing a profile that connects perfectly well.
+// server started without access control and a Redis server with no ACL both take none at all, and
+// a file has nobody to be, so insisting on a user name for any of the three would be refusing a
+// profile that connects perfectly well.
 func (e Engine) NeedsUser() bool {
-	return e == EngineMySQL || e == EnginePostgres
+	switch e {
+	case EngineMySQL, EnginePostgres, EngineSQLServer, EngineOracle:
+		return true
+	default:
+		return false
+	}
+}
+
+// NeedsDatabase says a connection cannot be made without one being named, and the three that do
+// mean three different things by it: a PostgreSQL session is bound to one database for its whole
+// life, an Oracle connection asks the listener for a *service*, and a SQLite database is the file
+// itself. Everything else is browsed from wherever the server put the connection.
+func (e Engine) NeedsDatabase() bool {
+	switch e {
+	case EnginePostgres, EngineOracle, EngineSQLite:
+		return true
+	default:
+		return false
+	}
 }
 
 // Environment is what a server is *for*, and the one fact about a profile that changes how the
@@ -346,14 +385,18 @@ func (p ConnectionProfile) Validate() error {
 	if strings.TrimSpace(p.Name) == "" {
 		return ValidationError{Field: "name", Message: "is required"}
 	}
-	if strings.TrimSpace(p.Host) == "" {
-		return ValidationError{Field: "host", Message: "is required"}
-	}
-	if p.Port < 1 || p.Port > 65535 {
-		return ValidationError{Field: "port", Message: "must be between 1 and 65535"}
-	}
 	if !p.Engine.Valid() {
 		return ValidationError{Field: "engine", Message: "is not supported"}
+	}
+	// A file engine dials nothing, so a host and a port are not merely optional here: there is no
+	// server for either of them to name.
+	if !p.Engine.File() {
+		if strings.TrimSpace(p.Host) == "" {
+			return ValidationError{Field: "host", Message: "is required"}
+		}
+		if p.Port < 1 || p.Port > 65535 {
+			return ValidationError{Field: "port", Message: "must be between 1 and 65535"}
+		}
 	}
 	// A MongoDB server started without access control and a Redis server with no ACL take no
 	// credentials at all, so a user name is asked for only by an engine that authenticates every
@@ -367,10 +410,15 @@ func (p ConnectionProfile) Validate() error {
 	if !p.Colour.Valid() {
 		return ValidationError{Field: "colour", Message: "is not a known colour"}
 	}
-	// A PostgreSQL session is bound to one database for its whole life and cannot cross to
-	// another, so a profile that names none has nothing to connect to.
-	if p.Engine == EnginePostgres && strings.TrimSpace(p.Database) == "" {
-		return ValidationError{Field: "database", Message: "is required for PostgreSQL"}
+	// Three engines cannot be connected to without one: a PostgreSQL session is bound to its
+	// database for life, an Oracle listener is asked for a service by name, and a SQLite database
+	// *is* the file. See Engine.NeedsDatabase.
+	if p.Engine.NeedsDatabase() && strings.TrimSpace(p.Database) == "" {
+		message := "is required for this engine"
+		if p.Engine.File() {
+			message = "is the database file, and is required"
+		}
+		return ValidationError{Field: "database", Message: message}
 	}
 	// A Redis database is not named but numbered — one of a fixed set the server was started with —
 	// so anything that is not a number is not a database this server has.
@@ -388,7 +436,13 @@ func (p ConnectionProfile) Validate() error {
 	return p.SSH.Validate()
 }
 
+// Target is where this connection goes, as the status bar says it. A file engine is the path and
+// nothing else: there is no address to put after an `@`.
 func (p ConnectionProfile) Target() string {
+	if p.Engine.File() {
+		return p.Database
+	}
+
 	database := p.Database
 	if database == "" {
 		database = "(no database)"

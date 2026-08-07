@@ -70,7 +70,7 @@ cell is read, and it reads nothing else.
 ## Why bytes arrive as `\x…`
 
 **A value that is not valid UTF-8 crosses the wire as hex**, written the way PostgreSQL already
-spells a `bytea` so that one form means one thing on both engines. `sqlkit.TextOrNil` is the single
+spells a `bytea` so that one form means one thing on every engine. `sqlkit.TextOrNil` is the single
 place that decides it.
 
 It is not a preference. A bound method's result reaches the WebView as one JSON string, and a byte

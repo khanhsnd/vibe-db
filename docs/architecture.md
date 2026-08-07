@@ -9,8 +9,9 @@ internal/app  ->  session / profile / secret / history / transfer / compare / ba
 - **`internal/domain`** — `ConnectionProfile`, `Validate()`, sentinel errors. Pure; imports nothing
   of ours. Business rules live here, not in the API layer.
 - **`internal/driver`** — the `Driver`/`Session` interfaces plus a `Registry` keyed by engine.
-  `driver/mysql`, `driver/postgres`, `driver/mongo` and `driver/redis` are the adapters;
-  `driver/sqlkit` is what the two SQL ones share, and `sqlkit.Lex` alone is what all four do.
+  `driver/mysql`, `driver/postgres`, `driver/sqlite`, `driver/sqlserver`, `driver/oracle`,
+  `driver/mongo` and `driver/redis` are the adapters; `driver/sqlkit` is what the five SQL ones
+  share, and `sqlkit.Lex` alone is what all seven do.
 - **`internal/app`** — the Wails boundary and the only package bound to JavaScript. Speaks `dto.go`
   wire types, never domain types, and maps every error to a stable code (see
   [errors.md](errors.md)).
@@ -79,31 +80,52 @@ four capability flags on the frontend's `EngineInfo`, and **no new failure code 
 `app`, `session`, `transfer` or `compare` knows it exists. See
 [the key-value store](#the-key-value-store).
 
+**SQLite, SQL Server and Oracle are the cheap proof, which is the point of the other two.** Three
+engines landed as three adapters, one registry line each, three `domain.Engine` values, three rows
+in the frontend's `ENGINES`, and **no new failure code and no new bound method**. What they cost
+`sqlkit` is a set of flags and nothing else — see [the five SQL engines](#the-five-sql-engines).
+
 Reach for `internal/driver/sqlkit` before writing anything: row scanning, result-column
 reflection, statement classification, **the lexer** and everything written over it — script
 splitting, **laying a script out**, **reviewing it** — source parsing, identifier and string
-quoting, **building a `*tls.Config` from a profile's certificate files**, the transport errors and
-**the DDL statements both engines spell the same way** are all
-there already, and an engine differs from another only in
-
-| Part | MySQL | PostgreSQL |
-|---|---|---|
-| `dsn.go` | go-sql-driver config, `tls=…` | libpq keyword/value, `sslmode=…` |
-| a dialler and a TLS configuration | registered **globally by name** before the DSN can refer to them, and deregistered with the session (`transport.go`) | set on the parsed `pgx.ConnConfig`, which `stdlib` then takes by name — the certificate *files* need none of it, being libpq keywords already |
-| `errors.go` | errno → sentinel | SQLSTATE → sentinel |
-| catalogue reads | `information_schema` | `pg_catalog`, for `format_type` |
-| a stored default | reported as the **value** — `x`, not `'x'` — and only marked `DEFAULT_GENERATED` when it is an expression, so a text literal is quoted on the way in (`defaultExpression`) | already an expression: `'x'::character varying` |
-| placeholders | `?` | `$1` |
-| `sqlkit.Dialect` | backtick quoting, `#` comments, `\` escapes a string | double-quote quoting, `$tag$` bodies |
-| levels above a table | one pool, `USE <database>` | a pool per database, `SET search_path` |
-| `ddl.go` | a qualified rename target; every primary key is called `PRIMARY` | an unqualified rename target; a key's constraint name has to be read before it can be dropped |
-| the four `Dialect` flags | `RestatesColumn`, `MethodBeforeTable` | `IndexIsObject`, `ForeignKeyIsConstraint` |
-| `database.go` | a database is a namespace with a character set | a database is an object with an owner, a template, a locale, a tablespace and a connection limit, and can carry extensions and a comment |
+quoting, **building a `*tls.Config` from a profile's certificate files**, the transport errors,
+**the reads and writes of rows** (`sqlkit.Data`) and **the DDL statements the engines spell the same
+way** (`sqlkit.DDL`) are all there already.
 
 **`sqlkit.Lex` is the one place a script is read character by character.** Splitting, formatting and
 reviewing are all written over its tokens, so what counts as a string, a comment or a `$tag$` body
 is settled once per engine instead of three times — and a fourth thing built on it inherits that for
 free.
+
+### The five SQL engines
+
+**An adapter is its catalogue reads, its error map, how it is dialled, and a `Dialect`.** That is
+the whole of it: `sqlkit.DDL` supplies the schema changes and `sqlkit.Data` supplies the reads and
+writes of rows, and neither is overridden except where an engine genuinely differs in *shape* rather
+than in spelling.
+
+| Part | What varies |
+|---|---|
+| how it is dialled | MySQL registers a dialler and a TLS configuration **globally by name** before its DSN can refer to them, and deregisters them with the session (`transport.go`). PostgreSQL sets them on a parsed `pgx.ConnConfig`. SQL Server and Oracle build the driver's own connector and put both on it, as the MongoDB adapter does — nothing is written as text only to be parsed back. SQLite dials nothing and **refuses a tunnel** rather than quietly opening a local file instead |
+| `errors.go` | errno → sentinel (MySQL, SQL Server), SQLSTATE → sentinel (PostgreSQL), `ORA-` number → sentinel (Oracle), result code → sentinel plus one text read for the name that is not there (SQLite) |
+| catalogue reads | `information_schema`, `pg_catalog` for `format_type`, `sys.*` three-part, `all_*`, and — SQLite alone — the *pragmas*, which it exposes as table-valued functions |
+| a stored default | MySQL reports the **value** and only marks an expression `DEFAULT_GENERATED`, so a text literal is quoted on the way in (`defaultExpression`). Everywhere else it is already an expression — including SQLite's, which is the text of the declaration, and Oracle's, which is a `LONG` and therefore cannot be trimmed in the query that reads it |
+| levels above a table | one pool and `USE` (MySQL, SQL Server), a pool per database (PostgreSQL), one pool and `ALTER SESSION SET CURRENT_SCHEMA` (Oracle), one pool and one namespace (SQLite) |
+| `ddl.go` | what is left after the Dialect: a rename that is a *procedure* rather than a clause (SQL Server), a key whose constraint name has to be read first (PostgreSQL, SQL Server, Oracle), and what an engine has not got at all (SQLite, Oracle) |
+| `database.go` | a namespace with a character set (MySQL), an object with an owner and a template and a locale (PostgreSQL), a collation and an extended property (SQL Server), and **nothing to make** (SQLite, Oracle) |
+| `plan.go` | `EXPLAIN` and `EXPLAIN FORMAT=JSON`, `EXPLAIN (FORMAT JSON)`, `EXPLAIN QUERY PLAN`, `SET SHOWPLAN_ALL ON`, and `EXPLAIN PLAN FOR` followed by a read of `plan_table` |
+
+Everything else is a flag. There are about thirty of them on `Dialect` now and each says one fact —
+where a page's bounds go, whether an index is dropped by its own name, what an empty insert is
+spelled as — which is what keeps a fifth engine from being a fifth speller. The reader-facing list of
+which engine sets what is [features/engines.md](features/engines.md).
+
+**Two of those flags are worth naming here**, because they are the ones that changed a structure and
+not a string. `NamespaceIsBoth` says a name carries the database *and* the schema, which is what
+lets SQL Server read every database from one pool where PostgreSQL needs one each.
+`KeepsColumnAsDeclared` says a column cannot be altered at all, so `AlterColumn` spells **nothing** —
+and because an empty list is already what "this engine has no concept of that" means in
+`AlterStatements`, the SQLite adapter needs no override for either half of it.
 
 It is not only SQL's. `sqlkit.Shell` is a `Dialect` carried by the MongoDB adapter **for the lexer
 alone**: where a command ends, what a string is and what a comment is are the same questions in a
@@ -142,34 +164,48 @@ the same interface, and both go through one speller on `sqlkit.Dialect`, so the 
 Spelling needs no connection and raises no error: a change an engine has no concept of contributes
 **nothing**, and the run of it is where `domain.Unsupported` is answered.
 
-Four statements that used to be written out per engine now live on `Dialect` behind flags, which is
-the form every other difference between the two takes: `RestatesColumn` (MySQL's `MODIFY COLUMN`
-against one `ALTER COLUMN` action per fact), `MethodBeforeTable`, `IndexIsObject` and
-`ForeignKeyIsConstraint`. What is left in `mysql/ddl.go` and `postgres/ddl.go` is what genuinely
-cannot be shared: the catalogue reads, and `SetPrimaryKey`, which on PostgreSQL has to *read* the
-constraint's name before it can drop it.
+It answers with a **list** per change rather than a statement, because on one engine a change *is*
+two statements: a default on SQL Server is a constraint with a name of its own, so an altered column
+there carries its type and its nullability and the default follows. An engine that spells nothing
+contributes nothing, which is how SQLite says it cannot alter a column at all.
+
+Every statement of it lives on `Dialect` behind a flag, which is the form every difference between
+the engines takes — `RestatesColumn` and `RestateClause` (`MODIFY COLUMN` and `MODIFY` against one
+`ALTER COLUMN` action per fact), `SeparatesDefault`, `MethodBeforeTable`, `IndexIsObject`,
+`QualifiesIndexName`, `IndexTableIsBare`, `DropsIndexOnTable`, `ForeignKeyIsConstraint`. What is left
+in an adapter's `ddl.go` is what genuinely cannot be shared: the catalogue reads, `SetPrimaryKey`
+where the old key's constraint name has to be *read* before it can be dropped, and the rename that
+is a procedure rather than a clause.
 
 **A dump is those two methods and nothing else.** `CreateStatements` is its structure half and
 `RowStatements` its data half, and both are the driver's because only the engine knows how it
 declares a table and quotes a value. The one difference between them is that a declaration has to be
 *read*, so an engine that can answer for itself is **asked** rather than described: MySQL's whole
 dump is one `SHOW CREATE TABLE`, storage engine and charset and constraints included, which no read
-of `information_schema` puts back together. PostgreSQL has no such statement — `pg_dump` is another
-program — so it describes the shape the tree already reads, through the same `Dialect`; the one thing
-a description has to translate rather than copy is a `serial`, which is an `integer`, a sequence and
-a default reading from it, and would otherwise name a sequence the dump never created. MongoDB writes
-`createCollection` and a `createIndex` per index, and nothing about the fields, because a collection
-declares none. `internal/app/dump.go` owns only the file: it opens it, asks for those statements, and
-**streams** the rows into it batch by batch, so a dump of a million rows costs one batch of memory.
+of `information_schema` puts back together, and SQLite's is exact — the file *stores* the statement
+that made each object. PostgreSQL has no such statement — `pg_dump` is another program — so it
+describes the shape the tree already reads, through the same `Dialect`; the one thing a description
+has to translate rather than copy is a `serial`, which is an `integer`, a sequence and a default
+reading from it, and would otherwise name a sequence the dump never created. SQL Server and Oracle
+are described too, and Oracle deliberately: `DBMS_METADATA.GET_DDL` would answer, but with the
+storage as well as the shape. MongoDB writes `createCollection` and a `createIndex` per index, and
+nothing about the fields, because a collection declares none. `internal/app/dump.go` owns only the
+file: it opens it, asks for those statements, and **streams** the rows into it batch by batch, so a
+dump of a million rows costs one batch of memory.
 
 **`RowStatements` is one method and not five.** A SQL export, the data half of a dump and every mode
 of an import are the same question asked with different `driver.RowWrite`s: an export is `WriteAppend`
 with a batch of one, and an import is whichever mode the wizard picked with a batch of two hundred.
-Only three things about it vary by engine, and all three are on `sqlkit.Dialect` — the verb
-(`INSERT IGNORE` on MySQL, unchanged on PostgreSQL), the clause after the values (`ON DUPLICATE KEY
-UPDATE` against `ON CONFLICT (…) DO UPDATE SET`), and whether the conflicting columns are named at
-all. MongoDB writes its own: `insertOne`/`insertMany`, and `updateOne` with `upsert` for a merge,
-because a document store's merge is a *command* and not a clause.
+What varies by engine is on `sqlkit.Dialect` and nowhere else — the verb (`INSERT IGNORE` on MySQL,
+unchanged elsewhere), the clause after the values (`ON DUPLICATE KEY UPDATE` against `ON CONFLICT (…)
+DO UPDATE SET`), whether the conflicting columns are named at all, and whether several rows may share
+one statement, which on Oracle they may not. **Two engines have neither clause**, so a row that may
+already be there is written a row at a time instead: an insert guarded by `WHERE NOT EXISTS`, with an
+update in front of it for an upsert. Both SQL Server and Oracle have a `MERGE` and neither uses it —
+a `MERGE` is a page of syntax to say what two ordinary statements already say, and one of the two
+spends that page arguing about which source the rows came from. MongoDB writes its own:
+`insertOne`/`insertMany`, and `updateOne` with `upsert` for a merge, because a document store's merge
+is a *command* and not a clause.
 
 Two rules about it are not the driver's and must not migrate there. **A row with nothing to find it by
 matches nothing** — `WHERE 1 = 0`, and a filter no document satisfies — because the alternative is a
@@ -200,9 +236,12 @@ list the Go side decides, `import.go` maps a file's fields onto a table's column
 `RowStatements` builds, and `export_job.go` streams each table into a file of its own.
 
 A table is addressed by a `driver.Namespace` — `(database, schema)` — and how many of its parts an
-engine fills is the one structural difference between the SQL adapters. MySQL fills `Database`
-alone; PostgreSQL fills both and needs a connection pool per database to do it, because a session
-cannot leave the database it was opened with. MongoDB fills `Database` alone and needs one pool for
+engine fills is the one structural difference between the SQL adapters. MySQL, SQLite and Oracle
+fill `Database` alone, and Oracle's is a *schema*, an Oracle connection having nothing between
+itself and one. PostgreSQL fills both and needs a connection pool per database to do it, because a
+session cannot leave the database it was opened with. **SQL Server fills both and needs only one
+pool**, because its names carry both — `[shop].[dbo].[users]` reaches any database on the server
+from wherever the connection happens to be. MongoDB fills `Database` alone and needs one pool for
 the *server*, a single connection reading every database on it. See [decisions.md](decisions.md).
 
 ## Backing a database up
@@ -303,12 +342,19 @@ would return exactly the rows counted, spelled from the **same** clause. That is
 open a query tab without anything outside a driver having spelled a statement. It counts one table's,
 because
 only the engine knows how to read a column of any type as text and how to quote what it is compared
-against: `sqlkit.Dialect.MatchAny` spells the whole clause for both SQL engines, and the three ways
-they differ are three flags — `RegexIsFunction` (MySQL's `REGEXP_LIKE`, whose third argument is the
-sensitivity, against PostgreSQL's `~` and `~*`), `PatternIgnoresCase` (MySQL's collations ignore case,
-so a *sensitive* pattern is compared as bytes) and `WordBoundary` (`\b` against `\y`, where `\b` is a
-backspace). MongoDB writes its own filter, a `$regex` per sampled field, because a document store has
-no LIKE and no quoting at all.
+against: `sqlkit.Dialect.MatchAny` spells the whole clause for all five SQL engines, and the ways
+they differ are flags — `RegexIsFunction` (the `REGEXP_LIKE` MySQL, SQL Server and Oracle share,
+whose third argument is the sensitivity, against PostgreSQL's `~` and `~*`), `SensitiveCast` and
+`SensitiveCollation` (the two ways an engine whose collation ignores case can be made to notice it),
+and `WordBoundary` (`\b` against `\y`, where `\b` is a backspace). MongoDB writes its own filter, a
+`$regex` per sampled field, because a document store has no LIKE and no quoting at all.
+
+**SQLite answers every mode with an expression, and the expression is Go's own.** Its `LIKE` ignores
+case for ASCII and for nothing else, so the Case Sensitive box could only be honoured for half the
+alphabet — `MatchesByRegex` therefore sends all four modes down the expression path, and the adapter
+registers the `regexp` its grammar names and its library leaves out. It is `regexp.MatchString`, which
+is what `domain.Matcher` already compiles for a *name*: on this one engine the rows of a search and
+the names of one are matched by literally the same matcher.
 
 **Which names hold it asks no server anything.** A field, an index and a constraint are names
 `TableStructure` already answers with, so `internal/app/search.go` reads the shape and asks the

@@ -138,11 +138,13 @@
   and they share the `MenuItem` type and their look (`MENU_CONTENT`, `menuItemClass`, `MenuGlyph`,
   all exported from `ContextMenu.tsx`). An action offered both ways is one object drawn one way.
 - **An engine is a chip, not a line icon**: `features/connections/EngineIcon.tsx` draws the engine's
-  own mark in white on `--engine-<name>`, because MySQL and PostgreSQL are both databases and a
-  `Database` glyph twice over says nothing. The dolphin and the elephant are what a reader already
-  knows the two by, and the shape still reads where the colour cannot. The marks are two vendored
-  path strings in `engineGlyphs.ts` (Devicon, MIT) rather than an icon-set dependency; the
-  elephant's eyes and tusks are subpaths filled `evenodd`, so they are holes onto the chip.
+  own mark in white on `--engine-<name>`, because every engine is a database and a `Database` glyph
+  seven times over says nothing. The dolphin and the elephant are what a reader already knows those
+  two by, and the shape still reads where the colour cannot. Three of the marks are vendored path
+  strings in `engineGlyphs.ts` (Devicon, MIT) rather than an icon-set dependency, and the other four
+  are drawn there: at sixteen pixels a logo is a **shape**, so what each of those draws is the thing
+  the engine *is* — a stack of discs, a turned page, a window pane, a ring. A subpath filled
+  `evenodd` is how a hole onto the chip is made, which is the elephant's eyes and the page's corner.
 - **Nothing is selectable, and every failure is.** `body` carries `user-select: none` because this
   is a client and not a document, so text is opted back in with `.selectable` — and anything
   reporting a failure always opts in: `ErrorStrip` (the one-line strip four surfaces used to

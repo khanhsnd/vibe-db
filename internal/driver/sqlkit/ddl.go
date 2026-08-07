@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 )
 
@@ -94,7 +95,7 @@ func (x DDL) AlterStatements(
 			statements = append(statements, x.Dialect.AddColumn(ns, table, change.Column))
 		case driver.ChangeAlterColumn:
 			statements = append(statements,
-				x.Dialect.AlterColumn(ns, table, change.Name, change.Column))
+				x.Dialect.AlterColumn(ns, table, change.Name, change.Column)...)
 		case driver.ChangeDropColumn:
 			statements = append(statements, x.Dialect.DropColumn(ns, table, change.Name))
 		case driver.ChangeCreateIndex:
@@ -122,27 +123,54 @@ func (d Dialect) DropColumn(ns driver.Namespace, table, column string) string {
 	return "ALTER TABLE " + d.Table(ns, table) + " DROP COLUMN " + d.QuoteIdent(column)
 }
 
-// AlterColumn is the one statement of these that the two engines do not merely spell differently
-// but *shape* differently. MySQL restates the column whole, so a fact left out of the clause is a
-// fact dropped; PostgreSQL has no such clause and takes one action per fact, all in one ALTER TABLE
-// so the column is never left half-changed.
+// AlterColumn is the one statement of these that the engines do not merely spell differently but
+// *shape* differently, and it answers with a list because on one of them the shape is two
+// statements. MySQL and Oracle restate the column whole, so a fact left out of the clause is a fact
+// dropped; PostgreSQL has no such clause and takes one action per fact, all in one ALTER TABLE so
+// the column is never left half-changed; and SQL Server restates the type and the nullability but
+// not the default, a default there being a constraint with a name of its own.
 //
-// Either way the clause names the column **being changed** rather than the name in the spec, so
-// renaming is RenameColumn's alone and never a side effect of an edit.
+// An engine that cannot alter a column at all contributes **nothing**, which is what an empty list
+// means everywhere in AlterStatements — the run of that same change is where `domain.Unsupported`
+// is answered.
+//
+// Every shape names the column **being changed** rather than the name in the spec, so renaming is
+// RenameColumn's alone and never a side effect of an edit.
 func (d Dialect) AlterColumn(
 	ns driver.Namespace,
 	table, column string,
 	spec driver.ColumnSpec,
-) string {
+) []string {
+	if d.KeepsColumnAsDeclared {
+		return nil
+	}
+
 	head := "ALTER TABLE " + d.Table(ns, table) + " "
+	quoted := d.QuoteIdent(column)
+	fallen := strings.TrimSpace(defaultOf(spec))
 
 	if d.RestatesColumn {
 		restated := spec
 		restated.Name = column
-		return head + "MODIFY COLUMN " + d.ColumnClause(restated)
+		if d.AltersColumnOnly {
+			restated.Default = nil
+		}
+
+		clause := d.RestateClause
+		if clause == "" {
+			clause = "MODIFY COLUMN"
+		}
+		statements := []string{head + clause + " " + d.ColumnClause(restated)}
+
+		// A default that could not travel in the clause is the second statement, and it is an *add*
+		// rather than a change: what is already there has a name only a catalogue read knows, and a
+		// spelling cannot read one. The server says so if there is one, which is the honest outcome.
+		if d.SeparatesDefault && fallen != "" {
+			statements = append(statements, head+"ADD DEFAULT "+fallen+" FOR "+quoted)
+		}
+		return statements
 	}
 
-	quoted := d.QuoteIdent(column)
 	actions := []string{"ALTER COLUMN " + quoted + " TYPE " + strings.TrimSpace(spec.Type)}
 
 	if spec.Nullable && !spec.PrimaryKey {
@@ -151,13 +179,23 @@ func (d Dialect) AlterColumn(
 		actions = append(actions, "ALTER COLUMN "+quoted+" SET NOT NULL")
 	}
 
-	if spec.Default != nil && strings.TrimSpace(*spec.Default) != "" {
-		actions = append(actions, "ALTER COLUMN "+quoted+" SET DEFAULT "+strings.TrimSpace(*spec.Default))
+	if fallen != "" {
+		actions = append(actions, "ALTER COLUMN "+quoted+" SET DEFAULT "+fallen)
 	} else {
 		actions = append(actions, "ALTER COLUMN "+quoted+" DROP DEFAULT")
 	}
 
-	return head + strings.Join(actions, ", ")
+	return []string{head + strings.Join(actions, ", ")}
+}
+
+// defaultOf is the expression a column is to fall back to, and empty for a column that falls back
+// to nothing. It is one function because "no default" reaches here two ways — a nil pointer and a
+// pointer to nothing — and both mean the same thing to every statement that reads one.
+func defaultOf(spec driver.ColumnSpec) string {
+	if spec.Default == nil {
+		return ""
+	}
+	return strings.TrimSpace(*spec.Default)
 }
 
 // CreateIndex differs between the engines only in where the access method goes: MySQL takes it
@@ -168,7 +206,7 @@ func (d Dialect) CreateIndex(ns driver.Namespace, table string, spec driver.Inde
 	if spec.Unique {
 		statement += "UNIQUE "
 	}
-	statement += "INDEX " + d.QuoteIdent(spec.Name)
+	statement += "INDEX " + d.indexName(ns, spec.Name)
 
 	method := strings.TrimSpace(spec.Method)
 	using := ""
@@ -176,22 +214,43 @@ func (d Dialect) CreateIndex(ns driver.Namespace, table string, spec driver.Inde
 		using = " USING " + method
 	}
 
+	target := d.Table(ns, table)
+	if d.IndexTableIsBare {
+		target = d.QuoteIdent(table)
+	}
+
 	if d.MethodBeforeTable {
-		statement += using + " ON " + d.Table(ns, table)
+		statement += using + " ON " + target
 	} else {
-		statement += " ON " + d.Table(ns, table) + using
+		statement += " ON " + target + using
 	}
 
 	return statement + " (" + strings.Join(d.QuoteAll(spec.Columns), ", ") + ")"
 }
 
-// DropIndex names the index alone where an index is an object of the schema in its own right, and
-// goes through the table where it belongs to one.
+// DropIndex has three spellings, which is one more than most things here: an index is dropped by
+// its own name where it is an object of the schema (PostgreSQL, Oracle), by its name *and* its
+// table where it is an object belonging to one (SQL Server), and through an ALTER TABLE where it is
+// part of one (MySQL).
 func (d Dialect) DropIndex(ns driver.Namespace, table, index string) string {
-	if d.IndexIsObject {
-		return "DROP INDEX " + d.Qualify(ns.Schema, index)
+	switch {
+	case d.DropsIndexOnTable:
+		return "DROP INDEX " + d.QuoteIdent(index) + " ON " + d.Table(ns, table)
+	case d.IndexIsObject:
+		return "DROP INDEX " + d.Table(ns, index)
+	default:
+		return "ALTER TABLE " + d.Table(ns, table) + " DROP INDEX " + d.QuoteIdent(index)
 	}
-	return "ALTER TABLE " + d.Table(ns, table) + " DROP INDEX " + d.QuoteIdent(index)
+}
+
+// indexName is the name a create gives an index. PostgreSQL refuses a qualified one — the index
+// goes wherever its table is — where Oracle takes it and would otherwise put the index in whichever
+// schema the reader happened to connect as.
+func (d Dialect) indexName(ns driver.Namespace, name string) string {
+	if d.QualifiesIndexName {
+		return d.Table(ns, name)
+	}
+	return d.QuoteIdent(name)
 }
 
 func (d Dialect) DropForeignKey(ns driver.Namespace, table, constraint string) string {
@@ -221,13 +280,26 @@ func (x DDL) DropColumn(ctx context.Context, ns driver.Namespace, table, column 
 // whether a column is restated whole, where an index's method goes, whether an index is an object
 // of the schema, and what the clause dropping a constraint is called — and a flag is the form every
 // other difference between the two takes.
+// AlterColumn runs what AlterStatements would have shown, in the same order and from the same
+// speller. An engine that spells nothing has no way to change a column, and says so rather than
+// reporting a change that never happened.
 func (x DDL) AlterColumn(
 	ctx context.Context,
 	ns driver.Namespace,
 	table, column string,
 	spec driver.ColumnSpec,
 ) error {
-	return x.Run(ctx, ns.Database, x.Dialect.AlterColumn(ns, table, column, spec))
+	statements := x.Dialect.AlterColumn(ns, table, column, spec)
+	if len(statements) == 0 {
+		return domain.Unsupported("changing a column")
+	}
+
+	for _, statement := range statements {
+		if err := x.Run(ctx, ns.Database, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (x DDL) CreateIndex(
@@ -324,14 +396,24 @@ func (x DDL) RowStatements(
 
 // rowsAdded is the three modes that are an INSERT: appending, merging on a key, and skipping what
 // is already there. They differ only in the verb and in the clause after the values, which is why
-// they are one method — and all three carry `Batch` rows to a statement, since an insert is the one
-// write a server takes several rows of at once.
+// they are one method — and all three carry `Batch` rows to a statement where the engine takes
+// several tuples at once, which is every engine but Oracle.
+//
+// An engine with neither merge clause writes those two modes a row at a time instead: see
+// rowsGuarded, which is what MergeByExists means.
 func (x DDL) rowsAdded(target string, write driver.RowWrite) []string {
+	if x.Dialect.MergeByExists && write.Mode != driver.WriteAppend {
+		return x.rowsGuarded(target, write)
+	}
+
 	head := x.Dialect.InsertVerb(write.Mode) + " INTO " + target +
 		" (" + strings.Join(x.Dialect.QuoteAll(write.Columns), ", ") + ") VALUES "
 	tail := x.Dialect.MergeClause(write.Mode, write.Keys, write.Columns)
 
 	batch := max(write.Batch, 1)
+	if !x.Dialect.MultiRowValues {
+		batch = 1
+	}
 	statements := make([]string, 0, (len(write.Rows)+batch-1)/batch)
 
 	for at := 0; at < len(write.Rows); at += batch {
@@ -344,28 +426,66 @@ func (x DDL) rowsAdded(target string, write driver.RowWrite) []string {
 	return statements
 }
 
+// rowsGuarded is a merge on an engine that has no clause for one: an insert that looks first, and
+// for an upsert an update in front of it. It is a row at a time because it has to be — the
+// condition names *this* row's key — and the update comes first so a row already there is changed
+// once and then not inserted.
+//
+// Neither engine's MERGE is used. A MERGE says the same thing in a page of syntax, and one of the
+// two spends that page arguing about which source the rows came from.
+func (x DDL) rowsGuarded(target string, write driver.RowWrite) []string {
+	columns := strings.Join(x.Dialect.QuoteAll(write.Columns), ", ")
+
+	statements := make([]string, 0, len(write.Rows)*2)
+	for _, row := range write.Rows {
+		match := x.match(write, row)
+		if write.Mode == driver.WriteUpsert {
+			if changed, ok := x.assign(write, row); ok {
+				statements = append(statements,
+					"UPDATE "+target+" SET "+changed+" WHERE "+match)
+			}
+		}
+		statements = append(statements,
+			"INSERT INTO "+target+" ("+columns+")"+
+				" SELECT "+strings.Join(x.literals(row), ", ")+x.Dialect.From()+
+				" WHERE NOT EXISTS (SELECT 1 FROM "+target+" WHERE "+match+")")
+	}
+	return statements
+}
+
 // rowsChanged is one UPDATE per row. It cannot be batched the way an insert can — every row sets
 // different values on a different key — and a key column is left out of the SET, since changing the
 // thing a row is found by is a rename rather than an update.
 func (x DDL) rowsChanged(target string, write driver.RowWrite) []string {
-	keys := set(write.Keys)
-
 	statements := make([]string, 0, len(write.Rows))
 	for _, row := range write.Rows {
-		assignments := []string{}
-		for at, name := range write.Columns {
-			if keys[name] || at >= len(row) {
-				continue
-			}
-			assignments = append(assignments, x.Dialect.QuoteIdent(name)+" = "+x.literal(row[at]))
-		}
-		if len(assignments) == 0 {
+		changed, ok := x.assign(write, row)
+		if !ok {
 			continue
 		}
-		statements = append(statements, "UPDATE "+target+" SET "+strings.Join(assignments, ", ")+
-			" WHERE "+x.match(write, row))
+		statements = append(statements,
+			"UPDATE "+target+" SET "+changed+" WHERE "+x.match(write, row))
 	}
 	return statements
+}
+
+// assign is the SET of one row's update: every column that is not part of the key. It says whether
+// there was anything to set, because a row that is entirely its own key has nothing to change and
+// an `UPDATE … SET  WHERE …` is not a statement.
+func (x DDL) assign(write driver.RowWrite, row []*string) (string, bool) {
+	keys := set(write.Keys)
+
+	assignments := []string{}
+	for at, name := range write.Columns {
+		if keys[name] || at >= len(row) {
+			continue
+		}
+		assignments = append(assignments, x.Dialect.QuoteIdent(name)+" = "+x.literal(row[at]))
+	}
+	if len(assignments) == 0 {
+		return "", false
+	}
+	return strings.Join(assignments, ", "), true
 }
 
 func (x DDL) rowsRemoved(target string, write driver.RowWrite) []string {
@@ -534,9 +654,13 @@ func AppendKeyColumn(
 	return append(keys, found)
 }
 
-// Table names a table the way the engine addresses it: inside its database on MySQL, inside
-// its schema on PostgreSQL.
+// Table names a table the way the engine addresses it: inside its database on MySQL and Oracle,
+// inside its schema on PostgreSQL, and inside both on SQL Server — which is what lets one pool
+// there read every database on the server.
 func (d Dialect) Table(ns driver.Namespace, table string) string {
+	if d.NamespaceIsBoth && ns.Database != "" {
+		return d.QuoteIdent(ns.Database) + "." + d.Qualify(ns.Schema, table)
+	}
 	if d.NamespaceIsSchema {
 		return d.Qualify(ns.Schema, table)
 	}
@@ -563,24 +687,35 @@ func (d Dialect) CreateTable(spec driver.TableSpec) string {
 		" (\n  " + strings.Join(clauses, ",\n  ") + "\n)"
 }
 
-// CopyTable declares a table shaped like another one. MySQL's LIKE is a clause of its own and
-// brings the defaults and the indexes with it; PostgreSQL's stands where a column would and
-// brings the columns alone until INCLUDING ALL asks for the rest.
+// CopyTable declares a table shaped like another one, and the engines have four words for it.
+// MySQL's LIKE is a clause of its own and brings the defaults and the indexes with it;
+// PostgreSQL's stands where a column would and brings the columns alone until INCLUDING ALL asks
+// for the rest; SQLite and Oracle have no LIKE and *read* the other table for its shape; and SQL
+// Server reads it too but puts the new name in the middle of the read.
+//
+// The three that read take the columns and their types and nothing else — no key, no index, no
+// default — which is the honest cost of an engine with no way to declare "like that one".
 func (d Dialect) CopyTable(ns driver.Namespace, table, name string) string {
 	source := d.Table(ns, table)
-	statement := "CREATE TABLE " + d.Table(ns, name)
+	target := d.Table(ns, name)
 
-	if d.LikeInColumnList {
-		return statement + " (LIKE " + source + " INCLUDING ALL)"
+	switch {
+	case d.SelectIntoCopy:
+		return "SELECT * INTO " + target + " FROM " + source + " WHERE 1 = 0"
+	case d.CopyAsSelect:
+		return "CREATE TABLE " + target + " AS SELECT * FROM " + source + " WHERE 1 = 0"
+	case d.LikeInColumnList:
+		return "CREATE TABLE " + target + " (LIKE " + source + " INCLUDING ALL)"
+	default:
+		return "CREATE TABLE " + target + " LIKE " + source
 	}
-	return statement + " LIKE " + source
 }
 
 // CopyRows is every row of a table on its way into a copy of it. PostgreSQL's copy took the
 // original's identity column with it and then refuses a value for that column, so the write says
 // out loud that it is overriding one — a table with no identity column takes the same clause
 // without complaint, which is what keeps this from needing to read the table first. A *generated*
-// column is the one thing neither engine will be written, and says so itself.
+// column is the one thing no engine will be written, and says so itself.
 func (d Dialect) CopyRows(ns driver.Namespace, table, name string) string {
 	statement := "INSERT INTO " + d.Table(ns, name)
 	if d.OverridesIdentity {
@@ -590,10 +725,11 @@ func (d Dialect) CopyRows(ns driver.Namespace, table, name string) string {
 }
 
 // InsertVerb is how this engine opens an insert that is not to fail on a row already there. MySQL
-// has a verb for it; PostgreSQL says the same thing in a clause at the other end of the statement,
-// so its verb never changes — see MergeClause.
+// has a verb for it; PostgreSQL and SQLite say the same thing in a clause at the other end of the
+// statement, so their verb never changes — see MergeClause — and the two with neither never reach
+// here for that mode at all, an insert of theirs looking first instead (see rowsGuarded).
 func (d Dialect) InsertVerb(mode driver.RowWriteMode) string {
-	if mode == driver.WriteSkip && !d.MergesOnConflict {
+	if mode == driver.WriteSkip && !d.MergesOnConflict && !d.MergeByExists {
 		return "INSERT IGNORE"
 	}
 	return "INSERT"

@@ -68,11 +68,12 @@ nothing a reader typed arrives as an operator; a conjunction crosses as `and` or
 else. On the SQL engines the *values* are written into the statement as string literals rather than
 bound, for the same reason the `LIMIT` is: one string is then both what ran and what the status line
 shows and copies — a statement carrying `?` is not one a reader could paste into an editor.
-`sqlkit.Dialect.QuoteString` is what stands between the text and the statement, and both engines read
-a string literal back into a column of any type. Two smaller consequences: the six text matches
-compare the column **as text** (`CAST(… AS CHAR)` / `AS TEXT`), so they work on a number or a date as
-well as a name, and a `%` the reader typed is their own wildcard. In memory those matches ignore case;
-on the server the collation decides, which is MySQL ignoring it and PostgreSQL not.
+`sqlkit.Dialect.QuoteString` is what stands between the text and the statement, and every SQL engine
+reads a string literal back into a column of any type. Two smaller consequences: the six text matches
+compare the column **as text** (`CAST(… AS CHAR)`, `AS TEXT`, `AS NVARCHAR(MAX)`, `AS VARCHAR2(4000)`
+— one `TextType` per engine), so they work on a number or a date as well as a name, and a `%` the
+reader typed is their own wildcard. In memory those matches ignore case; on the server the collation
+decides, which is MySQL and SQL Server ignoring it and the other three not.
 
 **On MongoDB there is nothing to quote.** The tree becomes a `bson.D` and travels as a *document*, so
 a field name and a value reach the server as values and can only ever be values. Three things follow.

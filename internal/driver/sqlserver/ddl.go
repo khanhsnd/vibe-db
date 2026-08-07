@@ -1,0 +1,160 @@
+package sqlserver
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"strings"
+
+	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+)
+
+// run is what sqlkit.DDL executes its statements through, and the one place a schema change meets
+// this adapter's error map. Every statement already names its database in its own three-part table
+// name, so nothing has to be selected for it — which is why there is no pinning here and no pool
+// per database anywhere in this adapter.
+func (s *session) run(ctx context.Context, _, statement string) error {
+	if _, err := s.db.ExecContext(ctx, statement); err != nil {
+		return translateError(err)
+	}
+	return nil
+}
+
+// A rename here is a *procedure* rather than a clause, and it is the same procedure for a table and
+// for a column — which is why both are written out and neither comes from `sqlkit.DDL`.
+//
+// `sp_rename` takes its arguments as strings, and the object is named by a schema-qualified name
+// inside one. The new name goes in bare: naming a schema there would be read as an attempt to move
+// the object, which is not what a rename is and which SQL Server refuses.
+func (s *session) RenameTable(
+	ctx context.Context,
+	ns driver.Namespace,
+	table, name string,
+) error {
+	return s.rename(ctx, ns, dialect.Qualify(ns.Schema, table), name, "OBJECT")
+}
+
+func (s *session) RenameColumn(
+	ctx context.Context,
+	ns driver.Namespace,
+	table, column, name string,
+) error {
+	target := dialect.Qualify(ns.Schema, table) + "." + dialect.QuoteIdent(column)
+	return s.rename(ctx, ns, target, name, "COLUMN")
+}
+
+func (s *session) rename(
+	ctx context.Context,
+	ns driver.Namespace,
+	target, name, kind string,
+) error {
+	statement := "EXEC " + dialect.QuoteIdent(ns.Database) + ".sys.sp_rename " +
+		dialect.QuoteString(target) + ", " + dialect.QuoteString(name) +
+		", " + dialect.QuoteString(kind)
+	return s.run(ctx, ns.Database, statement)
+}
+
+// SetPrimaryKey has to name the constraint it is replacing, which SQL Server keeps in
+// sys.key_constraints rather than deriving from the table — the same arrangement PostgreSQL has,
+// and for the same reason: a key here is a constraint with a name of its own.
+func (s *session) SetPrimaryKey(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+	columns []string,
+) error {
+	existing, err := s.primaryKeyName(ctx, ns, table)
+	if err != nil {
+		return err
+	}
+
+	actions := []string{}
+	if existing != "" {
+		actions = append(actions, "DROP CONSTRAINT "+dialect.QuoteIdent(existing))
+	}
+	if len(columns) > 0 {
+		actions = append(actions,
+			"ADD PRIMARY KEY ("+strings.Join(dialect.QuoteAll(columns), ", ")+")")
+	}
+	if len(actions) == 0 {
+		return nil
+	}
+
+	// Unlike every other engine here, SQL Server will not take a drop and an add in one ALTER
+	// TABLE: each action is a statement of its own. The order is what matters — the old key has to
+	// be gone before the new one can be declared.
+	for _, action := range actions {
+		statement := "ALTER TABLE " + dialect.Table(ns, table) + " " + action
+		if err := s.run(ctx, ns.Database, statement); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *session) primaryKeyName(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) (string, error) {
+	catalogue := dialect.QuoteIdent(ns.Database)
+
+	query := `
+		SELECT k.name
+		FROM ` + catalogue + `.sys.key_constraints k
+		JOIN ` + catalogue + `.sys.tables t ON t.object_id = k.parent_object_id
+		JOIN ` + catalogue + `.sys.schemas s ON s.schema_id = t.schema_id
+		WHERE s.name = @p1 AND t.name = @p2 AND k.type = 'PK'`
+
+	var name string
+	err := s.db.QueryRowContext(ctx, query, ns.Schema, table).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", translateError(err)
+	}
+	return name, nil
+}
+
+// CreateStatements has to *describe* the table, because SQL Server cannot be asked: there is no
+// SHOW CREATE TABLE and the script Management Studio writes is written by Management Studio. So
+// the shape the tree already reads is spelled back out through the same dialect every other
+// statement here goes through — the columns and the key as one CREATE TABLE, then an index each,
+// then a constraint each.
+//
+// The index behind the primary key is left out: it arrives with the table's own PRIMARY KEY clause,
+// and declaring it a second time is a statement the server refuses. What a description cannot carry
+// is an identity column, a computed column or a filtered index — the honest cost of an engine that
+// will not answer for itself.
+func (s *session) CreateStatements(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) ([]string, error) {
+	structure, err := s.TableStructure(ctx, ns, table)
+	if err != nil {
+		return nil, err
+	}
+
+	spec := sqlkit.TableSpecOf(ns, table, structure.Columns)
+	statements := []string{dialect.CreateTable(spec)}
+	for _, index := range structure.Indexes {
+		if index.Primary {
+			continue
+		}
+		// The method the catalogue reported is what the index *is* — clustered or not — and not an
+		// access method a CREATE INDEX takes a `USING` for. Dropping it is what keeps the statement
+		// one the server will accept.
+		declared := sqlkit.IndexSpecOf(index)
+		declared.Method = ""
+		statements = append(statements, dialect.CreateIndex(ns, table, declared))
+	}
+	for _, key := range structure.ForeignKeys {
+		statements = append(statements,
+			dialect.AddForeignKey(ns, table, sqlkit.ForeignKeySpecOf(key)))
+	}
+
+	return statements, nil
+}

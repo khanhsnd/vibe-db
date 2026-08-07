@@ -90,7 +90,7 @@ func (d Dialect) scanTokens(statement string) []string {
 	for i := 0; i < len(statement); i++ {
 		switch c := statement[i]; {
 		case c == d.IdentQuote:
-			end := skipDelimited(statement, i, d.IdentQuote)
+			end := skipDelimited(statement, i, d.CloseQuote())
 			if depth == 0 {
 				word.WriteString(statement[i:min(end+1, len(statement))])
 			}
@@ -137,7 +137,11 @@ func (d Dialect) scanTokens(statement string) []string {
 }
 
 // splitQualified reads a quoted or bare table name, with or without the namespace in front
-// of it: `db`.`table`, "schema"."table", db.table or table.
+// of it: `db`.`table`, "schema"."table", [db].[dbo].[table], db.table or table.
+//
+// Three parts are read only on the engine that has three — SQL Server, where the middle one is
+// the schema a table is addressed by. Everywhere else a name of three parts is not a table this
+// side can find, and reading one would make a result writable that nothing could write back.
 func (d Dialect) splitQualified(token string) (Source, bool) {
 	parts := []string{}
 	part := strings.Builder{}
@@ -145,7 +149,7 @@ func (d Dialect) splitQualified(token string) (Source, bool) {
 
 	for i := 0; i < len(token); i++ {
 		switch c := token[i]; {
-		case c == d.IdentQuote:
+		case c == d.IdentQuote || c == d.CloseQuote():
 			quoted = !quoted
 		case c == '.' && !quoted:
 			parts = append(parts, part.String())
@@ -155,6 +159,10 @@ func (d Dialect) splitQualified(token string) (Source, bool) {
 		}
 	}
 	parts = append(parts, part.String())
+
+	if len(parts) == 3 && d.NamespaceIsBoth {
+		parts = parts[1:]
+	}
 
 	switch len(parts) {
 	case 1:

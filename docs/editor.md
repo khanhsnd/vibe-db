@@ -6,11 +6,14 @@ caret and the undo stack do not follow a tab switch.
 
 **The language follows the connection's engine**, through `queryLanguage`, and rides in the same
 compartment as the schema so it reconfigures in place rather than rebuilding the editor. There are
-three of them, because two of the four engines write the same language and the other two write
+three of them, because five of the seven engines write the same language and the other two write
 nothing like it or like each other:
 
-- **SQL** (`sqlLanguage`, `@codemirror/lang-sql`) for MySQL and PostgreSQL, whose dialects differ only
-  in a quoting rule and a keyword list.
+- **SQL** (`sqlLanguage`, `@codemirror/lang-sql`) for the five SQL engines, whose dialects differ only
+  in a quoting rule and a keyword list — one `SQLDialect` each, so a bracket is an identifier on SQL
+  Server and something else everywhere else. The **quoter** differs too, and only where an engine
+  folds an unquoted name: PostgreSQL lowers one and Oracle raises one, so completion inserts the form
+  that will run rather than the form the catalogue reported.
 - **The shell** (`shellLanguage`, `@codemirror/lang-javascript`) for MongoDB. JavaScript to
   *highlight* — a command is `db.users.find({…})` and its argument is a document, so a brace is a
   brace and a string is a string — and nothing like JavaScript to *run*: the driver reads one command

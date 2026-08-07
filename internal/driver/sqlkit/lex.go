@@ -59,7 +59,7 @@ func (d Dialect) Lex(script string) []Token {
 			at = tokens[len(tokens)-1].End
 
 		case c == d.IdentQuote:
-			tokens = append(tokens, d.lexQuoted(script, at, c, TokenIdent))
+			tokens = append(tokens, d.lexQuoted(script, at, d.CloseQuote(), TokenIdent))
 			at = tokens[len(tokens)-1].End
 
 		case strings.HasPrefix(script[at:], "--"),

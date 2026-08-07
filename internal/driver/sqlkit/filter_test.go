@@ -221,7 +221,7 @@ func TestDistinctValuesReadsOneColumn(t *testing.T) {
 	}
 
 	want := "SELECT DISTINCT `email` FROM `shop`.`users`" +
-		" WHERE `email` IS NOT NULL ORDER BY 1 LIMIT 200"
+		" WHERE `email` IS NOT NULL ORDER BY 1 LIMIT 200 OFFSET 0"
 	if got != want {
 		t.Errorf("DistinctValues() = %q, want %q", got, want)
 	}

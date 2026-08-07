@@ -33,12 +33,20 @@ Testing Library exists — add the dependency first, or verify frontend behaviou
 
 ## Verifying against a real database
 
-All four engines are exercised through the same UI, but each has a failure mode the others cannot
-show — `USE` versus `SET search_path` versus neither versus a client per database, an errno versus a
-SQLSTATE versus a code name versus a first word, `LIMIT 1` on an update versus none versus an
-`updateOne` versus a `SET`. A change to any adapter deserves a run against that server; a PostgreSQL
-profile needs a database name before it will connect at all, a MongoDB one needs neither a database
-nor a user, and a Redis one takes a database *number*.
+All seven engines are exercised through the same UI, but each has a failure mode the others cannot
+show — `USE` versus `SET search_path` versus `ALTER SESSION` versus neither versus a client per
+database, an errno versus a SQLSTATE versus an `ORA-` number versus a result code versus a first
+word, `LIMIT 1` on an update versus none. A change to any adapter deserves a run against that
+server; a PostgreSQL profile needs a database name before it will connect at all, an Oracle one
+needs a *service* name, a MongoDB one needs neither a database nor a user, and a Redis one takes a
+database *number*.
+
+**SQLite is the exception, and it is exercised by `go test`.** It is a file, so
+`internal/driver/sqlite` opens one in a temporary directory and drives the whole adapter against it
+— the catalogue reads, every mode of a row write, the two schema changes a file takes, and the
+plan. That run is worth watching after **any** change to `sqlkit`: `sqlkit.Data` and `sqlkit.DDL`
+build those statements for all five SQL engines, so a mistake in the paging, the placeholders or the
+quoting shows up there as a failure rather than as a string that merely looks right.
 
 **MongoDB is where a run against a real server matters most**, because the two things that cannot be
 unit-tested are exactly the two that make it different: a field list is inferred from documents, so it

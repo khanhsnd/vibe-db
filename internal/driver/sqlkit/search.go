@@ -44,36 +44,50 @@ func (d Dialect) SelectMatching(table, where string) string {
 }
 
 // matches is one column against the reader's text: a LIKE for the two modes a pattern can say, and
-// a regular expression for the two it cannot.
+// a regular expression for the two it cannot — or for all four on an engine whose LIKE cannot
+// answer the case box at all.
 func (d Dialect) matches(text string, match domain.TextMatch) string {
-	if match.IsPattern() {
+	if match.IsPattern() && !d.MatchesByRegex {
 		return d.like(text, match)
 	}
 	return d.regex(text, match)
 }
 
 // like spells a pattern match, and is where the reader's Case Insensitive box becomes SQL. Folding
-// both sides is one spelling that serves both engines; the *sensitive* match is the one that
-// differs, MySQL's own collation ignoring case unless the pattern is compared as bytes.
+// both sides is one spelling that serves every engine; the *sensitive* match is the one that
+// differs, an engine whose collation ignores case having to say so — MySQL by comparing the pattern
+// as bytes, SQL Server by naming a collation that tells them apart.
 func (d Dialect) like(text string, match domain.TextMatch) string {
 	pattern := d.QuoteString(match.Pattern())
 
 	if match.CaseInsensitive {
 		return "LOWER(" + text + ") LIKE LOWER(" + pattern + ")"
 	}
-	if d.PatternIgnoresCase {
-		pattern = "CAST(" + pattern + " AS BINARY)"
+	if d.SensitiveCast != "" {
+		return text + " LIKE CAST(" + pattern + " AS " + d.SensitiveCast + ")"
+	}
+	if d.SensitiveCollation != "" {
+		return text + " COLLATE " + d.SensitiveCollation + " LIKE " + pattern
 	}
 	return text + " LIKE " + pattern
 }
 
 // regex spells an expression match. The expression itself is domain's — one rule, so Whole Word
-// means the same thing here as it does of a name — and only the *engine's* two words for it are
-// here: MySQL's function, whose third argument is the sensitivity, against PostgreSQL's pair of
-// operators.
+// means the same thing here as it does of a name — and only the *engine's* three words for it are
+// here: a function whose third argument is the sensitivity (MySQL, Oracle, SQL Server), an operator
+// per answer (PostgreSQL), and one operator whose pattern carries the answer itself (SQLite, whose
+// `regexp` the adapter supplies and which is therefore Go's own).
 func (d Dialect) regex(text string, match domain.TextMatch) string {
-	pattern := d.QuoteString(match.Expression(d.WordBoundary))
+	expression := match.Expression(d.WordBoundary)
 
+	if d.RegexFlagsInPattern {
+		if match.CaseInsensitive {
+			expression = "(?i)" + expression
+		}
+		return text + " REGEXP " + d.QuoteString(expression)
+	}
+
+	pattern := d.QuoteString(expression)
 	if d.RegexIsFunction {
 		return "REGEXP_LIKE(" + text + ", " + pattern + ", " + d.QuoteString(regexFlags(match)) + ")"
 	}
@@ -83,8 +97,8 @@ func (d Dialect) regex(text string, match domain.TextMatch) string {
 	return text + " ~ " + pattern
 }
 
-// regexFlags is MySQL's match type: `i` ignores case and `c` insists on it. Both are spelled out
-// rather than one being left to the collation, so the box the reader ticked decides.
+// regexFlags is the match type those engines take: `i` ignores case and `c` insists on it. Both are
+// spelled out rather than one being left to the collation, so the box the reader ticked decides.
 func regexFlags(match domain.TextMatch) string {
 	if match.CaseInsensitive {
 		return "i"

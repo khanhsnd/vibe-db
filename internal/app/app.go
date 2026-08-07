@@ -8,8 +8,11 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/mongo"
 	"github.com/khanhsnd/vibe-db/internal/driver/mysql"
+	"github.com/khanhsnd/vibe-db/internal/driver/oracle"
 	"github.com/khanhsnd/vibe-db/internal/driver/postgres"
 	"github.com/khanhsnd/vibe-db/internal/driver/redis"
+	"github.com/khanhsnd/vibe-db/internal/driver/sqlite"
+	"github.com/khanhsnd/vibe-db/internal/driver/sqlserver"
 	historyfile "github.com/khanhsnd/vibe-db/internal/history/jsonfile"
 	profilefile "github.com/khanhsnd/vibe-db/internal/profile/jsonfile"
 	"github.com/khanhsnd/vibe-db/internal/secret/keyring"
@@ -40,8 +43,7 @@ func New() (*App, error) {
 		return nil, fmt.Errorf("resolve config path: %w", err)
 	}
 
-	registry := driver.NewRegistry(mysql.New(), postgres.New(), mongo.New(), redis.New())
-	sessions := session.NewManager(registry)
+	sessions := session.NewManager(engines())
 
 	return &App{
 		Connections: NewConnectionAPI(
@@ -54,6 +56,22 @@ func New() (*App, error) {
 		System:   NewSystemAPI(),
 		sessions: sessions,
 	}, nil
+}
+
+// engines is the registry every session is opened through, and the one place an adapter is named.
+// It is a function of its own so a test can walk it: an engine `domain` knows about and this list
+// does not is a profile the reader can save and then cannot connect — a mistake that costs one line
+// to make and shows up nowhere until somebody tries it.
+func engines() *driver.Registry {
+	return driver.NewRegistry(
+		mysql.New(),
+		postgres.New(),
+		sqlite.New(),
+		sqlserver.New(),
+		oracle.New(),
+		mongo.New(),
+		redis.New(),
+	)
 }
 
 func (a *App) Startup(ctx context.Context) {

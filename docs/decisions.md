@@ -1,5 +1,21 @@
 # Deliberate choices — do not "fix" these
 
+- **Every database driver is pure Go, and that is a hard requirement rather than a preference.**
+  `modernc.org/sqlite` over `mattn/go-sqlite3`, `microsoft/go-mssqldb`, `sijms/go-ora` over `godror`.
+  Wails cross-compiles this app for Windows and the alternatives each want something the build
+  machine has to have first — a C toolchain for one, and Oracle's Instant Client, separately
+  licensed, for the other. A client that cannot be built without an installer is a client that
+  cannot be built.
+- **SQL Server and Oracle each have a `MERGE`, and neither is used.** A row that may already be
+  there is written as an insert guarded by `WHERE NOT EXISTS`, with an update in front of it for an
+  upsert. That is two ordinary statements against a page of syntax whose hardest part is naming the
+  source the rows came from — and both statements are already spelled by the same code the other
+  three engines' merges go through, so what varies stays a flag.
+- **SQLite will not have its tables rebuilt to fake an `ALTER COLUMN`.** The usual trick — make a new
+  table, copy the rows, drop the old one, rename — is how other clients offer a column change on an
+  engine that has none. It also drops every trigger, view and foreign key that pointed at the table,
+  silently, which is not what "change this column to `TEXT`" means. So the change spells nothing, a
+  migration shows an empty script, and the run says `UNSUPPORTED`.
 - **A PostgreSQL session keeps one connection pool per database.** A PostgreSQL connection is bound
   for life to the database it was opened with, and `pg_namespace` only ever describes that one. But
   a client has to show every database, so `driver.Namespace` carries `(database, schema)` and the
@@ -9,17 +25,22 @@
   database *is* its schema, and its tree has one level fewer — which the frontend decides from
   `ENGINES[…].hasSchemas`, not from a null check.
 - **A statement is pinned per namespace, not per session.** One pooled connection is held for the
-  call and pointed at the namespace — `USE` on MySQL, `SET search_path` on PostgreSQL — so the
-  pool's other connections keep whatever they had.
+  call and pointed at the namespace — `USE` on MySQL and SQL Server, `SET search_path` on
+  PostgreSQL, `ALTER SESSION SET CURRENT_SCHEMA` on Oracle — so the pool's other connections keep
+  whatever they had. It is only ever for a statement the *reader* wrote: everything this app spells
+  itself names its namespace in the statement, which is why SQL Server needs no pool per database
+  and SQLite needs no pinning at all.
 - **`multiStatements` stays `false`** in the MySQL DSN. Statements are split client-side, which
   removes an injection surface and allows per-statement timing.
-- **TLS modes keep libpq's meaning on both engines.** The five modes map onto
+- **TLS modes keep libpq's meaning on every engine.** The five modes map onto
   `disable` / `prefer` / `require` / `verify-ca` / `verify-full`, and `Verify CA` therefore checks
   the chain and *not* the host name — the only reading that works against a server addressed by an
-  address. Go verifies the chain and the name together or not at all, so MySQL's two verifying modes
-  are a `*tls.Config` this side builds, with `verify-ca` doing its own chain-only check in
-  `VerifyPeerCertificate`. `Required` is encryption and no verification, on both, and the label says
-  so rather than implying a weaker check.
+  address. Go verifies the chain and the name together or not at all, so the verifying modes are a
+  `*tls.Config` this side builds (`sqlkit.TLSConfig`), with `verify-ca` doing its own chain-only
+  check in `VerifyPeerCertificate`. `Required` is encryption and no verification everywhere, and the
+  label says so rather than implying a weaker check. Two engines have **no `prefer`** — Oracle's
+  listener endpoint is TCP or TCPS and MongoDB's driver has no opportunistic mode — so `Preferred`
+  connects in the clear on both rather than pretending to try.
 - **A certificate file named under a mode that never opens one is refused, not ignored.** A file the
   app quietly drops is a reader believing they have configured something.
 - **The SSH tunnel forwards no local port.** It dials the bastion and opens connections *from* it

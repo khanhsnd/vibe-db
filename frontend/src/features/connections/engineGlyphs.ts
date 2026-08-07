@@ -1,14 +1,17 @@
 import type { Engine } from '@/bridge/connections'
 
 /**
- * The mark of each engine: one path over a 128-unit box, drawn in `currentColor`. The first three
- * are vendored from Devicon (MIT) rather than pulled in as a dependency — three paths are three
- * paths, and an icon set is three thousand. The elephant's eyes and tusks are subpaths of that one
- * path and are filled `evenodd`, so they read as holes onto the chip's colour rather than needing a
- * second fill; the leaf's own stem is the same trick.
+ * The mark of each engine: one path over a 128-unit box, drawn in `currentColor`. The dolphin, the
+ * elephant and the leaf are vendored from Devicon (MIT) rather than pulled in as a dependency —
+ * three paths are three paths, and an icon set is three thousand. The elephant's eyes and tusks are
+ * subpaths of that one path and are filled `evenodd`, so they read as holes onto the chip's colour
+ * rather than needing a second fill; the leaf's own stem is the same trick.
  *
- * The fourth is drawn here rather than vendored: Redis's mark is a stack of three discs, and three
- * ellipses say that at sixteen pixels as well as five hundred nodes would.
+ * The other four are drawn here rather than vendored, and for a reason beyond the dependency: at
+ * sixteen pixels a logo is a *shape*, so what each of these draws is the thing the engine is. Redis
+ * is its stack of three discs. SQLite is a disc with a leaf out of the corner, the file it lives in.
+ * SQL Server is a disc with a window pane over it. Oracle is the flat ring its own mark is, which
+ * survives being drawn a sixteenth of the size better than any wordmark could.
  */
 export interface EngineGlyph {
   path: string
@@ -171,5 +174,32 @@ export const ENGINE_GLYPHS: Record<Engine, EngineGlyph> = {
       "M14 32a50 16 0 1 0 100 0a50 16 0 1 0-100 0z" +
       "M14 63a50 16 0 1 0 100 0a50 16 0 1 0-100 0z" +
       "M14 94a50 16 0 1 0 100 0a50 16 0 1 0-100 0z",
+  },
+  sqlite: {
+    evenOdd: true,
+    // A page with its corner turned, holding a disc: the database that *is* a file. The corner and
+    // the disc's hole are subpaths filled `evenodd`, so both read as holes onto the chip's colour.
+    path:
+      "M22 8h56l28 28v84a4 4 0 0 1-4 4H22a4 4 0 0 1-4-4V12a4 4 0 0 1 4-4z" +
+      "M78 8v28h28z" +
+      "M64 56a28 14 0 1 0 0 28a28 14 0 1 0 0-28z",
+  },
+  sqlserver: {
+    evenOdd: true,
+    // A disc with a pane of four over it: the server, and the window it is served from.
+    path:
+      "M10 26a54 18 0 1 1 108 0v76a54 18 0 1 1-108 0z" +
+      "M64 14a42 12 0 1 0 0 24a42 12 0 1 0 0-24z" +
+      "M40 52h20v20H40z" +
+      "M68 52h20v20H68z" +
+      "M40 80h20v20H40z" +
+      "M68 80h20v20H68z",
+  },
+  oracle: {
+    evenOdd: true,
+    // The flat ring the mark is: one stadium outline, and the same shape again inside it as a hole.
+    path:
+      "M42 34h44a30 30 0 0 1 0 60H42a30 30 0 0 1 0-60z" +
+      "M42 52h44a12 12 0 0 1 0 24H42a12 12 0 0 1 0-24z",
   },
 }

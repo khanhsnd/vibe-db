@@ -7,10 +7,12 @@ repository.
 
 `vibe-db` is a desktop database client in the Navicat Premium mould — a Go backend in a Wails v2
 shell (OS WebView2, no bundled Chromium) with a React 19 + TypeScript frontend. MySQL, PostgreSQL,
-MongoDB and Redis are implemented; the driver layer is a port so others are added as adapters,
-`internal/driver/sqlkit` holds everything about a `database/sql` adapter that does not vary by
-engine, `internal/driver/mongo` is the proof the port is not secretly a SQL one, and
-`internal/driver/redis` is the proof it does not secretly assume tables either.
+SQLite, SQL Server, Oracle, MongoDB and Redis are implemented; the driver layer is a port so others
+are added as adapters, `internal/driver/sqlkit` holds everything about a `database/sql` adapter that
+does not vary by engine — including `sqlkit.DDL` and `sqlkit.Data`, which are the whole of a schema
+change and the whole of a read or write of rows — `internal/driver/mongo` is the proof the port is
+not secretly a SQL one, and `internal/driver/redis` is the proof it does not secretly assume tables
+either. What each engine has and has not got is [docs/features/engines.md](docs/features/engines.md).
 
 ## Rules that must not be broken
 
@@ -42,6 +44,14 @@ engine, `internal/driver/mongo` is the proof the port is not secretly a SQL one,
    through `sqlkit.Shell`. Never write a second scanner, in Go or in TypeScript. **A data file is
    not a script** — `internal/transfer` reads CSV, JSON, XML and XLSX and is not covered by this:
    nothing it reads is ever a statement, and nothing in it reaches a server except as a value.
+16. **A SQL adapter is its catalogue reads, its error map, how it is dialled, and a `Dialect`** —
+    and nothing else. `sqlkit.DDL` spells and runs every schema change, `sqlkit.Data` builds every
+    read and write of a row, and **an adapter that writes a `SELECT`, an `UPDATE`, an `INSERT` or a
+    `DELETE` of its own has gone wrong**. What differs between five SQL engines is a *flag* on
+    `Dialect` — where a page's bounds go, how an argument is numbered, whether an index is dropped
+    by its own name, what an empty insert is spelled as — never a second speller. An override on an
+    adapter is for a difference in **shape**: a rename that is a procedure, a key whose constraint
+    name has to be read first, a thing the engine has not got at all.
 11. **A row leaves for a server through one method.** `driver.Schema.RowStatements` is what a SQL
     export, the data half of a dump and every mode of an import all call — there is no second way to
     turn rows into statements, and nothing outside a driver ever quotes a value. What is *dangerous*
@@ -102,6 +112,8 @@ engine, `internal/driver/mongo` is the proof the port is not secretly a SQL one,
 |---|---|
 | Build, test, run against a real database | [docs/development.md](docs/development.md) |
 | Touch a layer boundary, or add an engine | [docs/architecture.md](docs/architecture.md) |
+| Find out what an engine has, or has not | [docs/features/engines.md](docs/features/engines.md) |
+| Touch a SQL adapter, or a `Dialect` flag | [docs/architecture.md](docs/architecture.md#the-five-sql-engines) |
 | Touch anything MongoDB | [docs/architecture.md](docs/architecture.md#the-document-store) |
 | Touch anything Redis | [docs/architecture.md](docs/architecture.md#the-key-value-store), [docs/features/key-space.md](docs/features/key-space.md) |
 | Add or change a failure mode | [docs/errors.md](docs/errors.md) |
@@ -125,8 +137,11 @@ A new failure mode needs all four of: a `domain` sentinel, a mapping in `errmap.
 
 A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `documents`, `keys`,
-`createsTables`, `createsDatabases`, `hasViews`, `hasBackups`, `needsUser` — and never a comparison
-against an engine's name in a component.
+`isFile`, `createsTables`, `createsDatabases`, `hasViews`, `hasBackups`, `needsUser`,
+`needsDatabase`, `databaseLabel` — and never a comparison against an engine's name in a component.
+The two exceptions are the lists that *are* per-engine data rather than a capability: the types a
+designer offers (`features/schema/dataTypes.ts`) and the dialect the editor highlights with
+(`features/editor/sqlLanguage.ts`).
 
 ## How the docs are written
 

@@ -5,9 +5,9 @@ owns rather than one the reader picks. That is the whole difference between it a
 [dump](transfer.md#dumping-a-table-or-a-schema): a dump is carried somewhere, and a backup is found
 again by being where backups are.
 
-It is offered on **MySQL and PostgreSQL only**. A backup here is SQL, so the engines that have one
-are the engines whose statements declare a table and write a row; MongoDB and Redis get no Backups
-node at all rather than a node that could only refuse — see `hasBackups`, and
+It is offered on **the five SQL engines**. A backup here is SQL, so the engines that have one are the
+engines whose statements declare a table and write a row; MongoDB and Redis get no Backups node at
+all rather than a node that could only refuse — see `hasBackups`, and
 [architecture.md](../architecture.md#backing-a-database-up) for where that rule lives.
 
 ## Where a backup is reached

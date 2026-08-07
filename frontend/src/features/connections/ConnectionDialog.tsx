@@ -22,7 +22,6 @@ import {
   tlsUsesFiles,
   withEngine,
   type Engine,
-  type EngineInfo,
   type ProfileInput,
 } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
@@ -218,86 +217,105 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                     )}
                   </Field>
 
-                  <div className="grid grid-cols-[1fr_110px] gap-2">
-                    <Field label="Host" error={fieldError('host')}>
-                      {(id, invalid) => (
-                        <TextInput
-                          id={id}
-                          invalid={invalid}
-                          value={form.host}
-                          onChange={(e) => update('host', e.target.value)}
-                        />
-                      )}
-                    </Field>
+                  {/* A file engine has no server, so it is asked for a *path* and nothing else.
+                      The three boxes that would otherwise be here are not disabled but absent:
+                      there is no host to fill in later, and a greyed-out Password would suggest
+                      the file might have one. */}
+                  {engine.isFile ? (
+                    <FileField
+                      label={engine.databaseLabel}
+                      hint={engine.databaseHint}
+                      value={form.database}
+                      disabled={false}
+                      error={fieldError('database')}
+                      pattern="*.db;*.sqlite;*.sqlite3"
+                      onChange={(value) => update('database', value)}
+                    />
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-[1fr_110px] gap-2">
+                        <Field label="Host" error={fieldError('host')}>
+                          {(id, invalid) => (
+                            <TextInput
+                              id={id}
+                              invalid={invalid}
+                              value={form.host}
+                              onChange={(e) => update('host', e.target.value)}
+                            />
+                          )}
+                        </Field>
 
-                    <Field label="Port" error={fieldError('port')}>
-                      {(id, invalid) => (
-                        <TextInput
-                          id={id}
-                          invalid={invalid}
-                          inputMode="numeric"
-                          value={form.port === 0 ? '' : String(form.port)}
-                          placeholder={String(engine.port)}
-                          onChange={(e) =>
-                            update('port', Number(e.target.value.replace(/\D/g, '')) || 0)
-                          }
-                        />
-                      )}
-                    </Field>
-                  </div>
+                        <Field label="Port" error={fieldError('port')}>
+                          {(id, invalid) => (
+                            <TextInput
+                              id={id}
+                              invalid={invalid}
+                              inputMode="numeric"
+                              value={form.port === 0 ? '' : String(form.port)}
+                              placeholder={String(engine.port)}
+                              onChange={(e) =>
+                                update('port', Number(e.target.value.replace(/\D/g, '')) || 0)
+                              }
+                            />
+                          )}
+                        </Field>
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    {/* A MongoDB server started without access control and a Redis server with no
-                        ACL take no credentials at all, so the box says so rather than being
-                        refused when it is left empty. */}
-                    <Field
-                      label="User"
-                      hint={engine.needsUser ? undefined : 'Optional'}
-                      error={fieldError('user')}
-                    >
-                      {(id, invalid) => (
-                        <TextInput
-                          id={id}
-                          invalid={invalid}
-                          value={form.user}
-                          onChange={(e) => update('user', e.target.value)}
-                        />
-                      )}
-                    </Field>
+                      <div className="grid grid-cols-2 gap-2">
+                        {/* A MongoDB server started without access control and a Redis server with
+                            no ACL take no credentials at all, so the box says so rather than being
+                            refused when it is left empty. */}
+                        <Field
+                          label="User"
+                          hint={engine.needsUser ? undefined : 'Optional'}
+                          error={fieldError('user')}
+                        >
+                          {(id, invalid) => (
+                            <TextInput
+                              id={id}
+                              invalid={invalid}
+                              value={form.user}
+                              onChange={(e) => update('user', e.target.value)}
+                            />
+                          )}
+                        </Field>
 
-                    <Field
-                      label="Password"
-                      hint={passwordHint(form, auth.minted, Boolean(initial?.id))}
-                    >
-                      {(id) => (
-                        <TextInput
-                          id={id}
-                          type="password"
-                          disabled={auth.minted}
-                          value={form.password}
-                          onChange={(e) => update('password', e.target.value)}
-                        />
-                      )}
-                    </Field>
-                  </div>
+                        <Field
+                          label="Password"
+                          hint={passwordHint(form, auth.minted, Boolean(initial?.id))}
+                        >
+                          {(id) => (
+                            <TextInput
+                              id={id}
+                              type="password"
+                              disabled={auth.minted}
+                              value={form.password}
+                              onChange={(e) => update('password', e.target.value)}
+                            />
+                          )}
+                        </Field>
+                      </div>
 
-                  {/* A Redis database is numbered rather than named, so the box takes an index and
-                      says which — leaving it blank is database 0. */}
-                  <Field
-                    label={engine.needsDatabase ? 'Database' : 'Default database'}
-                    hint={databaseHint(engine)}
-                    error={fieldError('database')}
-                  >
-                    {(id, invalid) => (
-                      <TextInput
-                        id={id}
-                        invalid={invalid}
-                        value={form.database}
-                        placeholder={engine.keys ? '0' : undefined}
-                        onChange={(e) => update('database', e.target.value)}
-                      />
-                    )}
-                  </Field>
+                      {/* A Redis database is numbered rather than named, so the box takes an index
+                          and says which — leaving it blank is database 0. An Oracle one is not a
+                          database at all but the *service* the listener is asked for. */}
+                      <Field
+                        label={engine.databaseLabel}
+                        hint={engine.databaseHint}
+                        error={fieldError('database')}
+                      >
+                        {(id, invalid) => (
+                          <TextInput
+                            id={id}
+                            invalid={invalid}
+                            value={form.database}
+                            placeholder={engine.keys ? '0' : undefined}
+                            onChange={(e) => update('database', e.target.value)}
+                          />
+                        )}
+                      </Field>
+                    </>
+                  )}
 
                   <Field
                     label="Environment"
@@ -636,12 +654,6 @@ function FileField({
 
 function tlsHint(mode: string): string {
   return TLS_MODES.find((one) => one.value === mode)?.hint ?? ''
-}
-
-/** What the Database box takes, which on a key-value store is a number and not a name. */
-function databaseHint(engine: EngineInfo): string {
-  if (engine.keys) return 'A number, counting from 0'
-  return engine.needsDatabase ? 'Required' : 'Optional'
 }
 
 function passwordHint(form: ProfileInput, minted: boolean, editing: boolean): string | undefined {

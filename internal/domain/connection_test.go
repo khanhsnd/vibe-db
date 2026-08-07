@@ -43,7 +43,7 @@ func TestValidate(t *testing.T) {
 		{"port too high", func(p *ConnectionProfile) { p.Port = 70000 }, "port"},
 		{"port negative", func(p *ConnectionProfile) { p.Port = -1 }, "port"},
 		{"blank user", func(p *ConnectionProfile) { p.User = "" }, "user"},
-		{"unsupported engine", func(p *ConnectionProfile) { p.Engine = "oracle" }, "engine"},
+		{"unsupported engine", func(p *ConnectionProfile) { p.Engine = "cassandra" }, "engine"},
 		{"unknown tls mode", func(p *ConnectionProfile) { p.TLS.Mode = "sometimes" }, "tlsMode"},
 		{"unknown environment", func(p *ConnectionProfile) { p.Environment = "uat" }, "environment"},
 		{"unknown auth", func(p *ConnectionProfile) { p.Auth = "kerberos" }, "auth"},

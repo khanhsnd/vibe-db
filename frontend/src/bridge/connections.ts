@@ -231,13 +231,24 @@ export const SSH_AUTHS: ReadonlyArray<{ value: SSHAuth; label: string }> = [
   { value: 'agent', label: 'SSH Agent' },
 ]
 
-export type Engine = 'mysql' | 'postgres' | 'mongo' | 'redis'
+export type Engine =
+  | 'mysql'
+  | 'postgres'
+  | 'sqlite'
+  | 'sqlserver'
+  | 'oracle'
+  | 'mongo'
+  | 'redis'
 
 export interface EngineInfo {
   value: Engine
   label: string
   port: number
   user: string
+  // Whether the whole database is one file on this machine rather than a server somewhere. There
+  // is nothing to dial and nobody to be, so the dialog asks for a *path* instead of a host, a port,
+  // a user and a password — see `domain.Engine.File`, which is where the rule lives.
+  isFile: boolean
   // Whether every connection to this engine is made *as* somebody. A MongoDB server started
   // without access control and a Redis server with no ACL both take no user name at all, which is
   // what greys the box rather than refusing the profile.
@@ -245,6 +256,12 @@ export interface EngineInfo {
   // PostgreSQL binds a session to one database for its whole life, so a profile that names
   // none has nothing to connect to. MySQL can be browsed without one.
   needsDatabase: boolean
+  // What the Database box is called and what it takes, in this engine's own words. They are fields
+  // rather than a comparison in the dialog because what a box *holds* is a fact about the engine:
+  // Oracle's is not a database at all but the service its listener is asked for, Redis's is a
+  // number, and SQLite's is a path to a file.
+  databaseLabel: string
+  databaseHint: string
   // Whether a table is qualified with a schema inside its database. MySQL's database *is*
   // its schema, so its tree has one level fewer.
   hasSchemas: boolean
@@ -356,8 +373,11 @@ export const ENGINES = [
     label: 'MySQL',
     port: 3306,
     user: 'root',
+    isFile: false,
     needsUser: true,
     needsDatabase: false,
+    databaseLabel: 'Default database',
+    databaseHint: 'Optional',
     hasSchemas: false,
     databaseHasOwner: false,
     documents: false,
@@ -376,13 +396,95 @@ export const ENGINES = [
     label: 'PostgreSQL',
     port: 5432,
     user: 'postgres',
+    isFile: false,
     needsUser: true,
     needsDatabase: true,
+    databaseLabel: 'Database',
+    databaseHint: 'Required',
     hasSchemas: true,
     databaseHasOwner: true,
     documents: false,
     keys: false,
     createsDatabases: true,
+    createsTables: true,
+    hasViews: true,
+    databaseNeedsCollection: false,
+    hasForeignKeys: true,
+    hasRoutines: true,
+    hasTruncate: true,
+    hasBackups: true,
+  },
+  {
+    // A SQLite database is a file, so there is no host, no port and nobody to be — the Database box
+    // holds a path and the dialog draws a Browse beside it. It has no second database to make, no
+    // TRUNCATE, and no stored routine: a function there belongs to the program that opened the file.
+    value: 'sqlite',
+    label: 'SQLite',
+    port: 0,
+    user: '',
+    isFile: true,
+    needsUser: false,
+    needsDatabase: true,
+    databaseLabel: 'Database file',
+    databaseHint: 'The file has to be there already — this never makes an empty one.',
+    hasSchemas: false,
+    databaseHasOwner: false,
+    documents: false,
+    keys: false,
+    createsDatabases: false,
+    createsTables: true,
+    hasViews: true,
+    databaseNeedsCollection: false,
+    hasForeignKeys: true,
+    hasRoutines: false,
+    hasTruncate: false,
+    hasBackups: true,
+  },
+  {
+    // SQL Server names a table by its database *and* its schema, so the tree has both levels the
+    // way PostgreSQL's does. A database of its own has a collation and nothing else the dialog
+    // asks for, which is MySQL's arrangement rather than PostgreSQL's.
+    value: 'sqlserver',
+    label: 'SQL Server',
+    port: 1433,
+    user: 'sa',
+    isFile: false,
+    needsUser: true,
+    needsDatabase: false,
+    databaseLabel: 'Default database',
+    databaseHint: 'Optional',
+    hasSchemas: true,
+    databaseHasOwner: false,
+    documents: false,
+    keys: false,
+    createsDatabases: true,
+    createsTables: true,
+    hasViews: true,
+    databaseNeedsCollection: false,
+    hasForeignKeys: true,
+    hasRoutines: true,
+    hasTruncate: true,
+    hasBackups: true,
+  },
+  {
+    // Oracle has no level between a connection and a schema: the Database box holds the *service*
+    // the listener is asked for, and what the tree lists below the connection are schemas. Making
+    // one is making a user with a password, which is administration rather than this dialog's
+    // business — see `createsDatabases`.
+    value: 'oracle',
+    label: 'Oracle',
+    port: 1521,
+    user: 'system',
+    isFile: false,
+    needsUser: true,
+    needsDatabase: true,
+    databaseLabel: 'Service name',
+    databaseHint: 'The service the listener is asked for, such as XEPDB1',
+    hasSchemas: false,
+    databaseHasOwner: false,
+    documents: false,
+    keys: false,
+    createsDatabases: false,
     createsTables: true,
     hasViews: true,
     databaseNeedsCollection: false,
@@ -398,8 +500,11 @@ export const ENGINES = [
     label: 'MongoDB',
     port: 27017,
     user: '',
+    isFile: false,
     needsUser: false,
     needsDatabase: false,
+    databaseLabel: 'Default database',
+    databaseHint: 'Optional',
     hasSchemas: false,
     databaseHasOwner: false,
     documents: true,
@@ -421,8 +526,11 @@ export const ENGINES = [
     label: 'Redis',
     port: 6379,
     user: '',
+    isFile: false,
     needsUser: false,
     needsDatabase: false,
+    databaseLabel: 'Default database',
+    databaseHint: 'A number, counting from 0',
     hasSchemas: false,
     databaseHasOwner: false,
     documents: false,

@@ -59,6 +59,9 @@
   /** One per engine, so a connection says which it is before it is read. */
   --engine-mysql: #0e8fa8;
   --engine-postgres: #4779b8;
+  --engine-sqlite: #4a8fc0;
+  --engine-sqlserver: #d4574e;
+  --engine-oracle: #e05a4f;
   --engine-mongo: #1aa85f;
   --engine-redis: #e8564a;
 
@@ -180,6 +183,9 @@
 
   --engine-mysql: #00758f;
   --engine-postgres: #336791;
+  --engine-sqlite: #2f6792;
+  --engine-sqlserver: #b8332a;
+  --engine-oracle: #c74634;
   --engine-mongo: #13aa52;
   --engine-redis: #d82c20;
 
@@ -271,6 +277,9 @@
 
   --color-engine-mysql: var(--engine-mysql);
   --color-engine-postgres: var(--engine-postgres);
+  --color-engine-sqlite: var(--engine-sqlite);
+  --color-engine-sqlserver: var(--engine-sqlserver);
+  --color-engine-oracle: var(--engine-oracle);
   --color-engine-mongo: var(--engine-mongo);
   --color-engine-redis: var(--engine-redis);
 

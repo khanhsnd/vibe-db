@@ -52,6 +52,12 @@ func (*Driver) Open(
 		pools:   map[string]*sql.DB{},
 	}
 	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
+	s.Data = sqlkit.Data{
+		Dialect: dialect,
+		Columns: s.columns,
+		Open:    func(database string) (sqlkit.Queryer, error) { return s.pool(database) },
+		Fail:    translateError,
+	}
 
 	// The profile's own database is what the session is judged on: reaching it proves the
 	// host, the credentials and the TLS mode, and it is where the database list is read.
@@ -71,9 +77,11 @@ func (*Driver) Open(
 // bound to the database it was opened with and cannot cross to another, so browsing a second
 // database means dialling it — lazily, on first use, and closed with the session.
 type session struct {
-	// The schema changes the two engines spell alike come from here; this file overrides the
-	// four that do not.
+	// The schema changes the engines spell alike come from here; `ddl.go` overrides the few that
+	// do not, and `Data` is the reads and writes of rows, which none of them spells differently
+	// once the quoting and the paging are the dialect's.
 	sqlkit.DDL
+	sqlkit.Data
 
 	profile domain.ConnectionProfile
 	creds   driver.Credentials

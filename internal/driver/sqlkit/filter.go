@@ -1,7 +1,6 @@
 package sqlkit
 
 import (
-	"strconv"
 	"strings"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
@@ -210,7 +209,7 @@ func (d Dialect) DistinctValues(
 	return "SELECT DISTINCT " + quoted +
 		" FROM " + table +
 		" WHERE " + quoted + " IS NOT NULL" +
-		" ORDER BY 1 LIMIT " + strconv.Itoa(limit), nil
+		d.Page(" ORDER BY 1", limit, 0), nil
 }
 
 func filterError(message string) error {

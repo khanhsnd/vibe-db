@@ -5,7 +5,16 @@ import {
   type Completion,
   type CompletionSource,
 } from '@codemirror/autocomplete'
-import { MySQL, PostgreSQL, sql, type SQLDialect, type SQLNamespace } from '@codemirror/lang-sql'
+import {
+  MSSQL,
+  MySQL,
+  PLSQL,
+  PostgreSQL,
+  SQLite,
+  sql,
+  type SQLDialect,
+  type SQLNamespace,
+} from '@codemirror/lang-sql'
 import type { EditorState, Extension } from '@codemirror/state'
 
 import type { TableSchema } from '@/bridge/connections'
@@ -44,17 +53,24 @@ function firstLine(template: string): string {
 }
 
 /**
- * How a name has to be written to resolve to the object it names. PostgreSQL folds an
- * unquoted identifier to lower case, so `AIFolders` reaches the server as `aifolders` and
- * a mixed-case table can only be read quoted. Completion inserts the form that will run,
- * which is the difference between a working statement and `UNKNOWN_TABLE`.
+ * How a name has to be written to resolve to the object it names. Two engines fold an unquoted
+ * identifier, and they fold it opposite ways: PostgreSQL lowers it, so `AIFolders` reaches the
+ * server as `aifolders`; Oracle raises it, so `users` reaches it as `USERS`. Either way a name that
+ * is not already in the engine's own case can only be read quoted, and completion inserts the form
+ * that will run — which is the difference between a working statement and `UNKNOWN_TABLE`.
  *
- * MySQL folds nothing, so its names are offered as they are stored.
+ * MySQL, SQL Server and SQLite fold nothing, so their names are offered as they are stored.
  */
 function quoterFor(engine: string): (name: string) => string {
-  if (engine !== 'postgres') return (name) => name
+  if (engine === 'postgres') return foldedBy(/^[a-z_][a-z0-9_$]*$/)
+  if (engine === 'oracle') return foldedBy(/^[A-Z_][A-Z0-9_$#]*$/)
+  return (name) => name
+}
 
-  return (name) => (/^[a-z_][a-z0-9_$]*$/.test(name) ? name : `"${name.replaceAll('"', '""')}"`)
+// A name matching the engine's own unquoted form is offered bare; anything else is quoted, the
+// standard's own doubling escaping a quote inside it.
+function foldedBy(plain: RegExp): (name: string) => string {
+  return (name) => (plain.test(name) ? name : `"${name.replaceAll('"', '""')}"`)
 }
 
 // lang-sql keys its namespace by table name and resolves `FROM users u` aliases itself,
@@ -107,8 +123,18 @@ function bareColumnSource(
   }
 }
 
+// One dialect per engine, which is what decides how the editor colours a name, a string and a
+// comment: the bracket around `[dbo]` is an identifier on one engine and an array on another, and a
+// `#` opens a comment on exactly one of the five.
+const DIALECTS: Record<string, SQLDialect> = {
+  postgres: PostgreSQL,
+  sqlite: SQLite,
+  sqlserver: MSSQL,
+  oracle: PLSQL,
+}
+
 function dialectFor(engine: string): SQLDialect {
-  return engine === 'postgres' ? PostgreSQL : MySQL
+  return DIALECTS[engine] ?? MySQL
 }
 
 // Any word in the statement that names a table counts, rather than only the one after

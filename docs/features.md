@@ -1,6 +1,7 @@
 # Features and UI behaviour
 
-Working: connection profiles (create / edit / delete) for **MySQL, PostgreSQL, MongoDB and Redis**,
+Working: connection profiles (create / edit / delete) for **MySQL, PostgreSQL, SQLite, SQL Server,
+Oracle, MongoDB and Redis**,
 **over an SSH tunnel, with TLS held to a certificate this machine trusts, and signing in by AWS or
 Google cloud identity as well as by password**, Test Connection
 with server version and latency, connect / disconnect, **an environment label that colours a
@@ -13,7 +14,7 @@ the tree and in a designer tab**, **schema changes from the tree's context menu*
 empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index or a
 foreign key, drop a view or a routine — table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
-or SQL**, **backing a MySQL or PostgreSQL namespace up into a folder the app keeps, and restoring
+or SQL**, **backing a SQL namespace up into a folder the app keeps, and restoring
 one**, query tabs with completion that **run a whole script**, **a console that runs one statement
 at a time and keeps the transcript**, **running a file of statements against a connection**,
 **marking a connection with a colour that washes down the sidebar**, **a history of every statement
@@ -37,6 +38,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | Feature | Read |
 |---|---|
 | Picking an engine, filling a profile in, TLS, SSH, the environment guard, a connection's colour | [features/connections.md](features/connections.md) |
+| What each of the seven engines has, and what it has not | [features/engines.md](features/engines.md) |
 | The tree, what a level loads, filtering it, and the table list | [features/schema-tree.md](features/schema-tree.md) |
 | A Redis key space: the grid of keys, the prefix tree, the search bar, the key panel | [features/key-space.md](features/key-space.md) |
 | Finding text across a schema | [features/search.md](features/search.md) |

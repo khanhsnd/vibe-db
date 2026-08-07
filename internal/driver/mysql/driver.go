@@ -70,13 +70,21 @@ func (*Driver) Open(
 
 	s := &session{db: db, release: transport.release}
 	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
+	s.Data = sqlkit.Data{
+		Dialect: dialect,
+		Columns: s.columns,
+		Open:    func(string) (sqlkit.Queryer, error) { return s.db, nil },
+		Fail:    translateError,
+	}
 	return s, nil
 }
 
 type session struct {
-	// The schema changes the two engines spell alike come from here; `ddl.go` overrides the
-	// four that do not.
+	// The schema changes the engines spell alike come from here; `ddl.go` overrides the few that
+	// do not, and `Data` is the reads and writes of rows, which none of them spells differently
+	// once the quoting and the paging are the dialect's.
 	sqlkit.DDL
+	sqlkit.Data
 
 	db *sql.DB
 	// release forgets the dialler and the TLS configuration this session registered with

@@ -10,30 +10,40 @@ double-click on a tile does both. `Back` in the form returns to the grid, which 
 existing connection changes engine: editing one opens straight on the form, since it already has a
 type.
 
-Everything the form defaults to comes from that choice: port 3306 and user `root` for MySQL, 5432
-and `postgres` for PostgreSQL, 27017 and **no user at all** for MongoDB, 6379 and no user for Redis —
-a server started without access control takes no credentials, and a name filled in for it would be a
-name the reader had to clear. Going back and choosing another engine rewrites only the fields that
-still hold the old engine's default, so a typed port survives the switch. The editor loads that
-engine's own language for highlighting and completion — SQL for two of them, the shell for MongoDB,
-and commands for Redis; see [editor.md](../editor.md).
+Everything the form defaults to comes from that choice: the port, the usual administrator's name,
+and what the Database box is even *called*. The whole table of it is
+[features/engines.md](engines.md#what-a-connection-asks-for). Going back and choosing another engine
+rewrites only the fields that still hold the old engine's default, so a typed port survives the
+switch. The editor loads that engine's own language for highlighting and completion — a SQL dialect
+for five of them, the shell for MongoDB, and commands for Redis; see [editor.md](../editor.md).
 
 **Every connection wears its engine's chip** — the dolphin on teal for MySQL, the elephant on blue
-for PostgreSQL, the leaf on green for MongoDB, the stack of discs on red for Redis — in the tree, in
-the dialog's header and in the status bar. It replaces the engine badge the tree used to carry on the right of a connection row, which is
-where the **connection status dot** now sits: what the connection *is* on the left, how it is *doing*
-on the right.
+for PostgreSQL, the turned page for SQLite, the window pane for SQL Server, the ring for Oracle, the
+leaf on green for MongoDB, the stack of discs on red for Redis — in the tree, in the dialog's header
+and in the status bar. It replaces the engine badge the tree used to carry on the right of a
+connection row, which is where the **connection status dot** now sits: what the connection *is* on
+the left, how it is *doing* on the right.
 
-Two things differ rather than just defaulting:
+Some engines differ rather than just defaulting:
 
+- **SQLite has no server.** The General tab is one `Database file` box with a `Browse` beside it, and
+  the host, port, user and password are not there at all — see
+  [engines.md](engines.md#what-a-connection-asks-for) for why they are absent rather than disabled.
+  An SSH tunnel is refused, and so is a file that is not already there.
 - **PostgreSQL needs a database.** A session is bound to one for life, so that is the database the
   connection bootstraps from — the one its database list is read in. Reaching any other database dials
   it separately, which the adapter does on first use.
-- **MongoDB needs none.** One connection reads every database on the server, so a database named here
-  is a *starting point* and nothing more: it is where a command carrying no namespace goes. TLS is on
-  or it is not — the driver has no opportunistic mode — so `Preferred` connects in the clear, and the
-  two cloud identity methods are refused outright rather than sent as a password no MongoDB
-  authentication mechanism would take.
+- **Oracle needs a service, not a database.** The box is labelled `Service name` because that is what
+  it holds: an Oracle connection asks the listener for a service, and what the tree lists under it are
+  *schemas*. Oracle also has no opportunistic TLS — a listener endpoint is TCP or TCPS and the client
+  has to know which before it dials — so `Preferred` connects in the clear.
+- **SQL Server needs none.** One pool reads every database on the server, its names carrying both the
+  database and the schema, so a database named here is a *starting point*: it is where a statement
+  carrying no namespace goes.
+- **MongoDB needs none**, for the same reason and with the same meaning. TLS is on or it is not — the
+  driver has no opportunistic mode — so `Preferred` connects in the clear, and the two cloud identity
+  methods are refused outright rather than sent as a password no MongoDB authentication mechanism
+  would take.
 - **Redis takes a database *number*.** Its databases are not named but numbered — `0` to `15` on a
   default install — and the set is fixed when the server starts, so the box takes an index and blank
   means `0`. Anything that is not a number is refused before anything is dialled. The two cloud
