@@ -1,10 +1,12 @@
 import {
   useId,
+  useState,
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
 
@@ -89,6 +91,41 @@ export function TextInput({ invalid, className, ...rest }: TextInputProps) {
       )}
       {...rest}
     />
+  )
+}
+
+/**
+ * A secret, hidden by default with an eye to read it back. Every password box in the app is this
+ * one: a pass phrase mistyped behind dots is a connection that fails for no visible reason, and the
+ * eye is what turns that into something the reader can see before they press Connect. Nothing is
+ * remembered — closing the box hides it again.
+ */
+export function PasswordInput({ className, ...rest }: TextInputProps) {
+  const [shown, setShown] = useState(false)
+  const label = shown ? 'Hide password' : 'Show password'
+
+  return (
+    <div className="relative">
+      {/* WebView2 puts an eye of its own inside every password box, which would sit beside this
+          one saying the same thing. Ours is the one that stays: the native button only reveals
+          while it is held down, and it is absent the moment the box is switched to text. */}
+      <TextInput
+        type={shown ? 'text' : 'password'}
+        className={cn('pr-8 [&::-ms-reveal]:hidden', className)}
+        {...rest}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        aria-label={label}
+        title={label}
+        disabled={rest.disabled}
+        onClick={() => setShown((was) => !was)}
+        className="absolute inset-y-0 right-0 grid w-8 place-items-center text-faint hover:text-fg disabled:opacity-50"
+      >
+        {shown ? <EyeOff size={13} /> : <Eye size={13} />}
+      </button>
+    </div>
   )
 }
 

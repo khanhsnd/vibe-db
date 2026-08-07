@@ -10,6 +10,17 @@ double-click on a tile does both. `Back` in the form returns to the grid, which 
 existing connection changes engine: editing one opens straight on the form, since it already has a
 type.
 
+**The grid is searched, and what is already in use sits above it.** A box at the top narrows the
+tiles by name as it is typed, and `Enter` takes a choice whole: the tile in force where it still
+matches what was typed, and the first match where it does not — so `mon` and `Enter` is a
+connection type chosen without the mouse. `Esc` empties the box. Above the grid is **Recent**: up to
+four engines this reader already has a connection to, newest first, drawn as chips rather than tiles
+so they read as a shortcut *into* the grid and never as a second copy of it. Nothing is stored to
+know them and there is nothing to keep in step — a profile is appended to `connections.json` as it is
+saved, so the end of that list is the newest connection made. A reader with no connections yet sees
+only the grid, and a search hides the row: what was typed is the narrowing, and two narrowings at
+once say less than one.
+
 Everything the form defaults to comes from that choice: the port, the usual administrator's name,
 and what the Database box is even *called*. The whole table of it is
 [features/engines.md](engines.md#what-a-connection-asks-for). Going back and choosing another engine
@@ -23,6 +34,12 @@ leaf on green for MongoDB, the stack of discs on red for Redis — in the tree, 
 and in the status bar. It replaces the engine badge the tree used to carry on the right of a
 connection row, which is where the **connection status dot** now sits: what the connection *is* on
 the left, how it is *doing* on the right.
+
+**A connection being dialled wears a spinner where its chip goes**, and takes the chip back the
+moment the session lands or the attempt fails. It says nothing the dot on the right does not already
+say — it says it where the reader is looking, which is the row they have just pressed. Dialling a
+bastion and then a server behind it takes long enough to be doubted, and a doubted press is a second
+press.
 
 Some engines differ rather than just defaulting:
 
@@ -55,6 +72,13 @@ The form is three tabs, because the three answer different questions and only th
 every time: **General** is where the server is, **Security** is what it is held to, and **SSH** is
 what carries the connection there. Every tab is the same height, so switching one never moves the
 footer under it.
+
+**Every password box has an eye.** The password, the SSH pass phrase and the prompt that asks for one
+at connect time are all the same control, and all three open hidden with a button that reads the
+secret back. A pass phrase mistyped behind dots is a connection that fails for no visible reason,
+which is a reader changing a setting that was never wrong. Nothing is remembered: the box is hidden
+again the next time it is opened, and what is shown is only ever what was just typed — a saved
+password never comes back out of the credential store to be looked at.
 
 ### Security
 

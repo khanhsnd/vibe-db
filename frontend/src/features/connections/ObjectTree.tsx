@@ -13,6 +13,7 @@ import {
   FolderOpen,
   KeyRound,
   Link,
+  Loader2,
   Server,
   Sigma,
   Table2,
@@ -225,7 +226,17 @@ export function ObjectTree({
                 )}
 
                 {node.engine ? (
-                  <EngineIcon engine={node.engine} />
+                  // A connection being dialled wears a spinner where its chip goes — the one place
+                  // in the tree an icon says what is *happening* rather than what a row is. A dot
+                  // on the far right is easy to miss on the row the reader has just pressed, and
+                  // dialling a bastion and a server behind it takes long enough to be doubted.
+                  node.status === 'connecting' ? (
+                    <span className="grid h-4 w-4 shrink-0 place-items-center" title="Connecting…">
+                      <Loader2 size={13} className="animate-spin text-accent" />
+                    </span>
+                  ) : (
+                    <EngineIcon engine={node.engine} />
+                  )
                 ) : (
                   <Icon
                     size={13}

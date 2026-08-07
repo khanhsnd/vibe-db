@@ -3,7 +3,7 @@ import { KeyRound, Plug } from 'lucide-react'
 
 import { Button } from '@/shared/ui/Button'
 import { Dialog } from '@/shared/ui/Dialog'
-import { Field, TextInput } from '@/shared/ui/Field'
+import { Field, PasswordInput } from '@/shared/ui/Field'
 
 interface PasswordPromptProps {
   open: boolean
@@ -45,9 +45,8 @@ export function PasswordPrompt({ open, target, onOpenChange, onSubmit }: Passwor
     >
       <Field label="Password">
         {(id) => (
-          <TextInput
+          <PasswordInput
             id={id}
-            type="password"
             autoFocus
             value={password}
             onChange={(e) => setPassword(e.target.value)}

@@ -29,7 +29,7 @@ import { files } from '@/bridge/files'
 import { ResultTabs } from '@/features/results/ResultTabs'
 import { Banner } from '@/shared/ui/Banner'
 import { Button } from '@/shared/ui/Button'
-import { Checkbox, Field, SelectInput, TextInput } from '@/shared/ui/Field'
+import { Checkbox, Field, PasswordInput, SelectInput, TextInput } from '@/shared/ui/Field'
 import { Dialog } from '@/shared/ui/Dialog'
 import { useConnectionsStore } from '@/stores/connections'
 
@@ -285,9 +285,8 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                           hint={passwordHint(form, auth.minted, Boolean(initial?.id))}
                         >
                           {(id) => (
-                            <TextInput
+                            <PasswordInput
                               id={id}
-                              type="password"
                               disabled={auth.minted}
                               value={form.password}
                               onChange={(e) => update('password', e.target.value)}
@@ -544,9 +543,8 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                       hint={sshSecretHint(form)}
                     >
                       {(id) => (
-                        <TextInput
+                        <PasswordInput
                           id={id}
-                          type="password"
                           disabled={!form.ssh.enabled}
                           value={form.sshSecret}
                           onChange={(e) => update('sshSecret', e.target.value)}
