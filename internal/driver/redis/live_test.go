@@ -2,7 +2,9 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -198,6 +200,96 @@ func TestLiveAgainstARealServer(t *testing.T) {
 		}
 	})
 
+	// A page samples a value on purpose — a hundred keys must not be a million members — so the panel
+	// that looks at one key asks for that one whole. Both halves of the bargain are checked here: a
+	// page still cuts, and a whole read does not.
+	t.Run("A page samples a large value and a whole read does not", func(t *testing.T) {
+		// A sorted set, because its page read is a *range* and cuts at fifty however the server feels.
+		// `HSCAN` and `SSCAN` take a COUNT that is only a hint, so a hash of this size comes back whole
+		// anyway — which is the same reason a whole read of one cannot be a single `HSCAN` either.
+		var command strings.Builder
+		command.WriteString("ZADD big:zset")
+		for i := range 130 {
+			fmt.Fprintf(&command, " %d member:%03d", i, i)
+		}
+		run(t, live, ns, command.String())
+		t.Cleanup(func() { run(t, live, ns, "UNLINK big:zset") })
+
+		only := driver.TableGroup{Children: []driver.TableCriterion{
+			driver.TableFilter{Column: columnKey, Op: driver.FilterEqual, Values: []string{"big:zset"}},
+		}}
+
+		page, err := live.TableRows(ctx, driver.TablePage{Namespace: ns, Table: keySpace, Filter: only})
+		if err != nil {
+			t.Fatalf("TableRows() error = %v", err)
+		}
+		if len(page.Rows) != 1 {
+			t.Fatalf("a filter naming one key found %d rows, want 1", len(page.Rows))
+		}
+		sampled := *page.Rows[0][2]
+		if !strings.HasSuffix(sampled, "… 50 of 130") {
+			t.Errorf("a page's value = %.60s…, want it to end `… 50 of 130`", sampled)
+		}
+
+		whole, err := live.TableRows(ctx, driver.TablePage{
+			Namespace: ns,
+			Table:     keySpace,
+			Filter:    only,
+			Whole:     true,
+		})
+		if err != nil {
+			t.Fatalf("TableRows(Whole) error = %v", err)
+		}
+
+		held := *whole.Rows[0][2]
+		if strings.Contains(held, "…") {
+			t.Errorf("a whole value carries the sample mark: %.80s…", held)
+		}
+		var fields map[string]string
+		if err := json.Unmarshal([]byte(held), &fields); err != nil {
+			t.Fatalf("a whole value is not readable JSON: %v", err)
+		}
+		if len(fields) != 130 {
+			t.Errorf("a whole value holds %d members, want all 130", len(fields))
+		}
+		if fields["member:129"] != "129" {
+			t.Errorf("member:129 = %q, want the last one to be there", fields["member:129"])
+		}
+	})
+
+	t.Run("A filter naming one key looks it up rather than scanning for it", func(t *testing.T) {
+		only := func(name string) driver.TableGroup {
+			return driver.TableGroup{Children: []driver.TableCriterion{
+				driver.TableFilter{Column: columnKey, Op: driver.FilterEqual, Values: []string{name}},
+			}}
+		}
+
+		page, err := live.TableRows(ctx, driver.TablePage{
+			Namespace: ns,
+			Table:     keySpace,
+			Filter:    only("user:1"),
+		})
+		if err != nil {
+			t.Fatalf("TableRows() error = %v", err)
+		}
+		if len(page.Rows) != 1 || *page.Rows[0][0] != "user:1" {
+			t.Fatalf("a lookup found %v, want just user:1", page.Rows)
+		}
+
+		// A key that is not there is no rows, not an error and not every key.
+		gone, err := live.TableRows(ctx, driver.TablePage{
+			Namespace: ns,
+			Table:     keySpace,
+			Filter:    only("nothing:here"),
+		})
+		if err != nil {
+			t.Fatalf("TableRows() error = %v", err)
+		}
+		if len(gone.Rows) != 0 {
+			t.Errorf("a key that is not there found %d rows, want none", len(gone.Rows))
+		}
+	})
+
 	t.Run("A clock is read in seconds and only where there is one", func(t *testing.T) {
 		rows, err := live.TableRows(ctx, driver.TablePage{Namespace: ns, Table: keySpace})
 		if err != nil {
@@ -310,6 +402,93 @@ func TestLiveAgainstARealServer(t *testing.T) {
 		reply = run(t, live, ns, "HLEN session:4012")
 		if got := *reply.Rows[0][0]; got != "3" {
 			t.Errorf("fields = %q, want 3", got)
+		}
+	})
+
+	// The type is not a cell of its own: it travels with the value, because on this engine the two
+	// are one fact. So changing it is a value write that names the type it is to be written as, and
+	// what it does is empty the key and refill it — which is the whole of what a Redis key changing
+	// type can mean.
+	t.Run("A key is written as a different type", func(t *testing.T) {
+		edit := driver.CellEdit{
+			Namespace: ns,
+			Table:     keySpace,
+			Column:    columnValue,
+			Key:       map[string]string{columnKey: "session:4012"},
+			Value:     cell(`["a","b","c"]`),
+			ValueType: typeList,
+		}
+		if err := live.UpdateCell(ctx, edit); err != nil {
+			t.Fatalf("UpdateCell() error = %v", err)
+		}
+
+		if got := *run(t, live, ns, "TYPE session:4012").Rows[0][0]; got != typeList {
+			t.Errorf("type = %q, want %q", got, typeList)
+		}
+		// A list reply is numbered, so the element is the second column — see the reply-shape test.
+		elements := run(t, live, ns, "LRANGE session:4012 0 -1")
+		if len(elements.Rows) != 3 || *elements.Rows[0][1] != "a" {
+			t.Errorf("LRANGE = %v, want the three elements written", elements.Rows)
+		}
+
+		// And back again, which is the same write the other way about.
+		edit.Value = cell(`{"domain":"10.0.0.1","port":"80","live":"yes"}`)
+		edit.ValueType = typeHash
+		if err := live.UpdateCell(ctx, edit); err != nil {
+			t.Fatalf("UpdateCell() error = %v", err)
+		}
+		if got := *run(t, live, ns, "TYPE session:4012").Rows[0][0]; got != typeHash {
+			t.Errorf("type = %q, want %q", got, typeHash)
+		}
+	})
+
+	t.Run("A value the new type cannot read is refused whole", func(t *testing.T) {
+		edit := driver.CellEdit{
+			Namespace: ns,
+			Table:     keySpace,
+			Column:    columnValue,
+			Key:       map[string]string{columnKey: "session:4012"},
+			// A hash's own JSON is not a list's, so nothing here is writable as a list.
+			Value:     cell(`{"domain":"10.0.0.1"}`),
+			ValueType: typeList,
+		}
+		if err := live.UpdateCell(ctx, edit); err == nil {
+			t.Fatal("UpdateCell() took a value the type cannot read")
+		}
+
+		// Refused *before* a command was sent, so the key is exactly as it was.
+		if got := *run(t, live, ns, "TYPE session:4012").Rows[0][0]; got != typeHash {
+			t.Errorf("type = %q, want the key left alone as a %s", got, typeHash)
+		}
+	})
+
+	t.Run("A type this adapter cannot write says so", func(t *testing.T) {
+		edit := driver.CellEdit{
+			Namespace: ns,
+			Table:     keySpace,
+			Column:    columnValue,
+			Key:       map[string]string{columnKey: "session:4012"},
+			Value:     cell("[]"),
+			ValueType: typeStream,
+		}
+		err := live.UpdateCell(ctx, edit)
+		var unsupported domain.UnsupportedError
+		if !errors.As(err, &unsupported) {
+			t.Fatalf("UpdateCell() error = %v, want an Unsupported", err)
+		}
+	})
+
+	t.Run("The type is not a cell that can be written on its own", func(t *testing.T) {
+		edit := driver.CellEdit{
+			Namespace: ns,
+			Table:     keySpace,
+			Column:    columnType,
+			Key:       map[string]string{columnKey: "session:4012"},
+			Value:     cell(typeList),
+		}
+		var unsupported domain.UnsupportedError
+		if err := live.UpdateCell(ctx, edit); !errors.As(err, &unsupported) {
+			t.Fatalf("UpdateCell() error = %v, want an Unsupported", err)
 		}
 	})
 

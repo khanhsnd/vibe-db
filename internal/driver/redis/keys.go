@@ -161,7 +161,7 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 		return driver.TableRows{}, err
 	}
 
-	names, err := scanKeys(ctx, client, glob(page.Filter))
+	names, err := keyNames(ctx, client, page.Filter)
 	if err != nil {
 		return driver.TableRows{}, err
 	}
@@ -186,7 +186,7 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 	}
 
 	window := cut(rows, page.Offset, page.Limit)
-	filled, err := fill(ctx, client, window)
+	filled, err := fill(ctx, client, window, page.Whole)
 	if err != nil {
 		return driver.TableRows{}, err
 	}
@@ -210,7 +210,7 @@ func (s *session) streamRows(
 	window := cut(rows, page.Offset, page.Limit)
 
 	for start := 0; start < len(window); start += streamBatch {
-		filled, err := fill(ctx, client, window[start:min(start+streamBatch, len(window))])
+		filled, err := fill(ctx, client, window[start:min(start+streamBatch, len(window))], page.Whole)
 		if err != nil {
 			return err
 		}
@@ -241,6 +241,53 @@ func cut(rows []keyRow, offset, limit int) []keyRow {
 		rows = rows[:limit]
 	}
 	return rows
+}
+
+// keyNames is the keys a filter admits — **looked up** where it names exactly one, and scanned where
+// it does not.
+//
+// The difference is not a nicety. `SCAN` walks the whole key space however narrow its pattern, so a
+// read of one named key would cost a walk of a million of them; the panel under the grid makes exactly
+// that read every time it needs a value whole. `EXISTS` is one round trip and answers the same
+// question — which keys of this filter are there — for the one case where the answer is at most one.
+func keyNames(
+	ctx context.Context,
+	client *goredis.Client,
+	filter driver.TableGroup,
+) ([]string, error) {
+	name, exact := exactKey(filter)
+	if !exact {
+		return scanKeys(ctx, client, glob(filter))
+	}
+
+	held, err := client.Exists(ctx, name).Result()
+	if err != nil {
+		return nil, translateError(err)
+	}
+	if held == 0 {
+		return []string{}, nil
+	}
+	return []string{name}, nil
+}
+
+// exactKey is the key a filter names when it names one and only one — `Key = user:1`. It reads the
+// same place `glob` reads and refuses the same shapes: a top-level `OR` narrows nothing on its own, so
+// a condition inside one is never the whole answer.
+func exactKey(filter driver.TableGroup) (string, bool) {
+	if filter.Conjunction == driver.ConjunctionOr && len(filter.Children) > 1 {
+		return "", false
+	}
+
+	for _, child := range filter.Children {
+		one, ok := child.(driver.TableFilter)
+		if !ok || one.Op != driver.FilterEqual || len(one.Values) == 0 {
+			continue
+		}
+		if name, known := canonical(one.Column); known && name == columnKey {
+			return one.Values[0], true
+		}
+	}
+	return "", false
 }
 
 // scanKeys walks the whole key space, or the part of it a glob admits. It is a loop because SCAN is
@@ -314,7 +361,10 @@ func narrow(
 			}
 		}
 
-		read, err := readRows(ctx, client, rows, wanted[columnValue])
+		// A filter reads what it needs to compare against, and compares against the *sample* — which
+		// is the bound `filterValueCap` exists for. Asking for the whole of every candidate's value
+		// to answer `Value contains x` would be reading the database to narrow it.
+		read, err := readRows(ctx, client, rows, wanted[columnValue], false)
 		if err != nil {
 			return nil, err
 		}
@@ -334,11 +384,17 @@ func narrow(
 	return kept, nil
 }
 
-// fill reads the values of the rows the reader is about to see, and nothing else's.
-func fill(ctx context.Context, client *goredis.Client, rows []keyRow) ([]keyRow, error) {
+// fill reads the values of the rows the reader is about to see, and nothing else's. A read asking for
+// them **whole** always reads again, however much was already held: what a filter left behind is a
+// sample, and handing that back would be answering a request for the whole with part of it.
+func fill(ctx context.Context, client *goredis.Client, rows []keyRow, whole bool) ([]keyRow, error) {
+	if whole {
+		return readRows(ctx, client, rows, true, true)
+	}
+
 	for _, row := range rows {
 		if !row.valued {
-			return readRows(ctx, client, rows, true)
+			return readRows(ctx, client, rows, true, false)
 		}
 	}
 	return rows, nil
@@ -356,6 +412,7 @@ func readRows(
 	client *goredis.Client,
 	rows []keyRow,
 	withValue bool,
+	whole bool,
 ) ([]keyRow, error) {
 	filled := append([]keyRow(nil), rows...)
 
@@ -386,6 +443,19 @@ func readRows(
 	}
 
 	if !withValue {
+		return filled, nil
+	}
+
+	// A whole read is a read of one key, so it is one command per value and no pipeline: the two
+	// commands that make a page cheap are cursors, and a cursor read once is not a whole value.
+	if whole {
+		for i := range filled {
+			value, err := wholeValue(ctx, client, filled[i].name, filled[i].kind)
+			if err != nil {
+				return nil, err
+			}
+			filled[i].value, filled[i].valued = value, true
+		}
 		return filled, nil
 	}
 

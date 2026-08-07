@@ -7,6 +7,7 @@ export namespace app {
 	    column: string;
 	    value?: string;
 	    key: Record<string, string>;
+	    valueType: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new CellEditInput(source);
@@ -20,6 +21,7 @@ export namespace app {
 	        this.column = source["column"];
 	        this.value = source["value"];
 	        this.key = source["key"];
+	        this.valueType = source["valueType"];
 	    }
 	}
 	export class ColumnInput {
@@ -1720,6 +1722,7 @@ export namespace app {
 	    offset: number;
 	    sort: TableSortInput[];
 	    filter: TableCriterionInput;
+	    whole: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new TablePageInput(source);
@@ -1735,6 +1738,7 @@ export namespace app {
 	        this.offset = source["offset"];
 	        this.sort = this.convertValues(source["sort"], TableSortInput);
 	        this.filter = this.convertValues(source["filter"], TableCriterionInput);
+	        this.whole = source["whole"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

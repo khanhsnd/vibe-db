@@ -354,12 +354,13 @@ inferred from a sample: they are the same five on every Redis server there has e
 | `TTL` | Seconds until the key expires, and **empty** for a key nobody put a clock on. Empty is not zero: zero would mean it has already gone |
 | `Size` | What `MEMORY USAGE` says the key costs, and empty on a server that will not answer that |
 
-**Four of the five can be edited in place, and each is a different command.** Writing `Value` writes
+**Four of the five can be written, and each is a different command.** Writing `Value` writes
 the value **whole** — the JSON in the cell is what the key becomes — and the key's expiry survives
 it. Writing `TTL` is `EXPIRE`, and *clearing* it is `PERSIST` rather than an expiry of zero, which
 the server reads as *now* and answers by deleting the key. Writing `Key` renames it, and is refused
-if a key of that name is already there rather than taking it. `Type` and `Size` are not the reader's
-to change: a type is what the value is, so the value is what to change.
+if a key of that name is already there rather than taking it. `Type` is written **with** the value
+rather than on its own — a key's type is what its value is, so the two are one fact and one write; see
+[the panel](#the-key-panel-is-always-open). `Size` is nobody's to change.
 
 A value the grid could only **sample** refuses to be written back, and says so: whatever it did not
 show would go with the edit.
@@ -437,20 +438,57 @@ the same act, and the band says so.
 
 It holds the four things a key is: its **name**, its **type**, its **value** and its **clock**. Its
 layout is four fixed rows with the value taking the slack, so nothing rides over the clock however
-short the panel is dragged. The clock is two controls and not one: **No expiry** and **Expire In
-(seconds)**, because clearing the box is what takes a clock off and zero would delete the key.
+short the panel is dragged.
 
-**The type is shown and not picked — except on a key that is not there yet.** A type is what the value
-*is*, so changing one on a key that exists is changing the value, and the driver refuses it. A key the
-reader has just **added** has nothing to contradict, and its type is what decides which command writes
-it, so there it is a list of the six.
+**The clock is said three ways**: **No expiry**, **Expire In (seconds)**, and **Expire At (Local
+Time)** — a moment, picked in the platform's own calendar as every other date in the app is. Only the
+first is a different fact; the other two are one number said two ways, so switching between them keeps
+what was said and the panel shows how many seconds off the moment picked is. What the key actually
+holds is always the **seconds**, because that is what a Redis clock is: converting here rather than
+storing a date is what stops the two drifting apart between the write and the next read. A moment
+already **past** is refused rather than sent — the server reads an expiry of zero as *now* and answers
+by deleting the key.
 
-**The value is read and written as text**, in the ordinary [value viewer](#reading-a-value-whole) — laid
-out, syntax-coloured, and typed into in whichever view it is read in. It is not a table of fields, and
-that is deliberate twice over: the driver already spells a container as JSON precisely so that what is
-drawn is what an edit hands back, so a field table would be a second notation for the one thing the app
-has exactly one notation for — and it would be a second grid inside a panel, with a header, a gutter and
-an editor opening under every click, for a value that is usually a dozen short lines.
+**The type is picked, and picking one is a promise about the box below it.** A type is what the value
+*is*, so there is no converting a key: what happens is that the key is **emptied and refilled** as the
+type chosen, from the text standing in the value box. A hash written as a list is that list; a value the
+new type cannot read — a hash's own JSON asked to be a list — is refused *before* a single command is
+sent, so the key is left exactly as it was.
+
+That is also why the type is **not a cell of its own**. Writing it apart from the value could not work
+in either order: a value in the new type's shape is refused by the old type's parser, and a type change
+on its own has nothing but the old value to re-express. So the two travel as one write
+(`driver.CellEdit.ValueType`), which is what makes changing a key's type and its value **one** press of
+Apply. Editing the `Type` cell directly says so rather than half-working.
+
+A **stream** is the one type that cannot be written: its ids are the server's and it is append-only.
+Picking it says so before anything is sent.
+
+**The two values whose members are pairs are laid out as those pairs; the rest are read whole as
+text.** A hash's members have names the reader thinks in and a sorted set's have ranks, so each is two
+columns — **Field** and **Value** for a hash, **Element** and **Score** for a sorted set, the score
+drawn as the number it is — with `+` and `−` to add a member and take one out, and a count under them.
+A list and a set are positions rather than pairs, so they are read in the ordinary
+[value viewer](#reading-a-value-whole) like every other value in the app, laid out and syntax-coloured,
+and so is a string.
+
+Either way it is the **same JSON**: the members are read out of what the driver wrote and written back
+into what it parses, so the table is a *layout* and never a second notation. Text that cannot be read as
+members — which is what the box holds the moment a reader starts retyping a value into some other shape
+— falls back to the viewer, so there is always a box under them.
+
+**The panel reads the whole value, even where the grid could only carry a sample of it.** The grid's
+own bound is what makes a page answerable — a hundred keys must not be a million members — but the
+panel is looking at *one* key, and there is nothing left there for the bound to protect. So a key whose
+row ends `… 50 of 117` opens with all hundred and seventeen, and is fully editable.
+
+It is an ordinary row read narrowed to that one key, not a call of its own. Two things make it cheap:
+a filter naming exactly one key is **looked up** rather than scanned for — `SCAN` walks the whole key
+space however narrow its pattern, so reading one value would otherwise cost a walk of a million — and
+nothing is read at all where the row already carried the value whole, which is nearly every key.
+
+While it is on its way the sample stands, so the panel never goes blank; when it lands the panel starts
+again on it, a draft typed against a sample never having been writable anyway.
 
 **Apply stages, and the footer's Apply writes** — the same two steps the cell editor has on every
 other surface, and the reason it matters here is that a rename, a new value and a new clock are three
@@ -459,6 +497,12 @@ every command before it names the key by the name it had.
 
 A value the grid could only sample, a **stream** and a module's own type all refuse to be written, and
 the panel says which before anything is typed rather than after Apply.
+
+**What such a value refuses is itself, and nothing else about the key.** A rename is `RENAME` and a
+clock is `EXPIRE`, and neither so much as reads what the key holds — so a key whose value is a sample
+can still be renamed and still be given an expiry, and Apply is live for exactly those. Blocking them
+too would mean a key that happened to be large could never be given a clock at all, which is the
+opposite of what the refusal is protecting.
 
 ### What a right-click on a key offers
 
@@ -471,11 +515,12 @@ sorted scan. What is left is what a reader does to a key.
 being the footer's own buttons reached without travelling to the bar — and then **View Value**,
 **Copy**, **Copy Field Name**, **Copy As**, **Save Data As** and **Refresh**.
 
-**A key is added beside another one**, so the box opens with the key that was picked rather than empty:
-a sibling shares its whole prefix, and retyping it would be the reader's first act every single time. A
-**branch** hands over its prefix and the colon, which is the same intent one level up — the reader is
-adding a key *in* that folder. It is a starting point and not a name: the insert refuses a key that is
-already there, which is what makes the suffix the only thing left to change.
+**A key is added inside the folder the reader is looking in**, so the box opens with **that prefix and
+the colon** rather than empty, and the whole of what is left to type is the tail. It is the same answer
+whichever row is picked — a branch *is* that folder, and a leaf is a key in one, so its prefix is
+everything up to its last colon — which is what makes the button mean one thing wherever the reader
+happens to be standing. A key with no colon in it is at the top and offers nothing, which is the empty
+box.
 
 **The rows are in key order** before a page is cut from them, because `SCAN` has no order of its own
 and a page cut from an unordered list is a different page every time it is read. Sorting by any other

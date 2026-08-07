@@ -151,6 +151,15 @@ type TablePage struct {
 	// Stream, when set, takes the rows as they are read and the read then answers with none of
 	// them. A page that leaves it nil is answered whole, which is what every bounded read is.
 	Stream *RowStream
+	// Whole asks for values as they *are* rather than for as much of one as a row can carry. It
+	// means nothing on an engine that never samples a value, which is every engine but the key-value
+	// one — a Redis container is drawn as its first fifty members precisely so that a page of a
+	// hundred keys cannot be a million members (see `redis.sampled`).
+	//
+	// It is set by a read of **one** key that is going to be looked at whole, which is what the panel
+	// under a key space is. A page never sets it: the bound is what makes the grid answerable, and
+	// lifting it for a hundred rows at once would be lifting it for the reason it exists.
+	Whole bool
 }
 
 // RowSearch is one table of a Find in Schema's *data* half: how many of its rows hold the reader's
@@ -446,6 +455,13 @@ type CellEdit struct {
 	Column string
 	Value  *string
 	Key    map[string]string
+	// ValueType is what the value is to be written **as**, on an engine where a value carries a type
+	// the reader picks rather than a column declaring one. It travels with the value and never on its
+	// own, because on such an engine the two cannot be written apart: a Redis key's type *is* what its
+	// value is, so `hash` and `{"a":"1"}` are one fact and two writes of it would each be refused by
+	// the half the other was going to supply. Empty means "whatever the value is already", which is
+	// every edit on every other engine, and a driver with no such notion ignores it.
+	ValueType string
 }
 
 // RowWriteMode is what a row arriving from outside does to the table it is written into. The list

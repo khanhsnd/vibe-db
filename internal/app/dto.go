@@ -153,6 +153,9 @@ type TablePageInput struct {
 	Sort   []TableSortInput `json:"sort"`
 	// Filter is the root of the condition tree, and is therefore always a group.
 	Filter TableCriterionInput `json:"filter"`
+	// Whole asks for values as they are rather than for as much of one as a row can carry, and is set
+	// by a read of one row that is going to be looked at whole — see driver.TablePage.Whole.
+	Whole bool `json:"whole"`
 }
 
 // ColumnValuesInput names the column a filter's value is picked from. The cap on the answer is
@@ -545,12 +548,15 @@ type RowWriteInput struct {
 	Rows    [][]*string `json:"rows"`
 }
 
+// CellEditInput is one cell of one row. `valueType` is what the value is to be written **as**, and is
+// set only on an engine whose value carries a type the reader picks — see driver.CellEdit.
 type CellEditInput struct {
 	Namespace
-	Table  string            `json:"table"`
-	Column string            `json:"column"`
-	Value  *string           `json:"value"`
-	Key    map[string]string `json:"key"`
+	Table     string            `json:"table"`
+	Column    string            `json:"column"`
+	Value     *string           `json:"value"`
+	Key       map[string]string `json:"key"`
+	ValueType string            `json:"valueType"`
 }
 
 type RowValueInput struct {
@@ -630,6 +636,7 @@ func (in TablePageInput) toDriver() driver.TablePage {
 		Offset:    max(in.Offset, 0),
 		Sort:      sort,
 		Filter:    in.Filter.toDriverGroup(),
+		Whole:     in.Whole,
 	}
 }
 
@@ -692,6 +699,7 @@ func (in CellEditInput) toDriver() driver.CellEdit {
 		Column:    in.Column,
 		Value:     in.Value,
 		Key:       in.Key,
+		ValueType: in.ValueType,
 	}
 }
 

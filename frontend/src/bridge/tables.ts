@@ -52,6 +52,14 @@ export interface TablePageRequest {
   sort: TableSortRequest[]
   /** The root of the condition tree. The total is counted through it as well as the rows. */
   filter: TableCriterionRequest
+  /**
+   * Asks for values as they **are** rather than for as much of one as a row can carry. Only an engine
+   * that samples a value has anything to do with it — a Redis container is drawn as its first fifty
+   * members so that a page of a hundred keys cannot be a million of them — and only a read of **one**
+   * row that is going to be looked at whole sets it. A page never does: the bound is what makes the
+   * grid answerable at all.
+   */
+  whole?: boolean
 }
 
 /** Which column a filter's values are picked from, rather than typed into. */
@@ -110,6 +118,13 @@ export interface CellEdit {
   column: string
   value: Cell
   key: Record<string, string>
+  /**
+   * What the value is to be written **as**, on an engine where a value carries a type the reader
+   * picks rather than a column declaring one. It travels with the value and never on its own,
+   * because on such an engine the two cannot be written apart — a Redis key's type *is* what its
+   * value is. Left out everywhere else, which is every SQL edit there is.
+   */
+  valueType?: string
 }
 
 export interface RowValue {

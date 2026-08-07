@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { engineInfo, type Namespace } from '@/bridge/connections'
 import { rowExport, type ExportFormat } from '@/bridge/export'
 import { queries } from '@/bridge/query'
-import { tables, type TablePage } from '@/bridge/tables'
+import { tables, type Cell, type TablePage } from '@/bridge/tables'
 import {
   CellEditor,
   EDITOR_HEIGHT,
@@ -58,6 +58,8 @@ import {
   writeSearch,
   type KeySearch,
 } from './keySpace'
+import { sampledTotal } from './keyValue'
+import { useWholeValue } from './useWholeValue'
 import { TableToolbar, type PanelKind } from './TableToolbar'
 import { useTableData } from './useTableData'
 
@@ -272,6 +274,20 @@ export function TableDataView({
   }, [keySpace, selection, edits.rows, columns, tree, data])
 
   /**
+   * The whole of that key's value, where the page could only carry a sample of it. The grid's bound
+   * is what makes a page of a hundred keys answerable; the panel is looking at one, so there is
+   * nothing there for the bound to protect — see `useWholeValue`.
+   */
+  const whole = useWholeValue({
+    sessionId,
+    namespace,
+    table,
+    key: keyTarget?.name ?? '',
+    sampled: sampledTotal(keyTarget?.value ?? '') !== null,
+    at: loadedAt,
+  })
+
+  /**
    * Where the reader is in the whole table. The rows are paged on the server, so the grid's first
    * row is this page's first row and the read's own offset is what puts it in the table — and with
    * nothing focused, the page's first row is where the reader is.
@@ -289,22 +305,31 @@ export function TableDataView({
   /**
    * The draft lands after every fetched row, and is selected so a paste that follows means it.
    *
-   * On a key space it opens with **the key that was selected in the box**: a key is added beside
-   * another one — a sibling under the same prefix — so retyping the prefix would be the reader's first
-   * act every time. A branch hands over its prefix and the separator, which is the same intent one
-   * level up.
+   * On a key space it opens with **the prefix the reader is looking inside**, ending in the separator:
+   * a key is added beside another one, so the whole of what is left to type is the tail. It is the
+   * same answer whichever row is picked — a branch is that folder, and a leaf is a key *in* it — which
+   * is what makes the button mean one thing wherever the reader happens to be standing.
    */
   const addRow = () => {
     setSelection(oneRange(rowRange(grid.rows.length, visible.length)))
-    edits.addRow(keyColumn >= 0 ? { [keyColumn]: addedFrom() } : undefined)
+    edits.addRow(keyColumn >= 0 ? { [keyColumn]: addedUnder() } : undefined)
   }
 
-  /** The name a fresh key opens with: the picked key, or the prefix the reader is looking inside. */
-  const addedFrom = (): string => {
+  /**
+   * The prefix a fresh key opens with. A **branch** is a folder, so it is that folder; a **leaf** is a
+   * key inside one, so it is everything up to its last separator. A key with no separator in it is at
+   * the top and there is no prefix to offer, which is the empty box.
+   */
+  const addedUnder = (): string => {
     const picked = focusOf(selection)?.row
-    const branch = picked === undefined ? undefined : tree?.[picked]?.branch
+    if (picked === undefined) return ''
+
+    const branch = tree?.[picked]?.branch
     if (branch !== undefined) return `${branch}${KEY_SEPARATOR}`
-    return keyTarget?.name ?? ''
+
+    const name = keyTarget?.name ?? ''
+    const at = name.lastIndexOf(KEY_SEPARATOR)
+    return at < 0 ? '' : name.slice(0, at + 1)
   }
 
   const showAllColumns = () => {
@@ -363,22 +388,31 @@ export function TableDataView({
     changeCriteria(writeSearch(next))
   }
 
-  /** Stages a whole key: a rename, a value and a clock are three cells and one write. */
+  /** Stages a whole key: a rename, a type, a value and a clock are one Apply. */
   const applyKey = (edit: KeyEdit) => {
     if (keyTarget === null) return
 
-    const stage = (name: string, value: string | null, was: string | null) => {
+    const stage = (name: string, value: Cell, valueType?: string) => {
       const column = columnAt(columns, name)
-      if (column < 0 || value === was) return
-      edits.setCell({ row: keyTarget.source, column }, value)
+      if (column >= 0) edits.setCell({ row: keyTarget.source, column }, value, valueType)
     }
 
-    // The value first and the name last, which is also the order `useGridEdits` writes them in:
-    // every command names the key by the name it had, so a rename has to be the last of them.
-    stage(TYPE_COLUMN, edit.type, keyTarget.type)
-    stage(VALUE_COLUMN, edit.value, keyTarget.value)
-    stage(TTL_COLUMN, edit.ttl, keyTarget.ttl)
-    stage(KEY_COLUMN, edit.name, keyTarget.name)
+    if (keyTarget.isNew) {
+      // A key that is not on the server yet is *inserted*, and an insert carries its columns as they
+      // stand — so there the type is a cell like any other, and it is what decides how the value is
+      // written.
+      stage(TYPE_COLUMN, edit.type)
+      stage(VALUE_COLUMN, edit.value)
+    } else if (edit.type !== keyTarget.type || edit.value !== keyTarget.value) {
+      // A key that exists is *written*, and there the type cannot be a cell of its own: a key's type
+      // is what its value is, so the two are one fact and one write. Either of them changing is that
+      // write, and the type travels on it — see `driver.CellEdit.ValueType`.
+      stage(VALUE_COLUMN, edit.value, edit.type)
+    }
+
+    if (edit.ttl !== keyTarget.ttl) stage(TTL_COLUMN, edit.ttl)
+    // Last, because every command above names the key by the name it had.
+    if (edit.name !== keyTarget.name) stage(KEY_COLUMN, edit.name)
   }
 
   /**
@@ -427,7 +461,7 @@ export function TableDataView({
       rows: flatRows,
     })
 
-  const failure = edits.error ?? (data ? error : null)
+  const failure = edits.error ?? whole.error ?? (data ? error : null)
 
   /**
    * Which panels are open, named for the splitter. A layout is remembered per *combination*, which
@@ -614,12 +648,13 @@ export function TableDataView({
                   <Empty title="No key selected" hint="Click a key in the grid to edit it." />
                 ) : (
                   <KeyEditor
-                    key={keyTarget.source}
+                    // The whole value arriving is a different value to edit, so the panel starts
+                    // again on it: a draft typed against a sample was never going to be written.
+                    key={`${keyTarget.source}:${whole.value === null ? 'sample' : 'whole'}`}
                     keyName={keyTarget.name}
                     type={keyTarget.type}
-                    value={keyTarget.value}
+                    value={whole.value ?? keyTarget.value}
                     ttl={keyTarget.ttl}
-                    isNew={keyTarget.isNew}
                     busy={edits.saving}
                     onApply={applyKey}
                     formatValue={formatValue}

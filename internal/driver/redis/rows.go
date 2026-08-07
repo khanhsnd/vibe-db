@@ -12,12 +12,19 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/driver"
 )
 
-// Editing a key space is editing keys, and the four columns a reader can change are four different
-// commands rather than four clauses of one. That is the whole of this file: a value is `SET` or a
-// rebuild, a clock is `EXPIRE` or `PERSIST`, a name is `RENAME`, and what a key *is* cannot be
-// changed at all — a type is not a property of a key but of what it holds.
+// Editing a key space is editing keys, and the columns a reader can change are different commands
+// rather than clauses of one. That is the whole of this file: a value is `SET` or a rebuild, a clock
+// is `EXPIRE` or `PERSIST`, a name is `RENAME`, and what a key *is* is not a property of the key at
+// all but of what it holds — so a type is changed by writing the value as that type, and travels
+// with it.
 
 // UpdateCell changes one column of one key.
+//
+// `ValueType` is the one thing here that is not a column: a key's type and its value are **one fact**,
+// so they are written together. Writing them apart could not work in either order — a value in the new
+// type's shape is refused by the old type's parser, and a type change on its own has nothing but the
+// old value to re-express — which is why the type is not a cell that can be written and the panel
+// sends it alongside the value instead.
 func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 	client, err := s.client(edit.Namespace)
 	if err != nil {
@@ -46,20 +53,58 @@ func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 			return valueError("cannot be nothing: a key that holds nothing does not exist, so " +
 				"clearing one is deleting it")
 		}
-		kind, err := client.Type(ctx, key).Result()
+		kind, err := writtenAs(ctx, client, key, edit.ValueType)
 		if err != nil {
-			return translateError(err)
-		}
-		if kind == typeMissing {
-			return domain.ErrUnknownTable
+			return err
 		}
 		return writeValue(ctx, client, key, kind, *edit.Value)
 	case columnType:
-		return domain.Unsupported("changing the type of a key: a type is what the value is, so " +
-			"the value is what to change")
+		return domain.Unsupported("changing a type on its own: a key's type is what its value is, " +
+			"so the two are written together and the value is what carries it")
 	}
 
 	return domain.Unsupported("changing what a key costs")
+}
+
+// writtenAs is the type a value is about to be written as: the one the reader picked, or the one the
+// key already is where they picked none. `writeValue` empties the key before it fills it, so a type
+// the reader *did* pick simply replaces what was there — which is the whole of what changing a key's
+// type means on this engine. A type this adapter cannot write is refused here rather than after the
+// key has been emptied, and a value the new type cannot read is refused by `parseValue` before a
+// single command is sent.
+func writtenAs(
+	ctx context.Context,
+	client *goredis.Client,
+	key string,
+	picked string,
+) (string, error) {
+	if wanted := strings.ToLower(strings.TrimSpace(picked)); wanted != "" {
+		if !writable[wanted] {
+			return "", domain.Unsupported("writing a " + wanted + " value")
+		}
+		return wanted, nil
+	}
+
+	kind, err := client.Type(ctx, key).Result()
+	if err != nil {
+		return "", translateError(err)
+	}
+	if kind == typeMissing {
+		return "", domain.ErrUnknownTable
+	}
+	return kind, nil
+}
+
+// writable is the five types a value can be *written* as. A stream is the sixth type there is and is
+// not among them: its ids are the server's and it is append-only, which is the same refusal
+// `parseValue` already makes — said here so that picking it from a list fails before the key is
+// emptied rather than after.
+var writable = map[string]bool{
+	typeString: true,
+	typeList:   true,
+	typeSet:    true,
+	typeHash:   true,
+	typeZSet:   true,
 }
 
 // keyOf reads the one column that identifies a row. `sqlkit.EditableKeys` is the SQL side of this

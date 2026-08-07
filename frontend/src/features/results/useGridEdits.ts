@@ -26,6 +26,8 @@ export interface EditSource {
 interface PendingEdit {
   ref: CellRef
   value: Cell
+  /** What the value is to be written *as*, where the engine's value carries a type — see `CellEdit`. */
+  valueType?: string
 }
 
 /**
@@ -70,7 +72,12 @@ export function useGridEdits(
 
   const pending = dirtyKeys.size + drafts.length + deleted.size > 0
 
-  const setCell = (ref: CellRef, value: Cell) => {
+  /**
+   * Stages one cell. `valueType` is what that value is to be written *as*, and is set only where the
+   * engine's value carries a type the reader picks — it is what makes a change of type and a change
+   * of value **one** write, which on such an engine they have to be.
+   */
+  const setCell = (ref: CellRef, value: Cell, valueType?: string) => {
     const draft = ref.row - base.length
     if (draft >= 0) {
       setDrafts((current) =>
@@ -85,8 +92,10 @@ export function useGridEdits(
       const next = { ...current }
       const key = cellKey(ref.row, ref.column)
 
-      if (value === original) delete next[key]
-      else next[key] = { ref, value }
+      // An unchanged value is not an edit — unless it is being written as a different type, which
+      // is a change to the cell that the cell's own text cannot show.
+      if (value === original && valueType === undefined) delete next[key]
+      else next[key] = { ref, value, ...(valueType === undefined ? {} : { valueType }) }
 
       return next
     })
@@ -144,6 +153,7 @@ export function useGridEdits(
           column: column.name,
           value: edit.value,
           key: primaryKeyOf(columns, row),
+          ...(edit.valueType === undefined ? {} : { valueType: edit.valueType }),
         })
       }
 

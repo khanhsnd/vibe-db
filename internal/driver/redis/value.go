@@ -95,6 +95,78 @@ func queueValue(ctx context.Context, pipe goredis.Pipeliner, key, kind string) v
 	return read
 }
 
+// wholeValue reads one key's value as it **is**, which is what the panel under a key space asks for —
+// see `driver.TablePage.Whole`. It is a command per value rather than a pipeline, because a whole read
+// is a read of *one* key by construction: the bound exists to keep a page of a hundred answerable, and
+// a page never lifts it.
+//
+// The commands are the unbounded ones and not the same ones with a bigger number: `HSCAN` and `SSCAN`
+// are **cursors**, so one call of either answers with whatever the server felt like handing over and
+// no COUNT changes that — `HGETALL` and `SMEMBERS` are what "all of it" is spelled as. What comes back
+// goes through the same three writers a sampled read uses, so a value read whole and a value sampled
+// are the same notation and the panel is drawing the same thing either way.
+func wholeValue(ctx context.Context, client *goredis.Client, key, kind string) (string, error) {
+	switch kind {
+	case typeString:
+		text, err := client.Get(ctx, key).Result()
+		if err != nil && !isNil(err) {
+			return "", translateError(err)
+		}
+		return text, nil
+
+	case typeList:
+		items, err := client.LRange(ctx, key, 0, -1).Result()
+		if err != nil {
+			return "", translateError(err)
+		}
+		return jsonArray(items), nil
+
+	case typeSet:
+		items, err := client.SMembers(ctx, key).Result()
+		if err != nil {
+			return "", translateError(err)
+		}
+		// A set has no order of its own, so it is shown in one — the same rule the sampled read
+		// follows, and the reason reading the same set twice draws it the same way twice.
+		sort.Strings(items)
+		return jsonArray(items), nil
+
+	case typeHash:
+		held, err := client.HGetAll(ctx, key).Result()
+		if err != nil {
+			return "", translateError(err)
+		}
+		pairs := make([][2]string, 0, len(held))
+		for field, value := range held {
+			pairs = append(pairs, [2]string{field, value})
+		}
+		sort.Slice(pairs, func(a, b int) bool { return pairs[a][0] < pairs[b][0] })
+		return jsonPairs(pairs), nil
+
+	case typeZSet:
+		members, err := client.ZRangeWithScores(ctx, key, 0, -1).Result()
+		if err != nil {
+			return "", translateError(err)
+		}
+		pairs := make([][2]string, 0, len(members))
+		for _, member := range members {
+			name, _ := member.Member.(string)
+			pairs = append(pairs, [2]string{name, strconv.FormatFloat(member.Score, 'f', -1, 64)})
+		}
+		return jsonPairs(pairs), nil
+
+	case typeStream:
+		messages, err := client.XRange(ctx, key, "-", "+").Result()
+		if err != nil {
+			return "", translateError(err)
+		}
+		return jsonStream(messages), nil
+	}
+
+	// A module's type has no general shape, so it reads as its own name — whole or sampled alike.
+	return "(" + kind + ")", nil
+}
+
 // value reads what the pipeline came back with. A string is itself and the five containers are
 // **JSON**, which is the whole reason a value with structure can be edited in a cell at all: what
 // the grid draws is exactly what an edit hands back, and there is no second notation to learn.

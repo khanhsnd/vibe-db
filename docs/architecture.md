@@ -364,11 +364,28 @@ glob: `key begins user OR type is hash` admits every hash in the database, and n
 the first half would hide rows the reader asked for. Nothing in the package quotes anything, for the
 reason nothing in the MongoDB one does: a pattern crosses as an **argument**.
 
+**A key's type is what its value is, so the two are written together.** `driver.CellEdit.ValueType` is
+that one field: a write of the `Value` column may name the type it is to be written *as*, and
+`writeValue` empties the key and refills it — which is the whole of what a Redis key changing type can
+mean. It is not two writes because it could not be: a value in the new type's shape is refused by the
+old type's parser, and a type change alone has nothing but the old value to re-express. So the `Type`
+column is `domain.Unsupported` on its own, and empty `ValueType` means "whatever the key already is",
+which is every edit on every other engine.
+
 **A value is JSON, and that is what makes it editable.** A string is itself; the five container
 types are spelled as JSON — a list as an array, a hash and a sorted set as objects, in field and rank
 order — so what the grid draws is exactly what an edit hands back, and there is no second notation to
 learn. A value too large for a row is **sampled and marked**, and the mark is what makes writing it
 back fail: an edit of a sample would drop whatever was not shown.
+
+**The sample is the page's bound and not the value's**, which is what `TablePage.Whole` is for: a read
+of one key asks for its value as it *is*, and the panel under the grid makes exactly that read. It is
+`wholeValue` and not the same commands with a bigger number, because `HSCAN` and `SSCAN` are cursors —
+one call of either answers with whatever the server felt like, COUNT being a hint — so `HGETALL` and
+`SMEMBERS` are what "all of it" is spelled as. Such a read is one key by construction, so it is a
+command per value and no pipeline. It is also why a filter naming exactly one key is **looked up**
+(`keyNames`, one `EXISTS`) rather than scanned for: `SCAN` walks the whole space however narrow its
+pattern, and reading one value must not cost a walk of a million keys.
 
 **How the reader is shown that key space is the frontend's, and asks the server nothing more.** The
 keys group into a tree on the colon, the panel under the grid edits a container member by member, and
