@@ -22,6 +22,7 @@ import {
 import { countConditions, type Group } from '@/features/results/filter'
 import { pageCount } from '@/features/results/paging'
 import { ResultGrid } from '@/features/results/ResultGrid'
+import { CurlDrawer } from '@/features/results/CurlDrawer'
 import {
   focusOf,
   oneRange,
@@ -134,6 +135,7 @@ export function TableDataView({
   )
   const change = useTableViewsStore((s) => s.change)
   const [selection, setSelection] = useState<Selection | null>(null)
+  const [curlOpen, setCurlOpen] = useState(false)
 
   const setFilterShown = (shown: boolean) => change(tabId, { filterShown: shown })
 
@@ -489,6 +491,7 @@ export function TableDataView({
         filterCount={countConditions(criteria) + sort.length}
         onFilterToggle={() => setFilterShown(!filterShown)}
         onExport={data !== null ? exportRows : undefined}
+        onGenerateCurl={data !== null ? () => setCurlOpen(true) : undefined}
         keySpace={
           keySpace
             ? {
@@ -699,6 +702,12 @@ export function TableDataView({
       </Split>
 
       {failure !== null ? <ErrorStrip error={failure} /> : null}
+
+      <CurlDrawer
+        open={curlOpen}
+        target={{ namespace, table, fields: columns.map((column) => column.name) }}
+        onOpenChange={setCurlOpen}
+      />
 
       <GridFooter
         editable={editable}

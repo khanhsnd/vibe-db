@@ -14,6 +14,7 @@ import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import type { QueryRun } from '@/stores/queries'
 
 import { CellEditor, EDITOR_HEIGHT, EDITOR_MIN_HEIGHT } from './CellEditor'
+import { CurlDrawer, type CurlTarget } from './CurlDrawer'
 import { arrange, moveName, NO_ORDER } from './columnOrder'
 import { GridFooter } from './GridFooter'
 import { GridPager } from './GridPager'
@@ -59,6 +60,7 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
   const [sort, setSort] = useState<readonly SortKey[]>(NO_SORT)
   const [columnOrder, setColumnOrder] = useState<string[]>(NO_ORDER)
   const [cellShown, setCellShown] = useState(false)
+  const [curlTarget, setCurlTarget] = useState<CurlTarget | null>(null)
   const { running, result, error } = run
 
   const grid = result !== null && result.columns.length > 0 ? result : null
@@ -263,6 +265,16 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
               onSortChange={changeSort}
               onMoveColumn={moveColumn}
               onExport={sessionId !== null ? exportRows : undefined}
+              onGenerateCurl={
+                sessionId !== null && grid.table !== ''
+                  ? () =>
+                      setCurlTarget({
+                        namespace: { database: grid.database, schema: grid.schema },
+                        table: grid.table,
+                        fields: arranged.map((entry) => entry.column.name),
+                      })
+                  : undefined
+              }
               cellPanel={{ shown: cellShown, onToggle: () => setCellShown(!cellShown) }}
               onEditInPanel={editInPanel}
               onDeleteRows={editable ? deleteRows : undefined}
@@ -353,6 +365,14 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
           loadedAt={run.loadedAt}
         />
       ) : null}
+
+      <CurlDrawer
+        open={curlTarget !== null}
+        target={curlTarget}
+        onOpenChange={(open) => {
+          if (!open) setCurlTarget(null)
+        }}
+      />
     </div>
   )
 }

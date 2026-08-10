@@ -63,7 +63,8 @@ export function ValueViewer({
   // The *presence* of a formatter decides the views, never its identity: an unstable one would
   // otherwise rebuild the list every render and knock the reader back to the first tab.
   const laidOut = formatValue !== undefined
-  const views = useMemo(() => viewsFor(found.kind, laidOut), [found.kind, laidOut])
+  const editable = onChange !== undefined
+  const views = useMemo(() => viewsFor(found.kind, laidOut, editable), [found.kind, laidOut, editable])
 
   const [view, setView] = useState(views[0] ?? 'raw')
   // A different cell is a different value, and the view it was last read in may not exist here.
@@ -160,7 +161,11 @@ const VIEW_LABEL: Record<ViewKind, string> = {
  * A **document** is the one view a value can be denied: laying it out is the driver's, so a surface
  * with no session to ask has nothing to lay it out with and offers what cannot be wrong instead.
  */
-function viewsFor(kind: ReturnType<typeof detect>['kind'], laidOut: boolean): ViewKind[] {
+function viewsFor(
+  kind: ReturnType<typeof detect>['kind'],
+  laidOut: boolean,
+  editable: boolean,
+): ViewKind[] {
   switch (kind) {
     case 'geojson':
       return ['map', 'json', 'raw']
@@ -169,7 +174,9 @@ function viewsFor(kind: ReturnType<typeof detect>['kind'], laidOut: boolean): Vi
     case 'document':
       return laidOut ? ['document', 'raw'] : ['raw']
     case 'array':
-      return ['list', 'raw']
+      // `Items` is a reading view. An editable cell editor must open on its text input, not make
+      // the reader select Raw before they can change a PostgreSQL array literal.
+      return editable ? ['raw', 'list'] : ['list', 'raw']
     case 'binary':
       return ['image', 'hex', 'raw']
     default:

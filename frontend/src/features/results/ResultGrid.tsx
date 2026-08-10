@@ -237,6 +237,8 @@ interface ResultGridProps {
    * to write leaves this out, which is what keeps the button off an empty result.
    */
   onExport?: ((format: ExportFormat) => void) | undefined
+  /** Opens a generated cURL command for the table represented by this result. */
+  onGenerateCurl?: (() => void) | undefined
   /**
    * Whether the grid draws its own head strip — the **Filter & Sort** button on the left, Export
    * against the right. A surface with a toolbar of its own puts both there and passes `false`, so
@@ -314,8 +316,13 @@ interface ResultGridProps {
 }
 
 /** The head strip has nothing to say for a grid with none of the things it carries. */
-const hasHeadStrip = (props: Pick<ResultGridProps, 'onExport' | 'filtering' | 'cellPanel'>) =>
-  props.onExport !== undefined || props.filtering !== undefined || props.cellPanel !== undefined
+const hasHeadStrip = (
+  props: Pick<ResultGridProps, 'onExport' | 'onGenerateCurl' | 'filtering' | 'cellPanel'>,
+) =>
+  props.onExport !== undefined ||
+  props.onGenerateCurl !== undefined ||
+  props.filtering !== undefined ||
+  props.cellPanel !== undefined
 
 export function ResultGrid({
   result,
@@ -332,6 +339,7 @@ export function ResultGrid({
   columnMenuItems,
   onMoveColumn,
   onExport,
+  onGenerateCurl,
   headStrip = true,
   onEditInPanel,
   cellPanel,
@@ -972,12 +980,13 @@ export function ResultGrid({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {headStrip && hasHeadStrip({ onExport, filtering, cellPanel }) ? (
+      {headStrip && hasHeadStrip({ onExport, onGenerateCurl, filtering, cellPanel }) ? (
         <HeadStrip
           filtering={filtering}
           sort={sort}
           cellPanel={cellPanel}
           onExport={onExport}
+          onGenerateCurl={onGenerateCurl}
         />
       ) : null}
 
@@ -1038,11 +1047,13 @@ function HeadStrip({
   sort,
   cellPanel,
   onExport,
+  onGenerateCurl,
 }: {
   filtering: GridFiltering | undefined
   sort: readonly SortKey[]
   cellPanel: { shown: boolean; onToggle: () => void } | undefined
   onExport: ((format: ExportFormat) => void) | undefined
+  onGenerateCurl: (() => void) | undefined
 }) {
   return (
     <div
@@ -1062,7 +1073,7 @@ function HeadStrip({
       {cellPanel ? (
         <CellEditorButton shown={cellPanel.shown} onToggle={cellPanel.onToggle} />
       ) : null}
-      {onExport ? <ExportMenu onExport={onExport} /> : null}
+      {onExport ? <ExportMenu onExport={onExport} onGenerateCurl={onGenerateCurl} /> : null}
     </div>
   )
 }

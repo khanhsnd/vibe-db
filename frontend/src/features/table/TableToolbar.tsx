@@ -39,6 +39,7 @@ interface TableToolbarProps {
   onFilterToggle: () => void
   /** Left out until there are rows to write, which is what keeps Export off an empty table. */
   onExport?: ((format: ExportFormat) => void) | undefined
+  onGenerateCurl?: (() => void) | undefined
   /** Set only where the namespace is a key space, and then it replaces three of the four above. */
   keySpace?: KeySpaceControls | undefined
 }
@@ -55,6 +56,7 @@ export function TableToolbar({
   filterCount,
   onFilterToggle,
   onExport,
+  onGenerateCurl,
   keySpace,
 }: TableToolbarProps) {
   return (
@@ -96,7 +98,7 @@ export function TableToolbar({
 
       <div className="min-w-2 flex-1" />
 
-      {onExport ? <ExportMenu onExport={onExport} /> : null}
+      {onExport ? <ExportMenu onExport={onExport} onGenerateCurl={onGenerateCurl} /> : null}
     </div>
   )
 }

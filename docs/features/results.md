@@ -93,6 +93,11 @@ file of that format does.
 | JSON | `null`, which is why a reader who needs to tell it from an empty string wants this one |
 | SQL | The `NULL` keyword. Every other value is written as a literal, which both SQL engines read back into a column of any type. The statements are asked of the driver, so the quoting is the engine's; a result no single table can be traced to is named `exported_rows`, which the reader has to correct — the honest outcome, rather than a file that looks right. **On MongoDB the format writes commands, not SQL**: one `db.<collection>.insertOne({…})` per document, with an absent value *left out* rather than written as null — a field nobody wrote is not a field holding nothing, and that is the difference a document store keeps. Each value is read back out of the notation the grid drew it in, so a number exports as a number and an `ObjectId` as one |
 
+Beside **Export**, the `</>` action opens a right-hand **Generate cURL** drawer for the table in
+front. The first format is cURL; it generates one POST command, naming the table in the URL and
+every field in a JSON body with an empty-string value. The reader can copy it with one click, and
+the format picker is intentionally ready for additional request formats later.
+
 ### When a result is writable
 
 A result is writable only when the driver can trace its rows to one stored row each.
