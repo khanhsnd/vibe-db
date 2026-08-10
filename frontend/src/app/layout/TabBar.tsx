@@ -187,7 +187,13 @@ function TabItem({
     { label: 'Close All But This', icon: <X size={13} />, onSelect: onCloseOthers },
     { label: 'Close to the Left', icon: <X size={13} />, disabled: !hasLeft, onSelect: onCloseLeft },
     { label: 'Close to the Right', icon: <X size={13} />, disabled: !hasRight, onSelect: onCloseRight },
-    { label: 'Rename…', icon: ICON.rename, onSelect: onRename, separatorBefore: true },
+    {
+      label: 'Rename…',
+      icon: ICON.rename,
+      shortcut: 'F2',
+      onSelect: onRename,
+      separatorBefore: true,
+    },
     {
       label: tab.pinned ? 'Unpin Tab' : 'Pin Tab',
       icon: tab.pinned ? <PinOff size={13} /> : <Pin size={13} />,
@@ -209,6 +215,13 @@ function TabItem({
         title={tooltip}
         onClick={onSelect}
         onContextMenu={onSelect}
+        tabIndex={active ? 0 : -1}
+        onKeyDown={(event) => {
+          if (event.key !== 'F2') return
+          if (event.target instanceof HTMLButtonElement) return
+          event.preventDefault()
+          onRename()
+        }}
       // The wheel closes the tab, which is what it does to a tab everywhere. Chromium's own
       // middle-click autoscroll starts on the *press* and swallows the `auxclick` that would
       // follow, and this strip scrolls the moment it holds more tabs than it can draw — so

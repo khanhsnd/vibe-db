@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, type KeyboardEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   Archive,
@@ -147,8 +147,26 @@ export function ObjectTree({
     overscan: 12,
   })
 
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'F2' || focusedId === null) return
+    if (event.target instanceof HTMLButtonElement || event.target instanceof HTMLInputElement) return
+
+    const node = rows.find((row) => row.node.id === focusedId)?.node
+    const rename = node ? menuItemsFor?.(node).find((item) => item.shortcut === 'F2') : undefined
+    if (!rename?.onSelect || rename.disabled) return
+
+    event.preventDefault()
+    rename.onSelect()
+  }
+
   return (
-    <div ref={scrollRef} className="scroll-thin h-full overflow-auto" role="tree">
+    <div
+      ref={scrollRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className="scroll-thin h-full overflow-auto"
+      role="tree"
+    >
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index]
@@ -178,6 +196,7 @@ export function ObjectTree({
                 aria-level={depth + 1}
                 aria-selected={picked}
                 aria-expanded={expandable ? isOpen : undefined}
+                tabIndex={focused ? 0 : -1}
                 // `Ctrl`/`Cmd` picks a second row beside the first rather than replacing it,
                 // which is how a pair is named for Compare — and is the same modifier that adds
                 // a rectangle in the grid.

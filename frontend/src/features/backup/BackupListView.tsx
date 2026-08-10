@@ -121,6 +121,7 @@ export function BackupListView({ sessionId, profileId, namespace }: BackupListVi
           variant="subtle"
           icon={ICON.rename}
           disabled={picked === null}
+          title="Rename Backup (F2)"
           onClick={act(on.rename)}
         >
           Rename
@@ -144,6 +145,9 @@ export function BackupListView({ sessionId, profileId, namespace }: BackupListVi
             result={data}
             selection={selection}
             onSelectionChange={setSelection}
+            onRenameRow={() => {
+              if (picked) act(on.rename)()
+            }}
             onRefresh={refresh}
           />
         )}

@@ -575,7 +575,7 @@ export function backupItems(
     // A copy is named after the original rather than asked for, the original's name being a
     // moment and a moment being the one thing a copy of it does not have a new one of.
     { label: `Copy ${name}`, icon: ICON.duplicate, onSelect: on.copy },
-    { label: 'Rename…', icon: ICON.rename, onSelect: on.rename },
+    { label: 'Rename…', icon: ICON.rename, shortcut: 'F2', onSelect: on.rename },
     {
       label: 'Delete Backup',
       icon: ICON.delete,
@@ -685,6 +685,7 @@ function connectionItems(
     {
       label: 'Rename…',
       icon: ICON.rename,
+      shortcut: 'F2',
       onSelect: () => on.onRename(profile),
     },
     {
@@ -729,7 +730,7 @@ export function tableItems(
   const declaring: MenuItem[] = info.createsTables
     ? [
         { label: `New ${words.table}`, icon: ICON.add, separatorBefore: true, onSelect: on.create },
-        { label: `Rename ${words.table}…`, icon: ICON.rename, onSelect: on.rename },
+        { label: `Rename ${words.table}…`, icon: ICON.rename, shortcut: 'F2', onSelect: on.rename },
         {
           label: `Duplicate ${words.table}`,
           icon: ICON.duplicate,
@@ -780,7 +781,12 @@ function fieldItems(node: TreeNode, stored: TableColumn | undefined, on: FieldAc
 
   return [
     { label: 'Edit Field', icon: ICON.design, onSelect: on.edit },
-    { label: 'Rename Field…', icon: ICON.rename, onSelect: () => on.rename(stored) },
+    {
+      label: 'Rename Field…',
+      icon: ICON.rename,
+      shortcut: 'F2',
+      onSelect: () => on.rename(stored),
+    },
     addField,
     {
       label: 'Delete Field',

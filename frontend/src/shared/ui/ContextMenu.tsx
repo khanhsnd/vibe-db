@@ -9,6 +9,8 @@ export interface MenuItem {
   /** What the item does. An item carrying `items` opens them instead and needs none. */
   onSelect?: () => void
   icon?: ReactNode
+  /** The key that invokes this item while its owner has focus. */
+  shortcut?: string
   disabled?: boolean
   danger?: boolean
   separatorBefore?: boolean
@@ -104,7 +106,13 @@ export function MenuItems({ parts, items }: { parts: MenuParts; items: MenuItem[
               >
                 <MenuGlyph item={item} iconic={iconic} />
                 {item.label}
-                <ChevronRight size={12} className="ml-auto shrink-0 text-faint" />
+                {item.shortcut ? (
+                  <span className="ml-auto text-2xs text-faint">{item.shortcut}</span>
+                ) : null}
+                <ChevronRight
+                  size={12}
+                  className={cn('shrink-0 text-faint', !item.shortcut && 'ml-auto')}
+                />
               </parts.SubTrigger>
               <parts.Portal>
                 <parts.SubContent sideOffset={2} className={MENU_CONTENT}>
@@ -120,6 +128,9 @@ export function MenuItems({ parts, items }: { parts: MenuParts; items: MenuItem[
             >
               <MenuGlyph item={item} iconic={iconic} />
               {item.label}
+              {item.shortcut ? (
+                <span className="ml-auto text-2xs text-faint">{item.shortcut}</span>
+              ) : null}
             </parts.Item>
           )}
         </div>

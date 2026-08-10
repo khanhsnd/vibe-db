@@ -93,6 +93,15 @@ export function ObjectListView({ sessionId, profileId, namespace }: ObjectListVi
             </Button>
             <Button
               variant="subtle"
+              icon={ICON.rename}
+              disabled={table === ''}
+              title={`Rename ${words.table} (F2)`}
+              onClick={on.rename}
+            >
+              Rename {words.table}
+            </Button>
+            <Button
+              variant="subtle"
               icon={ICON.delete}
               disabled={table === ''}
               onClick={on.remove}
@@ -126,6 +135,9 @@ export function ObjectListView({ sessionId, profileId, namespace }: ObjectListVi
             selection={selection}
             onSelectionChange={setSelection}
             onActivateRow={openRow}
+            onRenameRow={() => {
+              if (table !== '') on.rename()
+            }}
             onRefresh={refresh}
           />
         )}

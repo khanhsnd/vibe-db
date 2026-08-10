@@ -219,6 +219,8 @@ interface ResultGridProps {
    * already an editor, and the second one would land inside it.
    */
   onActivateRow?: ((row: number) => void) | undefined
+  /** Renames the focused row, which F2 invokes where the surface has rename semantics. */
+  onRenameRow?: ((row: number) => void) | undefined
   /**
    * Items appended to a header's context menu, for what only the call site can do — hiding a
    * column is its own state, not the grid's.
@@ -336,6 +338,7 @@ export function ResultGrid({
   sort = NO_SORT,
   onSortChange,
   onActivateRow,
+  onRenameRow,
   columnMenuItems,
   onMoveColumn,
   onExport,
@@ -788,6 +791,12 @@ export function ResultGrid({
       return
     }
     if (!current) return
+
+    if (event.key === 'F2' && focus && onRenameRow) {
+      event.preventDefault()
+      onRenameRow(focus.row)
+      return
+    }
 
     if (event.key === 'Enter' && onEditCell && focus && writable(focus.column)) {
       event.preventDefault()
