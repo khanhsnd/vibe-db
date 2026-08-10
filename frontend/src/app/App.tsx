@@ -11,6 +11,7 @@ import {
   type ProfileInput,
 } from '@/bridge/connections'
 import { NewBackupDialog } from '@/features/backup/NewBackupDialog'
+import { DumpDialog, type DumpTarget } from '@/features/backup/DumpDialog'
 import { RestoreBackupDialog } from '@/features/backup/RestoreBackupDialog'
 import { ToolDialog } from '@/features/dbtool/ToolDialog'
 import { ConnectionDialog } from '@/features/connections/ConnectionDialog'
@@ -131,6 +132,26 @@ export function App() {
       ),
     [picked],
   )
+  const pickedNamespaces = useMemo(() => {
+    const seen = new Set<string>()
+    return picked.flatMap((node) => {
+      // Engines with schemas put tables under schema children. A selected database therefore
+      // contributes every schema already loaded beneath it; schema-less engines contribute the
+      // database node itself.
+      const candidates = ownsObjects(node)
+        ? [node]
+        : node.kind === 'database'
+          ? (node.children ?? []).filter(ownsObjects)
+          : []
+      return candidates.flatMap((candidate) => {
+        if (!candidate.namespace) return []
+        const key = `${candidate.profileId}:${candidate.namespace.database}:${candidate.namespace.schema}`
+        if (seen.has(key)) return []
+        seen.add(key)
+        return [{ profileId: candidate.profileId, namespace: candidate.namespace }]
+      })
+    })
+  }, [picked])
 
   // Searching narrows the tree it is looking at and opens what it had to open to show a hit, so the
   // reader's own expansion survives the search and is what is left when the box is emptied.
@@ -149,6 +170,7 @@ export function App() {
   /** Where each transfer wizard is pointed, and non-null exactly while it is up. */
   const [importInto, setImportInto] = useState<ImportTarget | null>(null)
   const [exportFrom, setExportFrom] = useState<ExportTarget | null>(null)
+  const [dumpFrom, setDumpFrom] = useState<{ targets: DumpTarget[]; withData: boolean } | null>(null)
 
   useEffect(() => {
     void loadProfiles()
@@ -258,8 +280,10 @@ export function App() {
       onCompare: openCompare,
       onFind: openFind,
       onBackups: openBackups,
+      onDump: (targets, withData) => setDumpFrom({ targets, withData }),
     },
     pickedTables,
+    pickedNamespaces,
   )
 
   // Selecting reads nothing and dials nothing, and expanding stays the caret's job. The one
@@ -478,6 +502,11 @@ export function App() {
       />
 
       <NewBackupDialog />
+      <DumpDialog
+        target={dumpFrom?.targets ?? null}
+        withData={dumpFrom?.withData ?? true}
+        onClose={() => setDumpFrom(null)}
+      />
 
       <RestoreBackupDialog />
 

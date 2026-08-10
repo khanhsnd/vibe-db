@@ -53,6 +53,14 @@ export interface DumpRequest {
   table: string
   /** Whether the rows are written after the shape, which is the two items the menu offers. */
   withData: boolean
+  /** Optional multi-namespace dump; each entry can narrow its own tables. */
+  selections?: DumpSelection[]
+}
+
+export interface DumpSelection {
+  namespace: Namespace
+  tables: string[]
+  all?: boolean
 }
 
 export const objectDump = {
@@ -63,6 +71,11 @@ export const objectDump = {
         ...request.namespace,
         table: request.table,
         withData: request.withData,
+        selections: request.selections?.map((selection) => ({
+          ...selection.namespace,
+          tables: selection.tables,
+          all: selection.all ?? false,
+        })),
       } as unknown as app.DumpInput),
     ),
 }

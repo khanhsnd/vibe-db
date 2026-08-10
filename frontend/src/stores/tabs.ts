@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+import { create, type StoreApi } from 'zustand'
 
 import { namespaceLabel, NO_NAMESPACE, type Namespace } from '@/bridge/connections'
 
@@ -29,6 +29,8 @@ export type CompareMode = 'structure' | 'data'
 interface TabBase {
   id: string
   title: string
+  /** A tab kept at the leading edge of the strip for work that should stay in reach. */
+  pinned?: boolean
   profileId: string
   namespace: Namespace
 }
@@ -233,7 +235,15 @@ interface TabsState {
   /** Every statement the app has run. One tab, belonging to no connection — see `LogTab`. */
   openLog: () => string
   close: (id: string) => void
+  closeAll: () => void
+  closeOthers: (id: string) => void
+  closeLeft: (id: string) => void
+  closeRight: (id: string) => void
   activate: (id: string) => void
+  rename: (id: string, title: string) => void
+  togglePin: (id: string) => void
+  /** Duplicates a query tab under a reader-supplied name, leaving its original buffer untouched. */
+  saveQueryAs: (id: string, title: string) => void
   /** Points a tab at another namespace, which is what the picker on its own strip does. */
   retarget: (id: string, namespace: Namespace) => void
   /**
@@ -294,6 +304,38 @@ const reusable = (tab: NewTab) =>
 // tabs in the strip with nothing drawn under them would read as a window that had failed to open.
 const restored = loadQueryTabs()
 const restoredTabs: Tab[] = restored.tabs.map((saved) => ({ ...saved, kind: 'query', id: nextId() }))
+
+/** Drops every per-tab cache before taking the matching tabs out of the strip. */
+function closeTabs(set: StoreApi<TabsState>['setState'], ids: string[]): void {
+  const closing = new Set(ids)
+  if (closing.size === 0) return
+
+  for (const id of closing) {
+    useQueriesStore.getState().discard(id)
+    useTableViewsStore.getState().discard(id)
+    useConsoleStore.getState().discard(id)
+    useSearchesStore.getState().discard(id)
+  }
+
+  set((state) => {
+    const activeIndex = state.tabs.findIndex((tab) => tab.id === state.activeId)
+    const tabs = state.tabs.filter((tab) => !closing.has(tab.id))
+    if (state.activeId === null || !closing.has(state.activeId)) return { tabs }
+
+    // Keep the tab nearest to the one just closed, even where one bulk action removed every tab
+    // between it and the next survivor.
+    let neighbour: Tab | undefined
+    for (let at = activeIndex + 1; at < state.tabs.length && !neighbour; at += 1) {
+      const tab = state.tabs[at]
+      if (tab && !closing.has(tab.id)) neighbour = tab
+    }
+    for (let at = activeIndex - 1; at >= 0 && !neighbour; at -= 1) {
+      const tab = state.tabs[at]
+      if (tab && !closing.has(tab.id)) neighbour = tab
+    }
+    return { tabs, activeId: neighbour?.id ?? null }
+  })
+}
 
 export const useTabsStore = create<TabsState>((set, get) => ({
   tabs: restoredTabs,
@@ -384,24 +426,50 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     get().open({ kind: 'log', title: 'History Log', profileId: '', namespace: NO_NAMESPACE }),
 
   close: (id) => {
-    useQueriesStore.getState().discard(id)
-    useTableViewsStore.getState().discard(id)
-    useConsoleStore.getState().discard(id)
-    useSearchesStore.getState().discard(id)
+    closeTabs(set, [id])
+  },
 
-    set((s) => {
-      const index = s.tabs.findIndex((t) => t.id === id)
-      if (index === -1) return s
+  closeAll: () => closeTabs(set, get().tabs.map((tab) => tab.id)),
 
-      const tabs = s.tabs.filter((t) => t.id !== id)
-      if (s.activeId !== id) return { tabs, activeId: s.activeId }
+  closeOthers: (id) => closeTabs(set, get().tabs.filter((tab) => tab.id !== id).map((tab) => tab.id)),
 
-      const neighbour = tabs[index] ?? tabs[index - 1]
-      return { tabs, activeId: neighbour?.id ?? null }
-    })
+  closeLeft: (id) => {
+    const at = get().tabs.findIndex((tab) => tab.id === id)
+    if (at > 0) closeTabs(set, get().tabs.slice(0, at).map((tab) => tab.id))
+  },
+
+  closeRight: (id) => {
+    const at = get().tabs.findIndex((tab) => tab.id === id)
+    if (at !== -1) closeTabs(set, get().tabs.slice(at + 1).map((tab) => tab.id))
   },
 
   activate: (id) => set({ activeId: id }),
+
+  rename: (id, title) => {
+    const name = title.trim()
+    if (name === '') return
+    set((s) => ({ tabs: s.tabs.map((tab) => (tab.id === id ? { ...tab, title: name } : tab)) }))
+  },
+
+  togglePin: (id) =>
+    set((s) => {
+      const tab = s.tabs.find((one) => one.id === id)
+      if (!tab) return s
+
+      const pinned = !tab.pinned
+      const tabs = s.tabs.map((one) => (one.id === id ? { ...one, pinned } : one))
+      // Pinned tabs stay together at the left, while unpinning returns one to the end of that group.
+      return { ...s, tabs: [...tabs.filter((one) => one.pinned), ...tabs.filter((one) => !one.pinned)] }
+    }),
+
+  saveQueryAs: (id, title) => {
+    const source = get().tabs.find((tab): tab is QueryTab => tab.id === id && tab.kind === 'query')
+    const name = title.trim()
+    if (!source || name === '') return
+
+    const next = { ...source, id: nextId(), title: name, pinned: false }
+    set((s) => ({ tabs: [...s.tabs, next], activeId: next.id }))
+  },
 
   retarget: (id, namespace) =>
     set((s) => ({ tabs: s.tabs.map((tab) => (tab.id === id ? { ...tab, namespace } : tab)) })),

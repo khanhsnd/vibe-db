@@ -4,6 +4,8 @@ import {
   FileCode2,
   GitCompareArrows,
   List,
+  Pin,
+  PinOff,
   Plus,
   ScrollText,
   Search,
@@ -18,7 +20,10 @@ import { environmentInfo, namespaceLabel, type Profile } from '@/bridge/connecti
 import { EnvironmentStripe } from '@/features/connections/EnvironmentDot'
 import { cn } from '@/lib/cn'
 import { IconButton } from '@/shared/ui/IconButton'
+import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
+import { ICON } from '@/shared/ui/menuIcons'
 import { useConnectionsStore } from '@/stores/connections'
+import { useSchemaStore } from '@/stores/schema'
 import { targetLabel, useTabsStore, type Tab, type TabKind } from '@/stores/tabs'
 
 const MIDDLE_BUTTON = 1
@@ -48,6 +53,14 @@ export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
   const activeId = useTabsStore((s) => s.activeId)
   const activate = useTabsStore((s) => s.activate)
   const close = useTabsStore((s) => s.close)
+  const closeAll = useTabsStore((s) => s.closeAll)
+  const closeOthers = useTabsStore((s) => s.closeOthers)
+  const closeLeft = useTabsStore((s) => s.closeLeft)
+  const closeRight = useTabsStore((s) => s.closeRight)
+  const rename = useTabsStore((s) => s.rename)
+  const togglePin = useTabsStore((s) => s.togglePin)
+  const saveQueryAs = useTabsStore((s) => s.saveQueryAs)
+  const ask = useSchemaStore((s) => s.ask)
   const profiles = useConnectionsStore((s) => s.profiles)
 
   return (
@@ -55,7 +68,7 @@ export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
       role="tablist"
       className="scroll-thin flex h-8 shrink-0 items-stretch overflow-x-auto border-b border-line bg-panel"
     >
-      {tabs.map((tab) => {
+      {tabs.map((tab, index) => {
         const profile = profiles.find((one) => one.id === tab.profileId)
 
         return (
@@ -67,6 +80,33 @@ export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {
             tooltip={tabTooltip(tab, profile)}
             onSelect={() => activate(tab.id)}
             onClose={() => close(tab.id)}
+            onCloseAll={closeAll}
+            onCloseOthers={() => closeOthers(tab.id)}
+            onCloseLeft={() => closeLeft(tab.id)}
+            onCloseRight={() => closeRight(tab.id)}
+            onRename={() =>
+              ask({
+                kind: 'prompt',
+                title: 'Rename Tab',
+                label: 'Tab name',
+                value: tab.title,
+                submitLabel: 'Rename',
+                onSubmit: async (title) => rename(tab.id, title),
+              })
+            }
+            onTogglePin={() => togglePin(tab.id)}
+            onSaveAs={() =>
+              ask({
+                kind: 'prompt',
+                title: 'Save Query As',
+                label: 'Query name',
+                value: tab.title,
+                submitLabel: 'Save As',
+                onSubmit: async (title) => saveQueryAs(tab.id, title),
+              })
+            }
+            hasLeft={index > 0}
+            hasRight={index < tabs.length - 1}
           />
         )
       })}
@@ -111,18 +151,64 @@ interface TabItemProps {
   tooltip: string
   onSelect: () => void
   onClose: () => void
+  onCloseAll: () => void
+  onCloseOthers: () => void
+  onCloseLeft: () => void
+  onCloseRight: () => void
+  onRename: () => void
+  onTogglePin: () => void
+  onSaveAs: () => void
+  hasLeft: boolean
+  hasRight: boolean
 }
 
-function TabItem({ tab, active, environment, tooltip, onSelect, onClose }: TabItemProps) {
+function TabItem({
+  tab,
+  active,
+  environment,
+  tooltip,
+  onSelect,
+  onClose,
+  onCloseAll,
+  onCloseOthers,
+  onCloseLeft,
+  onCloseRight,
+  onRename,
+  onTogglePin,
+  onSaveAs,
+  hasLeft,
+  hasRight,
+}: TabItemProps) {
   const { icon: Icon, tint } = KINDS[tab.kind]
   const where = namespaceLabel(tab.namespace)
+  const menu: MenuItem[] = [
+    { label: 'Close', icon: <X size={13} />, onSelect: onClose },
+    { label: 'Close All Tabs', icon: <X size={13} />, onSelect: onCloseAll, separatorBefore: true },
+    { label: 'Close All But This', icon: <X size={13} />, onSelect: onCloseOthers },
+    { label: 'Close to the Left', icon: <X size={13} />, disabled: !hasLeft, onSelect: onCloseLeft },
+    { label: 'Close to the Right', icon: <X size={13} />, disabled: !hasRight, onSelect: onCloseRight },
+    { label: 'Rename…', icon: ICON.rename, onSelect: onRename, separatorBefore: true },
+    {
+      label: tab.pinned ? 'Unpin Tab' : 'Pin Tab',
+      icon: tab.pinned ? <PinOff size={13} /> : <Pin size={13} />,
+      onSelect: onTogglePin,
+    },
+    {
+      label: 'Save As…',
+      icon: ICON.saveAs,
+      disabled: tab.kind !== 'query',
+      onSelect: onSaveAs,
+    },
+  ]
 
   return (
-    <div
-      role="tab"
-      aria-selected={active}
-      title={tooltip}
-      onClick={onSelect}
+    <ContextMenu items={menu}>
+      <div
+        role="tab"
+        aria-selected={active}
+        title={tooltip}
+        onClick={onSelect}
+        onContextMenu={onSelect}
       // The wheel closes the tab, which is what it does to a tab everywhere. Chromium's own
       // middle-click autoscroll starts on the *press* and swallows the `auxclick` that would
       // follow, and this strip scrolls the moment it holds more tabs than it can draw — so
@@ -138,41 +224,43 @@ function TabItem({ tab, active, environment, tooltip, onSelect, onClose }: TabIt
         'border-r border-line px-3 text-sm whitespace-nowrap transition-colors',
         active ? 'bg-canvas text-fg' : 'text-muted hover:bg-hover hover:text-fg',
       )}
-    >
-      {active ? <span className="absolute inset-x-0 top-0 h-0.5 bg-accent" /> : null}
-      <EnvironmentStripe environment={environment} />
+      >
+        {active ? <span className="absolute inset-x-0 top-0 h-0.5 bg-accent" /> : null}
+        <EnvironmentStripe environment={environment} />
 
       {/* The tab's kind keeps its colour whether or not the tab is in front: it says what the tab
           *is*, which does not change with the selection, and a strip of grey glyphs would leave
           the reader reading every title to find the query among the tables. */}
-      <Icon size={13} className={cn('shrink-0', tint)} />
-      <span className="min-w-0 truncate">{tab.title}</span>
+        <Icon size={13} className={cn('shrink-0', tint)} />
+        <span className="min-w-0 truncate">{tab.title}</span>
+        {tab.pinned ? <Pin size={11} className="shrink-0 text-faint" /> : null}
 
       {/* Which namespace, for the reader holding two tabs on one table name. It is capped well
           under the title's share of the tab: the title is what was asked for, and this only says
           which of two the reader is looking at. */}
-      {where === '' ? null : (
-        <span className="max-w-[84px] shrink-0 truncate font-mono text-2xs text-faint">
-          {where}
-        </span>
-      )}
-
-      <button
-        type="button"
-        aria-label={`Close ${tab.title}`}
-        onClick={(e) => {
-          e.stopPropagation()
-          onClose()
-        }}
-        className={cn(
-          'ml-0.5 grid h-4 w-4 shrink-0 place-items-center rounded',
-          'text-faint opacity-0 hover:bg-hover hover:text-fg',
-          'group-hover:opacity-100 focus-visible:opacity-100',
-          active && 'opacity-60',
+        {where === '' ? null : (
+          <span className="max-w-[84px] shrink-0 truncate font-mono text-2xs text-faint">
+            {where}
+          </span>
         )}
-      >
-        <X size={11} />
-      </button>
-    </div>
+
+        <button
+          type="button"
+          aria-label={`Close ${tab.title}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onClose()
+          }}
+          className={cn(
+            'ml-0.5 grid h-4 w-4 shrink-0 place-items-center rounded',
+            'text-faint opacity-0 hover:bg-hover hover:text-fg',
+            'group-hover:opacity-100 focus-visible:opacity-100',
+            active && 'opacity-60',
+          )}
+        >
+          <X size={11} />
+        </button>
+      </div>
+    </ContextMenu>
   )
 }

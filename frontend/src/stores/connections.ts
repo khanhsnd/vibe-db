@@ -72,6 +72,8 @@ interface ConnectionsState {
 
   loadProfiles: () => Promise<void>
   saveProfile: (input: ProfileInput) => Promise<Profile>
+  /** Changes the local label of one connection without reopening its full settings form. */
+  renameProfile: (profileId: string, name: string) => Promise<void>
   /** Marks a connection with a colour, or clears it. Nothing else about the profile changes. */
   setColour: (profileId: string, colour: string) => Promise<void>
   deleteProfile: (profileId: string) => Promise<void>
@@ -178,6 +180,13 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     const saved = await connections.saveProfile(input)
     await get().loadProfiles()
     return saved
+  },
+
+  renameProfile: async (profileId, name) => {
+    const profile = get().profiles.find((one) => one.id === profileId)
+    if (!profile) return
+
+    await get().saveProfile({ ...toProfileInput(profile), name })
   },
 
   // A blank password in a saved profile keeps the stored one, so re-saving the profile it was

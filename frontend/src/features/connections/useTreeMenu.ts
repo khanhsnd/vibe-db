@@ -15,6 +15,7 @@ import { ICON } from '@/shared/ui/menuIcons'
 import { NEW_SOURCE, schema, type SourceKind, type SourceRef } from '@/bridge/schema'
 import type { TableColumn } from '@/bridge/tables'
 import { backupActions, type BackupActions } from '@/features/backup/backupActions'
+import type { DumpTarget } from '@/features/backup/DumpDialog'
 import { fieldActions, type FieldActions } from '@/features/schema/fieldActions'
 import { newSourceItems, sourceActions } from '@/features/schema/sourceActions'
 import { tableActions, type TableActions } from '@/features/schema/tableActions'
@@ -57,6 +58,7 @@ interface TreeMenuActions {
   onFind: (profileId: string, namespace: Namespace) => void
   /** Opens the list of backups kept for a namespace. */
   onBackups: (profileId: string, namespace: Namespace) => void
+  onDump: (targets: DumpTarget[], withData: boolean) => void
 }
 
 /**
@@ -115,6 +117,7 @@ function compareItem(picked: PickedTables, on: TreeMenuActions['onCompare']): Me
 export function useTreeMenu(
   actions: TreeMenuActions,
   picked: PickedTables,
+  pickedNamespaces: readonly DumpTarget[] = [],
 ): (node: TreeNode) => MenuItem[] {
   const profiles = useConnectionsStore((s) => s.profiles)
   const sessions = useConnectionsStore((s) => s.sessions)
@@ -126,6 +129,7 @@ export function useTreeMenu(
   const refreshStructure = useConnectionsStore((s) => s.refreshStructure)
   const refreshDatabases = useConnectionsStore((s) => s.refreshDatabases)
   const setColour = useConnectionsStore((s) => s.setColour)
+  const renameProfile = useConnectionsStore((s) => s.renameProfile)
   const changeSchema = useConnectionsStore((s) => s.changeSchema)
   const changeDatabases = useConnectionsStore((s) => s.changeDatabases)
   const dump = useConnectionsStore((s) => s.dump)
@@ -152,6 +156,7 @@ export function useTreeMenu(
     onCompare,
     onFind,
     onBackups,
+    onDump,
   } = actions
 
   return useCallback(
@@ -182,6 +187,15 @@ export function useTreeMenu(
           disconnect,
           deleteProfile,
           setColour,
+          onRename: (profile) =>
+            ask({
+              kind: 'prompt',
+              title: 'Rename Connection',
+              label: 'Connection name',
+              value: profile.name,
+              submitLabel: 'Rename',
+              onSubmit: (name) => renameProfile(profile.id, name),
+            }),
           refreshDatabases,
         })
       }
@@ -221,11 +235,15 @@ export function useTreeMenu(
         items: [
           {
             label: 'Structure Only…',
-            onSelect: () => void dump(node.profileId, { namespace: ns, table, withData: false }),
+            onSelect: () => table === ''
+              ? onDump(namespacesFor(node, pickedNamespaces), false)
+              : void dump(node.profileId, { namespace: ns, table, withData: false }),
           },
           {
             label: 'Structure and Data…',
-            onSelect: () => void dump(node.profileId, { namespace: ns, table, withData: true }),
+            onSelect: () => table === ''
+              ? onDump(namespacesFor(node, pickedNamespaces), true)
+              : void dump(node.profileId, { namespace: ns, table, withData: true }),
           },
         ],
       })
@@ -527,9 +545,16 @@ export function useTreeMenu(
       onCompare,
       onFind,
       onBackups,
+      onDump,
       picked,
+      pickedNamespaces,
     ],
   )
+}
+
+function namespacesFor(node: TreeNode, picked: readonly DumpTarget[]): DumpTarget[] {
+  const same = picked.filter((one) => one.profileId === node.profileId)
+  return same.length > 0 ? same : [{ profileId: node.profileId, namespace: node.namespace! }]
 }
 
 /**
@@ -610,6 +635,7 @@ function connectionItems(
     disconnect: (profileId: string) => Promise<void>
     deleteProfile: (profileId: string) => Promise<void>
     setColour: (profileId: string, colour: string) => Promise<void>
+    onRename: (profile: Profile) => void
     refreshDatabases: (profileId: string) => Promise<void>
   },
 ): MenuItem[] {
@@ -655,6 +681,11 @@ function connectionItems(
         icon: colourSwatch(info.value, info.value === profile.colour),
         onSelect: () => void on.setColour(profile.id, info.value),
       })),
+    },
+    {
+      label: 'Rename…',
+      icon: ICON.rename,
+      onSelect: () => on.onRename(profile),
     },
     {
       label: 'Edit Connection…',

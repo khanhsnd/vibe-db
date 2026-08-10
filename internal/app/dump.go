@@ -21,9 +21,18 @@ type DumpInput struct {
 	Namespace
 	// Table is the one table to dump, and is empty for a dump of every table the namespace holds.
 	Table string `json:"table"`
+	// Selections allows one dump file to contain selected tables from multiple namespaces.
+	Selections []DumpSelection `json:"selections"`
 	// WithData writes the rows after the shape. Off, the file holds the declarations alone — which
 	// is the difference between the two items the menu offers.
 	WithData bool `json:"withData"`
+}
+
+type DumpSelection struct {
+	Namespace
+	Tables []string `json:"tables"`
+	// All asks the server for the complete table list; false with an empty Tables list means none.
+	All    bool     `json:"all"`
 }
 
 // dumpWhat is which halves of a table go into a file: what would declare it, and the rows it holds.
@@ -102,7 +111,7 @@ func (a *ConnectionAPI) writeDump(
 	path string,
 	input DumpInput,
 ) error {
-	tables, err := a.dumpTables(ctx, sessionID, input)
+	selections, err := a.dumpSelections(ctx, sessionID, input)
 	if err != nil {
 		return err
 	}
@@ -116,10 +125,12 @@ func (a *ConnectionAPI) writeDump(
 	what := dumpWhat{structure: true, data: input.WithData}
 
 	writer := bufio.NewWriter(out)
-	for _, table := range tables {
-		ns := input.Namespace.toDriver()
-		if _, err := a.dumpTable(ctx, sessionID, schema, writer, ns, table, what); err != nil {
-			return err
+	for _, selection := range selections {
+		ns := selection.Namespace.toDriver()
+		for _, table := range selection.Tables {
+			if _, err := a.dumpTable(ctx, sessionID, schema, writer, ns, table, what); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -130,6 +141,29 @@ func (a *ConnectionAPI) writeDump(
 	// disk, so the close is where a full volume is finally heard from — which is why it is checked
 	// here as well as deferred.
 	return out.Close()
+}
+
+func (a *ConnectionAPI) dumpSelections(ctx context.Context, sessionID string, input DumpInput) ([]DumpSelection, error) {
+	if len(input.Selections) > 0 {
+		out := make([]DumpSelection, 0, len(input.Selections))
+		for _, selection := range input.Selections {
+			tables := selection.Tables
+			if selection.All {
+				var err error
+				tables, err = a.namespaceTables(ctx, sessionID, selection.Namespace)
+				if err != nil {
+					return nil, err
+				}
+			}
+			out = append(out, DumpSelection{Namespace: selection.Namespace, Tables: tables})
+		}
+		return out, nil
+	}
+	tables, err := a.dumpTables(ctx, sessionID, input)
+	if err != nil {
+		return nil, err
+	}
+	return []DumpSelection{{Namespace: input.Namespace, Tables: tables}}, nil
 }
 
 // dumpTables is what the dump covers: the one table named, or every table the namespace holds. A

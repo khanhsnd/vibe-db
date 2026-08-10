@@ -65,6 +65,7 @@ function readQuery(held: unknown): SavedQuery[] {
   return [
     {
       title: one.title,
+      ...(typeof one.pinned === 'boolean' ? { pinned: one.pinned } : {}),
       profileId: one.profileId,
       namespace: readNamespace(one.namespace),
       sql: one.sql,
