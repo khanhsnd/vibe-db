@@ -60,6 +60,7 @@ export function App() {
   const openConsole = useTabsStore((s) => s.openConsole)
   const openCompare = useTabsStore((s) => s.openCompare)
   const openFind = useTabsStore((s) => s.openFind)
+  const openDiagram = useTabsStore((s) => s.openDiagram)
   const activeTab = useTabsStore((s) => s.tabs.find((t) => t.id === s.activeId) ?? null)
 
   const profiles = useConnectionsStore((s) => s.profiles)
@@ -279,6 +280,7 @@ export function App() {
       onExport: setExportFrom,
       onCompare: openCompare,
       onFind: openFind,
+      onDiagram: openDiagram,
       onBackups: openBackups,
       onDump: (targets, withData) => setDumpFrom({ targets, withData }),
     },

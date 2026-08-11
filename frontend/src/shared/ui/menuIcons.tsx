@@ -21,6 +21,7 @@ import {
   FolderOpen,
   GitCompareArrows,
   GitMerge,
+  Network,
   HardDriveDownload,
   HardDriveUpload,
   Palette,
@@ -86,6 +87,8 @@ export const ICON = {
   // Looking for text across a whole namespace, which only ever reads — the glyph a search wears
   // everywhere, and the same one its tab wears in the strip.
   find: <Search size={SIZE} />,
+  // A namespace drawn as boxes and the lines between them, and the same glyph its tab wears.
+  diagram: <Network size={SIZE} />,
   // Applying a comparison is a *merge* and wears the glyph that means one everywhere.
   migrate: <GitMerge size={SIZE} />,
   add: <Plus size={SIZE} />,

@@ -2325,8 +2325,8 @@ export namespace app {
 	        this.writes = source["writes"];
 	    }
 	}
-
-
+	
+	
 	export class UpdateInfo {
 	    currentVersion: string;
 	    latestVersion: string;
@@ -2335,11 +2335,11 @@ export namespace app {
 	    releaseUrl: string;
 	    command: string;
 	    development: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.currentVersion = source["currentVersion"];
@@ -2353,3 +2353,4 @@ export namespace app {
 	}
 
 }
+

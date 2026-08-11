@@ -4,6 +4,7 @@ import {
   FileCode2,
   GitCompareArrows,
   List,
+  Network,
   Pin,
   PinOff,
   Plus,
@@ -45,6 +46,9 @@ export const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: str
   compare: { label: 'Compare', icon: GitCompareArrows, tint: 'text-kind-schema' },
   find: { label: 'Find in Schema', icon: Search, tint: 'text-kind-database' },
   backups: { label: 'Backups', icon: Archive, tint: 'text-kind-backup' },
+  // The relation's colour, because what a diagram is *for* is the lines: the boxes are a table list
+  // with room between them, and only the lines say something the tree cannot.
+  diagram: { label: 'Diagram', icon: Network, tint: 'text-kind-relation' },
   log: { label: 'History Log', icon: ScrollText, tint: 'text-kind-routine' },
 }
 

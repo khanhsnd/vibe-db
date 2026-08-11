@@ -14,4 +14,15 @@ import { call } from './errors'
 export const files = {
   choose: (title: string, pattern = ''): Promise<string> =>
     call(() => api.ChooseFile(title, pattern)),
+
+  /**
+   * Writes text to a path picked in the host's own save dialog, answering with that path — or with
+   * `''` for a dialog the reader dismissed, exactly as `choose` reads one.
+   *
+   * It carries what the *frontend* made, and nothing else may use it: rows and dumps are read out of
+   * a server as they are written and go through `rowExport` and `objectDump`, which never hold the
+   * whole of what they write.
+   */
+  saveText: (title: string, pattern: string, name: string, content: string): Promise<string> =>
+    call(() => api.SaveTextFile(title, pattern, name, content)),
 }

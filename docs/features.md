@@ -13,7 +13,8 @@ each table**, **a table's fields, indexes and foreign keys in
 the tree and in a designer tab**, **schema changes from the tree's context menu** — new / rename /
 empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index or a
 foreign key, drop a view or a routine — **reading and writing the definition of a view, a function
-or a procedure**, table data browsing with pagination, cell editing plus row
+or a procedure**, **a namespace drawn as boxes and the foreign keys between them, arranged, annotated
+and exported — with a dragged line declaring a key**, table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
 or SQL**, **backing a SQL namespace up into a folder the app keeps, and restoring
 one**, **running the engine's own mongodump, mysqldump or pg_dump — and putting one of those files
@@ -48,6 +49,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | A Redis key space: the grid of keys, the prefix tree, the search bar, the key panel | [features/key-space.md](features/key-space.md) |
 | Finding text across a schema | [features/search.md](features/search.md) |
 | Comparing two tables, and making them agree | [features/compare.md](features/compare.md) |
+| Drawing a namespace as boxes and the lines between them | [features/diagram.md](features/diagram.md) |
 | The tree's schema changes, `New Database`, and the designer | [features/schema-changes.md](features/schema-changes.md) |
 | A view's or a routine's definition: reading it, declaring one, and saving it back | [features/definitions.md](features/definitions.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |

@@ -130,6 +130,15 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     picked and never typed: the panel below is where a key is edited, and a click on a branch edits
     nothing, a prefix being a folder.
 
+19. **A diagram draws the catalogue, and a line on it is a constraint the server holds.** A box names
+    a table; its fields, its key marks and every line between the boxes are read from the same
+    catalogue cache the tree and the designer read, so nothing there can show a key that is not
+    there. Drawing a line therefore **declares** one — through the bound method the tree's own Add
+    Foreign Key calls, never a second way of spelling it — and the line appears because the catalogue
+    now says so. What is the *reader's* is the arrangement alone, which is stored per namespace
+    beside the code that reads it and goes to no server; so `Delete` there takes a box off the
+    picture, and dropping a table stays a schema change asked for where every other one is.
+
 ## Where to read before changing something
 
 | Task | Read |
@@ -152,6 +161,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Touch a backup or a restore | [docs/architecture.md](docs/architecture.md#backing-a-database-up), [docs/features/backup.md](docs/features/backup.md) |
 | Touch mongodump, mysqldump, pg_dump — or anything this app *runs* | [docs/architecture.md](docs/architecture.md#running-the-engines-own-programs), [docs/features/tools.md](docs/features/tools.md) |
 | Touch a comparison of two tables | [docs/architecture.md](docs/architecture.md#comparing-two-tables), [docs/features/compare.md](docs/features/compare.md) |
+| Touch the diagram: a box, a line, a note, the canvas | [docs/features/diagram.md](docs/features/diagram.md) |
 | Touch a search across a schema | [docs/architecture.md](docs/architecture.md#looking-for-text-across-a-schema), [docs/features/search.md](docs/features/search.md) |
 | Touch any table, grid, cell or selection | [docs/grid.md](docs/grid.md) |
 | Touch the SQL editor or completion | [docs/editor.md](docs/editor.md) |

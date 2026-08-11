@@ -56,6 +56,8 @@ interface TreeMenuActions {
   onCompare: (left: TableTarget, right: TableTarget, mode: CompareMode) => void
   /** Searches every table of a namespace for one piece of text. */
   onFind: (profileId: string, namespace: Namespace) => void
+  /** Opens the namespace's tables as boxes with the keys between them drawn as lines. */
+  onDiagram: (profileId: string, namespace: Namespace) => void
   /** Opens the list of backups kept for a namespace. */
   onBackups: (profileId: string, namespace: Namespace) => void
   onDump: (targets: DumpTarget[], withData: boolean) => void
@@ -155,6 +157,7 @@ export function useTreeMenu(
     onExport,
     onCompare,
     onFind,
+    onDiagram,
     onBackups,
     onDump,
   } = actions
@@ -295,6 +298,13 @@ export function useTreeMenu(
         onSelect: () => onFind(node.profileId, ns),
       }
 
+      // Offered beside it and for the same reason: the subject of a diagram is every table of one
+      // namespace. It is left out where a namespace has no tables to draw at all — a key space is
+      // one flat list of keys, and a box round it would say nothing (see `createsTables`).
+      const diagram: MenuItem[] = info.createsTables
+        ? [{ label: 'Diagram', icon: ICON.diagram, onSelect: () => onDiagram(node.profileId, ns) }]
+        : []
+
       // Everything a backup is offered, wherever it is offered — the toolbar over the list builds
       // from the same call. A failure with no dialog behind it goes where a dump's does: the bar.
       const backup = backupActions(node.profileId, ns, node.label, {
@@ -325,7 +335,7 @@ export function useTreeMenu(
         case 'database':
         case 'schema': {
           const own = ownsObjects(node)
-            ? [...newTable, findInSchema, dumpItems(''), ...wizards(''), ...toolItems, refreshObjectList]
+            ? [...newTable, findInSchema, ...diagram, dumpItems(''), ...wizards(''), ...toolItems, refreshObjectList]
             : [
                 {
                   label: 'Refresh',
@@ -364,7 +374,7 @@ export function useTreeMenu(
         }
 
         case 'tables':
-          return [...newTable, findInSchema, dumpItems(''), ...wizards(''), ...toolItems, refreshObjectList]
+          return [...newTable, findInSchema, ...diagram, dumpItems(''), ...wizards(''), ...toolItems, refreshObjectList]
 
         // A folder offers what goes in it, which on `Routines` is both kinds — no engine has a
         // folder for a function alone. Neither is offered where this engine's objects are not
@@ -544,6 +554,7 @@ export function useTreeMenu(
       onExport,
       onCompare,
       onFind,
+      onDiagram,
       onBackups,
       onDump,
       picked,

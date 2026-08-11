@@ -101,9 +101,13 @@
   one connection is that thing's, and is stored under its own key beside the code that reads it —
   `features/results/columnOrder.ts` for a table's column order,
   `features/connections/databaseFilter.ts` for [which databases a connection
-  draws](features/schema-tree.md#filtering-a-connections-databases). Both are keyed by what they are
-  about, both survive the app closing, and neither goes to the backend: a preference the *server*
-  would have to be told about is a field on the profile, which is what a connection's colour is.
+  draws](features/schema-tree.md#filtering-a-connections-databases), and
+  `features/diagram/persist.ts` for [a namespace's
+  diagram](features/diagram.md#where-it-is-kept-and-taking-it-away). All three are keyed by what they
+  are about, all three survive the app closing, and none goes to the backend: a preference the
+  *server* would have to be told about is a field on the profile, which is what a connection's colour
+  is. The diagram is the largest of them and so is the one written on a **timer** rather than on the
+  change, for the reason the query strip is.
 - **What the reader was *doing* is kept the same way.** `stores/savedQueries.ts` writes the strip's
   [query tabs down as they are edited](features/query-tab.md#the-tabs-are-still-there-next-time) and
   `stores/tabs.ts` builds itself from them, so a buffer is where it was left. It differs from the

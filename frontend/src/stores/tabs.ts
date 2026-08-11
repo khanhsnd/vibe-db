@@ -6,6 +6,7 @@ import type { SearchMode, SearchScope } from '@/bridge/search'
 import type { SourceKind, SourceRef } from '@/bridge/schema'
 
 import { useConsoleStore } from './console'
+import { useDiagramsStore } from './diagrams'
 import { useQueriesStore } from './queries'
 import { loadQueryTabs, saveQueryTabs } from './savedQueries'
 import { useSearchesStore } from './searches'
@@ -21,6 +22,7 @@ export type TabKind =
   | 'compare'
   | 'find'
   | 'backups'
+  | 'diagram'
   | 'log'
 
 /** Which half of two tables a comparison is reading: their shapes, or their rows. */
@@ -134,6 +136,18 @@ export interface BackupsTab extends TabBase {
 }
 
 /**
+ * A namespace's tables drawn as boxes with the lines between them — what `Diagram` opens. It names
+ * no table: the whole namespace is its subject, and which of its tables are on the canvas is the
+ * reader's own and is kept in `stores/diagrams.ts` rather than on the tab.
+ *
+ * There is one per namespace for the reason there is one table list per namespace, and the picture
+ * outlives both the tab and the window — see `features/diagram/persist.ts`.
+ */
+export interface DiagramTab extends TabBase {
+  kind: 'diagram'
+}
+
+/**
  * Every statement the app has run since it started — what `Tools ▸ History Log` opens. It is the
  * one tab that belongs to no connection: what it shows is the *window's* doing, across all of them,
  * so its `profileId` and namespace are empty and the strip draws neither. There is one of it for
@@ -153,6 +167,7 @@ export type Tab =
   | CompareTab
   | FindTab
   | BackupsTab
+  | DiagramTab
   | LogTab
 export type NewTab =
   | Omit<QueryTab, 'id'>
@@ -164,6 +179,7 @@ export type NewTab =
   | Omit<CompareTab, 'id'>
   | Omit<FindTab, 'id'>
   | Omit<BackupsTab, 'id'>
+  | Omit<DiagramTab, 'id'>
   | Omit<LogTab, 'id'>
 
 /** What names a table wherever one is opened: which connection, which namespace, which table. */
@@ -221,6 +237,8 @@ interface TabsState {
   openTables: (profileId: string, namespace: Namespace) => string
   /** Every backup kept for a namespace. */
   openBackups: (profileId: string, namespace: Namespace) => string
+  /** A namespace's tables as boxes, with the foreign keys between them drawn as lines. */
+  openDiagram: (profileId: string, namespace: Namespace) => string
   /** A console on one connection. One per connection and namespace, like every other tab. */
   openConsole: (profileId: string, namespace: Namespace) => string
   /**
@@ -315,6 +333,7 @@ function closeTabs(set: StoreApi<TabsState>['setState'], ids: string[]): void {
     useTableViewsStore.getState().discard(id)
     useConsoleStore.getState().discard(id)
     useSearchesStore.getState().discard(id)
+    useDiagramsStore.getState().discard(id)
   }
 
   set((state) => {
@@ -385,6 +404,9 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   openConsole: (profileId, namespace) =>
     get().open({ kind: 'console', title: 'Console', profileId, namespace }),
+
+  openDiagram: (profileId, namespace) =>
+    get().open({ kind: 'diagram', title: 'Diagram', profileId, namespace }),
 
   openCompare: (left, right, mode) => {
     const id = get().open({

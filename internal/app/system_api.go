@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+
 	"github.com/khanhsnd/vibe-db/internal/fonts"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -44,6 +46,39 @@ func (s *SystemAPI) ChooseFile(title, pattern string) (string, error) {
 		Filters: filters,
 	})
 	if err != nil {
+		return "", wrapError(err)
+	}
+	return path, nil
+}
+
+// SaveTextFile raises the host's own save dialog and writes text to the path it was given, answering
+// with that path — or with an empty one for a dialog the reader dismissed, exactly as ChooseFile
+// reads a dismissal.
+//
+// It is the picker's twin and lives here for the same reason: what is written is the *frontend's*
+// own — a diagram as SVG — rather than anything a server answered with, so there is no session to
+// hold and no driver in it. Everything a server produces goes out through ExportRows or DumpObjects,
+// which stream what they read rather than being handed it.
+func (s *SystemAPI) SaveTextFile(title, pattern, name, content string) (string, error) {
+	filters := []wailsruntime.FileFilter{}
+	if pattern != "" {
+		filters = append(filters, wailsruntime.FileFilter{DisplayName: title, Pattern: pattern})
+	}
+	filters = append(filters, wailsruntime.FileFilter{DisplayName: "All files", Pattern: "*.*"})
+
+	path, err := wailsruntime.SaveFileDialog(s.ctx, wailsruntime.SaveDialogOptions{
+		Title:           title,
+		DefaultFilename: name,
+		Filters:         filters,
+	})
+	if err != nil {
+		return "", wrapError(err)
+	}
+	if path == "" {
+		return "", nil
+	}
+
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		return "", wrapError(err)
 	}
 	return path, nil

@@ -22,15 +22,19 @@ export function headerFont(): string {
   return `700 ${size} ${family}`
 }
 
-export function widestText(texts: string[], font: string): number {
+/** One string in one font, which is what anything that has to *fit* a label is measured by. */
+export function textWidth(text: string, font: string): number {
   const target = measurer()
   if (!target) return 0
 
   target.font = font
+  return Math.ceil(target.measureText(text).width)
+}
 
+export function widestText(texts: string[], font: string): number {
   let widest = 0
   for (const text of texts) {
-    widest = Math.max(widest, target.measureText(text).width)
+    widest = Math.max(widest, textWidth(text, font))
   }
-  return Math.ceil(widest)
+  return widest
 }

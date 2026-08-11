@@ -51,6 +51,21 @@ const COLOURS: Record<TypeKind, string> = {
   other: 'text-type-other',
 }
 
+/**
+ * The same seven colours as a *fill*, for the one surface that draws a type into an SVG rather than
+ * as text: a diagram's boxes. It is here beside `COLOURS` so a class added to one is added to both,
+ * and the decision about which colour a type is stays in this file alone.
+ */
+export const TYPE_FILL: Record<TypeKind, string> = {
+  bool: 'fill-type-bool',
+  temporal: 'fill-type-temporal',
+  json: 'fill-type-json',
+  binary: 'fill-type-binary',
+  numeric: 'fill-type-numeric',
+  text: 'fill-type-text',
+  other: 'fill-type-other',
+}
+
 export function typeKind(type: string): TypeKind {
   for (const [kind, pattern] of KINDS) {
     if (pattern.test(type)) return kind

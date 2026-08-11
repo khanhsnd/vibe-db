@@ -85,6 +85,12 @@ therefore a deliberate list, kept in a store under the tab's id and dropped when
   and it is read again on the way back for a stronger reason than a table's rows are: another
   window of this app, or the reader with a file manager, changes the folder without this one
   hearing. See [features/backup.md](backup.md#the-list).
+- A **Diagram tab** keeps the picture (`stores/diagrams.ts`) — which tables are on the canvas, where
+  each sits, the notes beside them, and the steps to undo. It is the only one whose state also
+  outlives the *window*, written down per namespace rather than per tab, so it is read from disk
+  when the tab opens rather than started empty. What is *in* the boxes is not kept at all: that is
+  the catalogue's, and is read like any other tab's answer. See
+  [features/diagram.md](diagram.md#where-it-is-kept-and-taking-it-away).
 
 **A tab is named by what it shows, and a comparison by both sides**: `users ⇄ users_v2`, and the
 tooltip carries `Against:` as well, because two tabs comparing `users` against two different servers

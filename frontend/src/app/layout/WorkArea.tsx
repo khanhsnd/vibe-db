@@ -3,6 +3,7 @@ import { Terminal } from 'lucide-react'
 import { BackupListView } from '@/features/backup/BackupListView'
 import { CompareView } from '@/features/compare/CompareView'
 import { ConsoleView } from '@/features/console/ConsoleView'
+import { DiagramView } from '@/features/diagram/DiagramView'
 import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
 import { LogView } from '@/features/log/LogView'
 import { ObjectListView } from '@/features/objects/ObjectListView'
@@ -86,6 +87,15 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
               profileId={activeTab.profileId}
               namespace={activeTab.namespace}
             />
+          )
+        ) : activeTab.kind === 'diagram' ? (
+          // The picture is this machine's and survives a connection going down, but the fields and
+          // the lines in it are the catalogue's — so a shut connection is a diagram of empty boxes,
+          // and saying so is honester than drawing one.
+          sessionId === null ? (
+            <Empty title="Not connected" hint="Reconnect this connection to draw its tables." />
+          ) : (
+            <DiagramView key={activeTab.id} tab={activeTab} />
           )
         ) : activeTab.kind === 'console' ? (
           <ConsoleView
