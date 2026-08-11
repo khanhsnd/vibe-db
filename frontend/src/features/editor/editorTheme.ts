@@ -51,6 +51,42 @@ const layout = EditorView.theme({
   },
   '.cm-placeholder': { color: 'var(--fg-faint)' },
 
+  // The Find panel is CodeMirror's own DOM, and its base theme paints it for a light editor — a
+  // white bar with black text under this one — so every colour it wears is named here.
+  '.cm-panels.cm-panels-top': {
+    backgroundColor: 'var(--surface-bar)',
+    color: 'var(--fg)',
+    borderBottom: '1px solid var(--line)',
+  },
+  '.cm-panel.cm-search': { padding: '5px 24px 5px 8px' },
+  '.cm-panel.cm-search label': { fontSize: '11px', color: 'var(--fg-muted)' },
+  '.cm-panel.cm-search input[type=checkbox]': { accentColor: 'var(--accent)' },
+  '.cm-panel.cm-search .cm-textfield': {
+    fontFamily: 'inherit',
+    fontSize: '12px',
+    padding: '2px 6px',
+    borderRadius: '4px',
+    backgroundColor: 'var(--surface-canvas)',
+    border: '1px solid var(--line-strong)',
+    color: 'var(--fg)',
+  },
+  '.cm-panel.cm-search .cm-textfield:focus': { outline: '1px solid var(--accent)' },
+  '.cm-panel.cm-search .cm-button, .cm-panel.cm-search .cm-button:active': {
+    fontFamily: 'inherit',
+    fontSize: '11px',
+    padding: '2px 8px',
+    borderRadius: '4px',
+    backgroundImage: 'none',
+    backgroundColor: 'var(--surface-hover)',
+    border: '1px solid var(--line-strong)',
+    color: 'var(--fg)',
+  },
+  '.cm-panel.cm-search .cm-button:hover': { backgroundColor: 'var(--surface-active)' },
+  '.cm-panel.cm-search [name=close]': { color: 'var(--fg-muted)', fontSize: '15px' },
+
+  '.cm-searchMatch': { backgroundColor: 'var(--search-match)' },
+  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'var(--search-match-active)' },
+
   '.cm-tooltip': {
     backgroundColor: 'var(--surface-elevated)',
     border: '1px solid var(--line)',

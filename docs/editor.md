@@ -42,6 +42,28 @@ is. It reads the **parse tree** and never the text, which is what keeps `"$total
 **A selection narrows what runs.** Highlight one statement of a script and Execute sends only that;
 with nothing selected it sends the whole buffer.
 
+## Finding text in the buffer
+
+**`Ctrl`+`F`** opens a Find panel above the editor: a box to search for, `next` / `previous` / `all`,
+`match case`, `regexp` and `by word`, and a Replace row beneath. `F3` and `Ctrl`+`G` step through the
+matches — with `Shift` to go back — `Enter` in the box does the same, and `Escape` shuts the panel.
+`Ctrl`+`D` takes the next occurrence of what is selected as a second cursor, and `Ctrl`+`Alt`+`G`
+goes to a line.
+
+- **It is bound in the editor, not on the window** — unlike `F5` and `Ctrl`+`Shift`+`F`, which are
+  bound there because the reader is often in the output pane when they reach for them. What a Find
+  searches is the text the caret is in, so a Find with the caret elsewhere would be searching a
+  buffer the reader is not looking at.
+- **This is not a second scanner.** Rule 7 is about *reading a script* — where a statement ends and
+  what a quote means — which stays the driver's. A Find matches characters against characters and
+  knows nothing about statements, so it is `@codemirror/search`'s, the way undo is
+  `@codemirror/commands`'.
+- **Nothing is asked of a server.** The buffer is all it reads, which is what separates it from
+  [searching a schema](features/search.md), where the rows are the server's to find.
+- A match wears `--search-match` and the current one `--search-match-active`, both translucent for
+  the reason the active line is: the current match is also the selection, and painting over it
+  would hide which one the panel is on.
+
 ## Laying out and reviewing
 
 Neither is done here. **Format** and **Review** are `QueryAPI` calls onto the driver's `Text`, for

@@ -1,6 +1,7 @@
 import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { bracketMatching, indentOnInput } from '@codemirror/language'
+import { search, searchKeymap } from '@codemirror/search'
 import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import {
   drawSelection,
@@ -33,8 +34,17 @@ const baseExtensions: Extension = [
   bracketMatching(),
   closeBrackets(),
   autocompletion(),
+  // Ctrl+F, over the buffer and never over a server. It is bound in the editor rather than on the
+  // window like F5, because what it searches is the text the caret is in.
+  search({ top: true }),
   diagnostics,
-  keymap.of([swallowRunShortcut, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
+  keymap.of([
+    swallowRunShortcut,
+    ...closeBracketsKeymap,
+    ...searchKeymap,
+    ...defaultKeymap,
+    ...historyKeymap,
+  ]),
   editorTheme,
 ]
 

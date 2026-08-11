@@ -15,6 +15,12 @@
   --selection: #2d4f7a;
   --line-highlight: #ffffff0d;
 
+  /** What a Find paints on the text: every match washed, and the one the caret is on stronger.
+      Translucent on purpose — a match is drawn over the selection and the active line, and an
+      opaque one would hide that the current match is also the selection. */
+  --search-match: #e3b34140;
+  --search-match-active: #e3b34199;
+
   --line: #282e37;
   --line-strong: #3a424e;
 
@@ -148,6 +154,9 @@
   --surface-selected: #dce8fd;
   --selection: #b3d4fc;
   --line-highlight: #0000000a;
+
+  --search-match: #e3b34166;
+  --search-match-active: #e3b341cc;
 
   --line: #dfe3e8;
   --line-strong: #c3cad3;
