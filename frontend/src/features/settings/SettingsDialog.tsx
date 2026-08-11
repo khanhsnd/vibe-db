@@ -1,16 +1,19 @@
 import { useState, type ReactNode } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
 
+import { toAppError, type AppError } from '@/bridge/errors'
 import { PAGE_SIZES, QUERY_ROW_LIMITS } from '@/bridge/rows'
+import { updates, type UpdateInfo } from '@/bridge/update'
 import { cn } from '@/lib/cn'
 import { Button } from '@/shared/ui/Button'
 import { Dialog } from '@/shared/ui/Dialog'
+import { ErrorStrip } from '@/shared/ui/ErrorStrip'
 import { Checkbox, Field, SelectInput } from '@/shared/ui/Field'
 import { useSettingsStore, type Settings } from '@/stores/settings'
 
 import { FontPicker } from './FontPicker'
 
-const SECTIONS = ['General', 'Editor', 'Records'] as const
+const SECTIONS = ['General', 'Editor', 'Records', 'Updates'] as const
 
 type Section = (typeof SECTIONS)[number]
 
@@ -80,9 +83,86 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           {section === 'General' ? <General settings={settings} update={update} /> : null}
           {section === 'Editor' ? <Editor settings={settings} update={update} /> : null}
           {section === 'Records' ? <Records settings={settings} update={update} /> : null}
+          {section === 'Updates' ? <Updates /> : null}
         </div>
       </div>
     </Dialog>
+  )
+}
+
+function Updates() {
+  const [info, setInfo] = useState<UpdateInfo | null>(null)
+  const [error, setError] = useState<AppError | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [installing, setInstalling] = useState(false)
+
+  async function check() {
+    setChecking(true)
+    setError(null)
+    try {
+      setInfo(await updates.check())
+    } catch (thrown) {
+      setError(toAppError(thrown))
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  async function install() {
+    setInstalling(true)
+    setError(null)
+    try {
+      await updates.installWindows()
+    } catch (thrown) {
+      setError(toAppError(thrown))
+      setInstalling(false)
+    }
+  }
+
+  async function openRelease() {
+    setError(null)
+    try {
+      await updates.openRelease()
+    } catch (thrown) {
+      setError(toAppError(thrown))
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Group title="Application update">
+        <p className="text-sm text-muted">
+          {info ? `Installed version ${info.currentVersion}` : 'Check the public release channel for a newer version.'}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button onClick={check} disabled={checking || installing}>
+            {checking ? 'Checking…' : 'Check for updates'}
+          </Button>
+          {info?.available && info.platform === 'windows' ? (
+            <Button variant="primary" onClick={install} disabled={checking || installing}>
+              {installing ? 'Downloading…' : `Update to ${info.latestVersion}`}
+            </Button>
+          ) : null}
+        </div>
+        {info?.development ? (
+          <p className="text-xs text-muted">Development builds do not update themselves.</p>
+        ) : null}
+        {info && !info.development && !info.available ? (
+          <p className="text-xs text-muted">You are on the latest version.</p>
+        ) : null}
+        {info?.available && info.platform === 'darwin' ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-muted">
+              Version {info.latestVersion} is available. Update Homebrew installs with <code>{info.command}</code>.
+            </p>
+            <Button variant="subtle" onClick={() => void openRelease()}>
+              Open release page
+            </Button>
+          </div>
+        ) : null}
+        {error ? <ErrorStrip error={error} /> : null}
+      </Group>
+    </div>
   )
 }
 

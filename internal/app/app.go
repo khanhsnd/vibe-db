@@ -25,11 +25,12 @@ type App struct {
 	Connections *ConnectionAPI
 	Queries     *QueryAPI
 	System      *SystemAPI
+	Updates     *UpdateAPI
 
 	sessions *session.Manager
 }
 
-func New() (*App, error) {
+func New(version ...string) (*App, error) {
 	profilePath, err := profilefile.DefaultPath()
 	if err != nil {
 		return nil, fmt.Errorf("resolve config path: %w", err)
@@ -51,6 +52,10 @@ func New() (*App, error) {
 	}
 
 	sessions := session.NewManager(engines())
+	currentVersion := "dev"
+	if len(version) > 0 {
+		currentVersion = version[0]
+	}
 
 	return &App{
 		Connections: NewConnectionAPI(
@@ -62,6 +67,7 @@ func New() (*App, error) {
 		),
 		Queries:  NewQueryAPI(sessions, historyfile.New(historyPath), history.NewLog()),
 		System:   NewSystemAPI(),
+		Updates:  NewUpdateAPI(currentVersion),
 		sessions: sessions,
 	}, nil
 }
@@ -86,6 +92,7 @@ func (a *App) Startup(ctx context.Context) {
 	a.Connections.useContext(ctx)
 	a.Queries.useContext(ctx)
 	a.System.useContext(ctx)
+	a.Updates.useContext(ctx)
 }
 
 func (a *App) Shutdown(context.Context) {
@@ -93,5 +100,5 @@ func (a *App) Shutdown(context.Context) {
 }
 
 func (a *App) Bindings() []any {
-	return []any{a.Connections, a.Queries, a.System}
+	return []any{a.Connections, a.Queries, a.System, a.Updates}
 }

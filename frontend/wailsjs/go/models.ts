@@ -2325,7 +2325,31 @@ export namespace app {
 	        this.writes = source["writes"];
 	    }
 	}
-	
+
+
+	export class UpdateInfo {
+	    currentVersion: string;
+	    latestVersion: string;
+	    available: boolean;
+	    platform: string;
+	    releaseUrl: string;
+	    command: string;
+	    development: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.available = source["available"];
+	        this.platform = source["platform"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.command = source["command"];
+	        this.development = source["development"];
+	    }
+	}
 
 }
-

@@ -13,8 +13,12 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// version is set by the release workflow with -ldflags. A checkout stays a development build so it
+// cannot accidentally offer an update while somebody is working in it.
+var version = "dev"
+
 func main() {
-	application, err := app.New()
+	application, err := app.New(version)
 	if err != nil {
 		log.Fatalf("vibe-db: %v", err)
 	}

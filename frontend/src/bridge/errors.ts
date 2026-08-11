@@ -23,6 +23,7 @@ export type ErrorCode =
   // refused. Neither is a server saying anything — see `features/tools.md`.
   | 'TOOL_NOT_FOUND'
   | 'TOOL_FAILED'
+  | 'UPDATE_FAILED'
   | 'INTERNAL'
 
 export class AppError extends Error {

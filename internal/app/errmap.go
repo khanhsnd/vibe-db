@@ -48,6 +48,7 @@ const (
 	// verdict, carried through in its words.
 	CodeToolNotFound ErrorCode = "TOOL_NOT_FOUND"
 	CodeToolFailed   ErrorCode = "TOOL_FAILED"
+	CodeUpdateFailed ErrorCode = "UPDATE_FAILED"
 
 	CodeInternal ErrorCode = "INTERNAL"
 )

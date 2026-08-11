@@ -6,6 +6,13 @@
   "frontend:build": "corepack pnpm@10.34.5 run build",
   "frontend:dev:watcher": "corepack pnpm@10.34.5 run dev",
   "frontend:dev:serverUrl": "auto",
+  "info": {
+    "companyName": "khanh",
+    "productName": "Vibe DB",
+    "productVersion": "0.0.0",
+    "copyright": "Copyright © khanh",
+    "comments": "Vibe DB database client"
+  },
   "author": {
     "name": "khanh",
     "email": "khanhsnd@gmail.com"
