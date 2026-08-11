@@ -113,8 +113,9 @@ jobs:
           repository: ${{ env.RELEASE_REPOSITORY }}
           token: ${{ secrets.RELEASES_TOKEN }}
           tag_name: ${{ github.ref_name }}
+          target_commitish: master
           name: Vibe DB ${{ github.ref_name }}
-          generate_release_notes: true
+          body: Release ${{ github.ref_name }}.
           files: dist/*
 
   update-homebrew-tap:

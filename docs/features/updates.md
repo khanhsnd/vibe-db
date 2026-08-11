@@ -15,8 +15,8 @@ the installed application directory, so installing a new version does not migrat
 
 Create these public repositories:
 
-1. `khanhsnd/vibe-db-releases` — leave it empty; GitHub Actions will create the releases and upload the
-   installer, macOS ZIP and `checksums.txt`.
+1. `khanhsnd/vibe-db-releases` — initialize it with a README on the `master` branch; GitHub Actions will
+   create the releases and upload the installer, macOS ZIP and `checksums.txt`.
 2. `khanhsnd/homebrew-tap` — initialize it with a README. The release workflow creates `Casks/vibe-db.rb`
    here.
 
