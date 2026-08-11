@@ -29,4 +29,4 @@ Place Go tests beside their code as `*_test.go`; use `TestXxx` names that descri
 
 ## Commits, Pull Requests, and Documentation
 
-Write concise imperative commit subjects, e.g. `Implement restore with table selection`; use a conventional prefix when it clarifies scope, such as `docs:` or `feat:`. PRs should state the user-visible change, testing performed, and any required database or configuration steps; include screenshots for UI changes. Update the owning documentation in the same commit whenever behaviour changes.
+Write concise imperative commit subjects, e.g. `Implement restore with table selection`; use a conventional prefix when it clarifies scope, such as `docs:` or `feat:`. PRs should state the user-visible change, testing performed, and any required database or configuration steps; include screenshots for UI changes. Update the owning documentation in the same commit whenever behaviour changes
