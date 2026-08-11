@@ -115,11 +115,13 @@
   of them — so it writes on a timer rather than on the change, and flushes on `beforeunload`.
 - **State that must outlive a tab being looked away from belongs in a store keyed by the tab id**,
   never in the component: `WorkArea` mounts the tab in front and no other, so a component's own state
-  goes down with it. `stores/queries.ts` keeps a query tab's rows that way and `stores/tableViews.ts`
-  keeps a table tab's — the panels it has open, the columns it hides, and what its read was asked for.
-  Both are dropped by `tabs.close`, which is the one place a tab's belongings are let go, and a table
-  tab's view is started by `tabs.open` so a tab cannot exist without one. What each kind of tab keeps,
-  and why the two differ, is in [features/shell.md](features/shell.md#tabs).
+  goes down with it. `stores/queries.ts` keeps a query tab's rows that way, `stores/tableViews.ts`
+  keeps what a table tab's read was asked for — the panels it has open, the columns it hides, the
+  page, the order, the conditions — `stores/tableRows.ts` keeps what came back, and
+  `stores/gridEdits.ts` keeps what is waiting to be written back to *either* grid. All four are
+  dropped by `tabs.close`, which is the one place a tab's belongings are let go, and a table tab's
+  view is started by `tabs.open` so a tab cannot exist without one. What each kind of tab keeps is in
+  [features/shell.md](features/shell.md#tabs).
 - **A new kind of tab adds state, not a second way of running things.** `stores/console.ts` keeps a
   console's transcript and nothing else: the run goes through `stores/queries.ts` under the same tab
   id, which is why a console's rows are paged, exported, edited and stopped by the code that already

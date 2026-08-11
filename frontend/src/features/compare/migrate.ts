@@ -230,9 +230,16 @@ export function rowKey(_row: RowDiff, at: number): string {
   return `row:${at}`
 }
 
-/** Every row of a data comparison that could be ticked: the ones that differ. */
-export function everyRowPick(diff: DataDiff): string[] {
-  return diff.rows.flatMap((row, at) => (row.status === 'same' ? [] : [rowKey(row, at)]))
+/**
+ * Every row a tick could name: the ones that are **drawn** and differ. Drawn, because `Take all` is
+ * a button on the toolbar over the panes — a tick it made on a row a filter is hiding would be a
+ * statement in the script with nothing on screen to account for it.
+ */
+export function rowPicks(pairs: readonly RowDiff[], at: readonly number[]): string[] {
+  return at.flatMap((one) => {
+    const row = pairs[one]
+    return row === undefined || row.status === 'same' ? [] : [rowKey(row, one)]
+  })
 }
 
 /** The three lists a structure comparison ticks, so a caller can name one without spelling it. */

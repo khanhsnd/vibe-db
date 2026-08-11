@@ -13,6 +13,7 @@ import { QueryHistory } from './QueryHistory'
 import { ScriptMessages } from './ScriptMessages'
 
 interface QueryOutputProps {
+  tabId: string
   run: QueryRun
   sessionId: string | null
   profileId: string
@@ -34,6 +35,7 @@ interface QueryOutputProps {
  * the two beside it are that same answer read as a plan.
  */
 export function QueryOutput({
+  tabId,
   run,
   sessionId,
   profileId,
@@ -79,6 +81,7 @@ export function QueryOutput({
       label: 'Result',
       content: (
         <ResultPane
+          tabId={tabId}
           run={run}
           sessionId={sessionId}
           onRefresh={onRefresh}

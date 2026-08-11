@@ -63,15 +63,19 @@ therefore a deliberate list, kept in a store under the tab's id and dropped when
 
 - A **table tab** keeps *what was asked of it* (`stores/tableViews.ts`): the panels open — Cell
   Editor, Column, Filter & Sort — the columns hidden, the page and its size, the order and the
-  conditions. It does **not** keep the answer: the rows are read again on the way back, so a table
-  something else has changed under it reads fresh rather than stale, and the status line says when.
-  The column *order* is remembered against the table itself and outlives the tab entirely.
-- A **query tab** is the other way round and keeps its rows (`stores/queries.ts`), because a
-  statement cannot be re-run behind the reader's back: it may write, and it may be expensive. It is
-  also the one kind that outlives the *app* closing, buffer and all — see
-  [features/query-tab.md](query-tab.md#the-tabs-are-still-there-next-time).
+  conditions. It keeps **the answer** too (`stores/tableRows.ts`), and the changes staged against it
+  (`stores/gridEdits.ts`): coming back to a tab reads nothing, because the read that would have
+  replaced those rows would have taken the row the reader had added and not yet applied with them.
+  What reads again is a changed question or the footer's own `↻` — see
+  [features/table-tab.md](table-tab.md). The column *order* is remembered against the table itself
+  and outlives the tab entirely.
+- A **query tab** keeps its rows the same way (`stores/queries.ts`), because a statement cannot be
+  re-run behind the reader's back: it may write, and it may be expensive. Its un-applied edits are
+  kept beside them, in the same `stores/gridEdits.ts` a table tab uses, one grid's staging being one
+  thing wherever the grid is drawn. It is also the one kind that outlives the *app* closing, buffer
+  and all — see [features/query-tab.md](query-tab.md#the-tabs-are-still-there-next-time).
 - A **compare tab** keeps only *which half* it was showing — its two tables and its mode are the
-  tab itself. The diff is read again on the way back, for the reason a table's rows are: a
+  tab itself. The diff is read again on the way back: nothing there is the reader's to lose, and a
   comparison that had gone stale would be worse than the second read that replaces it.
 - A **Find in Schema tab** keeps its hits (`stores/searches.ts`), for the reason a query tab keeps its
   rows: a search of a whole schema is far too long a read to lose by looking at another tab. What was

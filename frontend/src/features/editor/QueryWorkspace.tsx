@@ -220,6 +220,7 @@ export function QueryWorkspace({
 
         <SplitPanel id="output" defaultSize="62%" minSize="20%">
           <QueryOutput
+            tabId={tab.id}
             run={run}
             sessionId={sessionId}
             profileId={tab.profileId}

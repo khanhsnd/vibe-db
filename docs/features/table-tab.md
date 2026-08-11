@@ -7,7 +7,16 @@ the server. **Until the first page lands the pane says so** — `Loading <table>
 from `shared/ui/Loading` — because a grid with no columns yet is a blank pane and a table of any
 size can take seconds to answer. Only the *first* read gets it: once rows are on screen a re-read
 leaves them there and the pager alone says it is working, which is what keeps a page turn from
-blinking. A tab loads 100 rows per page by default, ordered by primary key so paging is stable —
+blinking.
+
+**A page in hand is read once.** Looking at another tab and coming back reads nothing: the rows are
+the rows the reader left, and so is the row they had added and not yet applied — see
+[what a tab keeps](shell.md#tabs). What sends for more is a **changed question** — another page,
+another limit, another order, another filter, or the connection dialled again — or the **`↻`** under
+the grid, which is the same Refresh every grid's footer has ([grid.md](../grid.md#the-bar-under-it)).
+The status line's `Last Refresh` is therefore the age of what is on screen and means it.
+
+A tab loads 100 rows per page by default, ordered by primary key so paging is stable —
 until a header's `⋮` menu, or the Filter & Sort panel, gives it keys of its own; those travel into the
 read's `ORDER BY` and therefore order the whole table rather than the page on screen.
 **Paging lives on the right of the bar under the grid** — first, back, the page typed into a box,

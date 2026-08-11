@@ -31,10 +31,11 @@ again, in order, the next time the app starts, with the one that was in front in
 tab *is* its buffer: nothing else holds what was typed there, and closing the window is not asking for
 it to be thrown away.
 
-- **Only the question is kept, never the answer.** The rows a statement returned are not stored, for
-  the reason a table tab re-reads on the way back: a result restored from last week would be an
-  account of a server as it was, drawn as if it were now. A restored tab opens with an empty
-  `Result` and its statement ready to run.
+- **Only the question is kept, never the answer.** The rows a statement returned are not written to
+  disk: a result restored from last week would be an account of a server as it was, drawn as if it
+  were now. Rows survive a tab being looked away from, which is a glance; they do not survive the
+  app closing, which is a week. A restored tab opens with an empty `Result` and its statement ready
+  to run.
 - **A tab is restored whether or not its connection is dialled**, and it simply cannot run until it
   is — `Execute` is grey while there is no session, exactly as it is for a tab opened by hand against
   a connection that has been closed.

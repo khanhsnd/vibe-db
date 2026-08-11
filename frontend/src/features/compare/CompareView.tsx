@@ -34,8 +34,10 @@ import { ComparePanes, type CompareLayout } from './ComparePanes'
 import { CompareScript } from './CompareScript'
 import { CompareSummary, type CompareWords } from './CompareSummary'
 import { DdlDiff } from './DdlDiff'
-import { endsOf, everyPick, everyRowPick, tableInto, type Direction } from './migrate'
-import { allSame, countStatuses, dataPanes, shownAt, structurePanes } from './panes'
+import { FieldFilterButton } from './FieldFilterButton'
+import { filterCount, shownAt, type FieldFilters } from './fieldFilter'
+import { endsOf, everyPick, rowPicks, tableInto, type Direction } from './migrate'
+import { allSame, countStatuses, dataPanes, structurePanes, type DiffCounts } from './panes'
 import { BRANCHES, structureRows, type SideNames, type StructureRow } from './structureTree'
 import { useCompare } from './useCompare'
 import { useMigration } from './useMigration'
@@ -78,6 +80,8 @@ export function CompareView({ tab }: { tab: CompareTab }) {
   const profiles = useConnectionsStore((s) => s.profiles)
 
   const [differencesOnly, setDifferencesOnly] = useState(false)
+  /** What is looked for in each compared field, which narrows the rows the panes draw. */
+  const [filters, setFilters] = useState<FieldFilters>({})
   const [rows, setRows] = useState(DEFAULT_COMPARE_ROWS)
   const [direction, setDirection] = useState<Direction>('toTarget')
   const [taken, setTaken] = useState<ReadonlySet<string>>(new Set())
@@ -116,6 +120,10 @@ export function CompareView({ tab }: { tab: CompareTab }) {
     })
   }, [])
 
+  const setFilter = useCallback((column: string, text: string) => {
+    setFilters((current) => ({ ...current, [column]: text }))
+  }, [])
+
   const fold = useCallback((branch: string) => {
     setShut((current) => {
       const next = new Set(current)
@@ -141,7 +149,11 @@ export function CompareView({ tab }: { tab: CompareTab }) {
     engineInfo(profileOf(left.profileId)?.engine ?? '').hasForeignKeys &&
     engineInfo(profileOf(right.profileId)?.engine ?? '').hasForeignKeys
 
-  const picks = structure ? everyPick(structure) : data ? everyRowPick(data) : []
+  // Which rows are drawn is worked out here rather than in the half below, because `Take all` on the
+  // toolbar takes what is drawn: a tick has to be a row the reader can see.
+  const narrowed = filterCount(filters)
+  const at = data === null ? [] : shownAt(data.rows, data.columns, differencesOnly, filters)
+  const picks = structure ? everyPick(structure) : data ? rowPicks(data.rows, at) : []
   const setAll = (all: boolean) => setTaken(all ? new Set(picks) : new Set())
 
   return (
@@ -156,6 +168,8 @@ export function CompareView({ tab }: { tab: CompareTab }) {
           value={tab.mode}
           onChange={(mode) => {
             setTaken(new Set())
+            // A field filter names the columns of *these* rows, and the other half has none.
+            setFilters({})
             setMode(tab.id, mode)
           }}
         />
@@ -218,6 +232,21 @@ export function CompareView({ tab }: { tab: CompareTab }) {
           />
           Differences only
         </label>
+
+        {/* A box per compared field, which is the other half of the same question: `Differences
+            only` narrows by *what a row is*, and this by *what it holds*. The two compose, and
+            neither asks the server anything — see `fieldFilter`. */}
+        {tab.mode === 'data' && data !== null ? (
+          <FieldFilterButton
+            columns={data.columns}
+            filters={filters}
+            count={narrowed}
+            shown={at.length}
+            total={data.rows.length}
+            onChange={setFilter}
+            onClear={() => setFilters({})}
+          />
+        ) : null}
 
         {/* Only the data half reads rows. It is a list of counts and **not** the grids' own
             `RowLimit`, which offers All: a comparison holds both sides in memory at once and
@@ -303,7 +332,8 @@ export function CompareView({ tab }: { tab: CompareTab }) {
               ) : data !== null ? (
                 <DataHalf
                   diff={data}
-                  differencesOnly={differencesOnly}
+                  at={at}
+                  filtered={narrowed > 0}
                   names={names}
                   labels={labels}
                   taken={taken}
@@ -332,9 +362,11 @@ export function CompareView({ tab }: { tab: CompareTab }) {
                         statements={migration.statements}
                         into={targetLabel(into)}
                         empty={
-                          picks.length === 0
-                            ? 'The two sides agree, so there is nothing to carry across.'
-                            : 'Tick what to take above, or press Take all.'
+                          picks.length > 0
+                            ? 'Tick what to take above, or press Take all.'
+                            : narrowed > 0
+                              ? 'Nothing drawn differs — the field filters may be hiding what does.'
+                              : 'The two sides agree, so there is nothing to carry across.'
                         }
                       />
                     ),
@@ -430,10 +462,13 @@ function glyphOf(row: StructureRow) {
  * The data half: one pane pair of rows, and under it what the comparison was *able* to do — which
  * columns it matched on, which it left out, and which side it did not see the whole of. All three
  * are the difference between a diff and a diff that can be trusted, so none of them is optional.
+ *
+ * Which pairs are drawn is the toolbar's — `at` — because the same answer is what `Take all` takes.
  */
 function DataHalf({
   diff,
-  differencesOnly,
+  at,
+  filtered,
   names,
   labels,
   taken,
@@ -441,14 +476,16 @@ function DataHalf({
   layout,
 }: {
   diff: DataDiff
-  differencesOnly: boolean
+  /** Where each drawn pair sits in the whole comparison, which is what a tick is named by. */
+  at: readonly number[]
+  /** Whether a field filter is in force — why two empty panes need not mean two equal tables. */
+  filtered: boolean
   names: SideNames
   labels: SideNames
   taken: ReadonlySet<string>
   onTake: (picks: string[]) => void
   layout: CompareLayout
 }) {
-  const at = shownAt(diff.rows, differencesOnly)
   const shown = at.map((one) => diff.rows[one]).filter((one) => one !== undefined)
   const counts = countStatuses(diff.rows.map((one) => one.status))
   const words: CompareWords = {
@@ -464,14 +501,7 @@ function DataHalf({
           hint="There is nothing to compare row by row. Structure is where two shapes this far apart are read."
         />
       ) : shown.length === 0 ? (
-        <Empty
-          title={allSame(counts) ? 'Every row read is identical' : 'Neither side returned a row'}
-          hint={
-            allSame(counts)
-              ? `${numbers.format(counts.same)} rows matched and agreed on every compared column.`
-              : 'Both tables are empty, or neither read returned anything.'
-          }
-        />
+        <Empty {...nothingDrawn(counts, filtered)} />
       ) : (
         <ComparePanes
           panes={dataPanes(diff.columns, shown, at, taken, layout === 'rows')}
@@ -496,6 +526,30 @@ function DataHalf({
       ))}
     </div>
   )
+}
+
+/**
+ * Why the panes are empty. Three different facts, and never the same sentence: a filter that matched
+ * nothing must never read as two tables that agreed, which is the one reading a diff cannot afford.
+ */
+function nothingDrawn(counts: DiffCounts, filtered: boolean): { title: string; hint: string } {
+  if (filtered) {
+    return {
+      title: 'No row holds what the fields ask for',
+      hint: 'The panes are narrowed rather than empty — clear a field filter to widen them.',
+    }
+  }
+  if (allSame(counts)) {
+    return {
+      title: 'Every row read is identical',
+      hint: `${numbers.format(counts.same)} rows matched and agreed on every compared column.`,
+    }
+  }
+
+  return {
+    title: 'Neither side returned a row',
+    hint: 'Both tables are empty, or neither read returned anything.',
+  }
 }
 
 function matchedBy(diff: DataDiff): string {

@@ -1,13 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { toAppError, type AppError } from '@/bridge/errors'
 import { tables, type Cell, type RowValue, type TableColumn } from '@/bridge/tables'
+import { NOTHING_STAGED, useGridEditsStore, type PendingEdit } from '@/stores/gridEdits'
 
 import { cellKey, primaryKeyOf, type CellRef } from './resultSet'
 
 const NO_ROWS: Cell[][] = []
-const NO_DRAFTS: Cell[][] = []
-const NO_DELETIONS: ReadonlySet<number> = new Set()
 
 /** The stored table a grid's rows came from, and so what a write names. */
 export interface EditTarget {
@@ -23,27 +22,25 @@ export interface EditSource {
   rows: Cell[][]
 }
 
-interface PendingEdit {
-  ref: CellRef
-  value: Cell
-  /** What the value is to be written *as*, where the engine's value carries a type — see `CellEdit`. */
-  valueType?: string
-}
-
 /**
- * Holds every change to a grid locally until Apply writes it back: edited cells, rows added
- * at the end, and stored rows marked for deletion. A mistyped value therefore costs nothing,
- * and one round trip per keystroke is avoided. Discard drops them all; so does a fresh read,
- * because the row numbers a pending change names mean nothing in the next one.
+ * Holds every change to a grid until Apply writes it back: edited cells, rows added at the end, and
+ * stored rows marked for deletion. A mistyped value therefore costs nothing, and one round trip per
+ * keystroke is avoided. Discard drops them all; so does a fresh read, because the row numbers a
+ * pending change names mean nothing in the next one.
+ *
+ * They live in `stores/gridEdits.ts` under `id` — the tab this grid is drawn in — because only the
+ * tab in front is mounted, and a row the reader added would otherwise go down with the component
+ * the moment they glanced at another tab.
  */
 export function useGridEdits(
+  id: string,
   source: EditSource | null,
   sessionId: string | null,
   onApplied: () => void,
 ) {
-  const [edits, setEdits] = useState<Record<string, PendingEdit>>({})
-  const [drafts, setDrafts] = useState<Cell[][]>(NO_DRAFTS)
-  const [deleted, setDeleted] = useState<ReadonlySet<number>>(NO_DELETIONS)
+  const { cells, drafts, deleted } = useGridEditsStore((s) => s.staged[id] ?? NOTHING_STAGED)
+  const stage = useGridEditsStore((s) => s.stage)
+  const clear = useGridEditsStore((s) => s.discard)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<AppError | null>(null)
 
@@ -51,20 +48,25 @@ export function useGridEdits(
   const width = source?.columns.length ?? 0
 
   const discard = useCallback(() => {
-    setEdits({})
-    setDrafts(NO_DRAFTS)
-    setDeleted(NO_DELETIONS)
+    clear(id)
     setError(null)
-  }, [])
+  }, [clear, id])
 
-  // A pending change names a row number, which means nothing in the next read.
-  useEffect(discard, [discard, base])
+  // A pending change names a row number, which means nothing in the next read — so a **new** read
+  // drops them all. Coming back to the tab is not one: the rows are the rows it was left on, which
+  // is the whole reason the staging is kept outside the component.
+  const read = useRef(base)
+  useEffect(() => {
+    if (read.current === base) return
+    read.current = base
+    discard()
+  }, [base, discard])
 
   // One array per set of rows, not per render: the grid draws every row from it, and a new
   // identity on every render would redraw the whole viewport under the reader.
-  const rows = useMemo(() => [...overlay(base, edits), ...drafts], [base, edits, drafts])
+  const rows = useMemo(() => [...overlay(base, cells), ...drafts], [base, cells, drafts])
 
-  const dirtyKeys = useMemo(() => new Set(Object.keys(edits)), [edits])
+  const dirtyKeys = useMemo(() => new Set(Object.keys(cells)), [cells])
 
   /** Every cell of a row that does not exist on the server yet counts as pending. */
   const isDirty = (row: number, column: number) =>
@@ -80,16 +82,19 @@ export function useGridEdits(
   const setCell = (ref: CellRef, value: Cell, valueType?: string) => {
     const draft = ref.row - base.length
     if (draft >= 0) {
-      setDrafts((current) =>
-        current.map((row, index) => (index === draft ? replace(row, ref.column, value) : row)),
-      )
+      stage(id, (current) => ({
+        ...current,
+        drafts: current.drafts.map((row, index) =>
+          index === draft ? replace(row, ref.column, value) : row,
+        ),
+      }))
       return
     }
 
     const original = base[ref.row]?.[ref.column] ?? null
 
-    setEdits((current) => {
-      const next = { ...current }
+    stage(id, (current) => {
+      const next = { ...current.cells }
       const key = cellKey(ref.row, ref.column)
 
       // An unchanged value is not an edit — unless it is being written as a different type, which
@@ -97,7 +102,7 @@ export function useGridEdits(
       if (value === original && valueType === undefined) delete next[key]
       else next[key] = { ref, value, ...(valueType === undefined ? {} : { valueType }) }
 
-      return next
+      return { ...current, cells: next }
     })
   }
 
@@ -108,10 +113,10 @@ export function useGridEdits(
    * key it was added from is the name the box opens with.
    */
   const addRow = (seed?: Record<number, Cell>) =>
-    setDrafts((current) => [
+    stage(id, (current) => ({
       ...current,
-      Array.from({ length: width }, (_, at) => seed?.[at] ?? null),
-    ])
+      drafts: [...current.drafts, Array.from({ length: width }, (_, at) => seed?.[at] ?? null)],
+    }))
 
   /**
    * Marks the given stored rows for deletion, and drops outright a row that was only ever a
@@ -121,19 +126,22 @@ export function useGridEdits(
   const deleteRows = (rows: number[]) => {
     if (rows.length === 0) return
 
-    const marked = new Set(deleted)
-    const dropped = new Set<number>()
+    stage(id, (current) => {
+      const marked = new Set(current.deleted)
+      const dropped = new Set<number>()
 
-    for (const row of rows) {
-      const draft = row - base.length
-      if (draft >= 0) dropped.add(draft)
-      else marked.add(row)
-    }
+      for (const row of rows) {
+        const draft = row - base.length
+        if (draft >= 0) dropped.add(draft)
+        else marked.add(row)
+      }
 
-    setDeleted(marked)
-    if (dropped.size > 0) {
-      setDrafts((current) => current.filter((_, index) => !dropped.has(index)))
-    }
+      return {
+        ...current,
+        drafts: current.drafts.filter((_, index) => !dropped.has(index)),
+        deleted: marked,
+      }
+    })
   }
 
   /** Edits first, then inserts, then deletions, so an edit to a doomed row is simply skipped. */
@@ -143,7 +151,7 @@ export function useGridEdits(
 
     setSaving(true)
     try {
-      for (const edit of renamesLast(columns, Object.values(edits))) {
+      for (const edit of renamesLast(columns, Object.values(cells))) {
         const row = base[edit.ref.row]
         const column = columns[edit.ref.column]
         if (!row || !column || deleted.has(edit.ref.row)) continue

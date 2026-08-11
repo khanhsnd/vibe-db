@@ -112,6 +112,7 @@ export function ConsoleView({ tab, sessionId, databases, schemas, engine }: Cons
 
         <SplitPanel id="rows" defaultSize="55%" minSize="20%">
           <ResultPane
+            tabId={tab.id}
             run={run}
             sessionId={sessionId}
             onRefresh={refresh}

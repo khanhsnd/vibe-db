@@ -324,8 +324,13 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
 - **Add** appends an empty row at the end of the grid **and selects it**, so a paste that follows the
   add means the new row and not the one that was copied; **Delete** marks the selected rows, so both
   are pending like an edited cell. **Apply** writes every pending change — edits, then inserts, then
-  deletions — and reloads; **Discard** drops them all. **Refresh** reloads alone. **Stop** appears
-  only where there is something to cancel, which today is a running statement.
+  deletions — and reloads; **Discard** drops them all. **Refresh** reloads alone, and is the *only*
+  thing that re-reads a table tab — see [features/table-tab.md](features/table-tab.md). **Stop**
+  appears only where there is something to cancel, which today is a running statement.
+- **What is pending outlives the tab being looked away from.** It is staged in `stores/gridEdits.ts`
+  under the tab id rather than in the component, so a row added and not yet applied is still there
+  on the way back. Only a **new read** drops it, because the row numbers a pending change names mean
+  nothing in the next one.
 - **The four editing icons are hidden outright when the rows cannot be written back**, rather than
   shown disabled: a result that no `UPDATE` can name has no use for them. `Refresh` always shows.
   Export is not here at all — it belongs to the grid's head strip, above. Their four handlers are

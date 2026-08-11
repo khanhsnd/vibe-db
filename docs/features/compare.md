@@ -15,7 +15,7 @@ see is a gesture nobody finds.
 ## The tab
 
 ```
-[Structure|Data] ⌄⌃ ⌃⌄  Apply to [users_b|users_a]  ☐ Differences only  Refresh   Take all  Take none  [Apply to users_b]
+[Structure|Data] ⌄⌃ ⌃⌄  Apply to [users_b|users_a]  ☐ Differences only  ⏷Fields ②  Refresh   Take all  Take none  [Apply to users_b]
 ├─ Origin: shop.users_a ─────────────────────╥─────┬─ Target: shop.users_b ───────────────────────┤
 │ Name              │ Declaration            ║Take │ Name              │ Declaration  │Difference │
 │ ▾ ▦ shop.users_a  │                        ║ ☐   │ ▾ ▦ shop.users_b  │              │3 of 11 …  │
@@ -157,5 +157,28 @@ the table being written holds. Two writes and not one, because they are two inte
 `RowStatements` takes one mode.
 
 A count of each outcome sits under the panes in the colours it drew them in — it is the legend and
-the tally at once. Nothing on it is clickable: **Differences only** is what narrows the panes, and a
-count that also filtered would be two controls wearing one label.
+the tally at once. Nothing on it is clickable: the two controls below are what narrow the panes, and
+a count that also filtered would be two controls wearing one label.
+
+### Narrowing what is drawn
+
+Two controls, and they compose. **Differences only** narrows by *what a row is*; **Fields** narrows
+by *what it holds* — a funnel on the toolbar of the data half opening a **box per compared field**,
+with the number in force on the button so a shut panel never reads as a widened pane.
+
+- A box holds a **substring, matched case-insensitively** — the one notation this app has for "holds
+  this text", the same as the sidebar's own filter box. There is no operator to pick and no pattern
+  to write: the twenty operators belong to a `WHERE` this side writes, and there is no statement
+  here — see [filtering and sorting](filter-sort.md).
+- **It asks the server nothing.** Both sides are already in memory and were paired there; a read
+  that narrowed them would be two fresh windows, and row *n* of one pane would stop being row *n* of
+  the other. Nothing typed in a box is ever spelled into a statement.
+- **A pair is drawn if either side holds the text.** A row only the left has got has no right side at
+  all, and the side that has not got it must never be the reason it stops being drawn — a blank
+  opposite a row is *absent*, not empty, and it is the difference the tab was opened to see.
+- **`Take all` takes what is drawn**, so a tick is always a row on the screen. A tick already made
+  survives a filter that hides its row: the Script pane under the panes is the whole of what Apply
+  will run, and it is numbered.
+- Nothing is applied and nothing is confirmed — every keystroke narrows, `Escape`, `Enter` or a press
+  outside shuts the panel, and the boxes hold until **Clear all**. Switching the half being read
+  clears them, the compared fields being the other half's.

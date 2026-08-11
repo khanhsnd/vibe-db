@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import type { Namespace } from '@/bridge/connections'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { ALL_ROWS } from '@/bridge/rows'
-import { onRowsStreamed, tables, type Cell, type TablePage } from '@/bridge/tables'
+import { onRowsStreamed, tables, type Cell } from '@/bridge/tables'
 import { activeFilter, type Group } from '@/features/results/filter'
 import type { SortKey } from '@/features/results/resultSet'
+import { useTableRowsStore } from '@/stores/tableRows'
 import { IDLE_VIEW, useTableViewsStore } from '@/stores/tableViews'
 
 /** A read of every row, while it runs: what to stop, and how many rows have arrived so far. */
@@ -17,6 +18,11 @@ export interface RowFetch {
 /**
  * The rows are paged on the server, so the sort and the filters have to be too: ordering or
  * narrowing the page in hand would only shuffle the hundred rows the reader can already see.
+ *
+ * **A page in hand is not read again.** What a read was asked for is spelled out as `request`, and a
+ * tab holding a page that answers it reads nothing on the way back in — the rows the reader left,
+ * their un-applied edits included, are the rows they return to. Only a *changed* request — another
+ * page, another order, another filter — or **Refresh** sends for more.
  *
  * `All` is the one read that cannot be answered in one piece — a million rows would have to cross
  * the bridge as a single JavaScript string — so it is **streamed**: the rows arrive in batches
@@ -32,20 +38,39 @@ export function useTableData(
 ) {
   const { database, schema } = namespace
 
-  // What was asked for is the tab's and outlives it being looked away from; what came back is this
-  // hook's, and is read again on the way in — see `stores/tableViews.ts`.
+  // What was asked for is the tab's and outlives it being looked away from; so is what came back —
+  // see `stores/tableViews.ts` and `stores/tableRows.ts`.
   const view = useTableViewsStore((s) => s.views[tabId] ?? IDLE_VIEW)
   const change = useTableViewsStore((s) => s.change)
   const { page, limit, sort, criteria } = view
 
+  const held = useTableRowsStore((s) => s.pages[tabId] ?? null)
+  const hold = useTableRowsStore((s) => s.hold)
+  const markStale = useTableRowsStore((s) => s.stale)
+
   const [nonce, setNonce] = useState(0)
-  const [data, setData] = useState<TablePage | null>(null)
-  const [loadedAt, setLoadedAt] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(held === null)
   const [fetch, setFetch] = useState<RowFetch | null>(null)
   const [error, setError] = useState<AppError | null>(null)
 
+  /**
+   * The whole of what this read asks for, so a page in hand can say whether it answers it. The
+   * session is part of it: a connection dialled again is a different server as far as a page is
+   * concerned, and rows read before it went down are not an answer about the one now open.
+   */
+  const request = useMemo(
+    () => JSON.stringify({ sessionId, database, schema, table, limit, page, sort, criteria }),
+    [sessionId, database, schema, table, limit, page, sort, criteria],
+  )
+
   useEffect(() => {
+    // Read through the store rather than through the render's own snapshot: this must not re-run
+    // when the answer lands, only when the question changes or Refresh makes the answer stale.
+    if (useTableRowsStore.getState().pages[tabId]?.request === request) {
+      setLoading(false)
+      return
+    }
+
     let active = true
     setLoading(true)
 
@@ -81,8 +106,11 @@ export function useTableData(
       })
       .then((next) => {
         if (!active) return
-        setData(streamed ? { ...next, rows: streaming } : next)
-        setLoadedAt(Date.now())
+        hold(tabId, {
+          request,
+          data: streamed ? { ...next, rows: streaming } : next,
+          loadedAt: Date.now(),
+        })
         setError(null)
       })
       .catch((thrown: unknown) => {
@@ -100,12 +128,15 @@ export function useTableData(
           setError(failure)
           return
         }
-        setData((current) =>
-          current === null
-            ? null
-            : { ...current, rows: streaming, total: streaming.length, statement: '' },
-        )
-        setLoadedAt(Date.now())
+
+        const stopped = useTableRowsStore.getState().pages[tabId]
+        if (stopped === undefined) return
+
+        hold(tabId, {
+          request,
+          data: { ...stopped.data, rows: streaming, total: streaming.length, statement: '' },
+          loadedAt: Date.now(),
+        })
       })
       .finally(() => {
         if (!active) return
@@ -120,9 +151,17 @@ export function useTableData(
       // must not go on scanning a million rows and emitting them at a listener that has gone.
       if (streamed) void tables.stopRows(runId)
     }
-  }, [sessionId, database, schema, table, limit, page, sort, criteria, nonce])
+  }, [sessionId, tabId, database, schema, table, limit, page, sort, criteria, request, hold, nonce])
 
-  const refresh = useCallback(() => setNonce((current) => current + 1), [])
+  /**
+   * Sends for the rows again. The page in hand stays on screen — a re-read must not blink — but it
+   * answers nothing from now on, which is what makes the read above fetch rather than skip. The
+   * nonce is what re-runs it, a request that has not changed being exactly the case Refresh is for.
+   */
+  const refresh = useCallback(() => {
+    markStale(tabId)
+    setNonce((current) => current + 1)
+  }, [markStale, tabId])
 
   const goToPage = useCallback(
     (next: number) => change(tabId, { page: Math.max(0, next) }),
@@ -151,8 +190,8 @@ export function useTableData(
   }, [fetch])
 
   return {
-    data,
-    loadedAt,
+    data: held?.data ?? null,
+    loadedAt: held?.loadedAt ?? null,
     loading,
     fetch,
     error,

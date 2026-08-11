@@ -47,6 +47,8 @@ const NO_COLUMNS: TableColumn[] = []
 const isCancel = (error: AppError) => error.code === 'QUERY_CANCELLED'
 
 interface ResultPaneProps {
+  /** Which tab these rows are drawn in, and so where an un-applied edit is kept — see `useGridEdits`. */
+  tabId: string
   run: QueryRun
   sessionId: string | null
   onRefresh: () => void
@@ -55,7 +57,7 @@ interface ResultPaneProps {
   onStop: () => void
 }
 
-export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: ResultPaneProps) {
+export function ResultPane({ tabId, run, sessionId, onRefresh, onFetch, onStop }: ResultPaneProps) {
   const [selection, setSelection] = useState<Selection | null>(null)
   const [sort, setSort] = useState<readonly SortKey[]>(NO_SORT)
   const [columnOrder, setColumnOrder] = useState<string[]>(NO_ORDER)
@@ -65,7 +67,7 @@ export function ResultPane({ run, sessionId, onRefresh, onFetch, onStop }: Resul
 
   const grid = result !== null && result.columns.length > 0 ? result : null
   const editable = grid !== null && grid.table !== '' && sessionId !== null
-  const edits = useGridEdits(sourceOf(grid), sessionId, onRefresh)
+  const edits = useGridEdits(tabId, sourceOf(grid), sessionId, onRefresh)
 
   /** The columns in the reader's own order, each keeping the place it holds in a row. */
   const arranged = useMemo(

@@ -251,6 +251,9 @@ export function dataPanes(
 /**
  * What one side draws for a row of the data half. A side that holds the row draws the difference;
  * the side that does not draws `absent`, which is neither a value nor an empty one.
+ *
+ * Which pairs are drawn at all is not here but in `fieldFilter.shownAt` — one place for every
+ * narrowing of the panes, so the differences and the fields cannot answer that question twice.
  */
 function markFor(side: 'left' | 'right', status: DiffStatus): DiffMark | undefined {
   switch (status) {
@@ -263,10 +266,5 @@ function markFor(side: 'left' | 'right', status: DiffStatus): DiffMark | undefin
     default:
       return side === 'left' ? 'removed' : 'absent'
   }
-}
-
-/** The columns of a data comparison, and where each pair sits in the whole of it. */
-export function shownAt(pairs: readonly RowDiff[], differencesOnly: boolean): number[] {
-  return pairs.flatMap((pair, at) => (!differencesOnly || differs(pair.status) ? [at] : []))
 }
 

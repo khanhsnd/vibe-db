@@ -7,9 +7,11 @@ import type { SourceKind, SourceRef } from '@/bridge/schema'
 
 import { useConsoleStore } from './console'
 import { useDiagramsStore } from './diagrams'
+import { useGridEditsStore } from './gridEdits'
 import { useQueriesStore } from './queries'
 import { loadQueryTabs, saveQueryTabs } from './savedQueries'
 import { useSearchesStore } from './searches'
+import { useTableRowsStore } from './tableRows'
 import { useTableViewsStore } from './tableViews'
 
 export type TabKind =
@@ -331,6 +333,8 @@ function closeTabs(set: StoreApi<TabsState>['setState'], ids: string[]): void {
   for (const id of closing) {
     useQueriesStore.getState().discard(id)
     useTableViewsStore.getState().discard(id)
+    useTableRowsStore.getState().discard(id)
+    useGridEditsStore.getState().discard(id)
     useConsoleStore.getState().discard(id)
     useSearchesStore.getState().discard(id)
     useDiagramsStore.getState().discard(id)

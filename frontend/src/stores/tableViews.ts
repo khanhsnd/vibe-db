@@ -17,11 +17,11 @@ import { useSettingsStore } from './settings'
  * cell editor, hid two columns and narrowed the table would otherwise find all three undone by a
  * glance at another tab.
  *
- * **What a tab keeps is what was asked for, never the answer.** The panels, the hidden columns, the
- * page and its size, the order and the conditions are the reader's own and are kept; the rows are
- * read again on the way back, so a table something else has changed under it reads fresh rather
- * than stale. A query tab is the other way round — a statement cannot be re-run behind the reader's
- * back — and that is the whole difference between the two stores.
+ * This store is what was **asked for**: the panels, the hidden columns, the page and its size, the
+ * order and the conditions. What came back is `stores/tableRows.ts` and what is waiting to be
+ * written back is `stores/gridEdits.ts`, both under the same tab id — a tab returned to shows the
+ * rows it was left on rather than reading again, because a re-read behind the reader's back would
+ * take the row they had added and not yet applied with it. **Refresh** is what sends for more.
  */
 export interface TableView {
   /** The side panels showing: the cell editor, the column list. */

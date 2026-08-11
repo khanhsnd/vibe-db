@@ -141,7 +141,7 @@ export function TableDataView({
 
   const columns = data?.columns ?? []
   const editable = columns.some((column) => column.primaryKey)
-  const edits = useGridEdits(sourceOf(data, namespace, table), sessionId, refresh)
+  const edits = useGridEdits(tabId, sourceOf(data, namespace, table), sessionId, refresh)
 
   /** The columns in the reader's own order, each keeping the place it holds in a row. */
   const arranged = useMemo(() => arrange(columns, order), [columns, order])
