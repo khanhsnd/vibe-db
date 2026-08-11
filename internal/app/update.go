@@ -3,7 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	"os/exec"
 	"runtime"
 	"time"
 
@@ -70,7 +69,8 @@ func (a *UpdateAPI) Check() (UpdateInfo, error) {
 }
 
 // InstallWindowsUpdate downloads the public NSIS installer, verifies its published SHA-256, starts
-// it and then closes this process. NSIS owns the replacement of the running executable.
+// it through the shell's elevation prompt and then closes this process. NSIS owns the replacement
+// of the running executable, and the app stays open if the prompt is declined.
 func (a *UpdateAPI) InstallWindowsUpdate() error {
 	if runtime.GOOS != "windows" {
 		return updateFailure("install update", errors.New("automatic installation is available on Windows only"))
@@ -97,7 +97,7 @@ func (a *UpdateAPI) InstallWindowsUpdate() error {
 	if err != nil {
 		return updateFailure("download update", err)
 	}
-	if err := exec.Command(installer).Start(); err != nil {
+	if err := startInstaller(installer); err != nil {
 		return updateFailure("start installer", err)
 	}
 	wailsruntime.Quit(a.ctx)

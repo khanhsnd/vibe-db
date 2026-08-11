@@ -51,7 +51,9 @@ brew upgrade --cask vibe-db
 ```
 
 The app's Settings → Updates page checks the GitHub release API. A Windows update is downloaded and its
-checksum is checked against `checksums.txt` before the NSIS installer starts and the app exits. macOS
+checksum is checked against `checksums.txt` before the NSIS installer starts and the app exits. That
+installer's manifest requests administrator, which `CreateProcess` refuses outright, so it is started
+through the shell — Windows shows its elevation prompt, and declining it leaves the app running. macOS
 only displays the Homebrew command or the release page because this project has no Apple Developer
 certificate or notarization; Gatekeeper may require the first launch to be confirmed manually.
 
