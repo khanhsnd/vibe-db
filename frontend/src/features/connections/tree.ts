@@ -22,6 +22,10 @@ export type NodeKind =
   // it. An account is the server's and belongs to no database, which is why it is at that level.
   | 'accounts'
   | 'account'
+  // What the connection's server is *doing*, which hangs off the connection for the same reason and
+  // holds nothing: it is a leaf that opens a tab, there being no list of processes worth drawing six
+  // levels deep in a sidebar.
+  | 'monitor'
   | 'table'
   | 'view'
   | 'procedure'

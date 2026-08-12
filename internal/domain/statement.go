@@ -304,6 +304,47 @@ var redisSweeping = map[string]bool{
 	"cluster reset":  true,
 }
 
+// ProcessAction is what ending one of a server's own processes does to it: the statement it is
+// running is thrown away, or the whole connection is. It is a domain type for the reason ImportMode
+// is — what an action is going to do decides whether it has to be answered for before it runs, and
+// the driver spells it rather than deciding it.
+type ProcessAction string
+
+const (
+	// ProcessCancel stops the statement and leaves the connection open, which is what the client
+	// then sees as a failed query rather than as a dropped connection.
+	ProcessCancel ProcessAction = "cancel"
+	// ProcessClose ends the connection itself, and with it whatever transaction was open on it.
+	ProcessClose ProcessAction = "close"
+)
+
+// ProcessHazard is StatementHazard for ending one of a server's processes — the sixth grammar for
+// one rule, beside the ones a statement, an import, a grant, a shell command and a Redis command are
+// read by. What is dangerous to run is a domain rule and only its spelling is the engine's.
+//
+// Three answers, and the middle one is the point:
+//
+//   - **Ending the connection this app is reading on is unfiltered**, in exactly the sense a DELETE
+//     with no WHERE is: it is not a statement that does too much, it is a statement aimed at the
+//     wrong thing entirely, and it takes the reader's own session down with the transaction they had
+//     open on it. Environment.NeedsConfirmation answers that class **on a laptop as well as on
+//     production**, which is the whole reason this is not merely destructive.
+//   - **Ending anybody else's connection is destructive**: their uncommitted work is rolled back and
+//     nothing puts the connection back.
+//   - **Cancelling a statement is a write.** It throws away work in flight and no stored row with it,
+//     which is the honest reading — a cancelled statement leaves the connection, and its
+//     transaction, exactly where they were.
+func ProcessHazard(action ProcessAction, own bool) Hazard {
+	switch {
+	case action != ProcessClose:
+		return HazardWrite
+	case own:
+		return HazardUnfiltered
+	default:
+		return HazardDestructive
+	}
+}
+
 // RedisHazard is StatementHazard for a key-value store: the command is the verb, and a container
 // command's second word is part of it. It is the same rule read off a third grammar, and it lives
 // here beside the other two for the reason they do — what is dangerous to run is a domain rule, and

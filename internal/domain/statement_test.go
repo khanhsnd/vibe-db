@@ -234,3 +234,41 @@ func TestAGrantOfEverythingIsConfirmedOnALaptopToo(t *testing.T) {
 		t.Error("an ordinary grant on development is confirmed")
 	}
 }
+
+func TestProcessHazard(t *testing.T) {
+	cases := []struct {
+		name   string
+		action ProcessAction
+		own    bool
+		want   Hazard
+	}{
+		{"cancelling somebody's statement", ProcessCancel, false, HazardWrite},
+		{"cancelling one on our own connection", ProcessCancel, true, HazardWrite},
+		{"ending somebody's connection", ProcessClose, false, HazardDestructive},
+		{"ending the connection we are reading on", ProcessClose, true, HazardUnfiltered},
+	}
+
+	for _, one := range cases {
+		t.Run(one.name, func(t *testing.T) {
+			got := ProcessHazard(one.action, one.own)
+			if got != one.want {
+				t.Errorf("ProcessHazard = %q, want %q", got, one.want)
+			}
+		})
+	}
+}
+
+// The reason ending our own connection is classified unfiltered rather than merely destructive: it
+// is not a statement that does too much, it is one aimed at the wrong thing — and that is a mistake
+// on a laptop as surely as in production.
+func TestEndingOurOwnConnectionIsConfirmedOnALaptopToo(t *testing.T) {
+	ours := ProcessHazard(ProcessClose, true)
+
+	if !EnvironmentDevelopment.NeedsConfirmation(ours) {
+		t.Error("ending our own connection on development is not confirmed")
+	}
+	// Cancelling a statement is not, which is what keeps the warning worth reading.
+	if EnvironmentDevelopment.NeedsConfirmation(ProcessHazard(ProcessCancel, false)) {
+		t.Error("cancelling a statement on development is confirmed")
+	}
+}

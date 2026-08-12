@@ -28,6 +28,7 @@ export type TabKind =
   | 'diagram'
   | 'log'
   | 'accounts'
+  | 'monitor'
 
 /** Which half of two tables a comparison is reading: their shapes, or their rows. */
 export type CompareMode = 'structure' | 'data'
@@ -175,6 +176,28 @@ export interface AccountsTab extends TabBase {
   account: AccountRef | null
 }
 
+/** Which half of a server monitor is being read: what it is doing, or what it was started with. */
+export type MonitorPane = 'processes' | 'status' | 'variables'
+
+/**
+ * What a **connection's server** is doing, and what it was started with — what the `Server Monitor`
+ * node opens. It is the second tab that names a connection and no namespace: a process belongs to the
+ * server rather than to a database, so its `namespace` is empty and the strip draws none.
+ *
+ * `pane` and `every` are the tab's own state rather than its identity — the arrangement a
+ * comparison's `mode` has. There is **one** of these per connection, so asking for the Status pane on
+ * a monitor already open moves it rather than opening a second tab.
+ *
+ * `every` is how many seconds apart the pane re-reads itself, and `0` is off. It is on the tab rather
+ * than in the view so that switching away and back does not silently stop a monitor the reader left
+ * running.
+ */
+export interface MonitorTab extends TabBase {
+  kind: 'monitor'
+  pane: MonitorPane
+  every: number
+}
+
 export type Tab =
   | QueryTab
   | TableTab
@@ -188,6 +211,7 @@ export type Tab =
   | DiagramTab
   | LogTab
   | AccountsTab
+  | MonitorTab
 export type NewTab =
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
@@ -201,6 +225,7 @@ export type NewTab =
   | Omit<DiagramTab, 'id'>
   | Omit<LogTab, 'id'>
   | Omit<AccountsTab, 'id'>
+  | Omit<MonitorTab, 'id'>
 
 /** What names a table wherever one is opened: which connection, which namespace, which table. */
 export interface TableTarget {
@@ -241,7 +266,15 @@ export function targetLabel(target: TableTarget): string {
 /** The arrow between a comparison's two sides, wherever one is drawn. */
 export const COMPARE_ARROW = '⇄'
 
+/**
+ * How often a monitor re-reads itself when it opens, in seconds. Five is chosen so that a reader
+ * watching a busy server sees it move without the pane asking a catalogue question every time they
+ * blink — and the toolbar is where it is turned up, down or off.
+ */
+export const MONITOR_EVERY = 5
+
 type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'rowLimit'>>
+type MonitorEdit = Partial<Pick<MonitorTab, 'pane' | 'every'>>
 type FindEdit = Partial<Pick<FindTab, 'text' | 'scope' | 'mode' | 'caseInsensitive'>>
 
 interface TabsState {
@@ -268,6 +301,14 @@ interface TabsState {
   openAccounts: (profileId: string, account?: AccountRef) => string
   /** Moves the editor to another account, or off one entirely. */
   setAccount: (id: string, account: AccountRef | null) => void
+  /**
+   * Opens the server monitor of a connection, on the pane named. One tab per connection: a second
+   * pane is the same tab with its own moved, which is why the pane is passed to the open rather than
+   * being part of what identifies the tab.
+   */
+  openMonitor: (profileId: string, pane?: MonitorPane) => string
+  /** Switches the pane, or how often it re-reads itself — the monitor's own toolbar. */
+  editMonitor: (id: string, edit: MonitorEdit) => void
   /** A console on one connection. One per connection and namespace, like every other tab. */
   openConsole: (profileId: string, namespace: Namespace) => string
   /**
@@ -462,6 +503,28 @@ export const useTabsStore = create<TabsState>((set, get) => ({
     set((s) => ({
       tabs: s.tabs.map((tab) =>
         tab.id === id && tab.kind === 'accounts' ? { ...tab, account } : tab,
+      ),
+    })),
+
+  openMonitor: (profileId, pane = 'processes') => {
+    const id = get().open({
+      kind: 'monitor',
+      title: 'Server Monitor',
+      profileId,
+      namespace: NO_NAMESPACE,
+      pane,
+      every: MONITOR_EVERY,
+    })
+    // A connection already open is revealed rather than opened again, so the pane the reader just
+    // asked for is the one they land on — the arrangement openAccounts and openCompare have.
+    get().editMonitor(id, { pane })
+    return id
+  },
+
+  editMonitor: (id, edit) =>
+    set((s) => ({
+      tabs: s.tabs.map((tab) =>
+        tab.id === id && tab.kind === 'monitor' ? { ...tab, ...edit } : tab,
       ),
     })),
 

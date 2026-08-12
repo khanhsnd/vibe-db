@@ -224,6 +224,23 @@ type Dialect struct {
 	// MySQL's grammar wants a resource option before a lock, and a clause out of place is refused by
 	// the server rather than reordered here. See AccountAttr.
 	AccountAttrs []AccountAttr
+
+	// The monitoring half. Two statements and one flag, and `sqlkit.Watch` spells every kill there
+	// is out of them — the arrangement the account half above has.
+
+	// CancelStatementSQL stops the statement a process is running and leaves the connection open,
+	// `%s` being the process. Empty is an engine that cannot do the one without the other: SQL Server
+	// has only `KILL`, and Oracle's `ALTER SYSTEM CANCEL SQL` arrived in 18c and takes the statement's
+	// own id — neither is a thing to guess at, so both say so instead. See Watch.
+	CancelStatementSQL string
+	// CloseConnectionSQL ends the connection itself. Empty is an engine whose client is disconnected
+	// by the client and not by the server, which of the seven is only the document store — and that
+	// one has no Dialect here at all.
+	CloseConnectionSQL string
+	// ProcessIsPair says a process **is** two numbers in one string literal — Oracle's `'15,3421'`,
+	// a sid being reused the moment a session ends. It is the one name in this half that is not a
+	// bare number, exactly as AccountHasHost is the one account name that is not an identifier.
+	ProcessIsPair bool
 }
 
 // SourceStarter is the skeleton a reader starts a new view, routine or trigger from: the shape of
@@ -342,6 +359,10 @@ var (
 				Help: "Setting a new password is what clears this.",
 			},
 		},
+		// The one engine that says both halves in one verb, and the only reason `QUERY` and
+		// `CONNECTION` are spelled out is that `KILL 5` alone means the connection.
+		CancelStatementSQL: "KILL QUERY %s",
+		CloseConnectionSQL: "KILL CONNECTION %s",
 	}
 	Postgres = Dialect{
 		IdentQuote:             '"',
@@ -418,6 +439,11 @@ var (
 				Help: "A timestamp the server will parse, such as 2027-01-01.",
 			},
 		},
+		// Both are *functions* here rather than statements, which is why they are read as a SELECT
+		// and still spelled by one flag: a function that answers `false` is a backend that had already
+		// gone, which is the server's own answer and not a failure.
+		CancelStatementSQL: "SELECT pg_cancel_backend(%s)",
+		CloseConnectionSQL: "SELECT pg_terminate_backend(%s)",
 	}
 	// SQLite is one file and therefore one namespace: `main`, which every name is qualified by
 	// exactly as a MySQL name is qualified by its database. Its upsert is PostgreSQL's word for
@@ -509,6 +535,10 @@ var (
 				Login: true, Bare: true, On: "DISABLE", Off: "ENABLE",
 			},
 		},
+		// There is no cancel here: `KILL` ends the session, and the closest thing to cancelling one
+		// statement — `KILL <spid> WITH STATUSONLY` — only reports how far a rollback has got. An
+		// engine that has not got it says so rather than ending a session the reader meant to keep.
+		CloseConnectionSQL: "KILL %s",
 	}
 	// Oracle has no databases below its service, so the schema *is* what a Namespace's Database
 	// holds and a name is qualified by one level exactly as MySQL's is. Everything else here is
@@ -569,6 +599,11 @@ var (
 				Help: "Setting a new password is what clears this.",
 			},
 		},
+		// A session here **is** `sid,serial#`, in one string literal, because a sid is handed to the
+		// next session the moment this one ends. `IMMEDIATE` is what makes the statement return
+		// without waiting for the session to notice it has been ended.
+		CloseConnectionSQL: "ALTER SYSTEM KILL SESSION %s IMMEDIATE",
+		ProcessIsPair:      true,
 	}
 	// Shell is the lexical half of a document store's own language, and is a Dialect for one
 	// reason: so `Lex` reads it rather than a second scanner being written. `//` opens a comment,

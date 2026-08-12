@@ -1,4 +1,5 @@
 import {
+  Activity,
   Archive,
   Columns3,
   FileCode2,
@@ -54,6 +55,9 @@ export const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: str
   // The one tab that stands for somebody rather than for something the server stores, and it wears
   // the tree's own account colour for the reason every other row here wears the tree's.
   accounts: { label: 'Users', icon: UserRound, tint: 'text-kind-account' },
+  // A process is a statement in flight, so it wears the colour a *program* wears everywhere here —
+  // the same one a query tab has, and the same one its row in the tree has.
+  monitor: { label: 'Server Monitor', icon: Activity, tint: 'text-kind-routine' },
 }
 
 export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {

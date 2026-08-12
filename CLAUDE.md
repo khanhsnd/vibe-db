@@ -171,6 +171,27 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     naming it and `EngineInfo.hasAccounts` says so to the frontend; what one is *called* is
     `accountLabel`, never a comparison against an engine's name.
 
+22. **What a server is doing is read, and one speller ends it.** `driver.Monitor` is the fourth half of
+    a session: the processes a server is running, what it has counted since it started, what it was
+    started with, and the two statements that end one. Each read is the **engine's own** — a process
+    list is a catalogue read like a table list, in that engine's own columns, and two of them are not
+    name-and-value pairs at all (PostgreSQL has no `SHOW STATUS`; a document store's is one nested
+    document) — while `sqlkit.Watch` spells and runs **every** kill there is: what differs between five
+    SQL engines is a flag on `Dialect` (`CancelStatementSQL`, `CloseConnectionSQL`, and Oracle's session
+    being the pair `sid,serial#` in a string literal), never a second speller. `ProcessStatements`
+    previews exactly what `KillProcesses` runs — rule 13 again, and here the preview *is* the
+    confirmation, there being no Changes pane. **A process id is checked as a number before it reaches
+    a statement**: a kill binds no arguments, so this is the one place a value off the wire would
+    otherwise be pasted into SQL. What is dangerous is a `domain` rule (`domain.ProcessHazard`, the
+    sixth grammar), and ending the connection **this app is reading on** is unfiltered in the sense a
+    `DELETE` with no `WHERE` is — confirmed on a laptop as well as on production — which is why a
+    reference carries the driver's own `Own` mark and nothing re-derives it. A **variable is read and
+    never written**: setting one is five grammars, two of which need a restart. An engine with no server
+    to watch answers `domain.Unsupported` naming it and `EngineInfo.hasMonitor` says so to the frontend;
+    which kill it has is `cancelsStatement` and `closesConnection`, and what one is *called* is
+    `processLabel`, never a comparison against an engine's name.
+
+
 ## Where to read before changing something
 
 | Task | Read |
@@ -189,6 +210,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Change a query tab, a console or a file run | [docs/features/query-tab.md](docs/features/query-tab.md), [docs/features/script.md](docs/features/script.md), [docs/features/console.md](docs/features/console.md) |
 | Turn autocommit off, or touch Begin / Commit / Rollback | [docs/features/transaction.md](docs/features/transaction.md) |
 | Touch a user, a role or a privilege | [docs/architecture.md](docs/architecture.md#who-may-do-what), [docs/features/accounts.md](docs/features/accounts.md) |
+| Touch a process list, a kill, a server status or a variable | [docs/architecture.md](docs/architecture.md#what-a-server-is-doing), [docs/features/monitor.md](docs/features/monitor.md) |
 | Change what is kept about a statement that has run | [docs/features/log.md](docs/features/log.md), [docs/features/results.md](docs/features/results.md#the-history-pane) |
 | Change a table tab, its paging, filtering or values | [docs/features/table-tab.md](docs/features/table-tab.md), [docs/features/row-limit.md](docs/features/row-limit.md), [docs/features/filter-sort.md](docs/features/filter-sort.md), [docs/features/value-viewer.md](docs/features/value-viewer.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file), [docs/features/transfer.md](docs/features/transfer.md) |
@@ -209,7 +231,8 @@ A new failure mode needs all four of: a `domain` sentinel, a mapping in `errmap.
 A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `hasTriggers`, `documents`,
 `keys`, `isFile`, `createsTables`, `createsDatabases`, `hasViews`, `hasSource`, `hasBackups`, `hasTransactions`,
-`hasAccounts`, `accountLabel`, `hasRoles`,
+`hasAccounts`, `accountLabel`, `hasRoles`, `hasMonitor`, `cancelsStatement`, `closesConnection`,
+`processLabel`,
 `dumpTool`, `restoreTool`, `needsUser`, `needsDatabase`, `databaseLabel` — and never a comparison
 against an engine's name in a component.
 The two exceptions are the lists that *are* per-engine data rather than a capability: the types a

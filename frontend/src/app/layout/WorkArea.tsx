@@ -7,6 +7,7 @@ import { ConsoleView } from '@/features/console/ConsoleView'
 import { DiagramView } from '@/features/diagram/DiagramView'
 import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
 import { LogView } from '@/features/log/LogView'
+import { MonitorView } from '@/features/monitor/MonitorView'
 import { ObjectListView } from '@/features/objects/ObjectListView'
 import { SourceEditor } from '@/features/schema/SourceEditor'
 import { TableDesigner } from '@/features/schema/TableDesigner'
@@ -94,6 +95,12 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
             <Empty title="Not connected" hint="Reconnect this connection to read its users." />
           ) : (
             <AccountsView key={activeTab.id} tab={activeTab} sessionId={sessionId} />
+          )
+        ) : activeTab.kind === 'monitor' ? (
+          sessionId === null ? (
+            <Empty title="Not connected" hint="Reconnect this connection to watch its server." />
+          ) : (
+            <MonitorView key={activeTab.id} tab={activeTab} sessionId={sessionId} />
           )
         ) : activeTab.kind === 'diagram' ? (
           // The picture is this machine's and survives a connection going down, but the fields and

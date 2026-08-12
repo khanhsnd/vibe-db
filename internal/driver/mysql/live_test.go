@@ -224,3 +224,90 @@ func listed(list driver.AccountList, wanted driver.AccountRef) bool {
 	}
 	return false
 }
+
+// The monitoring half against a real server. The reads are what only a server can check — an alias
+// this app spelled wrongly is a column the grid draws under the wrong name, and nothing without a
+// server would notice — and the kill is checked against a thread that is **not there**: the point is
+// that the statement parsed and reached the server, which its own "unknown thread id" proves without
+// this test ending anybody's connection.
+func TestLiveMonitor(t *testing.T) {
+	live := openLive(t)
+	ctx := context.Background()
+
+	t.Run("processes", func(t *testing.T) {
+		list, err := live.Processes(ctx)
+		if err != nil {
+			t.Fatalf("Processes: %v", err)
+		}
+		if len(list.Rows) == 0 {
+			t.Fatal("no processes: this connection is one of them")
+		}
+		if len(list.Refs) != len(list.Rows) {
+			t.Fatalf("%d references for %d rows", len(list.Refs), len(list.Rows))
+		}
+		if columnAt(list.Columns, "ID") < 0 || columnAt(list.Columns, "Statement") < 0 {
+			t.Errorf("columns = %v", names(list.Columns))
+		}
+
+		// One row is the connection this read came back on, which is what the hazard rule turns on.
+		ours := 0
+		for _, ref := range list.Refs {
+			if ref.Own {
+				ours++
+			}
+			if ref.ID == "" {
+				t.Error("a process with no id")
+			}
+		}
+		if ours != 1 {
+			t.Errorf("%d rows marked as ours, want 1", ours)
+		}
+	})
+
+	t.Run("status and variables", func(t *testing.T) {
+		status, err := live.ServerStatus(ctx)
+		if err != nil {
+			t.Fatalf("ServerStatus: %v", err)
+		}
+		if len(status.Rows) == 0 || len(status.Columns) != 2 {
+			t.Errorf("status: %d rows in %d columns", len(status.Rows), len(status.Columns))
+		}
+
+		variables, err := live.ServerVariables(ctx)
+		if err != nil {
+			t.Fatalf("ServerVariables: %v", err)
+		}
+		if len(variables.Rows) == 0 {
+			t.Error("the server reported no variables")
+		}
+	})
+
+	t.Run("a kill reaches the server", func(t *testing.T) {
+		// A thread id no server hands out, so what comes back is the server's own refusal rather than
+		// somebody's connection ending.
+		gone := driver.ProcessRef{ID: "2147483647"}
+
+		if err := live.KillProcesses(ctx, []driver.ProcessKill{
+			{Process: gone, Action: domain.ProcessClose},
+		}); !errors.Is(err, domain.ErrStatementFailed) {
+			t.Errorf("KillProcesses on a thread that is gone = %v, want the server's own refusal", err)
+		}
+	})
+}
+
+func columnAt(columns []driver.Column, wanted string) int {
+	for at, column := range columns {
+		if column.Name == wanted {
+			return at
+		}
+	}
+	return -1
+}
+
+func names(columns []driver.Column) []string {
+	found := make([]string, 0, len(columns))
+	for _, column := range columns {
+		found = append(found, column.Name)
+	}
+	return found
+}

@@ -1303,6 +1303,105 @@ export namespace app {
 		}
 	}
 	
+	export class ProcessRef {
+	    id: string;
+	    serial: string;
+	    own: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProcessRef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.serial = source["serial"];
+	        this.own = source["own"];
+	    }
+	}
+	export class ProcessKillInput {
+	    process: ProcessRef;
+	    action: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProcessKillInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.process = this.convertValues(source["process"], ProcessRef);
+	        this.action = source["action"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ProcessList {
+	    columns: TableColumn[];
+	    rows: string[][];
+	    refs: ProcessRef[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ProcessList(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = this.convertValues(source["columns"], TableColumn);
+	        this.rows = source["rows"];
+	        this.refs = this.convertValues(source["refs"], ProcessRef);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ProcessPreview {
+	    statements: string[];
+	    hazard: string;
+	    confirm: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProcessPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.statements = source["statements"];
+	        this.hazard = source["hazard"];
+	        this.confirm = source["confirm"];
+	    }
+	}
+	
 	export class SSHSettings {
 	    enabled: boolean;
 	    host: string;
@@ -1971,6 +2070,38 @@ export namespace app {
 		}
 	}
 	
+	export class ServerFacts {
+	    columns: TableColumn[];
+	    rows: string[][];
+	
+	    static createFrom(source: any = {}) {
+	        return new ServerFacts(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = this.convertValues(source["columns"], TableColumn);
+	        this.rows = source["rows"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Session {
 	    id: string;
 	    profileId: string;

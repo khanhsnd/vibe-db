@@ -78,11 +78,15 @@ export function InTransaction(arg1:string):Promise<boolean>;
 
 export function InsertRow(arg1:string,arg2:app.RowInsertInput):Promise<void>;
 
+export function KillProcesses(arg1:string,arg2:Array<app.ProcessKillInput>):Promise<void>;
+
 export function ListAccounts(arg1:string):Promise<app.AccountList>;
 
 export function ListBackups(arg1:string,arg2:app.Namespace):Promise<Array<app.Backup>>;
 
 export function ListDatabases(arg1:string):Promise<Array<string>>;
+
+export function ListProcesses(arg1:string):Promise<app.ProcessList>;
 
 export function ListProfiles():Promise<Array<app.Profile>>;
 
@@ -106,6 +110,10 @@ export function LoadDatabaseOptions(arg1:string):Promise<app.DatabaseOptions>;
 
 export function LoadObjects(arg1:string,arg2:app.Namespace):Promise<app.Objects>;
 
+export function LoadServerStatus(arg1:string):Promise<app.ServerFacts>;
+
+export function LoadServerVariables(arg1:string):Promise<app.ServerFacts>;
+
 export function LoadSource(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<app.Source>;
 
 export function LoadTableList(arg1:string,arg2:app.Namespace):Promise<app.TableList>;
@@ -127,6 +135,8 @@ export function PreviewAccountChanges(arg1:string,arg2:Array<app.AccountChangeIn
 export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<Array<string>>;
 
 export function PreviewImportFile(arg1:app.ImportSource):Promise<app.ImportPreview>;
+
+export function PreviewProcessKills(arg1:string,arg2:Array<app.ProcessKillInput>):Promise<app.ProcessPreview>;
 
 export function PreviewRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<Array<string>>;
 

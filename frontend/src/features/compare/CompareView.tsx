@@ -17,7 +17,6 @@ import {
 } from '@/bridge/compare'
 import { engineInfo } from '@/bridge/connections'
 import { nodeGlyph } from '@/features/connections/ObjectTree'
-import { cn } from '@/lib/cn'
 import { ResultTabs } from '@/features/results/ResultTabs'
 import { Banner } from '@/shared/ui/Banner'
 import { Button } from '@/shared/ui/Button'
@@ -25,6 +24,7 @@ import { Empty } from '@/shared/ui/Empty'
 import { TOOLBAR_CONTROL } from '@/shared/ui/Field'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
+import { Segmented } from '@/shared/ui/Segmented'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import { useConnectionsStore } from '@/stores/connections'
 import { targetLabel, useTabsStore, type CompareMode, type CompareTab } from '@/stores/tabs'
@@ -587,57 +587,3 @@ function caveats(diff: DataDiff): string[] {
   return said
 }
 
-/**
- * One control, two or three mutually exclusive answers. A row of buttons rather than a `select`
- * because every choice it is used for is two-way, and the answer is worth being able to read
- * without opening anything.
- */
-function Segmented<T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-  iconOnly = false,
-  prefix,
-}: {
-  label: string
-  options: ReadonlyArray<{ id: T; label: string; icon?: typeof Columns2 }>
-  value: T
-  onChange: (id: T) => void
-  iconOnly?: boolean
-  /** A word before the buttons, where the control needs one to be read as a sentence. */
-  prefix?: string
-}) {
-  return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      {prefix ? <span className="text-xs text-muted">{prefix}</span> : null}
-
-      <div role="group" aria-label={label} className="flex shrink-0 rounded-md border border-line">
-        {options.map((option, at) => {
-          const Icon = option.icon
-          const chosen = option.id === value
-
-          return (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={chosen}
-              aria-label={iconOnly ? option.label : undefined}
-              title={option.label}
-              onClick={() => onChange(option.id)}
-              className={cn(
-                'flex h-6 max-w-[160px] items-center gap-1.5 px-2 text-xs font-medium transition-colors',
-                at === 0 ? 'rounded-l-md' : 'border-l border-line',
-                at === options.length - 1 && 'rounded-r-md',
-                chosen ? 'bg-accent text-on-accent' : 'text-muted hover:bg-hover hover:text-fg',
-              )}
-            >
-              {Icon ? <Icon size={13} className="shrink-0" /> : null}
-              {iconOnly ? null : <span className="min-w-0 truncate">{option.label}</span>}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}

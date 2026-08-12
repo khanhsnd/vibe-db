@@ -20,6 +20,7 @@ import { ICON } from '@/shared/ui/menuIcons'
 import { NEW_SOURCE, schema, type SourceKind } from '@/bridge/schema'
 import type { TableColumn } from '@/bridge/tables'
 import { accountItems } from '@/features/accounts/accountActions'
+import { monitorItems } from '@/features/monitor/monitorActions'
 import { dropChanges } from '@/features/accounts/accountDraft'
 import { backupActions, type BackupActions } from '@/features/backup/backupActions'
 import type { DumpTarget } from '@/features/backup/DumpDialog'
@@ -35,6 +36,7 @@ import {
   COMPARE_ARROW,
   SOURCE_NOUN,
   type CompareMode,
+  type MonitorPane,
   type SourceTarget,
   type TableTarget,
 } from '@/stores/tabs'
@@ -69,6 +71,8 @@ interface TreeMenuActions {
   onBackups: (profileId: string, namespace: Namespace) => void
   /** Opens the accounts of a connection, on one of them where the row named one. */
   onAccounts: (profileId: string, account?: AccountRef) => void
+  /** Opens what a connection's server is doing, on the pane named. */
+  onMonitor: (profileId: string, pane?: MonitorPane) => void
   onDump: (targets: DumpTarget[], withData: boolean) => void
 }
 
@@ -170,6 +174,7 @@ export function useTreeMenu(
     onDiagram,
     onBackups,
     onAccounts,
+    onMonitor,
     onDump,
   } = actions
 
@@ -194,6 +199,15 @@ export function useTreeMenu(
       if (node.kind === 'connection') {
         return connectionItems(profile, words, Boolean(sessions[node.profileId]), {
           newDatabase,
+          // Offered only where there is a server to watch, and only while it is open — see
+          // `hasMonitor`, and `connectionItems`, which leaves out everything needing a live server.
+          monitor: info.hasMonitor
+            ? {
+                label: 'Server Monitor',
+                icon: ICON.monitor,
+                items: monitorItems(node.profileId, onMonitor),
+              }
+            : null,
           onConnect,
           onEditConnection,
           onConsole,
@@ -212,6 +226,13 @@ export function useTreeMenu(
             }),
           refreshDatabases,
         })
+      }
+
+      // The row that stands for the server itself. It is answered **before** the guard below for the
+      // reason the two account rows are: what a server is doing belongs to no namespace.
+      if (node.kind === 'monitor') {
+        if (!sessions[node.profileId]) return []
+        return monitorItems(node.profileId, onMonitor)
       }
 
       // The two rows that name an account. They are answered **before** the guard below, because
@@ -710,6 +731,7 @@ function connectionItems(
   connected: boolean,
   on: {
     newDatabase: MenuItem | null
+    monitor: MenuItem | null
     onConnect: (profile: Profile) => void
     onEditConnection: (profile: Profile) => void
     onConsole: (profile: Profile) => void
@@ -740,6 +762,7 @@ function connectionItems(
           onSelect: () => on.onExecuteFile(profile),
         },
         ...(on.newDatabase ? [on.newDatabase] : []),
+        ...(on.monitor ? [on.monitor] : []),
       ]
     : []
 

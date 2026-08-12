@@ -174,6 +174,13 @@
 - **A read the reader waits on is `shared/ui/Loading`**, which fills its pane the way `Empty` does:
   the two make the same claim about the same area — nothing to show, or nothing *yet*. A surface
   draws it only while it has no rows at all; once rows are on screen a re-read leaves them there.
+- **"Which of these am I on" is `shared/ui/Segmented`, and "is this on" is a pressed `Button`.** The
+  two are different sentences and are drawn differently on purpose: a `Button` held down with
+  `aria-pressed` wears the hover shade, which reads beside its neighbours as *one button shaded* — fine
+  for a toggle like Word Wrap, and wrong for a row of mutually exclusive choices, where a reader is
+  looking for where they are rather than for what is switched on. `Segmented` joins its options into
+  one bordered group and gives the chosen one the accent outright. A comparison's two halves and
+  [the monitor's three panes](features/monitor.md) are both it.
 - Control styling is shared through `shared/ui/Field.tsx`: `CONTROL` for a form control in a dialog,
   the exported `TOOLBAR_CONTROL` for the shorter ones in a toolbar strip. Height is kept out of the
   shared `CONTROL_BASE`, because `cn` only joins class names — two height utilities on one element

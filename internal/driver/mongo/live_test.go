@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -789,4 +790,70 @@ func oneValue(t *testing.T, live *session, ns driver.Namespace, column string) s
 
 func errorsIsUnsupported(err error) bool {
 	return errors.Is(err, domain.ErrUnsupported)
+}
+
+// The monitoring half against a real server. A document store's answer to "what is this server doing"
+// is a list of **operations**, and the two halves of its status are nested documents — so what only a
+// server can check is the flattening: a path this side built wrongly is a row nobody can look up.
+//
+// There is no kill here. `killOp` needs an operation of somebody else's to be honest about, and this
+// test has none to spare.
+func TestLiveMonitor(t *testing.T) {
+	live, _ := openLive(t)
+	ctx := context.Background()
+
+	t.Run("operations", func(t *testing.T) {
+		list, err := live.Processes(ctx)
+		if err != nil {
+			t.Fatalf("Processes() error = %v", err)
+		}
+		if len(list.Refs) != len(list.Rows) {
+			t.Fatalf("%d references for %d rows", len(list.Refs), len(list.Rows))
+		}
+		// An idle connection is not an operation, so an unused server may report none at all — what is
+		// being checked is the shape rather than the count.
+		for at, ref := range list.Refs {
+			if ref.ID == "" {
+				t.Errorf("operation %d has no id", at)
+			}
+		}
+	})
+
+	t.Run("status and parameters", func(t *testing.T) {
+		status, err := live.ServerStatus(ctx)
+		if err != nil {
+			t.Fatalf("ServerStatus() error = %v", err)
+		}
+		if len(status.Rows) == 0 {
+			t.Fatal("serverStatus answered with nothing")
+		}
+		// `ok` is the command reporting that it worked rather than a fact about the server, so it is
+		// not one of the rows.
+		for _, row := range status.Rows {
+			if row[0] != nil && *row[0] == "ok" {
+				t.Error("`ok` is in the status")
+			}
+		}
+		// A nested document is rows under a dotted path, which is what makes the list searchable.
+		if !anyName(status.Rows, ".") {
+			t.Error("nothing in the status is a nested path")
+		}
+
+		parameters, err := live.ServerVariables(ctx)
+		if err != nil {
+			t.Fatalf("ServerVariables() error = %v", err)
+		}
+		if len(parameters.Rows) == 0 {
+			t.Error("getParameter answered with nothing")
+		}
+	})
+}
+
+func anyName(rows [][]*string, holding string) bool {
+	for _, row := range rows {
+		if row[0] != nil && strings.Contains(*row[0], holding) {
+			return true
+		}
+	}
+	return false
 }

@@ -1,4 +1,5 @@
 import {
+  Activity,
   Archive,
   ArchiveRestore,
   ArrowDownNarrowWide,
@@ -80,6 +81,10 @@ export const ICON = {
   toolRestore: <HardDriveUpload size={SIZE} />,
 
   newDatabase: <Database size={SIZE} />,
+
+  // What the server is *doing*, which is the same glyph the tree's own Server Monitor row wears and
+  // the same one its tab wears in the strip.
+  monitor: <Activity size={SIZE} />,
 
   open: <Table2 size={SIZE} />,
   design: <TableProperties size={SIZE} />,

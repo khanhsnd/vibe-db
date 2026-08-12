@@ -450,6 +450,45 @@ type AccountPreview struct {
 	Confirm    bool     `json:"confirm"`
 }
 
+// ProcessRef names one thing a server is doing. `serial` is Oracle's, where a session *is* the pair;
+// `own` says the connection is one this app is reading on — see driver.ProcessRef.
+type ProcessRef struct {
+	ID     string `json:"id"`
+	Serial string `json:"serial"`
+	Own    bool   `json:"own"`
+}
+
+// ProcessList is one row per thing the server is doing, in the columns this engine's catalogue keeps —
+// the arrangement AccountList has. `refs` runs parallel to `rows` and is what a row is acted on by, so
+// nothing on the frontend reads an id back out of a column.
+type ProcessList struct {
+	Columns []TableColumn `json:"columns"`
+	Rows    [][]*string   `json:"rows"`
+	Refs    []ProcessRef  `json:"refs"`
+}
+
+// ProcessKillInput is one process and what is to be done to it. The action is a closed list checked
+// here rather than in a driver, exactly as an account change's kind is.
+type ProcessKillInput struct {
+	Process ProcessRef `json:"process"`
+	Action  string     `json:"action"`
+}
+
+// ProcessPreview is exactly what the kills will run, and whether the reader has to answer for it
+// first. There is no Changes pane for a kill, so this is what the confirmation itself shows.
+type ProcessPreview struct {
+	Statements []string `json:"statements"`
+	Hazard     string   `json:"hazard"`
+	Confirm    bool     `json:"confirm"`
+}
+
+// ServerFacts is what a server says about itself, in whatever columns this engine keeps it in — the
+// arrangement TableList and AccountList have.
+type ServerFacts struct {
+	Columns []TableColumn `json:"columns"`
+	Rows    [][]*string   `json:"rows"`
+}
+
 type QueryInput struct {
 	Namespace
 	RunID   string `json:"runId"`
@@ -1092,14 +1131,15 @@ func toAccountListDTO(list driver.AccountList) AccountList {
 	}
 	return AccountList{
 		Columns: toColumnDTOs(list.Columns),
-		Rows:    accountRows(list.Rows),
+		Rows:    gridRows(list.Rows),
 		Refs:    refs,
 	}
 }
 
-// accountRows keeps an empty list an empty list rather than a null, which is what the grid draws
-// as "no accounts" instead of falling over.
-func accountRows(rows [][]*string) [][]*string {
+// gridRows keeps an empty list an empty list rather than a null, which is what a grid draws as
+// "nothing here" instead of falling over. Every list that is the *engine's own columns* goes through
+// it: an account list, a process list, and either half of a monitor.
+func gridRows(rows [][]*string) [][]*string {
 	if rows == nil {
 		return [][]*string{}
 	}
@@ -1292,11 +1332,18 @@ var accountActions = map[driver.AccountChangeKind]domain.AccountAction{
 
 // hazardRank orders the four so the worst of a list can be found. It is here rather than on the
 // domain type because it is a question only a *batch* asks, and nothing else in the app has one.
+//
+// **Unfiltered outranks destructive**, which is the one thing about this order worth explaining: it
+// is not how much each class destroys, it is how much answering for it each class demands — and
+// `domain.Environment.NeedsConfirmation` confirms an unfiltered change *everywhere* while a
+// destructive one is confirmed on a guarded environment alone. Ranking them the other way round would
+// let one row of a batch hide the very row the rule exists to stop: a grant of everything beside a
+// drop, or this app's own connection beside somebody else's.
 var hazardRank = map[domain.Hazard]int{
 	domain.HazardNone:        0,
 	domain.HazardWrite:       1,
-	domain.HazardUnfiltered:  2,
-	domain.HazardDestructive: 3,
+	domain.HazardDestructive: 2,
+	domain.HazardUnfiltered:  3,
 }
 
 // grantScope collapses the driver's six levels into the one distinction the rule turns on: a grant
@@ -1306,6 +1353,82 @@ func grantScope(grant driver.Grant) domain.GrantScope {
 		return domain.GrantWhole
 	}
 	return domain.GrantScoped
+}
+
+func toProcessListDTO(list driver.ProcessList) ProcessList {
+	refs := make([]ProcessRef, 0, len(list.Refs))
+	for _, ref := range list.Refs {
+		refs = append(refs, ProcessRef{ID: ref.ID, Serial: ref.Serial, Own: ref.Own})
+	}
+	return ProcessList{
+		Columns: toColumnDTOs(list.Columns),
+		Rows:    gridRows(list.Rows),
+		Refs:    refs,
+	}
+}
+
+func toServerFactsDTO(facts driver.ServerFacts) ServerFacts {
+	return ServerFacts{
+		Columns: toColumnDTOs(facts.Columns),
+		Rows:    gridRows(facts.Rows),
+	}
+}
+
+// processActions is every action a bound method will accept, and it is the same closed list an account
+// change's kind is checked against, for the same reason: a word that arrived off the wire as something
+// else would otherwise reach the speller as an action it is not.
+var processActions = map[string]domain.ProcessAction{
+	"cancel": domain.ProcessCancel,
+	"close":  domain.ProcessClose,
+}
+
+func (in ProcessKillInput) toDriver() (driver.ProcessKill, error) {
+	action, known := processActions[in.Action]
+	if !known {
+		return driver.ProcessKill{}, domain.ValidationError{
+			Field:   "action",
+			Message: "is not something this app does to a process",
+		}
+	}
+
+	return driver.ProcessKill{
+		Process: driver.ProcessRef{
+			ID:     in.Process.ID,
+			Serial: in.Process.Serial,
+			Own:    in.Process.Own,
+		},
+		Action: action,
+	}, nil
+}
+
+func toDriverProcessKills(in []ProcessKillInput) ([]driver.ProcessKill, error) {
+	kills := make([]driver.ProcessKill, 0, len(in))
+	for _, one := range in {
+		kill, err := one.toDriver()
+		if err != nil {
+			return nil, err
+		}
+		kills = append(kills, kill)
+	}
+	return kills, nil
+}
+
+// processHazard is what the whole list of kills amounts to, which is the **worst** of them — the
+// arrangement accountHazard has, and for the same reason: a reader pressing the button ends all of
+// them, so a batch holding this app's own connection is answered for even where the rows around it are
+// somebody else's.
+//
+// `own` is the driver's own mark on the reference rather than anything derived here: which connection
+// this session reads on is a fact only the adapter could know.
+func processHazard(kills []driver.ProcessKill) domain.Hazard {
+	worst := domain.HazardNone
+	for _, kill := range kills {
+		hazard := domain.ProcessHazard(kill.Action, kill.Process.Own)
+		if hazardRank[hazard] > hazardRank[worst] {
+			worst = hazard
+		}
+	}
+	return worst
 }
 
 func names(list []string) []string {

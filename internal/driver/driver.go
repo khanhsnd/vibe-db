@@ -990,6 +990,101 @@ type Security interface {
 	ApplyAccountChanges(ctx context.Context, changes []AccountChange) error
 }
 
+// ProcessRef names one thing a server is doing. The two fields beside the id are each one engine's
+// way of saying which one, exactly as SourceRef's and AccountRef's are:
+//
+//   - Serial is Oracle's, where a session **is** the pair `sid,serial#`: a sid is reused the moment
+//     a session ends, and a statement naming one alone would end whoever came after it.
+//   - Own says this is a connection **this app is reading on**, which is the one fact about a process
+//     that is not the server's — see Monitor.Processes for what it costs to know and why it is not
+//     quite "the only one of ours".
+//
+// The id is a string because it is one on a document store, where an operation on a sharded cluster
+// is `shard0000:1234`. On the five SQL engines it is a number and is checked as one before it reaches
+// a statement: DDL binds no arguments, so this is the one place a value off the wire would otherwise
+// be pasted into SQL — see `sqlkit.Dialect.KillProcess`.
+type ProcessRef struct {
+	ID     string
+	Serial string
+	Own    bool
+}
+
+// ProcessList is one row per thing the server is doing, with whatever else this engine's catalogue
+// keeps about one. The columns are the engine's own, for the reason TableList's and AccountList's
+// are — no two engines report the same facts about a connection, and a column neither could fill
+// would say nothing.
+//
+// Refs runs parallel to Rows and is what the list is *acted on* by, a field of its own rather than
+// the first column read back, because nothing here is matched by position.
+type ProcessList struct {
+	Columns []Column
+	Rows    [][]*string
+	Refs    []ProcessRef
+}
+
+// ProcessKill is one process and what is to be done to it. It is the shape both spelling the kill
+// and running it take — the arrangement TableChange and AccountChange have, and for the same reason:
+// one list goes to the preview and to the run, so what the reader was shown and what happens cannot
+// drift apart.
+type ProcessKill struct {
+	Process ProcessRef
+	Action  domain.ProcessAction
+}
+
+// ServerFacts is what a server says about itself: one row per setting it was started with, or per
+// number it has been counting. Both halves of a monitor answer with this, and the columns are the
+// engine's own for the reason every other list's are — MySQL's status is a name and a value,
+// PostgreSQL's settings carry a unit, a category and a description, and a column one of them could
+// not fill would say nothing.
+type ServerFacts struct {
+	Columns []Column
+	Rows    [][]*string
+}
+
+// Monitor is the fourth half of a session: what the server is doing **right now**, what it was
+// started with, and the two statements that stop one of its processes.
+//
+// It is its own interface for the reason Schema, Security and Transaction are — an adapter keeps its
+// monitoring in its own file, and `sqlkit.Watch` supplies the whole of the killing for the five SQL
+// engines. What differs between them is a **flag** on `sqlkit.Dialect`: the statement that cancels,
+// the statement that disconnects, and whether a process is named by two numbers. Never a second
+// speller.
+//
+// An engine with no server to monitor answers `domain.Unsupported` naming it, and the frontend never
+// draws the node — see `EngineInfo.hasMonitor`.
+type Monitor interface {
+	// Processes lists them, in the columns this engine's catalogue keeps.
+	//
+	// `Own` is marked from a second, scalar read — `CONNECTION_ID()`, `pg_backend_pid()`, `@@SPID`,
+	// `CLIENT ID`, `whatsmyuri` — and it says "a connection of ours" rather than "the only one":
+	// a session holds a small pool, and which of those connections answered this read is
+	// `database/sql`'s business rather than anything this side chooses. Marking one is worth it
+	// anyway, because the mistake it prevents is the one nothing else could catch.
+	Processes(ctx context.Context) (ProcessList, error)
+	// ProcessStatements spells the kills as the statements that would make them, in the order they
+	// are given, and **runs none of them** — the arrangement AlterStatements, SourceStatements and
+	// AccountStatements have, and here it is the whole of what a confirmation shows.
+	//
+	// It is spelling and not running, so it needs no connection and answers no error: an action this
+	// engine has no statement for contributes **nothing** rather than failing, and the run of that
+	// same kill is where `domain.Unsupported` is raised. A reference whose id is not a number spells
+	// nothing for the same reason, and is refused by the run.
+	ProcessStatements(kills []ProcessKill) []string
+	// KillProcesses runs exactly what ProcessStatements showed, in that order, **stopping at the
+	// first failure**.
+	KillProcesses(ctx context.Context, kills []ProcessKill) error
+	// ServerStatus is what the server has been counting since it started — `SHOW GLOBAL STATUS`,
+	// `pg_stat_database`, `sys.dm_os_performance_counters`, `v$sysstat`, `serverStatus`, `INFO`.
+	ServerStatus(ctx context.Context) (ServerFacts, error)
+	// ServerVariables is what it was started *with* — `SHOW GLOBAL VARIABLES`, `pg_settings`,
+	// `sys.configurations`, `v$parameter`, `getParameter`, `CONFIG GET`.
+	//
+	// It is a **read**. Setting one is a different statement on every engine and on two of them not a
+	// statement at all — a file rewritten, or a restart — so a variable is changed where the reader
+	// can see which server they are on: a query tab. See docs/features/monitor.md.
+	ServerVariables(ctx context.Context) (ServerFacts, error)
+}
+
 // Transaction is the manual half of a session's writing: the reader decides when what they have
 // done becomes true, instead of every statement being true the moment it runs.
 //
@@ -1019,6 +1114,7 @@ type Transaction interface {
 type Session interface {
 	Schema
 	Security
+	Monitor
 	Transaction
 
 	Ping(ctx context.Context) error

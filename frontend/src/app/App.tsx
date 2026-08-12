@@ -59,6 +59,7 @@ export function App() {
   const openTables = useTabsStore((s) => s.openTables)
   const openBackups = useTabsStore((s) => s.openBackups)
   const openAccounts = useTabsStore((s) => s.openAccounts)
+  const openMonitor = useTabsStore((s) => s.openMonitor)
   const openConsole = useTabsStore((s) => s.openConsole)
   const openCompare = useTabsStore((s) => s.openCompare)
   const openFind = useTabsStore((s) => s.openFind)
@@ -293,6 +294,7 @@ export function App() {
       onDiagram: openDiagram,
       onBackups: openBackups,
       onAccounts: openAccounts,
+      onMonitor: openMonitor,
       onDump: (targets, withData) => setDumpFrom({ targets, withData }),
     },
     pickedTables,
@@ -337,6 +339,13 @@ export function App() {
         if (how === 'replace') toggleTreeNode(node)
         return
       }
+
+      // The server monitor is the one row here that holds nothing, so there is nothing to expand
+      // beside opening it: a press *is* the open.
+      if (opens && node.kind === 'monitor') {
+        openMonitor(node.profileId)
+        return
+      }
       if (!opens || node.namespace === undefined) return
 
       if (node.kind === 'tables') openTables(node.profileId, node.namespace)
@@ -356,6 +365,7 @@ export function App() {
       openTables,
       openBackups,
       openAccounts,
+      openMonitor,
       toggleTreeNode,
     ],
   )
@@ -373,6 +383,10 @@ export function App() {
         openAccounts(node.profileId, node.account)
         return
       }
+      if (node.kind === 'monitor') {
+        openMonitor(node.profileId)
+        return
+      }
 
       const ref = sourceRefOf(node)
       if (hasRows(node)) openNodeRows(node)
@@ -380,7 +394,7 @@ export function App() {
         openSource({ profileId: node.profileId, namespace: node.namespace, ref })
       } else if (isExpandable(node)) toggleTreeNode(node)
     },
-    [toggleTreeNode, openNodeRows, openSource, openAccounts],
+    [toggleTreeNode, openNodeRows, openSource, openAccounts, openMonitor],
   )
 
   // A new editor inherits the selected connection and namespace, falling back to

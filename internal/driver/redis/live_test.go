@@ -755,3 +755,69 @@ func sortedByKey(rows [][]*string) bool {
 	}
 	return true
 }
+
+// The monitoring half against a real server, and it is **read-only on purpose**: a `CLIENT KILL` aimed
+// at an id nobody has would still be a destructive command sent to whatever is on that port, and this
+// file's own warning about port 6379 is the reason not to. What only a server can check is the parsing
+// — `CLIENT LIST` is one line of `name=value` pairs and `INFO` is sections — and that is what this does.
+func TestLiveMonitor(t *testing.T) {
+	live, _ := openLive(t)
+	ctx := context.Background()
+
+	t.Run("clients", func(t *testing.T) {
+		list, err := live.Processes(ctx)
+		if err != nil {
+			t.Fatalf("Processes() error = %v", err)
+		}
+		if len(list.Rows) == 0 {
+			t.Fatal("no clients: this connection is one of them")
+		}
+		if len(list.Refs) != len(list.Rows) {
+			t.Fatalf("%d references for %d rows", len(list.Refs), len(list.Rows))
+		}
+
+		ours := 0
+		for at, ref := range list.Refs {
+			if ref.ID == "" {
+				t.Errorf("row %d has no id", at)
+			}
+			if ref.Own {
+				ours++
+			}
+		}
+		// A session holds a client per database, so what is marked is the one this read came back on.
+		if ours == 0 {
+			t.Error("no row marked as ours")
+		}
+	})
+
+	t.Run("status", func(t *testing.T) {
+		status, err := live.ServerStatus(ctx)
+		if err != nil {
+			t.Fatalf("ServerStatus() error = %v", err)
+		}
+		if len(status.Rows) == 0 || len(status.Columns) != 3 {
+			t.Fatalf("status: %d rows in %d columns", len(status.Rows), len(status.Columns))
+		}
+
+		// Every row carries the section it was read under, which is how the server groups them.
+		for at, row := range status.Rows {
+			if row[0] == nil || *row[0] == "" {
+				t.Errorf("row %d has no section", at)
+				break
+			}
+		}
+	})
+
+	t.Run("variables", func(t *testing.T) {
+		// `CONFIG` is disabled on a hosted Redis, and that refusal is the server's own answer rather
+		// than a failure of this adapter — so what is checked is only that a list that came back is one.
+		variables, err := live.ServerVariables(ctx)
+		if err != nil {
+			t.Skipf("this server refuses CONFIG GET: %v", err)
+		}
+		if len(variables.Rows) == 0 {
+			t.Error("CONFIG GET * answered with nothing")
+		}
+	})
+}

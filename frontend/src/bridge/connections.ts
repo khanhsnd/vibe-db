@@ -346,6 +346,23 @@ export interface EngineInfo {
   // there are no roles at all. Both facts reach the editor as the driver's own `AccountOptions`,
   // and this is only what keeps a menu item off an engine that has neither.
   hasRoles: boolean
+  // Whether there is a server to monitor at all. A SQLite database is a file: nobody is connected to
+  // it, nothing is in flight, and a pragma is a fact about this program's own handle rather than a
+  // server's state — so there is no `Server Monitor` node under one and no tab to open.
+  hasMonitor: boolean
+  // Whether one statement can be stopped while its connection is left open. MySQL has `KILL QUERY`,
+  // PostgreSQL `pg_cancel_backend` and MongoDB `killOp`; SQL Server has only `KILL`, Oracle's cancel
+  // arrived in 18c and is addressed by the statement rather than the session, and a Redis server runs
+  // one command at a time and to completion. An engine without it is not offered the button.
+  cancelsStatement: boolean
+  // Whether a connection can be ended by the server. Every SQL engine here can; MongoDB cannot — a
+  // client there disconnects itself — which is the one engine with the cancel and not this.
+  closesConnection: boolean
+  // What this engine calls one of the things in that list, in its own words: a MySQL process, a
+  // PostgreSQL backend, an Oracle or SQL Server session, a MongoDB operation, a Redis client. It is a
+  // field for the reason `accountLabel` is one — never a comparison against an engine's name in a
+  // component — and `''` where there is nothing to name.
+  processLabel: string
 }
 
 /**
@@ -440,6 +457,10 @@ export const ENGINES = [
     hasAccounts: true,
     accountLabel: 'User',
     hasRoles: true,
+    hasMonitor: true,
+    cancelsStatement: true,
+    closesConnection: true,
+    processLabel: 'Process',
   },
   {
     value: 'postgres',
@@ -472,6 +493,12 @@ export const ENGINES = [
     // A role and a user are one object here: `CREATE USER` is `CREATE ROLE … LOGIN`.
     accountLabel: 'Role',
     hasRoles: true,
+    hasMonitor: true,
+    cancelsStatement: true,
+    closesConnection: true,
+    // A backend is an operating-system process of its own here, which is what the server calls one
+    // everywhere it reports them — `pg_stat_activity`, `pg_terminate_backend`.
+    processLabel: 'Backend',
   },
   {
     // A SQLite database is a file, so there is no host, no port and nobody to be — the Database box
@@ -508,6 +535,11 @@ export const ENGINES = [
     hasAccounts: false,
     accountLabel: '',
     hasRoles: false,
+    // Nobody is connected to a file, so there is nothing to watch and nothing to end.
+    hasMonitor: false,
+    cancelsStatement: false,
+    closesConnection: false,
+    processLabel: '',
   },
   {
     // SQL Server names a table by its database *and* its schema, so the tree has both levels the
@@ -544,6 +576,11 @@ export const ENGINES = [
     hasAccounts: true,
     accountLabel: 'User',
     hasRoles: true,
+    hasMonitor: true,
+    // `KILL` ends the session; there is no statement that stops a request and leaves it.
+    cancelsStatement: false,
+    closesConnection: true,
+    processLabel: 'Session',
   },
   {
     // Oracle has no level between a connection and a schema: the Database box holds the *service*
@@ -581,6 +618,12 @@ export const ENGINES = [
     hasAccounts: true,
     accountLabel: 'User',
     hasRoles: true,
+    hasMonitor: true,
+    // `ALTER SYSTEM CANCEL SQL` arrived in 18c and names the statement rather than the session, so
+    // this app does not claim it — what it offers is ending the session.
+    cancelsStatement: false,
+    closesConnection: true,
+    processLabel: 'Session',
   },
   {
     // A MongoDB server started without access control takes no credentials at all, which is why
@@ -619,6 +662,12 @@ export const ENGINES = [
     hasAccounts: true,
     accountLabel: 'User',
     hasRoles: true,
+    hasMonitor: true,
+    // The one engine with the cancel and not the close: `killOp` stops an operation, and a client
+    // disconnects itself.
+    cancelsStatement: true,
+    closesConnection: false,
+    processLabel: 'Operation',
   },
   {
     // A Redis database is *numbered* rather than named — `0` to `15` on a default install — so the
@@ -656,6 +705,12 @@ export const ENGINES = [
     accountLabel: 'User',
     // A Redis ACL grants command categories and has nothing that is granted in turn.
     hasRoles: false,
+    hasMonitor: true,
+    // A Redis server runs one command at a time and to completion, so there is nothing in flight for
+    // a second connection to cancel. What can be ended is the client.
+    cancelsStatement: false,
+    closesConnection: true,
+    processLabel: 'Client',
   },
 ] as const satisfies readonly EngineInfo[]
 

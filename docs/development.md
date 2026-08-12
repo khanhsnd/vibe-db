@@ -78,6 +78,17 @@ Then, by hand in the app:
 | `Empty`, then **Add Field** / **Edit Field** / **Delete Field** | Each is an update over the documents, and an empty collection is the case with nothing to update |
 | A **replica set through an SSH tunnel** | The connection is pinned `Direct`, or discovery hands back addresses that resolve only on the far side |
 
+And for the server monitor, which is the one pane whose rows come from a *server's own state* rather
+than from a catalogue of objects:
+
+| What | Why it needs a server |
+|---|---|
+| A **second connection running something slow** | The process list is only itself with somebody else in it, and a statement column is what the reader picks a row by |
+| **Cancel Statement**, then **End** on that connection | The two are different statements on the engines that have both, and only a server says whether the connection survived the first |
+| The row marked as **this app's own** | It is read from a second scalar question beside the list; on a pool of four, which connection answers is `database/sql`'s choice, and the mark has to land on one row and not none |
+| **Status** and **Variables** on each engine | Every alias in those reads is what the grid draws as a header — a name spelled wrongly is not a failure, it is a wrong word on the screen |
+| A reader **without the privilege** | Each engine refuses differently: MySQL shows their own threads, PostgreSQL blanks the statements, the rest refuse in the server's own words |
+
 And for Redis:
 
 | What | Why it needs a server |

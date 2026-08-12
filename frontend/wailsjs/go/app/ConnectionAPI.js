@@ -154,6 +154,10 @@ export function InsertRow(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['InsertRow'](arg1, arg2);
 }
 
+export function KillProcesses(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['KillProcesses'](arg1, arg2);
+}
+
 export function ListAccounts(arg1) {
   return window['go']['app']['ConnectionAPI']['ListAccounts'](arg1);
 }
@@ -164,6 +168,10 @@ export function ListBackups(arg1, arg2) {
 
 export function ListDatabases(arg1) {
   return window['go']['app']['ConnectionAPI']['ListDatabases'](arg1);
+}
+
+export function ListProcesses(arg1) {
+  return window['go']['app']['ConnectionAPI']['ListProcesses'](arg1);
 }
 
 export function ListProfiles() {
@@ -210,6 +218,14 @@ export function LoadObjects(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadObjects'](arg1, arg2);
 }
 
+export function LoadServerStatus(arg1) {
+  return window['go']['app']['ConnectionAPI']['LoadServerStatus'](arg1);
+}
+
+export function LoadServerVariables(arg1) {
+  return window['go']['app']['ConnectionAPI']['LoadServerVariables'](arg1);
+}
+
 export function LoadSource(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['LoadSource'](arg1, arg2, arg3);
 }
@@ -252,6 +268,10 @@ export function PreviewCreateDatabase(arg1, arg2) {
 
 export function PreviewImportFile(arg1) {
   return window['go']['app']['ConnectionAPI']['PreviewImportFile'](arg1);
+}
+
+export function PreviewProcessKills(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['PreviewProcessKills'](arg1, arg2);
 }
 
 export function PreviewRowWrite(arg1, arg2) {

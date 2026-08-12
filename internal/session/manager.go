@@ -278,6 +278,18 @@ func (m *Manager) Security(id string) (driver.Security, domain.Environment, erro
 	return s.driverSession, s.Profile.Environment, nil
 }
 
+// Monitor hands out the half of a session that watches the server, and the environment it would run
+// in beside it. The two travel together for the reason Security's do: ending one of a server's own
+// processes carries a hazard, and turning that into a question the reader has to answer is
+// `domain.Environment.NeedsConfirmation`'s.
+func (m *Manager) Monitor(id string) (driver.Monitor, domain.Environment, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return nil, "", err
+	}
+	return s.driverSession, s.Profile.Environment, nil
+}
+
 func (m *Manager) TableRows(
 	ctx context.Context,
 	id string,

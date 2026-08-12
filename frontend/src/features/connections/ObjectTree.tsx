@@ -1,6 +1,7 @@
 import { useMemo, useRef, type KeyboardEvent } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
+  Activity,
   Archive,
   ArrowDownAZ,
   Boxes,
@@ -54,6 +55,9 @@ const ICONS: Record<NodeKind, typeof Table2> = {
   // stands for somebody rather than for something the server stores.
   accounts: Folder,
   account: UserRound,
+  // What the server is doing, drawn as the pulse it is: the one row in the tree whose contents change
+  // while nobody touches anything.
+  monitor: Activity,
   table: Table2,
   view: Eye,
   procedure: Terminal,
@@ -84,6 +88,9 @@ const COLOURS: Record<NodeKind, string> = {
   backup: 'text-kind-backup',
   accounts: 'text-kind-account',
   account: 'text-kind-account',
+  // A process is a statement in flight, so it wears the colour a *program* wears everywhere in this
+  // app rather than taking an entry of its own — the same colour a query tab has in the strip.
+  monitor: 'text-kind-routine',
   table: 'text-kind-table',
   view: 'text-kind-view',
   procedure: 'text-kind-routine',

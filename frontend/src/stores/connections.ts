@@ -600,6 +600,11 @@ export function buildTree(input: TreeInput): TreeNode[] {
         // connection. It is filled by a read of its own, like the backups folder, and is left out
         // entirely for an engine with no accounts — see `hasAccounts`.
         ...(info.hasAccounts ? [accountsFolder(input, profile.id, info.accountLabel)] : []),
+        // The second row that hangs off a connection, and the only one in the whole tree that holds
+        // **nothing**: what a server is doing is a list that changes while nobody touches it, so it is
+        // read in a tab that can re-read itself rather than drawn as branches nobody could keep up
+        // with. Left out for an engine with no server to watch — see `hasMonitor`.
+        ...(info.hasMonitor ? [monitorNode(profile.id)] : []),
       ],
     }
   })
@@ -889,3 +894,17 @@ function accountsFolder(input: TreeInput, profileId: string, label: string): Tre
 }
 
 export const accountsFolderNodeId = (profileId: string) => `accounts:${profileId}`
+
+// What the connection's server is doing. It carries no children and no badge: there is nothing here
+// the store has read, because everything this row stands for is read by the tab it opens and re-read
+// on that tab's own clock — a count in the sidebar would be a number from a minute ago.
+function monitorNode(profileId: string): TreeNode {
+  return {
+    id: monitorNodeId(profileId),
+    kind: 'monitor',
+    label: 'Server Monitor',
+    profileId,
+  }
+}
+
+export const monitorNodeId = (profileId: string) => `monitor:${profileId}`

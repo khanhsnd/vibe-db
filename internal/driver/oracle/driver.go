@@ -102,6 +102,12 @@ func (*Driver) Open(
 		Translate: translateError,
 		Tx:        &s.Txn,
 	}
+	s.Watch = sqlkit.Watch{
+		Dialect:   dialect,
+		Run:       s.run,
+		Translate: translateError,
+		Tx:        &s.Txn,
+	}
 	return s, nil
 }
 
@@ -113,6 +119,9 @@ type session struct {
 	// Auth spells and runs every change to a user or a role; what `account.go` adds beside it is
 	// the catalogue reads that say who exists and what they hold.
 	sqlkit.Auth
+	// Watch runs the one kill this engine has; what `monitor.go` adds beside it is the reads that say
+	// what the instance is doing and what it was started with.
+	sqlkit.Watch
 	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data`, `Auth` and the
 	// query path all run on — see `sqlkit.Txn`.
 	sqlkit.Txn

@@ -159,3 +159,69 @@ func TestLiveAccounts(t *testing.T) {
 		}
 	})
 }
+
+// The monitoring half against a real server. What is checked here beyond MySQL's is the fact that
+// shapes this adapter's monitor: `pg_stat_activity` is the **cluster's** backends and `pg_settings`
+// the cluster's settings, both read from the one database this session was opened with — so a reader
+// browsing a second database still sees every backend on the server.
+//
+// The cancel is aimed at a pid that is not a backend at all: `pg_cancel_backend` answers false and
+// warns, which proves the statement ran without this test cancelling anybody's query.
+func TestLiveMonitor(t *testing.T) {
+	live := openLive(t)
+	ctx := context.Background()
+
+	t.Run("processes", func(t *testing.T) {
+		list, err := live.Processes(ctx)
+		if err != nil {
+			t.Fatalf("Processes: %v", err)
+		}
+		if len(list.Rows) == 0 {
+			t.Fatal("no backends: this connection is one of them")
+		}
+		if len(list.Refs) != len(list.Rows) {
+			t.Fatalf("%d references for %d rows", len(list.Refs), len(list.Rows))
+		}
+
+		ours := 0
+		for _, ref := range list.Refs {
+			if ref.Own {
+				ours++
+			}
+		}
+		if ours != 1 {
+			t.Errorf("%d rows marked as ours, want 1", ours)
+		}
+	})
+
+	t.Run("status and variables", func(t *testing.T) {
+		status, err := live.ServerStatus(ctx)
+		if err != nil {
+			t.Fatalf("ServerStatus: %v", err)
+		}
+		// One row per database, which is what this engine counts with — see the adapter.
+		if len(status.Rows) == 0 || len(status.Columns) < 3 {
+			t.Errorf("status: %d rows in %d columns", len(status.Rows), len(status.Columns))
+		}
+
+		variables, err := live.ServerVariables(ctx)
+		if err != nil {
+			t.Fatalf("ServerVariables: %v", err)
+		}
+		if len(variables.Rows) == 0 {
+			t.Error("the server reported no settings")
+		}
+	})
+
+	t.Run("a cancel reaches the server", func(t *testing.T) {
+		// Process 1 is never a PostgreSQL backend, so the function answers false and nothing is
+		// cancelled — what is being checked is that the statement itself was accepted.
+		notABackend := driver.ProcessRef{ID: "1"}
+
+		if err := live.KillProcesses(ctx, []driver.ProcessKill{
+			{Process: notABackend, Action: domain.ProcessCancel},
+		}); err != nil {
+			t.Errorf("KillProcesses on a pid that is not a backend: %v", err)
+		}
+	})
+}

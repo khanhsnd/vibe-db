@@ -17,7 +17,8 @@ function, a procedure or a trigger**, **a namespace drawn as boxes and the forei
 and exported — with a dragged line declaring a key**, table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **a manual transaction — autocommit
 off, and Commit or Rollback when the reader says so**, **the users a server knows, what each of them
-has been granted, and the statements that change it**, **exporting a grid to CSV, JSON
+has been granted, and the statements that change it**, **what a server is doing right now, what it was
+started with, and ending a statement or a connection**, **exporting a grid to CSV, JSON
 or SQL**, **backing a SQL namespace up into a folder the app keeps, and restoring
 one**, **running the engine's own mongodump, mysqldump or pg_dump — and putting one of those files
 back**, query tabs with completion that **run a whole script**, **a console that runs one statement
@@ -27,7 +28,10 @@ run, kept on disk and put back in the editor by a double-click**, **a log of eve
 has run, across every connection, on one clock**, passwords in Windows Credential
 Manager, and the full layout shell with dark and light themes and a **data font the reader picks**.
 
-Not there yet: a **materialised view** is not listed, because it is dropped by a statement of its
+Not there yet: a server **variable cannot be changed** from the monitor — reading one is the same
+question on every engine and setting one is five different statements, two of which do not take effect
+until a restart, so it is done in a query tab where the server answers for itself. A **materialised
+view** is not listed, because it is dropped by a statement of its
 own and a list that cannot be acted on is worse than one that does not claim it. A routine is
 declared and edited but not **run** with its arguments filled in — that is a query tab's business.
 A MongoDB view has no definition to open, being declared by a document rather than by a statement.
@@ -55,6 +59,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | The tree's schema changes, `New Database`, and the designer | [features/schema-changes.md](features/schema-changes.md) |
 | A view's, a routine's or a trigger's definition: reading it, declaring one, and saving it back | [features/definitions.md](features/definitions.md) |
 | The users a server knows, what they may do, and how a grant is made | [features/accounts.md](features/accounts.md) |
+| What a server is doing, its status and its variables, and ending a process | [features/monitor.md](features/monitor.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |
 | Backing a namespace up, the list of backups, and restoring one | [features/backup.md](features/backup.md) |
 | Running the engine's own mongodump, mysqldump or pg_dump — and putting one back | [features/tools.md](features/tools.md) |

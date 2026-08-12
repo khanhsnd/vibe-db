@@ -261,6 +261,41 @@ the server enumerating what it understands; PostgreSQL's are a fixed list becaus
 enumerates them nowhere. It is the same choice `driver.Source` makes about a definition, for the same
 reason: a list this app decided on is a list that goes stale one server version later.
 
+## What a server is doing
+
+`driver.Monitor` is the fourth half of a session, beside `Schema`, `Security` and `Transaction`: the
+processes a server is running, what it has counted, what it was started with, and the two statements
+that end one of them. `internal/app` owns five bound methods and no rules.
+
+**One speller.** `sqlkit.Watch` spells and runs every kill there is, and what differs between five SQL
+engines is a **flag** on `sqlkit.Dialect` — the statement that cancels, the statement that
+disconnects, and whether a process is named by two numbers. An engine with no statement for one of
+them leaves the flag empty and answers `domain.Unsupported` naming it, which is the same arrangement
+`RenameAccountSQL` already has for the account Oracle cannot rename. MongoDB and Redis touch none of
+it: both end a process with a **command**, and each writes its own `Monitor` the way each already
+writes its own `Security`.
+
+**The reads are each engine's own.** A process list, a status and a variable list are catalogue reads
+in the same sense a table list is, so they are the adapter's — `information_schema.processlist` against
+`pg_stat_activity` against `v$session` against `CLIENT LIST` — and they answer in the **engine's own
+columns**, for the reason [an account list does](#who-may-do-what). Two of them are not name-and-value
+pairs at all: PostgreSQL has no `SHOW STATUS`, so its status is `pg_stat_database` with a row per
+database, and a document store's is one nested document, flattened onto dotted paths.
+
+**A process id is checked as a number before it is spelled.** A kill binds no arguments, so the id
+reaches the statement as text — the one place in this port where a value off the wire would otherwise
+be pasted into SQL, and `sqlkit.Watch.supports` is what stands there. Oracle's session is the one
+process name that is not a bare number: `sid,serial#`, in a string literal, because a sid is reused the
+moment a session ends.
+
+**What is dangerous is a `domain` rule.** `domain.ProcessHazard` is the sixth grammar for one rule, and
+it says the thing worth saying: ending the connection *this app is reading on* is **unfiltered** in the
+sense a `DELETE` with no `WHERE` is — not a statement that does too much but one aimed at the wrong
+thing — so it is confirmed on a laptop as well as on production. Which row that is comes from the
+driver, read from a second scalar question beside the list (`CONNECTION_ID()`, `pg_backend_pid()`,
+`@@SPID`, `CLIENT ID`, `whatsmyuri`), and it says *one of ours* rather than the only one: a session
+holds a pool. See [features/monitor.md](features/monitor.md).
+
 ## Carrying a table to a file
 
 `internal/transfer` is the file formats and nothing else. It knows no databases: a row here is
