@@ -1,9 +1,11 @@
 import { Columns3, ListTree } from 'lucide-react'
 
+import type { Namespace } from '@/bridge/connections'
 import type { ExportFormat } from '@/bridge/export'
 import { CellEditorButton } from '@/features/results/CellEditorButton'
 import { ExportMenu } from '@/features/results/ExportMenu'
 import { FilterSortButton } from '@/features/results/FilterSortButton'
+import { TransactionMenu } from '@/features/results/TransactionMenu'
 import { cn } from '@/lib/cn'
 import { Button } from '@/shared/ui/Button'
 
@@ -40,6 +42,16 @@ interface TableToolbarProps {
   /** Left out until there are rows to write, which is what keeps Export off an empty table. */
   onExport?: ((format: ExportFormat) => void) | undefined
   onGenerateCurl?: (() => void) | undefined
+  /**
+   * The connection these rows are read over, its namespace and its engine — which is what a manual
+   * transaction is addressed by, a transaction being a fact of the connection rather than of this
+   * tab. See `TransactionMenu`, which draws nothing on an engine that has none.
+   */
+  sessionId: string
+  namespace: Namespace
+  engine: string
+  /** Run after a Commit or a Rollback, the rows on screen then being about a truth that has moved. */
+  onSettled: () => void
   /** Set only where the namespace is a key space, and then it replaces three of the four above. */
   keySpace?: KeySpaceControls | undefined
 }
@@ -57,6 +69,10 @@ export function TableToolbar({
   onFilterToggle,
   onExport,
   onGenerateCurl,
+  sessionId,
+  namespace,
+  engine,
+  onSettled,
   keySpace,
 }: TableToolbarProps) {
   return (
@@ -95,6 +111,13 @@ export function TableToolbar({
       >
         Column
       </Button>
+
+      <TransactionMenu
+        sessionId={sessionId}
+        namespace={namespace}
+        engine={engine}
+        onSettled={onSettled}
+      />
 
       <div className="min-w-2 flex-1" />
 

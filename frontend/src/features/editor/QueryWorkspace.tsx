@@ -179,6 +179,8 @@ export function QueryWorkspace({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <QueryToolbar
+        sessionId={sessionId}
+        engine={engine}
         databases={databases}
         schemas={schemas}
         namespace={tab.namespace}

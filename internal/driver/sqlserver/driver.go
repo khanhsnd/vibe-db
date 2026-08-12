@@ -69,12 +69,20 @@ func (*Driver) Open(
 	}
 
 	s := &session{db: db, home: profile.Database}
-	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run, Pin: s.pinned, Translate: translateError}
+	s.Txn = sqlkit.Txn{Pin: s.pinned, Translate: translateError}
+	s.DDL = sqlkit.DDL{
+		Dialect:   dialect,
+		Run:       s.run,
+		Pin:       s.Pinned,
+		Translate: translateError,
+		Tx:        &s.Txn,
+	}
 	s.Data = sqlkit.Data{
 		Dialect: dialect,
 		Columns: s.columns,
 		Open:    func(string) (sqlkit.Queryer, error) { return s.db, nil },
 		Fail:    translateError,
+		Tx:      &s.Txn,
 	}
 	return s, nil
 }
@@ -84,6 +92,9 @@ type session struct {
 	// that differ, and `Data` is the reads and writes of rows.
 	sqlkit.DDL
 	sqlkit.Data
+	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data` and the query
+	// path all run on — see `sqlkit.Txn`.
+	sqlkit.Txn
 
 	db *sql.DB
 	// home is the database the connection was opened with, and is where a catalogue read goes when
@@ -278,6 +289,9 @@ func (s *session) names(ctx context.Context, query string, args ...any) ([]strin
 	return names, nil
 }
 
+// Close rolls back whatever transaction is still open before the pool goes, a transaction nobody
+// can reach any more being one the server would hold every lock of until the connection died.
 func (s *session) Close() error {
+	s.Txn.Close()
 	return s.db.Close()
 }

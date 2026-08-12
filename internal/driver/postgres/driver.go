@@ -51,12 +51,20 @@ func (*Driver) Open(
 		tunnel:  tunnel,
 		pools:   map[string]*sql.DB{},
 	}
-	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run, Pin: s.pinned, Translate: translateError}
+	s.Txn = sqlkit.Txn{Pin: s.pinned, Translate: translateError}
+	s.DDL = sqlkit.DDL{
+		Dialect:   dialect,
+		Run:       s.run,
+		Pin:       s.Pinned,
+		Translate: translateError,
+		Tx:        &s.Txn,
+	}
 	s.Data = sqlkit.Data{
 		Dialect: dialect,
 		Columns: s.columns,
 		Open:    func(database string) (sqlkit.Queryer, error) { return s.pool(database) },
 		Fail:    translateError,
+		Tx:      &s.Txn,
 	}
 
 	// The profile's own database is what the session is judged on: reaching it proves the
@@ -82,6 +90,9 @@ type session struct {
 	// once the quoting and the paging are the dialect's.
 	sqlkit.DDL
 	sqlkit.Data
+	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data` and the query
+	// path all run on — see `sqlkit.Txn`.
+	sqlkit.Txn
 
 	profile domain.ConnectionProfile
 	creds   driver.Credentials
@@ -162,7 +173,11 @@ func verifyAs(config *pgx.ConnConfig, name string) {
 	}
 }
 
+// Close rolls back whatever transaction is still open before the pools go, a transaction nobody
+// can reach any more being one the server would hold every lock of until the connection died.
 func (s *session) Close() error {
+	s.Txn.Close()
+
 	s.mu.Lock()
 	pools := s.pools
 	registered := s.registered

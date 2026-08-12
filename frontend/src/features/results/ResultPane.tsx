@@ -12,6 +12,7 @@ import { Empty } from '@/shared/ui/Empty'
 import { ErrorStrip } from '@/shared/ui/ErrorStrip'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import type { QueryRun } from '@/stores/queries'
+import { useTransactionsStore } from '@/stores/transactions'
 
 import { CellEditor, EDITOR_HEIGHT, EDITOR_MIN_HEIGHT } from './CellEditor'
 import { CurlDrawer, type CurlTarget } from './CurlDrawer'
@@ -68,6 +69,13 @@ export function ResultPane({ tabId, run, sessionId, onRefresh, onFetch, onStop }
   const grid = result !== null && result.columns.length > 0 ? result : null
   const editable = grid !== null && grid.table !== '' && sessionId !== null
   const edits = useGridEdits(tabId, sourceOf(grid), sessionId, onRefresh)
+
+  // A transaction belongs to the connection, so what it failed with is read per session and shown
+  // in the same strip a failed cell write is — see `stores/transactions.ts`.
+  const transactionError = useTransactionsStore((s) =>
+    sessionId === null ? null : (s.errors[sessionId] ?? null),
+  )
+  const failure = edits.error ?? transactionError
 
   /** The columns in the reader's own order, each keeping the place it holds in a row. */
   const arranged = useMemo(
@@ -326,7 +334,7 @@ export function ResultPane({ tabId, run, sessionId, onRefresh, onFetch, onStop }
         ) : null}
       </Split>
 
-      {edits.error !== null ? <ErrorStrip error={edits.error} /> : null}
+      {failure !== null ? <ErrorStrip error={failure} /> : null}
 
       <GridFooter
         editable={editable}

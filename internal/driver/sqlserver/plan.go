@@ -2,7 +2,6 @@ package sqlserver
 
 import (
 	"context"
-	"database/sql"
 	"strconv"
 	"strings"
 
@@ -20,7 +19,7 @@ import (
 //
 // The estimated form is the only one asked for. `SHOWPLAN` describes without executing, which is
 // what Explain has to mean — the statement itself is run exactly once, by the caller.
-func explainPlan(ctx context.Context, conn *sql.Conn, statement string) *driver.Plan {
+func explainPlan(ctx context.Context, conn sqlkit.Queryer, statement string) *driver.Plan {
 	if _, err := conn.ExecContext(ctx, "SET SHOWPLAN_ALL ON"); err != nil {
 		return nil
 	}

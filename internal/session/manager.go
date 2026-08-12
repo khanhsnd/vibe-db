@@ -387,6 +387,43 @@ func (m *Manager) DeleteRow(ctx context.Context, id string, removal driver.RowDe
 	return s.driverSession.DeleteRow(ctx, removal)
 }
 
+// Begin, Commit and Rollback are the reader's own transaction, and they are the session's rather
+// than a tab's for the reason the driver gives: a transaction is one connection, and this is what
+// holds it. Anything the session runs between a Begin and its end runs inside it.
+func (m *Manager) Begin(ctx context.Context, id string, ns driver.Namespace) error {
+	s, err := m.Get(id)
+	if err != nil {
+		return err
+	}
+	return s.driverSession.Begin(ctx, ns)
+}
+
+func (m *Manager) Commit(ctx context.Context, id string) error {
+	s, err := m.Get(id)
+	if err != nil {
+		return err
+	}
+	return s.driverSession.Commit(ctx)
+}
+
+func (m *Manager) Rollback(ctx context.Context, id string) error {
+	s, err := m.Get(id)
+	if err != nil {
+		return err
+	}
+	return s.driverSession.Rollback(ctx)
+}
+
+// InTransaction asks no server anything, so a connection that has gone away answers `false`
+// rather than an error: what it reports is whether *this* side is holding one open.
+func (m *Manager) InTransaction(id string) bool {
+	s, err := m.Get(id)
+	if err != nil {
+		return false
+	}
+	return s.driverSession.InTransaction()
+}
+
 func newID() (string, error) {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {

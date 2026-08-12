@@ -32,14 +32,37 @@ type DDL struct {
 	//
 	// An adapter that leaves it nil has one namespace to be in — SQLite — and runs its definitions
 	// through Run like everything else.
-	Pin func(ctx context.Context, ns driver.Namespace) (*sql.Conn, error)
-	// Translate is the adapter's error map. `Run` applies its own; what goes through `Pin` has to
-	// be given one too, since it is executed here rather than there.
+	//
+	// It hands back the way to give the connection back as well as the connection, because inside a
+	// manual transaction there is nothing to give back: it is `Txn.Pinned` in all four adapters that
+	// set it, so a definition saved while one is open joins that transaction like every other
+	// statement.
+	Pin func(ctx context.Context, ns driver.Namespace) (Queryer, func(), error)
+	// Translate is the adapter's error map. `Run` applies its own; what goes through `Pin` or the
+	// open transaction has to be given one too, since both are executed here rather than there.
 	Translate func(error) error
+	// Tx is the session's manual transaction, and nil is a session that cannot hold one. While one
+	// is open every statement below runs *inside* it rather than through Run — see exec, and see
+	// Txn for why a transaction is one connection and therefore the whole session's.
+	Tx *Txn
+}
+
+// exec runs one statement wherever this session's statements currently go: inside the open
+// transaction, or through the adapter's own pool. It is the one seam, so no method below has to
+// know a transaction exists.
+func (x DDL) exec(ctx context.Context, database, statement string) error {
+	open := x.Tx.Queryer()
+	if open == nil {
+		return x.Run(ctx, database, statement)
+	}
+	if _, err := open.ExecContext(ctx, statement); err != nil {
+		return x.Translate(err)
+	}
+	return nil
 }
 
 func (x DDL) CreateTable(ctx context.Context, spec driver.TableSpec) error {
-	return x.Run(ctx, spec.Database, x.Dialect.CreateTable(spec))
+	return x.exec(ctx, spec.Database, x.Dialect.CreateTable(spec))
 }
 
 // RunAll executes statements in order, each in the database it names — which is what creating
@@ -47,7 +70,7 @@ func (x DDL) CreateTable(ctx context.Context, spec driver.TableSpec) error {
 // be run from inside the database that has just been made.
 func (x DDL) RunAll(ctx context.Context, statements []driver.DatabaseStatement) error {
 	for _, statement := range statements {
-		if err := x.Run(ctx, statement.In, statement.SQL); err != nil {
+		if err := x.exec(ctx, statement.In, statement.SQL); err != nil {
 			return err
 		}
 	}
@@ -55,7 +78,7 @@ func (x DDL) RunAll(ctx context.Context, statements []driver.DatabaseStatement) 
 }
 
 func (x DDL) DropDatabase(ctx context.Context, name string) error {
-	return x.Run(ctx, "", "DROP DATABASE "+x.Dialect.QuoteIdent(name))
+	return x.exec(ctx, "", "DROP DATABASE "+x.Dialect.QuoteIdent(name))
 }
 
 // DuplicateTable declares the copy and then fills it, which is two statements because neither
@@ -67,25 +90,25 @@ func (x DDL) DuplicateTable(
 	table, name string,
 	withRows bool,
 ) error {
-	if err := x.Run(ctx, ns.Database, x.Dialect.CopyTable(ns, table, name)); err != nil {
+	if err := x.exec(ctx, ns.Database, x.Dialect.CopyTable(ns, table, name)); err != nil {
 		return err
 	}
 	if !withRows {
 		return nil
 	}
-	return x.Run(ctx, ns.Database, x.Dialect.CopyRows(ns, table, name))
+	return x.exec(ctx, ns.Database, x.Dialect.CopyRows(ns, table, name))
 }
 
 func (x DDL) DropTable(ctx context.Context, ns driver.Namespace, table string) error {
-	return x.Run(ctx, ns.Database, "DROP TABLE "+x.Dialect.Table(ns, table))
+	return x.exec(ctx, ns.Database, "DROP TABLE "+x.Dialect.Table(ns, table))
 }
 
 func (x DDL) TruncateTable(ctx context.Context, ns driver.Namespace, table string) error {
-	return x.Run(ctx, ns.Database, "TRUNCATE TABLE "+x.Dialect.Table(ns, table))
+	return x.exec(ctx, ns.Database, "TRUNCATE TABLE "+x.Dialect.Table(ns, table))
 }
 
 func (x DDL) EmptyTable(ctx context.Context, ns driver.Namespace, table string) error {
-	return x.Run(ctx, ns.Database, "DELETE FROM "+x.Dialect.Table(ns, table))
+	return x.exec(ctx, ns.Database, "DELETE FROM "+x.Dialect.Table(ns, table))
 }
 
 func (x DDL) AddColumn(
@@ -94,7 +117,7 @@ func (x DDL) AddColumn(
 	table string,
 	spec driver.ColumnSpec,
 ) error {
-	return x.Run(ctx, ns.Database, x.Dialect.AddColumn(ns, table, spec))
+	return x.exec(ctx, ns.Database, x.Dialect.AddColumn(ns, table, spec))
 }
 
 // AlterStatements spells changes to a table as the statements that would make them, and runs none
@@ -286,11 +309,11 @@ func (x DDL) RenameColumn(
 ) error {
 	statement := x.alter(ns, table) +
 		" RENAME COLUMN " + x.Dialect.QuoteIdent(column) + " TO " + x.Dialect.QuoteIdent(name)
-	return x.Run(ctx, ns.Database, statement)
+	return x.exec(ctx, ns.Database, statement)
 }
 
 func (x DDL) DropColumn(ctx context.Context, ns driver.Namespace, table, column string) error {
-	return x.Run(ctx, ns.Database, x.Dialect.DropColumn(ns, table, column))
+	return x.exec(ctx, ns.Database, x.Dialect.DropColumn(ns, table, column))
 }
 
 // AlterColumn, CreateIndex, DropIndex and DropForeignKey are here rather than in each adapter
@@ -313,7 +336,7 @@ func (x DDL) AlterColumn(
 	}
 
 	for _, statement := range statements {
-		if err := x.Run(ctx, ns.Database, statement); err != nil {
+		if err := x.exec(ctx, ns.Database, statement); err != nil {
 			return err
 		}
 	}
@@ -326,11 +349,11 @@ func (x DDL) CreateIndex(
 	table string,
 	spec driver.IndexSpec,
 ) error {
-	return x.Run(ctx, ns.Database, x.Dialect.CreateIndex(ns, table, spec))
+	return x.exec(ctx, ns.Database, x.Dialect.CreateIndex(ns, table, spec))
 }
 
 func (x DDL) DropIndex(ctx context.Context, ns driver.Namespace, table, index string) error {
-	return x.Run(ctx, ns.Database, x.Dialect.DropIndex(ns, table, index))
+	return x.exec(ctx, ns.Database, x.Dialect.DropIndex(ns, table, index))
 }
 
 func (x DDL) DropForeignKey(
@@ -338,7 +361,7 @@ func (x DDL) DropForeignKey(
 	ns driver.Namespace,
 	table, constraint string,
 ) error {
-	return x.Run(ctx, ns.Database, x.Dialect.DropForeignKey(ns, table, constraint))
+	return x.exec(ctx, ns.Database, x.Dialect.DropForeignKey(ns, table, constraint))
 }
 
 // CreateForeignKey is spelled the same by both engines once the quoting is the dialect's, and
@@ -349,7 +372,7 @@ func (x DDL) CreateForeignKey(
 	table string,
 	spec driver.ForeignKeySpec,
 ) error {
-	return x.Run(ctx, ns.Database, x.Dialect.AddForeignKey(ns, table, spec))
+	return x.exec(ctx, ns.Database, x.Dialect.AddForeignKey(ns, table, spec))
 }
 
 // AddForeignKey is that statement as text rather than as a run, so a dump writes the same clause
@@ -721,18 +744,18 @@ func (x DDL) runInside(ctx context.Context, ns driver.Namespace, statements []st
 
 	if x.Pin == nil {
 		for _, statement := range statements {
-			if err := x.Run(ctx, ns.Database, statement); err != nil {
+			if err := x.exec(ctx, ns.Database, statement); err != nil {
 				return err
 			}
 		}
 		return nil
 	}
 
-	conn, err := x.Pin(ctx, ns)
+	conn, release, err := x.Pin(ctx, ns)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer release()
 
 	for _, statement := range statements {
 		if _, err := conn.ExecContext(ctx, statement); err != nil {

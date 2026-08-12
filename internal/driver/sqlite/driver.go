@@ -88,12 +88,22 @@ func (*Driver) Open(
 	}
 
 	s := &session{db: db}
-	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
+	// A SQLite session has one namespace to be in, so pinning is taking a connection and nothing
+	// more — which is still what a transaction needs, a transaction being one connection.
+	s.Txn = sqlkit.Txn{
+		Pin: func(ctx context.Context, _ driver.Namespace) (*sql.Conn, error) {
+			conn, err := db.Conn(ctx)
+			return conn, translateError(err)
+		},
+		Translate: translateError,
+	}
+	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run, Translate: translateError, Tx: &s.Txn}
 	s.Data = sqlkit.Data{
 		Dialect: dialect,
 		Columns: s.columns,
 		Open:    func(string) (sqlkit.Queryer, error) { return s.db, nil },
 		Fail:    translateError,
+		Tx:      &s.Txn,
 	}
 	return s, nil
 }
@@ -112,8 +122,20 @@ type session struct {
 	// SQLite has not got, and `Data` is the reads and writes of rows.
 	sqlkit.DDL
 	sqlkit.Data
+	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data` and the query
+	// path all run on — see `sqlkit.Txn`.
+	sqlkit.Txn
 
 	db *sql.DB
+}
+
+// runsOn is where a statement of this session goes: the open transaction, or the pool. SQLite has
+// no namespace to pin a connection into, so its query path asks this rather than `Txn.Pinned`.
+func (s *session) runsOn() sqlkit.Queryer {
+	if open := s.Txn.Queryer(); open != nil {
+		return open
+	}
+	return s.db
 }
 
 func (s *session) Ping(ctx context.Context) error {
@@ -234,6 +256,9 @@ func (s *session) names(ctx context.Context, query string, args ...any) ([]strin
 	return names, nil
 }
 
+// Close rolls back whatever transaction is still open before the pool goes, a transaction nobody
+// can reach any more being one that would hold the database's write lock until the connection died.
 func (s *session) Close() error {
+	s.Txn.Close()
 	return s.db.Close()
 }

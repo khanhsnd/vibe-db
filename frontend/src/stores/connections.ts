@@ -25,6 +25,7 @@ import {
   saveDatabaseFilters,
 } from '@/features/connections/databaseFilter'
 import type { ConnectionStatus, NodeKind, TreeNode } from '@/features/connections/tree'
+import { useTransactionsStore } from '@/stores/transactions'
 
 export const connectionNodeId = (profileId: string) => `conn:${profileId}`
 export const databaseNodeId = (profileId: string, database: string) => `db:${profileId}:${database}`
@@ -239,6 +240,11 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
     try {
       await connections.disconnect(session.id)
     } finally {
+      // The connection is gone and so is whatever transaction it was holding — the Go side rolled
+      // it back on the way out. Forgetting it here is what stops a session id reused later from
+      // opening with a button that claims one is open.
+      useTransactionsStore.getState().forget(session.id)
+
       set((s) => {
         const sessions = { ...s.sessions }
         const databases = { ...s.databases }

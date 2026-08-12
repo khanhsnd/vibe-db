@@ -89,8 +89,8 @@ Reach for `internal/driver/sqlkit` before writing anything: row scanning, result
 reflection, statement classification, **the lexer** and everything written over it — script
 splitting, **laying a script out**, **reviewing it** — source parsing, identifier and string
 quoting, **building a `*tls.Config` from a profile's certificate files**, the transport errors,
-**the reads and writes of rows** (`sqlkit.Data`) and **the DDL statements the engines spell the same
-way** (`sqlkit.DDL`) are all there already.
+**the reads and writes of rows** (`sqlkit.Data`), **the DDL statements the engines spell the same
+way** (`sqlkit.DDL`) and **holding a manual transaction open** (`sqlkit.Txn`) are all there already.
 
 **`sqlkit.Lex` is the one place a script is read character by character.** Splitting, formatting and
 reviewing are all written over its tokens, so what counts as a string, a comment or a `$tag$` body
@@ -100,9 +100,11 @@ free.
 ### The five SQL engines
 
 **An adapter is its catalogue reads, its error map, how it is dialled, and a `Dialect`.** That is
-the whole of it: `sqlkit.DDL` supplies the schema changes and `sqlkit.Data` supplies the reads and
-writes of rows, and neither is overridden except where an engine genuinely differs in *shape* rather
-than in spelling.
+the whole of it: `sqlkit.DDL` supplies the schema changes, `sqlkit.Data` supplies the reads and
+writes of rows, and `sqlkit.Txn` supplies the whole of `driver.Transaction` — none of them is
+overridden except where an engine genuinely differs in *shape* rather than in spelling. A
+transaction has no spelling at all here, `BEGIN` being `database/sql`'s to send, which is why it
+needs no `Dialect` flag — see [transaction.md](features/transaction.md#where-it-lives).
 
 | Part | What varies |
 |---|---|

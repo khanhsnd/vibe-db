@@ -31,6 +31,13 @@ var (
 	// server, and the reader answers it in the file picker rather than in the connection.
 	ErrFileUnreadable = errors.New("cannot read the file")
 
+	// The two ways a manual transaction is asked for something it is not in a state to give. They
+	// are refusals rather than no-ops because the reader is being told what is *open*: a Begin that
+	// quietly joined the transaction already running would hide a second one they thought they had,
+	// and a Commit with nothing open would report having written what was never held.
+	ErrTransactionActive = errors.New("a transaction is already open on this connection")
+	ErrNoTransaction     = errors.New("no transaction is open on this connection")
+
 	// ErrUnsupported is a thing this engine has no concept of rather than a thing that went
 	// wrong: a foreign key on MongoDB, a primary key other than `_id`, a stored routine. It is
 	// its own sentinel because a reader answers it by not asking again, and because the alternative

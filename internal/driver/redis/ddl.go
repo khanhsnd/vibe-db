@@ -167,3 +167,22 @@ func (*session) SaveSource(context.Context, driver.Namespace, driver.SourceSave)
 func (*session) NewSource(driver.Namespace, driver.SourceRef) string {
 	return ""
 }
+
+// A manual transaction is a thing a key space has not got. Redis's MULTI queues the commands and
+// runs them at EXEC, which is not what Begin, Commit and Rollback mean: nothing between the two is
+// visible to the reader who typed it, and there is no rolling back once EXEC has run.
+func (*session) Begin(context.Context, driver.Namespace) error {
+	return domain.Unsupported("a manual transaction")
+}
+
+func (*session) Commit(context.Context) error {
+	return domain.Unsupported("a manual transaction")
+}
+
+func (*session) Rollback(context.Context) error {
+	return domain.Unsupported("a manual transaction")
+}
+
+func (*session) InTransaction() bool {
+	return false
+}

@@ -43,6 +43,9 @@ it — see [frontend.md](../frontend.md) on `panelIds`.
   **A query result has the same panel**, from the button on its own head strip beside Export: it is
   one `CellEditor` on both surfaces, and the line under it says why a value cannot be written back
   where it cannot — a table with no primary key here, a result no `UPDATE` can name there.
+- **`Transaction`** turns autocommit off for the whole **connection**, and is the same menu the
+  query tab carries. What it means and why it is not a fact of this tab is
+  [transaction.md](transaction.md).
 - **`Column`** opens a checkbox list to the left of the grid that picks which columns show.
   Unchecking the last visible column is blocked, so the grid can never go blank. Selection is
   cleared on a change, because the cell coordinates the grid reports are positions among the

@@ -767,8 +767,35 @@ type Schema interface {
 	NewSource(ns Namespace, ref SourceRef) string
 }
 
+// Transaction is the manual half of a session's writing: the reader decides when what they have
+// done becomes true, instead of every statement being true the moment it runs.
+//
+// It is a fact of the **connection** and therefore of the whole session, which is the only honest
+// way to model it: uncommitted rows exist on one connection and nowhere else, so a grid that read
+// them off a second one would show the reader a table that does not yet exist. While one is open
+// every statement of the session runs inside it — its reads, its writes and its schema changes
+// alike — and `sqlkit.Txn` is what supplies the whole of this for the five SQL engines.
+//
+// An engine with no such notion answers `domain.Unsupported` naming it, and the frontend never
+// offers the button — see `EngineInfo.hasTransactions`.
+type Transaction interface {
+	// Begin opens one, in the namespace the reader is looking at, and refuses where one is already
+	// open: `domain.ErrTransactionActive`.
+	Begin(ctx context.Context, ns Namespace) error
+	// Commit and Rollback both end it and both refuse where none is open
+	// (`domain.ErrNoTransaction`). Either way the connection goes back to the pool, so the session
+	// is autocommitting again the moment one of them returns — including when it returns a failure,
+	// a transaction the server has thrown out not being one this side may keep holding.
+	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
+	// InTransaction is what the button draws itself from. It asks no server anything: whether this
+	// session is holding a transaction open is this side's own fact.
+	InTransaction() bool
+}
+
 type Session interface {
 	Schema
+	Transaction
 
 	Ping(ctx context.Context) error
 	ServerInfo(ctx context.Context) (ServerInfo, error)

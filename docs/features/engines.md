@@ -65,6 +65,7 @@ answers [`UNSUPPORTED`](../errors.md) naming which — never a statement left fo
 | Read and write a definition | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Explain a statement | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Back up and restore | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| A manual transaction | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Its vendor's own dump program | ✓ | ✓ | | | | ✓ | |
 
 Four of those blanks are worth the sentence:
@@ -97,6 +98,26 @@ Four of those blanks are worth the sentence:
   than the New Database dialog's business, and there is nowhere on the dialog for a password to go.
   Dropping one is `DROP USER … CASCADE`, which removes an account and everything it ever owned: the
   same answer, rather more emphatically.
+
+## What a transaction is worth
+
+Every SQL engine here lets a reader turn autocommit off and decide for themselves when what they
+have done becomes true — see [transaction.md](transaction.md). The two that are left out are left
+out for reasons of their own, and neither is a gap:
+
+- **MongoDB's transaction needs a replica set or a sharded cluster**, and a client session carried
+  through every command inside it. Most connections here are to a standalone server, which would
+  answer a Begin by refusing it — so offering the button on half the servers it works on would be
+  worse than saying plainly that this app has not got one.
+- **Redis's MULTI is not the same thing.** It queues the commands and runs them at EXEC: nothing
+  between the two is visible to the reader who typed it, so there is nothing to look at before
+  deciding, and there is no rolling back once EXEC has run. Begin, Commit and Rollback would be
+  three words for something else.
+
+What the *engines that have one* do differently is what a schema change inside it means — three roll
+DDL back and two commit implicitly. That is
+[transaction.md](transaction.md#what-the-engines-do-with-it), not a flag on `Dialect`: nothing in
+this app spells `BEGIN`.
 
 ## What differs inside a statement
 

@@ -319,6 +319,11 @@ export interface EngineInfo {
   // that would put the database back, so the engines that have one are the engines whose statements
   // declare a table and write a row — see `domain.Engine.Backups`, which is where the rule lives.
   hasBackups: boolean
+  // Whether a reader may turn autocommit off and decide for themselves when what they have done
+  // becomes true. Every SQL engine here has one; MongoDB's needs a replica set and a client session
+  // it carries through every command, and Redis's MULTI shows the reader nothing until it has
+  // already run — so both answer `domain.Unsupported` and neither is offered the button.
+  hasTransactions: boolean
   // What this engine's vendor calls its own dump and restore programs, and `''` where it ships no
   // such pair. They are *names* rather than a boolean because the menu says them: a reader who has
   // installed MongoDB Database Tools is looking for the word `mongodump`. Whether either is on
@@ -413,6 +418,7 @@ export const ENGINES = [
     hasTriggers: true,
     hasTruncate: true,
     hasBackups: true,
+    hasTransactions: true,
     dumpTool: 'mysqldump',
     // The ordinary client, because mysqldump writes a plain script and running one is all it takes
     // to put it back. It is the one of the three whose restore is not a program of its own.
@@ -442,6 +448,7 @@ export const ENGINES = [
     hasTriggers: true,
     hasTruncate: true,
     hasBackups: true,
+    hasTransactions: true,
     dumpTool: 'pg_dump',
     restoreTool: 'pg_restore',
   },
@@ -472,6 +479,7 @@ export const ENGINES = [
     hasTriggers: false,
     hasTruncate: false,
     hasBackups: true,
+    hasTransactions: true,
     // A SQLite database is one file, so copying it *is* the dump. There is no client program to
     // run and nothing for one to do that Explorer does not already.
     dumpTool: '',
@@ -504,6 +512,7 @@ export const ENGINES = [
     hasTriggers: true,
     hasTruncate: true,
     hasBackups: true,
+    hasTransactions: true,
     // SQL Server's own backup is a statement the *server* runs, writing to a path the server can
     // see rather than one this machine has. There is no client program that carries a database out.
     dumpTool: '',
@@ -537,6 +546,7 @@ export const ENGINES = [
     hasTriggers: true,
     hasTruncate: true,
     hasBackups: true,
+    hasTransactions: true,
     // Oracle's Data Pump runs *inside* the instance and writes to a directory object the database
     // owns, so `expdp` is not a program that carries anything to this machine.
     dumpTool: '',
@@ -573,6 +583,7 @@ export const ENGINES = [
     // declaration and a row — but its *vendor* ships a pair of programs that carry the BSON
     // itself, which is what these two are and why this engine has the second without the first.
     hasBackups: false,
+    hasTransactions: false,
     dumpTool: 'mongodump',
     restoreTool: 'mongorestore',
   },
@@ -603,6 +614,7 @@ export const ENGINES = [
     hasTriggers: false,
     hasTruncate: false,
     hasBackups: false,
+    hasTransactions: false,
     // Redis persists itself — an RDB file the server writes where the server is — and there is no
     // client program that pulls one back to this machine.
     dumpTool: '',

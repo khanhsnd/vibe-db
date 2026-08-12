@@ -9,7 +9,9 @@ whichever connection is open.
 A query tab carries its own toolbar, editor buffer, database and row limit, so several tabs can sit
 on the same connection without treading on each other. The toolbar picks the database, then
 **Execute** (`F5` or `Ctrl`+`Enter`) or **Explain** runs the statement; **Format**
-(`Ctrl`+`Shift`+`F`) lays it out; **Stop** cancels it. `Ctrl`+`F` searches the buffer itself and has
+(`Ctrl`+`Shift`+`F`) lays it out; **Stop** cancels it; **Transaction** turns autocommit off — for
+the whole connection rather than for this tab, which is [transaction.md](transaction.md).
+`Ctrl`+`F` searches the buffer itself and has
 no button, being the editor's rather than the toolbar's — see
 [finding text in the buffer](../editor.md#finding-text-in-the-buffer).
 

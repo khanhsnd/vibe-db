@@ -18,6 +18,10 @@ export function ApplyTableChanges(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['ApplyTableChanges'](arg1, arg2, arg3, arg4);
 }
 
+export function BeginTransaction(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['BeginTransaction'](arg1, arg2);
+}
+
 export function ChooseToolFile(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['ChooseToolFile'](arg1, arg2, arg3);
 }
@@ -32,6 +36,10 @@ export function ChooseTransferFile(arg1) {
 
 export function ChooseTransferFolder() {
   return window['go']['app']['ConnectionAPI']['ChooseTransferFolder']();
+}
+
+export function CommitTransaction(arg1) {
+  return window['go']['app']['ConnectionAPI']['CommitTransaction'](arg1);
 }
 
 export function CompareData(arg1, arg2, arg3) {
@@ -132,6 +140,10 @@ export function FindInSchema(arg1, arg2) {
 
 export function ForgetToolProgram(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ForgetToolProgram'](arg1, arg2);
+}
+
+export function InTransaction(arg1) {
+  return window['go']['app']['ConnectionAPI']['InTransaction'](arg1);
 }
 
 export function InsertRow(arg1, arg2) {
@@ -252,6 +264,10 @@ export function RestoreBackup(arg1, arg2) {
 
 export function ReviewImport(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ReviewImport'](arg1, arg2);
+}
+
+export function RollbackTransaction(arg1) {
+  return window['go']['app']['ConnectionAPI']['RollbackTransaction'](arg1);
 }
 
 export function RunBackup(arg1, arg2) {

@@ -27,11 +27,11 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 	}
 
 	// A pooled connection is pinned for the call so the search path applies to the statement.
-	conn, err := s.pinned(ctx, query.Namespace)
+	conn, release, err := s.Pinned(ctx, query.Namespace)
 	if err != nil {
 		return driver.QueryResult{}, err
 	}
-	defer conn.Close()
+	defer release()
 
 	// A plan is read **before** the statement runs. Asking afterwards would ask about a server the
 	// statement has already changed: what `DELETE FROM t` was going to do is not what the planner
@@ -54,7 +54,7 @@ func (s *session) Query(ctx context.Context, query driver.Query) (driver.QueryRe
 // with rows, or the one that answers with a count.
 func (s *session) execute(
 	ctx context.Context,
-	conn *sql.Conn,
+	conn sqlkit.Queryer,
 	query driver.Query,
 	statement string,
 ) (driver.QueryResult, error) {

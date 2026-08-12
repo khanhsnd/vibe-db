@@ -2,7 +2,6 @@ package oracle
 
 import (
 	"context"
-	"database/sql"
 	"strings"
 
 	"github.com/khanhsnd/vibe-db/internal/driver"
@@ -19,7 +18,7 @@ import (
 //
 // It is never the `ANALYZE`-like form: EXPLAIN PLAN compiles and does not run, which is what
 // Explain has to mean — the statement itself is run exactly once, by the caller.
-func explainPlan(ctx context.Context, conn *sql.Conn, statement string) *driver.Plan {
+func explainPlan(ctx context.Context, conn sqlkit.Queryer, statement string) *driver.Plan {
 	if _, err := conn.ExecContext(ctx, "EXPLAIN PLAN FOR "+statement); err != nil {
 		return nil
 	}
@@ -59,7 +58,7 @@ const steps = `
 	WHERE plan_id = (SELECT MAX(plan_id) FROM plan_table)
 	ORDER BY id`
 
-func nodesOf(ctx context.Context, conn *sql.Conn) []driver.PlanNode {
+func nodesOf(ctx context.Context, conn sqlkit.Queryer) []driver.PlanNode {
 	rows, err := conn.QueryContext(ctx, steps)
 	if err != nil {
 		return []driver.PlanNode{}

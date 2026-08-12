@@ -15,7 +15,8 @@ empty / truncate / drop a table, add / edit / rename / drop a field, add or drop
 foreign key, drop a view, a routine or a trigger — **reading and writing the definition of a view, a
 function, a procedure or a trigger**, **a namespace drawn as boxes and the foreign keys between them, arranged, annotated
 and exported — with a dragged line declaring a key**, table data browsing with pagination, cell editing plus row
-insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
+insert and delete on any grid whose rows can be traced to one table, **a manual transaction — autocommit
+off, and Commit or Rollback when the reader says so**, **exporting a grid to CSV, JSON
 or SQL**, **backing a SQL namespace up into a folder the app keeps, and restoring
 one**, **running the engine's own mongodump, mysqldump or pg_dump — and putting one of those files
 back**, query tabs with completion that **run a whole script**, **a console that runs one statement
@@ -62,6 +63,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | The History Log: every statement the window has run, on one clock | [features/log.md](features/log.md) |
 | The two row-limit controls, and the streamed unbounded read | [features/row-limit.md](features/row-limit.md) |
 | The output panel, the history pane, editing a result, exporting a grid | [features/results.md](features/results.md) |
+| Turning autocommit off: Begin, Commit and Rollback by hand | [features/transaction.md](features/transaction.md) |
 | Filtering and sorting a table tab | [features/filter-sort.md](features/filter-sort.md) |
 | Reading a value whole, and why bytes arrive as `\x…` | [features/value-viewer.md](features/value-viewer.md) |
 | The menu bar, the dividers, the tab strip, Options and the font list | [features/shell.md](features/shell.md) |

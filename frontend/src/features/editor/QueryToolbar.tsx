@@ -4,10 +4,18 @@ import { ListTree, Loader2, Play, Square, WrapText } from 'lucide-react'
 import type { Namespace } from '@/bridge/connections'
 import { DEFAULT_QUERY_ROWS, QUERY_ROW_LIMITS } from '@/bridge/rows'
 import { NamespacePicker } from '@/features/connections/NamespacePicker'
+import { TransactionMenu } from '@/features/results/TransactionMenu'
 import { Button } from '@/shared/ui/Button'
 import { RowLimit } from '@/shared/ui/RowLimit'
 
 interface QueryToolbarProps {
+  /**
+   * The connection the statements run over, and its engine. A manual transaction is a fact of the
+   * connection rather than of this tab, so the menu is drawn from the session — see
+   * `TransactionMenu`, which draws nothing on an engine that has none.
+   */
+  sessionId: string | null
+  engine: string
   databases: string[]
   schemas: string[]
   namespace: Namespace
@@ -25,6 +33,8 @@ interface QueryToolbarProps {
 }
 
 export function QueryToolbar({
+  sessionId,
+  engine,
   databases,
   schemas,
   namespace,
@@ -97,6 +107,10 @@ export function QueryToolbar({
         Format
       </Button>
       <Shortcut>Ctrl+Shift+F</Shortcut>
+
+      {sessionId !== null ? (
+        <TransactionMenu sessionId={sessionId} namespace={namespace} engine={engine} />
+      ) : null}
 
       {running ? (
         <span className="ml-1 flex items-center gap-1.5 text-xs text-muted">

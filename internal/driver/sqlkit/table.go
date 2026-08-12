@@ -25,6 +25,20 @@ type Data struct {
 	Open func(database string) (Queryer, error)
 	// Fail is the adapter's error map, so nothing here has to know how this engine spells a failure.
 	Fail func(error) error
+	// Tx is the session's manual transaction, and nil is a session that cannot hold one. While one
+	// is open every read and every write below runs *inside* it — which is what makes the grid show
+	// the reader their own uncommitted rows, those rows existing on that one connection and nowhere
+	// else. See queryer, and see Txn.
+	Tx *Txn
+}
+
+// queryer is where this session's statements currently go: the open transaction, or the pool the
+// adapter hands back. It is the one seam, so no method below has to know a transaction exists.
+func (t Data) queryer(database string) (Queryer, error) {
+	if open := t.Tx.Queryer(); open != nil {
+		return open, nil
+	}
+	return t.Open(database)
 }
 
 func (t Data) TableRows(ctx context.Context, page driver.TablePage) (driver.TableRows, error) {
@@ -45,7 +59,7 @@ func (t Data) TableRows(ctx context.Context, page driver.TablePage) (driver.Tabl
 		return driver.TableRows{}, err
 	}
 
-	db, err := t.Open(page.Database)
+	db, err := t.queryer(page.Database)
 	if err != nil {
 		return driver.TableRows{}, err
 	}
@@ -84,7 +98,7 @@ func (t Data) ColumnValues(ctx context.Context, pick driver.ColumnPick) ([]strin
 		return nil, err
 	}
 
-	db, err := t.Open(pick.Database)
+	db, err := t.queryer(pick.Database)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +176,7 @@ func (t Data) DeleteRow(ctx context.Context, removal driver.RowDelete) error {
 }
 
 func (t Data) exec(ctx context.Context, database, query string, args []any) error {
-	db, err := t.Open(database)
+	db, err := t.queryer(database)
 	if err != nil {
 		return err
 	}
@@ -177,7 +191,7 @@ func (t Data) count(
 	ns driver.Namespace,
 	table, where string,
 ) (int64, error) {
-	db, err := t.Open(ns.Database)
+	db, err := t.queryer(ns.Database)
 	if err != nil {
 		return 0, err
 	}

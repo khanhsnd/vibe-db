@@ -638,3 +638,24 @@ func (*session) SaveSource(context.Context, driver.Namespace, driver.SourceSave)
 func (*session) NewSource(driver.Namespace, driver.SourceRef) string {
 	return ""
 }
+
+// A manual transaction is a thing this adapter has not got. MongoDB does have multi-document
+// transactions, but only on a replica set or a sharded cluster and only inside a *session* the
+// client carries through every command — so a standalone server, which is what most of these
+// connections are, would answer a Begin by refusing it. Saying so here names it, rather than
+// leaving a button that fails on half the servers it is offered on.
+func (*session) Begin(context.Context, driver.Namespace) error {
+	return domain.Unsupported("a manual transaction")
+}
+
+func (*session) Commit(context.Context) error {
+	return domain.Unsupported("a manual transaction")
+}
+
+func (*session) Rollback(context.Context) error {
+	return domain.Unsupported("a manual transaction")
+}
+
+func (*session) InTransaction() bool {
+	return false
+}

@@ -37,7 +37,7 @@ func (s *session) Query(
 	// what `DELETE FROM t` was going to do is not what the planner says once the rows are gone.
 	var plan *dbdriver.Plan
 	if query.Explain {
-		plan = explainPlan(ctx, s.db, statement)
+		plan = explainPlan(ctx, s.runsOn(), statement)
 	}
 
 	result, err := s.execute(ctx, query, statement)
@@ -55,14 +55,14 @@ func (s *session) execute(
 	statement string,
 ) (dbdriver.QueryResult, error) {
 	if !returnsRows(statement) {
-		result, err := sqlkit.Exec(ctx, s.db, statement)
+		result, err := sqlkit.Exec(ctx, s.runsOn(), statement)
 		if err != nil {
 			return dbdriver.QueryResult{}, translateError(err)
 		}
 		return result, nil
 	}
 
-	result, err := sqlkit.Read(ctx, s.db, statement, query.MaxRows, nil)
+	result, err := sqlkit.Read(ctx, s.runsOn(), statement, query.MaxRows, nil)
 	if err != nil {
 		return dbdriver.QueryResult{}, translateError(err)
 	}

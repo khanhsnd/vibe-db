@@ -24,6 +24,11 @@ const (
 	CodeTableNotEditable ErrorCode = "TABLE_NOT_EDITABLE"
 	CodeEmptyStatement   ErrorCode = "EMPTY_STATEMENT"
 	CodeSQLError         ErrorCode = "SQL_ERROR"
+	// The two ways a manual transaction is asked for something it is not in a state to give. They
+	// are their own codes because the reader answers each by looking at the button: one says there
+	// is already one open, and the other that there is not — see docs/features/transaction.md.
+	CodeTransactionActive ErrorCode = "TRANSACTION_ACTIVE"
+	CodeNoTransaction     ErrorCode = "NO_TRANSACTION"
 	// CodeFileUnreadable is a file on this machine, not an answer from a server — see
 	// domain.ErrFileUnreadable.
 	CodeFileUnreadable ErrorCode = "FILE_UNREADABLE"
@@ -82,6 +87,8 @@ var sentinelToWire = []struct {
 	{domain.ErrUnknownDefinition, CodeUnknownSource, "That view or routine no longer exists. Refresh the folder it was in."},
 	{domain.ErrTableNotEditable, CodeTableNotEditable, "This table has no primary key, so a single row cannot be identified for editing."},
 	{domain.ErrEmptyStatement, CodeEmptyStatement, "There is no statement to run."},
+	{domain.ErrTransactionActive, CodeTransactionActive, "A transaction is already open on this connection. Commit or roll it back first."},
+	{domain.ErrNoTransaction, CodeNoTransaction, "No transaction is open on this connection."},
 	{domain.ErrQueryCancelled, CodeQueryCancelled, "The query was cancelled."},
 	{domain.ErrFileUnreadable, CodeFileUnreadable, "That file could not be read. Check it is still there and that this account can open it."},
 	{domain.ErrHostUnreachable, CodeHostUnreachable, "Could not reach the server. Check the host and port."},

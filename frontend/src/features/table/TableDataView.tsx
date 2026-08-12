@@ -43,6 +43,7 @@ import { ICON } from '@/shared/ui/menuIcons'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import { useConnectionsStore } from '@/stores/connections'
 import { IDLE_VIEW, useTableViewsStore } from '@/stores/tableViews'
+import { useTransactionsStore } from '@/stores/transactions'
 
 import { ColumnPicker } from './ColumnPicker'
 import { KeyEditor, KEY_EDITOR_HEIGHT, KEY_EDITOR_MIN_HEIGHT, type KeyEdit } from './KeyEditor'
@@ -122,6 +123,10 @@ export function TableDataView({
     (s) => s.profiles.find((profile) => profile.id === profileId)?.engine ?? '',
   )
   const keySpace = engineInfo(engine).keys
+
+  // A transaction belongs to the connection, so what it failed with is read per session and shown
+  // in this tab's own strip — see `stores/transactions.ts`.
+  const transactionError = useTransactionsStore((s) => s.errors[sessionId] ?? null)
 
   // A table outlives the app, so the order its columns were dragged into is stored under it. The
   // tab is keyed on its own target, so the key is read once and never changes under the component.
@@ -467,7 +472,7 @@ export function TableDataView({
       rows: flatRows,
     })
 
-  const failure = edits.error ?? whole.error ?? (data ? error : null)
+  const failure = edits.error ?? whole.error ?? transactionError ?? (data ? error : null)
 
   /**
    * Which panels are open, named for the splitter. A layout is remembered per *combination*, which
@@ -492,6 +497,10 @@ export function TableDataView({
         onFilterToggle={() => setFilterShown(!filterShown)}
         onExport={data !== null ? exportRows : undefined}
         onGenerateCurl={data !== null ? () => setCurlOpen(true) : undefined}
+        sessionId={sessionId}
+        namespace={namespace}
+        engine={engine}
+        onSettled={refresh}
         keySpace={
           keySpace
             ? {

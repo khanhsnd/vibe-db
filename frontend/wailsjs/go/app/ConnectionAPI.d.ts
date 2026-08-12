@@ -10,6 +10,8 @@ export function ApplyRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<void>;
 
 export function ApplyTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<app.TableChangeInput>):Promise<void>;
 
+export function BeginTransaction(arg1:string,arg2:app.Namespace):Promise<boolean>;
+
 export function ChooseToolFile(arg1:string,arg2:boolean,arg3:string):Promise<string>;
 
 export function ChooseToolProgram(arg1:string,arg2:string):Promise<app.Toolkit>;
@@ -17,6 +19,8 @@ export function ChooseToolProgram(arg1:string,arg2:string):Promise<app.Toolkit>;
 export function ChooseTransferFile(arg1:string):Promise<string>;
 
 export function ChooseTransferFolder():Promise<string>;
+
+export function CommitTransaction(arg1:string):Promise<boolean>;
 
 export function CompareData(arg1:app.CompareSide,arg2:app.CompareSide,arg3:number):Promise<app.DataDiff>;
 
@@ -67,6 +71,8 @@ export function ExtractBackupSQL(arg1:string,arg2:app.Namespace,arg3:string):Pro
 export function FindInSchema(arg1:string,arg2:app.SearchInput):Promise<app.SearchResult>;
 
 export function ForgetToolProgram(arg1:string,arg2:string):Promise<app.Toolkit>;
+
+export function InTransaction(arg1:string):Promise<boolean>;
 
 export function InsertRow(arg1:string,arg2:app.RowInsertInput):Promise<void>;
 
@@ -127,6 +133,8 @@ export function RenameTable(arg1:string,arg2:app.Namespace,arg3:string,arg4:stri
 export function RestoreBackup(arg1:string,arg2:app.RestoreInput):Promise<app.BackupResult>;
 
 export function ReviewImport(arg1:string,arg2:app.ImportInput):Promise<app.ImportReview>;
+
+export function RollbackTransaction(arg1:string):Promise<boolean>;
 
 export function RunBackup(arg1:string,arg2:app.BackupInput):Promise<app.BackupResult>;
 
