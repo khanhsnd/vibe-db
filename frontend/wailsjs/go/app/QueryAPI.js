@@ -18,6 +18,10 @@ export function ClearLog() {
   return window['go']['app']['QueryAPI']['ClearLog']();
 }
 
+export function DeleteSnippet(arg1) {
+  return window['go']['app']['QueryAPI']['DeleteSnippet'](arg1);
+}
+
 export function Format(arg1, arg2) {
   return window['go']['app']['QueryAPI']['Format'](arg1, arg2);
 }
@@ -30,6 +34,10 @@ export function ListLog(arg1) {
   return window['go']['app']['QueryAPI']['ListLog'](arg1);
 }
 
+export function ListSnippets() {
+  return window['go']['app']['QueryAPI']['ListSnippets']();
+}
+
 export function Review(arg1, arg2) {
   return window['go']['app']['QueryAPI']['Review'](arg1, arg2);
 }
@@ -40,4 +48,8 @@ export function Run(arg1, arg2) {
 
 export function RunFile(arg1, arg2) {
   return window['go']['app']['QueryAPI']['RunFile'](arg1, arg2);
+}
+
+export function SaveSnippet(arg1) {
+  return window['go']['app']['QueryAPI']['SaveSnippet'](arg1);
 }

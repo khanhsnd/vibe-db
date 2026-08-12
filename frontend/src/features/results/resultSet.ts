@@ -186,6 +186,15 @@ export function cellPreview(value: Cell, limit = PREVIEW_LIMIT): string {
   return text.length <= limit ? text : `${text.slice(0, limit)}…`
 }
 
+/**
+ * A statement drawn as a cell, which is one line of it. The panes that list statements rather than
+ * rows — the History pane, the snippet library — hold a whole script in a cell and a row is one line
+ * tall; the whole of it goes back into the editor when the row is opened.
+ */
+export function oneLine(sql: string): string {
+  return sql.replace(/\s+/g, ' ').trim()
+}
+
 /** The inverse of `cellText`, so what a copy wrote means the same when it is pasted back. */
 export function parseCell(text: string): Cell {
   return text === NULL_TEXT ? null : text

@@ -17,7 +17,8 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 ## Rules that must not be broken
 
 1. **The dependency rule is one-way:**
-   `internal/app` → `session / profile / secret / history / transfer / compare / backup / dbtool` →
+   `internal/app` →
+   `session / profile / secret / history / snippet / transfer / compare / backup / dbtool` →
    `internal/driver` → `internal/domain`.
    Business rules live in `domain`, not in the API layer. `internal/app` speaks `dto.go` wire types,
    never domain types. `frontend/src/bridge` is the only frontend directory allowed to import
@@ -43,7 +44,10 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
    document store has no clauses and no keywords) but still reads its tokens from `sqlkit.Lex`
    through `sqlkit.Shell`. Never write a second scanner, in Go or in TypeScript. **A data file is
    not a script** — `internal/transfer` reads CSV, JSON, XML and XLSX and is not covered by this:
-   nothing it reads is ever a statement, and nothing in it reaches a server except as a value.
+   nothing it reads is ever a statement, and nothing in it reaches a server except as a value. **A
+   saved snippet is not a script either, because nothing reads it at all** — `internal/snippet` keeps
+   a body byte for byte and never splits, lays out or checks one; it becomes a statement when the
+   editor it is put into runs it, on the path every statement takes.
 16. **A SQL adapter is its catalogue reads, its error map, how it is dialled, and a `Dialect`** —
     and nothing else. `sqlkit.DDL` spells and runs every schema change, `sqlkit.Data` builds every
     read and write of a row, and **an adapter that writes a `SELECT`, an `UPDATE`, an `INSERT` or a
@@ -212,6 +216,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Touch a user, a role or a privilege | [docs/architecture.md](docs/architecture.md#who-may-do-what), [docs/features/accounts.md](docs/features/accounts.md) |
 | Touch a process list, a kill, a server status or a variable | [docs/architecture.md](docs/architecture.md#what-a-server-is-doing), [docs/features/monitor.md](docs/features/monitor.md) |
 | Change what is kept about a statement that has run | [docs/features/log.md](docs/features/log.md), [docs/features/results.md](docs/features/results.md#the-history-pane) |
+| Touch a named snippet, the library file, or what completion offers by name | [docs/features/snippets.md](docs/features/snippets.md), [docs/editor.md](docs/editor.md#what-completion-offers) |
 | Change a table tab, its paging, filtering or values | [docs/features/table-tab.md](docs/features/table-tab.md), [docs/features/row-limit.md](docs/features/row-limit.md), [docs/features/filter-sort.md](docs/features/filter-sort.md), [docs/features/value-viewer.md](docs/features/value-viewer.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file), [docs/features/transfer.md](docs/features/transfer.md) |
 | Touch a backup or a restore | [docs/architecture.md](docs/architecture.md#backing-a-database-up), [docs/features/backup.md](docs/features/backup.md) |

@@ -10,14 +10,20 @@ export function ClearHistory():Promise<void>;
 
 export function ClearLog():Promise<void>;
 
+export function DeleteSnippet(arg1:string):Promise<Array<app.Snippet>>;
+
 export function Format(arg1:string,arg2:string):Promise<string>;
 
 export function ListHistory():Promise<Array<app.HistoryEntry>>;
 
 export function ListLog(arg1:number):Promise<Array<app.LogEntry>>;
 
+export function ListSnippets():Promise<Array<app.Snippet>>;
+
 export function Review(arg1:string,arg2:string):Promise<app.ScriptReview>;
 
 export function Run(arg1:string,arg2:app.QueryInput):Promise<app.ScriptResult>;
 
 export function RunFile(arg1:string,arg2:app.ScriptFileInput):Promise<app.ScriptFileResult>;
+
+export function SaveSnippet(arg1:app.SnippetInput):Promise<Array<app.Snippet>>;

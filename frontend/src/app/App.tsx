@@ -35,6 +35,7 @@ import { Split, SplitHandle, SplitPanel, usePanelRef } from '@/shared/ui/Split'
 import { useBackupsStore } from '@/stores/backups'
 import { buildTree, useConnectionsStore } from '@/stores/connections'
 import { useSettingsStore } from '@/stores/settings'
+import { useSnippetsStore } from '@/stores/snippets'
 import { useTabsStore } from '@/stores/tabs'
 import { useUIStore } from '@/stores/ui'
 
@@ -81,6 +82,7 @@ export function App() {
   const expanded = useConnectionsStore((s) => s.expanded)
   const error = useConnectionsStore((s) => s.error)
   const loadProfiles = useConnectionsStore((s) => s.loadProfiles)
+  const loadSnippets = useSnippetsStore((s) => s.load)
   const connect = useConnectionsStore((s) => s.connect)
   const selectNamespace = useConnectionsStore((s) => s.selectNamespace)
   const loadSchemas = useConnectionsStore((s) => s.loadSchemas)
@@ -180,9 +182,13 @@ export function App() {
   const [exportFrom, setExportFrom] = useState<ExportTarget | null>(null)
   const [dumpFrom, setDumpFrom] = useState<{ targets: DumpTarget[]; withData: boolean } | null>(null)
 
+  // The two things the window needs before the reader touches anything: the connections the sidebar
+  // draws, and the snippet library, which every editor's completion offers whether or not the Snippets
+  // pane has ever been opened.
   useEffect(() => {
     void loadProfiles()
-  }, [loadProfiles])
+    void loadSnippets()
+  }, [loadProfiles, loadSnippets])
 
   useEffect(() => {
     const panel = sidebarRef.current

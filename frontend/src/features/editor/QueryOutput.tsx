@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 
 import type { HistoryEntry } from '@/bridge/history'
 import { failedStatement } from '@/bridge/query'
+import type { Snippet } from '@/bridge/snippets'
 import { ExplainPane } from '@/features/results/ExplainPane'
 import { planSummary } from '@/features/results/plan'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import { ResultPane } from '@/features/results/ResultPane'
 import { ResultTabs, type ResultPaneDef } from '@/features/results/ResultTabs'
+import { SnippetLibrary } from '@/features/snippets/SnippetLibrary'
 import type { QueryRun } from '@/stores/queries'
 
 import { QueryHistory } from './QueryHistory'
@@ -17,17 +19,19 @@ interface QueryOutputProps {
   run: QueryRun
   sessionId: string | null
   profileId: string
+  engine: string
   onRefresh: () => void
   onFetch: (maxRows: number) => void
   onStop: () => void
   onPickHistory: (entry: HistoryEntry) => void
+  onPickSnippet: (one: Snippet) => void
 }
 
 /**
- * The output half of a query tab: the `Result` pane, `History` beside it, and `Messages` as well
- * once there is a script to account for. What the run *did* — its rows, its time, how far it got —
- * is said by the pane itself, on the status line under its grid, rather than by a strip out here
- * that would only repeat the count already under the reader's eyes.
+ * The output half of a query tab: the `Result` pane, `History` and `Snippets` beside it, and
+ * `Messages` as well once there is a script to account for. What the run *did* — its rows, its time,
+ * how far it got — is said by the pane itself, on the status line under its grid, rather than by a
+ * strip out here that would only repeat the count already under the reader's eyes.
  *
  * **Explain brings two more**, `Summary` and `Explain`, and they sit next to the `Result` they are
  * about rather than at the end of the strip. `Result` is the engine's own EXPLAIN, unchanged and
@@ -39,10 +43,12 @@ export function QueryOutput({
   run,
   sessionId,
   profileId,
+  engine,
   onRefresh,
   onFetch,
   onStop,
   onPickHistory,
+  onPickSnippet,
 }: QueryOutputProps) {
   const statements = run.result?.statements ?? []
   const script = statements.length > 1
@@ -96,11 +102,18 @@ export function QueryOutput({
   panes.push(...planPanes)
 
   // The strip runs from what this run produced to what outlives it: the plan panes belong to the
-  // result beside them, History to the connection, and Messages to the script that needed it.
+  // result beside them, History to the connection, the library to the reader themselves, and
+  // Messages to the script that needed it.
   panes.push({
     id: 'history',
     label: 'History',
     content: <QueryHistory profileId={profileId} onPick={onPickHistory} />,
+  })
+
+  panes.push({
+    id: 'snippets',
+    label: 'Snippets',
+    content: <SnippetLibrary engine={engine} onPick={onPickSnippet} />,
   })
 
   if (script) {

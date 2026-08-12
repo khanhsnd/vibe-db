@@ -24,7 +24,10 @@ const (
 	CodeUnknownAccount   ErrorCode = "UNKNOWN_ACCOUNT"
 	CodeTableNotEditable ErrorCode = "TABLE_NOT_EDITABLE"
 	CodeEmptyStatement   ErrorCode = "EMPTY_STATEMENT"
-	CodeSQLError         ErrorCode = "SQL_ERROR"
+	// CodeEmptySnippet is a library entry saved with no body. It is its own code rather than
+	// EMPTY_STATEMENT because nothing was being run — see docs/features/snippets.md.
+	CodeEmptySnippet ErrorCode = "EMPTY_SNIPPET"
+	CodeSQLError     ErrorCode = "SQL_ERROR"
 	// The two ways a manual transaction is asked for something it is not in a state to give. They
 	// are their own codes because the reader answers each by looking at the button: one says there
 	// is already one open, and the other that there is not — see docs/features/transaction.md.
@@ -89,6 +92,7 @@ var sentinelToWire = []struct {
 	{domain.ErrUnknownAccount, CodeUnknownAccount, "That user no longer exists on this server. Refresh the list."},
 	{domain.ErrTableNotEditable, CodeTableNotEditable, "This table has no primary key, so a single row cannot be identified for editing."},
 	{domain.ErrEmptyStatement, CodeEmptyStatement, "There is no statement to run."},
+	{domain.ErrEmptySnippet, CodeEmptySnippet, "A snippet needs a statement in it."},
 	{domain.ErrTransactionActive, CodeTransactionActive, "A transaction is already open on this connection. Commit or roll it back first."},
 	{domain.ErrNoTransaction, CodeNoTransaction, "No transaction is open on this connection."},
 	{domain.ErrQueryCancelled, CodeQueryCancelled, "The query was cancelled."},

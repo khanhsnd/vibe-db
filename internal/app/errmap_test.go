@@ -40,6 +40,7 @@ func TestWrapErrorMapsSentinels(t *testing.T) {
 		{domain.ErrTLSUnsupported, CodeTLSUnsupported},
 		{domain.ErrPasswordNotFound, CodePasswordNotFound},
 		{domain.ErrEmptyStatement, CodeEmptyStatement},
+		{domain.ErrEmptySnippet, CodeEmptySnippet},
 		{domain.ErrQueryCancelled, CodeQueryCancelled},
 		{domain.ErrTunnelFailed, CodeTunnelFailed},
 		{domain.ErrTunnelCredentials, CodeTunnelCredentials},

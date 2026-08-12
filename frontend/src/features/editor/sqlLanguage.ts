@@ -1,7 +1,6 @@
 import {
   completeFromList,
   ifNotIn,
-  snippetCompletion,
   type Completion,
   type CompletionSource,
 } from '@codemirror/autocomplete'
@@ -18,6 +17,9 @@ import {
 import type { EditorState, Extension } from '@codemirror/state'
 
 import type { TableSchema } from '@/bridge/connections'
+import type { Snippet } from '@/bridge/snippets'
+
+import { builtIn as snippet, saved } from './snippets'
 
 /**
  * The tables one editor completes from. `tables` is the namespace it is pointed at, whose tables a
@@ -31,8 +33,8 @@ export interface QuerySchema {
   qualified: Record<string, TableSchema[]>
 }
 
-// `${…}` marks a field the caret jumps between with Tab. The label is what the user
-// types to reach the snippet, so it stays lower-case even though the body is not.
+// The dozen this app ships with. The reader's own join them at the same word and sort above them —
+// see `snippets.ts`, which is where `${…}` and the detail line are explained.
 const SNIPPETS: readonly Completion[] = [
   snippet('select', 'SELECT ${columns}\nFROM ${table}\nWHERE ${condition}'),
   snippet('select all', 'SELECT *\nFROM ${table}\nLIMIT ${100}'),
@@ -50,19 +52,6 @@ const SNIPPETS: readonly Completion[] = [
   ),
   snippet('case', 'CASE WHEN ${condition} THEN ${value} ELSE ${fallback} END'),
 ]
-
-function snippet(label: string, template: string): Completion {
-  return snippetCompletion(template, {
-    label,
-    type: 'snippet',
-    detail: firstLine(template),
-  })
-}
-
-function firstLine(template: string): string {
-  const line = template.split('\n')[0] ?? ''
-  return line.replace(/\$\{(\w*)\}/g, '$1')
-}
 
 /**
  * How a name has to be written to resolve to the object it names. Two engines fold an unquoted
@@ -228,7 +217,11 @@ const OFF_LIMITS = [
   'BlockComment',
 ]
 
-export function sqlLanguage(schema: QuerySchema, engine: string): Extension {
+export function sqlLanguage(
+  schema: QuerySchema,
+  engine: string,
+  library: readonly Snippet[],
+): Extension {
   const quote = quoterFor(engine)
   const support = sql({
     dialect: dialectFor(engine),
@@ -239,7 +232,7 @@ export function sqlLanguage(schema: QuerySchema, engine: string): Extension {
   return [
     support,
     support.language.data.of({
-      autocomplete: ifNotIn(OFF_LIMITS, completeFromList(SNIPPETS)),
+      autocomplete: ifNotIn(OFF_LIMITS, completeFromList([...SNIPPETS, ...saved(library)])),
     }),
     support.language.data.of({
       autocomplete: ifNotIn(OFF_LIMITS, bareColumnSource(reachable(schema), quote)),

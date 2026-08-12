@@ -19,6 +19,7 @@ import (
 	profilefile "github.com/khanhsnd/vibe-db/internal/profile/jsonfile"
 	"github.com/khanhsnd/vibe-db/internal/secret/keyring"
 	"github.com/khanhsnd/vibe-db/internal/session"
+	snippetfile "github.com/khanhsnd/vibe-db/internal/snippet/jsonfile"
 )
 
 type App struct {
@@ -37,6 +38,11 @@ func New(version ...string) (*App, error) {
 	}
 
 	historyPath, err := historyfile.DefaultPath()
+	if err != nil {
+		return nil, fmt.Errorf("resolve config path: %w", err)
+	}
+
+	snippetPath, err := snippetfile.DefaultPath()
 	if err != nil {
 		return nil, fmt.Errorf("resolve config path: %w", err)
 	}
@@ -65,7 +71,12 @@ func New(version ...string) (*App, error) {
 			backup.New(backupRoot),
 			dbtool.New(toolPath),
 		),
-		Queries:  NewQueryAPI(sessions, historyfile.New(historyPath), history.NewLog()),
+		Queries: NewQueryAPI(
+			sessions,
+			historyfile.New(historyPath),
+			snippetfile.New(snippetPath),
+			history.NewLog(),
+		),
 		System:   NewSystemAPI(),
 		Updates:  NewUpdateAPI(currentVersion),
 		sessions: sessions,

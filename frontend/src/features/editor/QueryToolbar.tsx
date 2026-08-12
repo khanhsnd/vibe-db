@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ListTree, Loader2, Play, Square, WrapText } from 'lucide-react'
+import { Bookmark, ListTree, Loader2, Play, Square, WrapText } from 'lucide-react'
 
 import type { Namespace } from '@/bridge/connections'
 import { DEFAULT_QUERY_ROWS, QUERY_ROW_LIMITS } from '@/bridge/rows'
@@ -24,11 +24,18 @@ interface QueryToolbarProps {
   rowLimit: number
   running: boolean
   canRun: boolean
+  /**
+   * Whether the buffer holds anything at all. It is not `canRun`: running needs a connection and
+   * naming a statement does not, so the two buttons are dead for different reasons.
+   */
+  hasText: boolean
   onNamespaceChange: (namespace: Namespace) => void
   onRowLimitChange: (limit: number) => void
   onExecute: () => void
   onExplain: () => void
   onFormat: () => void
+  /** Names what is in the editor and keeps it — see the Snippets pane below. */
+  onSaveSnippet: () => void
   onStop: () => void
 }
 
@@ -42,11 +49,13 @@ export function QueryToolbar({
   rowLimit,
   running,
   canRun,
+  hasText,
   onNamespaceChange,
   onRowLimitChange,
   onExecute,
   onExplain,
   onFormat,
+  onSaveSnippet,
   onStop,
 }: QueryToolbarProps) {
   return (
@@ -107,6 +116,18 @@ export function QueryToolbar({
         Format
       </Button>
       <Shortcut>Ctrl+Shift+F</Shortcut>
+
+      {/* Naming a statement needs no server: a snippet is text this machine keeps, and one is worth
+          saving whether or not the connection it was written against is still open. So this is alive
+          on an empty session and dead only on an empty buffer. */}
+      <Button
+        variant="default"
+        icon={<Bookmark size={12} />}
+        disabled={!hasText}
+        onClick={onSaveSnippet}
+      >
+        Save Snippet
+      </Button>
 
       {sessionId !== null ? (
         <TransactionMenu sessionId={sessionId} namespace={namespace} engine={engine} />

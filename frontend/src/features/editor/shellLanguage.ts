@@ -1,7 +1,6 @@
 import {
   completeFromList,
   ifNotIn,
-  snippetCompletion,
   type Completion,
   type CompletionSource,
 } from '@codemirror/autocomplete'
@@ -17,6 +16,9 @@ import {
 } from '@codemirror/view'
 
 import type { TableSchema } from '@/bridge/connections'
+import type { Snippet } from '@/bridge/snippets'
+
+import { builtIn as snippet, saved } from './snippets'
 
 /**
  * The editor for a document store. It is JavaScript to *highlight* — a command is `db.users.find({…})`
@@ -26,8 +28,8 @@ import type { TableSchema } from '@/bridge/connections'
  * completes against.
  */
 
-// `${…}` marks a field the caret jumps between with Tab. The label is what the user types to reach
-// the snippet, so it stays lower-case even though the body is not.
+// The commands this app ships with. The reader's own join them at the same word and sort above them —
+// see `snippets.ts`, which is where `${…}` and the detail line are explained.
 const SNIPPETS: readonly Completion[] = [
   snippet('find', 'db.${collection}.find({ ${field}: ${value} })'),
   snippet('find all', 'db.${collection}.find({}).limit(${100})'),
@@ -53,19 +55,6 @@ const SNIPPETS: readonly Completion[] = [
   snippet('index', 'db.${collection}.createIndex({ ${field}: 1 }, { name: "${name}" })'),
   snippet('command', 'db.runCommand({ ${command}: 1 })'),
 ]
-
-function snippet(label: string, template: string): Completion {
-  return snippetCompletion(template, {
-    label,
-    type: 'snippet',
-    detail: firstLine(template),
-  })
-}
-
-function firstLine(template: string): string {
-  const line = template.split('\n')[0] ?? ''
-  return line.replace(/\$\{(\w*)\}/g, '$1')
-}
 
 /**
  * The methods a collection answers to, and what each of them does. It is the driver's own list —
@@ -305,7 +294,10 @@ const operatorHighlight = ViewPlugin.fromClass(
 
 const operatorTheme = EditorView.baseTheme({ '.cm-operator': { color: 'var(--syn-keyword)' } })
 
-export function shellLanguage(collections: TableSchema[]): Extension {
+export function shellLanguage(
+  collections: TableSchema[],
+  library: readonly Snippet[],
+): Extension {
   const support = javascript()
 
   return [
@@ -325,7 +317,7 @@ export function shellLanguage(collections: TableSchema[]): Extension {
       autocomplete: ifNotIn(OFF_LIMITS, operatorSource),
     }),
     support.language.data.of({
-      autocomplete: ifNotIn(OFF_LIMITS, completeFromList(SNIPPETS)),
+      autocomplete: ifNotIn(OFF_LIMITS, completeFromList([...SNIPPETS, ...saved(library)])),
     }),
     support.language.data.of({
       autocomplete: ifNotIn(OFF_LIMITS, fieldSource(collections)),

@@ -10,6 +10,8 @@ export type ErrorCode =
   | 'UNKNOWN_DEFINITION'
   | 'TABLE_NOT_EDITABLE'
   | 'EMPTY_STATEMENT'
+  /** A snippet saved with no body. Its own code because nothing was being run — see `snippets.ts`. */
+  | 'EMPTY_SNIPPET'
   | 'SQL_ERROR'
   | 'FILE_UNREADABLE'
   | 'UNSUPPORTED'

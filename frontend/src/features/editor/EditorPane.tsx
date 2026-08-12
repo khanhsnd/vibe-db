@@ -1,4 +1,9 @@
-import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete'
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  snippet,
+} from '@codemirror/autocomplete'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { bracketMatching, indentOnInput } from '@codemirror/language'
 import { search, searchKeymap } from '@codemirror/search'
@@ -13,6 +18,7 @@ import {
 } from '@codemirror/view'
 import { useEffect, useImperativeHandle, useRef, type Ref } from 'react'
 
+import type { Snippet } from '@/bridge/snippets'
 import { useSettingsStore } from '@/stores/settings'
 
 import { diagnostics, position, showDiagnostics, type Diagnostics } from './diagnostics'
@@ -56,10 +62,17 @@ const wrapping = new Compartment()
 
 const lineWrap = (wordWrap: boolean): Extension => (wordWrap ? EditorView.lineWrapping : [])
 
-/** What the panes around the editor can ask of it, which is one thing: show me that offset. */
+/** What the panes around the editor can ask of it: show me that offset, and put this in. */
 export interface EditorHandle {
   /** Puts the caret at a **byte** offset — what a review reports — and scrolls it into view. */
   reveal: (offset: number) => void
+  /**
+   * Puts a snippet's body in at the caret, replacing whatever was selected, and leaves the caret on
+   * its first `${…}` field. It is what the library's double-click does, and it goes through the same
+   * `snippet` the completion list applies, so a body typed by name and one picked out of the pane
+   * behave identically — fields and all.
+   */
+  insert: (body: string) => void
 }
 
 interface EditorPaneProps {
@@ -68,6 +81,8 @@ interface EditorPaneProps {
   onSelectionChange: (selected: string) => void
   schema: QuerySchema
   engine: string
+  /** The snippets this editor offers by name, already narrowed to the ones for its engine. */
+  library: readonly Snippet[]
   /** What the last review found, marked in the text itself — see `diagnostics.ts`. */
   review: Diagnostics
   ref?: Ref<EditorHandle>
@@ -79,6 +94,7 @@ export function EditorPane({
   onSelectionChange,
   schema,
   engine,
+  library,
   review,
   ref,
 }: EditorPaneProps) {
@@ -96,12 +112,21 @@ export function EditorPane({
       instance.dispatch({ selection: { anchor: at }, scrollIntoView: true })
       instance.focus()
     },
+
+    insert(body) {
+      const instance = view.current
+      if (!instance) return
+
+      const { from, to } = instance.state.selection.main
+      snippet(body)(instance, null, from, to)
+      instance.focus()
+    },
   }))
 
   const emit = useRef({ onChange, onSelectionChange })
   emit.current = { onChange, onSelectionChange }
 
-  const seed = useRef({ value, schema, engine, wordWrap })
+  const seed = useRef({ value, schema, engine, library, wordWrap })
 
   useEffect(() => {
     const parent = host.current
@@ -113,7 +138,9 @@ export function EditorPane({
         doc: seed.current.value,
         extensions: [
           baseExtensions,
-          language.of(queryLanguage(seed.current.schema, seed.current.engine)),
+          language.of(
+            queryLanguage(seed.current.schema, seed.current.engine, seed.current.library),
+          ),
           wrapping.of(lineWrap(seed.current.wordWrap)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) emit.current.onChange(update.state.doc.toString())
@@ -133,9 +160,13 @@ export function EditorPane({
     }
   }, [])
 
+  // A snippet saved in the pane below reaches this editor's completion the moment it is written,
+  // which is the whole reason the library is one store rather than a read per pane.
   useEffect(() => {
-    view.current?.dispatch({ effects: language.reconfigure(queryLanguage(schema, engine)) })
-  }, [schema, engine])
+    view.current?.dispatch({
+      effects: language.reconfigure(queryLanguage(schema, engine, library)),
+    })
+  }, [schema, engine, library])
 
   useEffect(() => {
     view.current?.dispatch({ effects: wrapping.reconfigure(lineWrap(wordWrap)) })

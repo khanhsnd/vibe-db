@@ -2120,6 +2120,44 @@ export namespace app {
 	        this.serverVersion = source["serverVersion"];
 	    }
 	}
+	export class Snippet {
+	    name: string;
+	    description: string;
+	    body: string;
+	    engine: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Snippet(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.body = source["body"];
+	        this.engine = source["engine"];
+	    }
+	}
+	export class SnippetInput {
+	    previous: string;
+	    name: string;
+	    description: string;
+	    body: string;
+	    engine: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SnippetInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.previous = source["previous"];
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.body = source["body"];
+	        this.engine = source["engine"];
+	    }
+	}
 	export class Source {
 	    kind: string;
 	    name: string;

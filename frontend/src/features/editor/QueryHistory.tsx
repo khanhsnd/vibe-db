@@ -3,7 +3,13 @@ import { useMemo, useState } from 'react'
 import type { HistoryEntry } from '@/bridge/history'
 import { GridFooter } from '@/features/results/GridFooter'
 import { ResultGrid } from '@/features/results/ResultGrid'
-import { NO_SORT, type Cell, type GridData, type SortKey } from '@/features/results/resultSet'
+import {
+  NO_SORT,
+  oneLine,
+  type Cell,
+  type GridData,
+  type SortKey,
+} from '@/features/results/resultSet'
 import { useGridOrder } from '@/features/results/useGridOrder'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
@@ -129,11 +135,6 @@ function historyRows(entries: HistoryEntry[]): GridData {
       entry.error === '' ? 'OK' : `${entry.errorCode}: ${entry.error}`,
     ]),
   }
-}
-
-/** A statement is a cell here, and a cell is one line: two clicks put the whole of it back. */
-function oneLine(sql: string): string {
-  return sql.replace(/\s+/g, ' ').trim()
 }
 
 /**

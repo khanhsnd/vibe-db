@@ -9,6 +9,7 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/history"
 	"github.com/khanhsnd/vibe-db/internal/session"
+	"github.com/khanhsnd/vibe-db/internal/snippet"
 )
 
 const statementTimeout = 60 * time.Second
@@ -18,15 +19,24 @@ type QueryAPI struct {
 
 	sessions *session.Manager
 	history  history.Repository
+	// snippets is the statements the reader *named*, where history is the ones that ran. Both live
+	// here because both are a statement kept — see snippet_api.go.
+	snippets snippet.Repository
 	log      *history.Log
 	runs     *runRegistry
 }
 
-func NewQueryAPI(sessions *session.Manager, kept history.Repository, log *history.Log) *QueryAPI {
+func NewQueryAPI(
+	sessions *session.Manager,
+	kept history.Repository,
+	named snippet.Repository,
+	log *history.Log,
+) *QueryAPI {
 	return &QueryAPI{
 		apiContext: newAPIContext(),
 		sessions:   sessions,
 		history:    kept,
+		snippets:   named,
 		log:        log,
 		runs:       newRunRegistry(),
 	}

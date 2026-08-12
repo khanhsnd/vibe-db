@@ -1,6 +1,10 @@
-import type { CompletionSource } from '@codemirror/autocomplete'
+import { completeFromList, type CompletionSource } from '@codemirror/autocomplete'
 import { StreamLanguage } from '@codemirror/language'
 import type { Extension } from '@codemirror/state'
+
+import type { Snippet } from '@/bridge/snippets'
+
+import { saved } from './snippets'
 
 /**
  * The editor for a key-value store. A Redis command is **argv** — a verb and then bytes — so there
@@ -325,10 +329,14 @@ const subcommandSource: CompletionSource = (context) => {
   }
 }
 
-export function commandLanguage(): Extension {
+export function commandLanguage(library: readonly Snippet[]): Extension {
   return [
     commandStream,
     commandStream.data.of({ autocomplete: subcommandSource }),
     commandStream.data.of({ autocomplete: commandSource }),
+    // The reader's own, and only the reader's: this app ships no built-in Redis snippets, a command
+    // being a verb and its arguments with nothing to lay out. A saved one is offered by name exactly
+    // as it is in front of the other engines — see `snippets.ts`.
+    commandStream.data.of({ autocomplete: completeFromList(saved(library)) }),
   ]
 }

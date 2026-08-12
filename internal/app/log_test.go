@@ -51,7 +51,7 @@ func TestListLogAnswersOnlyWithWhatTheViewerHasNotRead(t *testing.T) {
 	recorder.note("SELECT 1", 0, nil)
 	recorder.note("SELECT 2", 0, nil)
 
-	api := NewQueryAPI(session.NewManager(engines()), nil, log)
+	api := NewQueryAPI(session.NewManager(engines()), nil, nil, log)
 	if got := api.ListLog(0); len(got) != 2 {
 		t.Fatalf("want both entries, got %d", len(got))
 	}

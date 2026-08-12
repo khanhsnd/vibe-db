@@ -4,10 +4,14 @@
 
 ## The output panel
 
-The panel under the editor is a tab strip of **`Result`**, **`History`** and, for a script,
-**`Messages`**; a further pane — a query plan — is one more entry in the list `QueryOutput` hands
-`ResultTabs`. Nothing sits below that strip: what the run did is the pane's own to report, on the
-status line under its grid, so `QueryOutput` is the tabs and nothing else.
+The panel under the editor is a tab strip of **`Result`**, **`History`**, **`Snippets`** and, for a
+script, **`Messages`**; a further pane — a query plan — is one more entry in the list `QueryOutput`
+hands `ResultTabs`. Nothing sits below that strip: what the run did is the pane's own to report, on
+the status line under its grid, so `QueryOutput` is the tabs and nothing else.
+
+The strip runs from what this run produced to what outlives it: a plan belongs to the result beside
+it, `History` to the connection, [`Snippets`](snippets.md) to the reader themselves, and `Messages` to
+the script that needed it.
 
 **An Execute brings its own outcome forward** — `Result`, or `Messages` for a script that stopped —
 wherever the reader had got to, and otherwise the strip stays where they left it. `Messages` is
@@ -25,9 +29,10 @@ how anybody wants to quote an error.
 ### The history pane
 
 `History` is every statement **this connection** has run, newest first, in a `ResultGrid` like
-everything else that shows rows and columns. Its sibling is the
-[History Log](log.md), which answers the other question — every *run* in the order it happened,
-across every connection — and the table there is what tells the two apart.
+everything else that shows rows and columns. It has two siblings, each answering a different question:
+the [History Log](log.md) holds every *run* in the order it happened, across every connection, and the
+[snippet library](snippets.md) holds the statements the reader **named** — kept by them rather than by
+the app, and put in at the caret rather than over the buffer.
 
 The columns are `When`, `Statement`, `Database`, `Runs`, `Rows`, `Time (ms)` and `Message`, which
 reads `OK` or the server's own wording exactly as `Messages` does.

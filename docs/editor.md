@@ -104,8 +104,12 @@ Completion fires as you type and on `Ctrl`+`Space`. On SQL it has four sources:
   which only completes behind a dot.
 - **Keywords** of the dialect, offered upper-case, and **statement snippets** (`select`, `insert`,
   `join`, `group by`, `with`, …). `Tab` walks the snippet's fields.
+- **The reader's own snippets**, by the name they gave them, and **above** everything else offered at
+  the same word — a name somebody chose is a name they meant. They are the same kind of completion as
+  the built-in dozen and use the same `${…}` fields; where they are kept and how one is made is
+  [features/snippets.md](features/snippets.md).
 
-The last two are suppressed after a dot and inside strings and comments, where only the qualified
+The last three are suppressed after a dot and inside strings and comments, where only the qualified
 schema has anything useful to say.
 
 `ConnectionAPI.LoadTableSchemas` reads a whole namespace's tables and columns in one catalogue scan —

@@ -3,7 +3,7 @@
 Ports and adapters, with a strictly one-way dependency rule:
 
 ```
-internal/app  ->  session / profile / secret / history / transfer / compare / backup  ->  internal/driver  ->  internal/domain
+internal/app  ->  session / profile / secret / history / snippet / transfer / compare / backup  ->  internal/driver  ->  internal/domain
 ```
 
 - **`internal/domain`** — `ConnectionProfile`, `Validate()`, sentinel errors. Pure; imports nothing
@@ -19,11 +19,19 @@ internal/app  ->  session / profile / secret / history / transfer / compare / ba
   A port with `List` / `Append` / `Clear` and a `jsonfile` adapter, exactly as `profile` is. `Append`
   is its only write besides `Clear`, because what a log holds after one more statement — newest
   first, one entry per statement, capped — is `domain.Remember`'s rule and not a caller's.
+- **`internal/snippet`** — the statements the reader has **named**, which is `history`'s opposite
+  number: history is a record of what ran, and this is a library somebody built. Same shape — a port
+  with `List` / `Save` / `Delete` and a `jsonfile` adapter — and the same division of labour: which
+  entry a name replaces, how a rename lets go of the old one, and the order the list comes back in are
+  all `domain.SaveSnippet`'s rule and not a caller's. **Nothing in it reads a body.** A snippet is not
+  split, laid out, checked or lexed on its way in or out; it becomes a statement only when the editor
+  it is put into runs it. See [features/snippets.md](features/snippets.md).
 - **`internal/jsonstore`** — one JSON document on disk: read whole, written whole, and put in place
   by a rename, so a crash mid-write leaves the document that was there rather than half of a new
   one. `File[T].Update` does the read-change-write under one lock, and writes nothing if the change
-  fails, which is how a rejected delete leaves the file alone. The connection profiles and the query
-  history are each one of these, which is why neither adapter spells atomic writing out.
+  fails, which is how a rejected delete leaves the file alone. The connection profiles, the query
+  history and the snippet library are each one of these, which is why none of the three adapters
+  spells atomic writing out.
 - **`internal/sshtunnel`** — a database connection carried over SSH. It knows nothing about
   databases: it dials a bastion and hands back a function that opens connections *from* it, which is
   exactly the shape `driver.Dialer` has, and is why neither engine adapter has ever heard of SSH.

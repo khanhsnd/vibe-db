@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { engineInfo, namespaceOf } from '@/bridge/connections'
 import type { HistoryEntry } from '@/bridge/history'
 import { needsConfirming, queries, type ScriptReview } from '@/bridge/query'
+import { emptySnippet, type Snippet, type SnippetInput } from '@/bridge/snippets'
+import { SnippetDialog } from '@/features/snippets/SnippetDialog'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import { IDLE_RUN, useQueriesStore } from '@/stores/queries'
+import { snippetsFor, useSnippetsStore } from '@/stores/snippets'
 import { useTabsStore, type QueryTab } from '@/stores/tabs'
 
 import { EditorPane, type EditorHandle } from './EditorPane'
@@ -43,6 +46,13 @@ export function QueryWorkspace({
   // The tables completion offers — this tab's namespace, and every other one the script joins to.
   const querySchema = useQuerySchema(tab.profileId, tab.namespace, engine, tab.sql)
 
+  /**
+   * The snippets this editor offers by name. It is memoised because the editor reconfigures its
+   * language whenever this changes, and a fresh array every render would reconfigure on every one.
+   */
+  const library = useSnippetsStore((s) => s.library)
+  const offered = useMemo(() => snippetsFor(library, engine), [library, engine])
+
   // A selection narrows what runs, the way every other client works. It is a ref because
   // dragging over the text would otherwise re-render the whole workspace.
   const selection = useRef('')
@@ -51,7 +61,8 @@ export function QueryWorkspace({
   // problems strip worth clicking.
   const editor = useRef<EditorHandle>(null)
 
-  const canRun = sessionId !== null && tab.sql.trim() !== ''
+  const hasText = tab.sql.trim() !== ''
+  const canRun = sessionId !== null && hasText
 
   // What the whole buffer says about itself, on its own clock: it is what the editor underlines
   // and what the strip above it reports, and it follows the buffer rather than the selection so
@@ -152,6 +163,27 @@ export function QueryWorkspace({
     if (entry.database !== '') retarget(tab.id, namespaceOf(entry.database, entry.schema))
   }
 
+  /**
+   * A snippet picked out of the library goes in **at the caret** rather than over the buffer, which is
+   * the whole difference between it and a history entry: a history entry is a statement that ran and
+   * is put back whole, and a snippet is a piece meant to be built with. Its `${…}` fields are live,
+   * so `Tab` walks them exactly as it does for one reached by typing its name.
+   */
+  const pickSnippet = (one: Snippet) => editor.current?.insert(one.body)
+
+  /**
+   * The snippet dialog's draft, and non-null exactly while it is up. **Save Snippet** opens it on
+   * whatever is selected, falling back to the whole buffer — the same text Execute would run — so
+   * naming the statement in front of you is one press and no copying.
+   */
+  const [naming, setNaming] = useState<SnippetInput | null>(null)
+
+  const nameThis = () => {
+    const body = selection.current.trim() || tab.sql.trim()
+    if (body === '') return
+    setNaming({ ...emptySnippet(engine), body })
+  }
+
   // Both shortcuts are bound on the window, because F5 reloads the WebView whenever focus sits
   // outside this panel. The ref keeps the listeners off the keystroke path.
   const latest = useRef({ start, format })
@@ -188,11 +220,13 @@ export function QueryWorkspace({
         rowLimit={tab.rowLimit}
         running={run.running}
         canRun={canRun}
+        hasText={hasText}
         onNamespaceChange={(namespace) => retarget(tab.id, namespace)}
         onRowLimitChange={(rowLimit) => editQuery(tab.id, { rowLimit })}
         onExecute={() => start(false)}
         onExplain={() => start(true)}
         onFormat={format}
+        onSaveSnippet={nameThis}
         onStop={() => cancel(tab.id)}
       />
 
@@ -210,6 +244,7 @@ export function QueryWorkspace({
             value={tab.sql}
             schema={querySchema}
             engine={engine}
+            library={offered}
             review={review}
             onChange={(sql) => editQuery(tab.id, { sql })}
             onSelectionChange={(selected) => {
@@ -226,10 +261,12 @@ export function QueryWorkspace({
             run={run}
             sessionId={sessionId}
             profileId={tab.profileId}
+            engine={engine}
             onRefresh={refresh}
             onFetch={fetchRows}
             onStop={() => cancel(tab.id)}
             onPickHistory={pickHistory}
+            onPickSnippet={pickSnippet}
           />
         </SplitPanel>
       </Split>
@@ -239,6 +276,10 @@ export function QueryWorkspace({
         onCancel={() => setAsking(null)}
         onConfirm={confirmRun}
       />
+
+      {naming !== null ? (
+        <SnippetDialog draft={naming} onClose={() => setNaming(null)} />
+      ) : null}
     </div>
   )
 }

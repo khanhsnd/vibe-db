@@ -614,6 +614,36 @@ type HistoryEntry struct {
 	RanAt        int64  `json:"ranAt"`
 }
 
+// Snippet is one statement the reader has named, as the library lists it. It carries no connection
+// and no namespace, unlike a HistoryEntry: a snippet is kept to be run in more than one place — see
+// domain.Snippet. `engine` is blank for one offered everywhere.
+type Snippet struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Body        string `json:"body"`
+	Engine      string `json:"engine"`
+}
+
+// SnippetInput is a snippet on its way in. `previous` is the name it was known by, and is blank for
+// one that is new — so a rename replaces the old entry in the same write rather than in a second call
+// that could leave two behind; see domain.SaveSnippet.
+type SnippetInput struct {
+	Previous    string `json:"previous"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Body        string `json:"body"`
+	Engine      string `json:"engine"`
+}
+
+func (s SnippetInput) toDomain() domain.Snippet {
+	return domain.Snippet{
+		Name:        s.Name,
+		Description: s.Description,
+		Body:        s.Body,
+		Engine:      domain.Engine(s.Engine),
+	}
+}
+
 // LogEntry is one statement the app has run, as the History Log lists it — one entry per *run*,
 // where a HistoryEntry is one per statement. `ranAt` is epoch milliseconds, the clock the rest of
 // the wire counts in, so the viewer draws it in the reader's own time zone.
@@ -1019,6 +1049,19 @@ func toHistoryDTOs(entries []domain.HistoryEntry) []HistoryEntry {
 			Error:        entry.Error,
 			Runs:         entry.Runs,
 			RanAt:        entry.RanAt.UnixMilli(),
+		})
+	}
+	return out
+}
+
+func toSnippetDTOs(library []domain.Snippet) []Snippet {
+	out := make([]Snippet, 0, len(library))
+	for _, one := range library {
+		out = append(out, Snippet{
+			Name:        one.Name,
+			Description: one.Description,
+			Body:        one.Body,
+			Engine:      string(one.Engine),
 		})
 	}
 	return out

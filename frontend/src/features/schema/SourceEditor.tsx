@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { RefreshCw, Save } from 'lucide-react'
 
 import type { Namespace } from '@/bridge/connections'
@@ -13,6 +13,7 @@ import { Banner } from '@/shared/ui/Banner'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
 import { useConnectionsStore } from '@/stores/connections'
+import { snippetsFor, useSnippetsStore } from '@/stores/snippets'
 import { SOURCE_NOUN, useTabsStore } from '@/stores/tabs'
 
 import { changeRows } from './designerRows'
@@ -56,6 +57,12 @@ export function SourceEditor({
   )
   const changeSchema = useConnectionsStore((s) => s.changeSchema)
   const declared = useTabsStore((s) => s.declared)
+
+  // A definition is written in the same editor a query is, so it is offered the same snippets — a
+  // body is where a kept `CASE` or a kept join earns its name most. Memoised because the editor
+  // reconfigures its language whenever the list changes.
+  const library = useSnippetsStore((s) => s.library)
+  const offered = useMemo(() => snippetsFor(library, engine), [library, engine])
 
   const [definition, setDefinition] = useState<string | null>(null)
   const [statements, setStatements] = useState<string[]>([])
@@ -178,6 +185,7 @@ export function SourceEditor({
                   value={definition}
                   schema={querySchema}
                   engine={engine}
+                  library={offered}
                   review={NO_DIAGNOSTICS}
                   onChange={setDefinition}
                   onSelectionChange={noSelection}
