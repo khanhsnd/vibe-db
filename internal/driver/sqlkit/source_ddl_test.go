@@ -40,6 +40,83 @@ func TestDropSourceCarriesTheArgumentsWhenThereAreAny(t *testing.T) {
 	}
 }
 
+// A trigger is dropped five ways, and the two that differ do so for different reasons. PostgreSQL
+// finds one by its *table*, a trigger name there being unique per table rather than per schema, so
+// its own name carries no namespace at all. SQL Server takes two parts where every other statement
+// it is sent takes three. The other three drop it by its qualified name like any other object.
+func TestDropTriggerIsAddressedTheWayEachEngineAddressesOne(t *testing.T) {
+	ref := driver.SourceRef{Kind: driver.SourceTrigger, Name: "audit", Table: "users"}
+
+	cases := []struct {
+		engine  string
+		dialect Dialect
+		ns      driver.Namespace
+		want    string
+	}{
+		{"MySQL", MySQL, driver.Namespace{Database: "shop"},
+			"DROP TRIGGER `shop`.`audit`"},
+		{"Postgres", Postgres, driver.Namespace{Database: "shop", Schema: "public"},
+			`DROP TRIGGER "audit" ON "public"."users"`},
+		{"SQLite", SQLite, driver.Namespace{Database: "main"},
+			`DROP TRIGGER "main"."audit"`},
+		{"SQLServer", SQLServer, driver.Namespace{Database: "shop", Schema: "dbo"},
+			"DROP TRIGGER [dbo].[audit]"},
+		{"Oracle", Oracle, driver.Namespace{Database: "HR"},
+			`DROP TRIGGER "HR"."audit"`},
+	}
+
+	for _, one := range cases {
+		if got := one.dialect.DropSource(one.ns, ref); got != one.want {
+			t.Errorf("%s: DropSource = %s, want %s", one.engine, got, one.want)
+		}
+	}
+}
+
+// A new trigger starts from the engine's own grammar, and the skeleton addresses **two** things:
+// the trigger, and the table it fires on. The two engines whose trigger name is not the name every
+// other statement writes spell it their way here as well, which is the whole point of one speller.
+func TestNewTriggerAddressesBothItselfAndItsTable(t *testing.T) {
+	ref := driver.SourceRef{Kind: driver.SourceTrigger, Name: "audit", Table: "users"}
+
+	cases := []struct {
+		engine  string
+		dialect Dialect
+		ns      driver.Namespace
+		want    string
+	}{
+		{"MySQL", MySQL, driver.Namespace{Database: "shop"},
+			"CREATE TRIGGER `shop`.`audit`\nBEFORE INSERT ON `shop`.`users`"},
+		{"Postgres", Postgres, driver.Namespace{Database: "shop", Schema: "public"},
+			"CREATE TRIGGER \"audit\"\nBEFORE INSERT ON \"public\".\"users\""},
+		// SQLite puts the schema on the trigger and refuses one on the table, exactly as it does
+		// for an index.
+		{"SQLite", SQLite, driver.Namespace{Database: "main"},
+			"CREATE TRIGGER \"main\".\"audit\"\nAFTER INSERT ON \"users\""},
+		{"SQLServer", SQLServer, driver.Namespace{Database: "shop", Schema: "dbo"},
+			"CREATE TRIGGER [dbo].[audit]\nON [dbo].[users]"},
+		{"Oracle", Oracle, driver.Namespace{Database: "HR"},
+			"CREATE OR REPLACE TRIGGER \"HR\".\"audit\"\nBEFORE INSERT ON \"HR\".\"users\""},
+	}
+
+	for _, one := range cases {
+		got := one.dialect.NewSource(one.ns, ref)
+		if !strings.HasPrefix(got, one.want) {
+			t.Errorf("%s: NewSource = %q, want it to open with %q", one.engine, got, one.want)
+		}
+	}
+}
+
+// An engine with no such object answers with nothing, which is what the frontend reads as there
+// being no starter — SQLite has no stored routine to begin one of.
+func TestNewSourceIsEmptyForAKindTheEngineHasNot(t *testing.T) {
+	ns := driver.Namespace{Database: "main"}
+	ref := driver.SourceRef{Kind: driver.SourceFunction, Name: "tax"}
+
+	if got := SQLite.NewSource(ns, ref); got != "" {
+		t.Errorf("NewSource = %q, want nothing", got)
+	}
+}
+
 // A kind that arrived as something else is a view rather than text on its way into a statement.
 // What refuses one outright is the API layer; this is the second lock.
 func TestSourceKeywordIsTotal(t *testing.T) {
@@ -93,21 +170,6 @@ func TestSourceStatementsSpellsNothingForABlankDefinition(t *testing.T) {
 
 	if len(got) != 0 {
 		t.Errorf("SourceStatements = %#v, want nothing", got)
-	}
-}
-
-// A routine reaches a drop as the reference the tree already held for it, so what the menu drops
-// and what a save drops in front of its create are one spelling.
-func TestRoutineSourceIsItsOwnReference(t *testing.T) {
-	routine := driver.Routine{Name: "tax", Procedure: false, Arguments: "numeric"}
-
-	got := routine.Source()
-	if got.Kind != driver.SourceFunction || got.Name != "tax" || got.Arguments != "numeric" {
-		t.Errorf("Source = %#v", got)
-	}
-	procedure := driver.Routine{Name: "sweep", Procedure: true}
-	if procedure.Source().Kind != driver.SourceProcedure {
-		t.Error("a procedure's reference is not a procedure")
 	}
 }
 

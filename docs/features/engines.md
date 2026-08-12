@@ -61,6 +61,7 @@ answers [`UNSUPPORTED`](../errors.md) naming which — never a statement left fo
 | Truncate as well as empty | ✓ | ✓ | | ✓ | ✓ | | |
 | Views | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Stored routines | ✓ | ✓ | | ✓ | ✓ | | |
+| Triggers | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Read and write a definition | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Explain a statement | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Back up and restore | ✓ | ✓ | ✓ | ✓ | ✓ | | |
@@ -78,11 +79,13 @@ Four of those blanks are worth the sentence:
   optimisation that makes `DELETE FROM t` drop the pages wholesale happens by itself. Offering both
   would be offering one command under two names.
 - **SQLite has no stored routine.** A function there belongs to the program that opened the file —
-  this app registers one, `regexp`, and it is gone the moment the file is closed. Its *views* are
-  read and written like any other engine's: the file stores the statement that made each one.
-- **MongoDB has no definition to read.** A view there is a collection declared by a *document* —
-  the collection it reads and the pipeline over it — rather than by a statement, so there is
-  nothing for an editor to open and nothing for a Save to put back. See
+  this app registers one, `regexp`, and it is gone the moment the file is closed. Its *views* and its
+  *triggers* are read and written like any other engine's: the file stores the statement that made
+  each one, and a trigger is the one program the file itself holds.
+- **MongoDB has no definition to read, and no trigger either.** A view there is a collection declared
+  by a *document* — the collection it reads and the pipeline over it — rather than by a statement, so
+  there is nothing for an editor to open and nothing for a Save to put back; and a change stream is
+  something a *client* watches rather than a program the server keeps and fires. See
   [definitions.md](definitions.md#what-a-definition-is).
 - **Three engines have no dump program of their own, and MongoDB has one without having a backup.**
   A SQLite database is one file, so copying it is the dump; SQL Server's backup is a statement the

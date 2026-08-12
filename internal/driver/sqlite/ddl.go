@@ -32,6 +32,10 @@ func (s *session) run(ctx context.Context, _, statement string) error {
 //
 // The indexes are the same read: an index SQLite made for a `UNIQUE` column has no statement of its
 // own — `sql` is NULL for it — and is left out, since the column's declaration already carries it.
+//
+// The **kinds are named** rather than everything under `tbl_name` being taken, because a trigger is
+// filed under the table it fires on and is not part of that table's declaration: a dump is of
+// tables, and a trigger is edited as [its own definition](../../../docs/features/definitions.md).
 func (s *session) CreateStatements(
 	ctx context.Context,
 	_ driver.Namespace,
@@ -40,7 +44,7 @@ func (s *session) CreateStatements(
 	const query = `
 		SELECT sql
 		FROM sqlite_master
-		WHERE tbl_name = ? AND sql IS NOT NULL
+		WHERE tbl_name = ? AND type IN ('table', 'index') AND sql IS NOT NULL
 		ORDER BY type = 'table' DESC, name`
 
 	statements, err := s.names(ctx, query, table)
@@ -122,14 +126,22 @@ func (*session) DatabaseOptions(context.Context) (driver.DatabaseOptions, error)
 }
 
 // A function in SQLite belongs to the program that opened the file — this one registers `regexp`,
-// and it is gone the moment the file is closed. There is nothing stored to drop.
-func (*session) DropRoutine(context.Context, driver.Namespace, driver.Routine) error {
-	return domain.Unsupported("a stored routine")
+// and it is gone the moment the file is closed. There is nothing stored to drop, so a routine is
+// the one kind this refuses; the other three are objects of the file like any table.
+func (s *session) DropSource(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) error {
+	if ref.Kind == driver.SourceFunction || ref.Kind == driver.SourceProcedure {
+		return domain.Unsupported("a stored routine")
+	}
+	return s.DDL.DropSource(ctx, ns, ref)
 }
 
 // Source is the same read CreateStatements is, and is exact for the same reason: the file stores
-// the statement that made the view, so what a reader is shown is the declaration they wrote rather
-// than a description of it.
+// the statement that made the view or the trigger, so what a reader is shown is the declaration
+// they wrote rather than a description of it.
 //
 // A routine is refused here rather than read as nothing, since there is none to read — see above.
 func (s *session) Source(
@@ -137,16 +149,18 @@ func (s *session) Source(
 	_ driver.Namespace,
 	ref driver.SourceRef,
 ) (driver.Source, error) {
-	if ref.Kind != driver.SourceView {
+	if ref.Kind != driver.SourceView && ref.Kind != driver.SourceTrigger {
 		return driver.Source{}, domain.Unsupported("a stored routine")
 	}
 
 	const query = `
 		SELECT sql
 		FROM sqlite_master
-		WHERE type = 'view' AND name = ? AND sql IS NOT NULL`
+		WHERE type = ? AND name = ? AND sql IS NOT NULL`
 
-	found, err := s.names(ctx, query, ref.Name)
+	// `sqlite_master.type` is spelled the way a kind already is — `view`, `trigger` — so the kind
+	// goes into the read as itself rather than through a map of two entries.
+	found, err := s.names(ctx, query, string(ref.Kind), ref.Name)
 	if err != nil {
 		return driver.Source{}, err
 	}

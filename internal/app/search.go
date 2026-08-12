@@ -66,9 +66,9 @@ type SearchResult struct {
 // **The two halves are different kinds of question and are answered in different places.** Which
 // *rows* hold the text is a statement, so it is the driver's (`driver.Session.MatchingRows`), and
 // every column of any type is read as text to answer it. Which *names* hold it is not a server's
-// question at all: a field, an index and a constraint are names the catalogue reads already answer
-// with, so a structure search is one read of the shape and then `domain.TextMatch` — the **same**
-// rule the driver spells, which is what stops Contains meaning two things.
+// question at all: a field, an index, a constraint and a trigger are names the catalogue reads
+// already answer with, so a structure search is one read of the shape and then `domain.TextMatch`
+// — the **same** rule the driver spells, which is what stops Contains meaning two things.
 //
 // A table nobody may read is one row missing from the answer and not the end of the search; a
 // deadline or a Stop is the end of it, because every table after it would fail the same way.
@@ -112,6 +112,13 @@ func (a *ConnectionAPI) FindInSchema(sessionID string, in SearchInput) (SearchRe
 		return SearchResult{}, wrapError(err)
 	}
 
+	// The triggers of the namespace, grouped by what they fire on. The same catalogue read already
+	// answered with them, so a structure search costs nothing extra for knowing they are there.
+	fired := map[string][]string{}
+	for _, trigger := range objects.Triggers {
+		fired[trigger.Table] = append(fired[trigger.Table], trigger.Name)
+	}
+
 	found := SearchResult{Hits: []SearchHit{}, Skipped: []SearchSkip{}}
 	for _, table := range objects.Tables {
 		hit, err := a.searchTable(ctx, searchOne{
@@ -119,6 +126,7 @@ func (a *ConnectionAPI) FindInSchema(sessionID string, in SearchInput) (SearchRe
 			schema:    schema,
 			namespace: ns,
 			table:     table,
+			triggers:  fired[table],
 			scope:     scope,
 			match:     match,
 			matcher:   matcher,
@@ -146,15 +154,18 @@ func (a *ConnectionAPI) StopSearch(runID string) {
 	a.runs.cancel(runID)
 }
 
-// searchOne is one table of a search, which is seven things and would otherwise be seven arguments.
+// searchOne is one table of a search, which is eight things and would otherwise be eight arguments.
 type searchOne struct {
 	sessionID string
 	schema    driver.Schema
 	namespace driver.Namespace
 	table     string
-	scope     domain.SearchScope
-	match     domain.TextMatch
-	matcher   domain.Matcher
+	// triggers is the names of the triggers on this table, which the catalogue read already
+	// answered with — a structure search asks no server anything.
+	triggers []string
+	scope    domain.SearchScope
+	match    domain.TextMatch
+	matcher  domain.Matcher
 }
 
 func (a *ConnectionAPI) searchTable(ctx context.Context, one searchOne) (SearchHit, error) {
@@ -178,16 +189,16 @@ func (a *ConnectionAPI) searchTable(ctx context.Context, one searchOne) (SearchH
 	if err != nil {
 		return SearchHit{}, err
 	}
-	return SearchHit{Table: one.table, Matches: matchedNames(shape, one.table, one.matcher)}, nil
+	return SearchHit{Table: one.table, Matches: matchedNames(shape, one, one.matcher)}, nil
 }
 
 // matchedNames is what a structure search found about one table: its own name, and then every field,
-// index and constraint whose name holds the text. It counts **names** and nothing else — a type, a
-// default and an access method are the engine's own wording, and a reader looking for `khanh` is
-// looking for something *called* that.
-func matchedNames(shape driver.TableStructure, table string, matcher domain.Matcher) int64 {
+// index, constraint and trigger whose name holds the text. It counts **names** and nothing else — a
+// type, a default, an access method and a trigger's body are the engine's own wording, and a reader
+// looking for `khanh` is looking for something *called* that.
+func matchedNames(shape driver.TableStructure, one searchOne, matcher domain.Matcher) int64 {
 	matched := int64(0)
-	if matcher.Matches(table) {
+	if matcher.Matches(one.table) {
 		matched++
 	}
 	for _, column := range shape.Columns {
@@ -202,6 +213,11 @@ func matchedNames(shape driver.TableStructure, table string, matcher domain.Matc
 	}
 	for _, key := range shape.ForeignKeys {
 		if matcher.Matches(key.Name) {
+			matched++
+		}
+	}
+	for _, trigger := range one.triggers {
+		if matcher.Matches(trigger) {
 			matched++
 		}
 	}

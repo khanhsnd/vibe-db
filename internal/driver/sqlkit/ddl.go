@@ -2,6 +2,7 @@ package sqlkit
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
@@ -18,6 +19,23 @@ type DDL struct {
 	// pool per database needs and an engine with one pool ignores. It is also where the
 	// adapter's own error translation happens, so nothing here has to know about it.
 	Run func(ctx context.Context, database, statement string) error
+	// Pin holds one pooled connection put *inside* a namespace — MySQL's and SQL Server's `USE`,
+	// PostgreSQL's `search_path`, Oracle's `CURRENT_SCHEMA`. It is the connection a **definition**
+	// is run on, and nothing else here needs one.
+	//
+	// Every other statement this app writes addresses its object by a qualified name; a definition
+	// cannot, because its body is the reader's own text and an unqualified table inside a view, a
+	// routine or a trigger resolves against whichever namespace the connection is in. Two engines
+	// go further and refuse the statement outright rather than putting it in the wrong place: MySQL
+	// will not have a trigger and its table in different schemas, and SQL Server's `CREATE TRIGGER`
+	// has to be the first statement of a batch in the database it belongs to.
+	//
+	// An adapter that leaves it nil has one namespace to be in — SQLite — and runs its definitions
+	// through Run like everything else.
+	Pin func(ctx context.Context, ns driver.Namespace) (*sql.Conn, error)
+	// Translate is the adapter's error map. `Run` applies its own; what goes through `Pin` has to
+	// be given one too, since it is executed here rather than there.
+	Translate func(error) error
 }
 
 func (x DDL) CreateTable(ctx context.Context, spec driver.TableSpec) error {
@@ -215,7 +233,7 @@ func (d Dialect) CreateIndex(ns driver.Namespace, table string, spec driver.Inde
 	}
 
 	target := d.Table(ns, table)
-	if d.IndexTableIsBare {
+	if d.ObjectTableIsBare {
 		target = d.QuoteIdent(table)
 	}
 
@@ -600,13 +618,22 @@ func ForeignKeySpecOf(key driver.ForeignKey) driver.ForeignKeySpec {
 	}
 }
 
-// DropSource removes a view or a routine, and is one statement for all three: what differs
-// between them is the word naming the kind, which the kind itself supplies.
+// DropSource removes a view, a routine or a trigger, and is one statement for all four: what
+// differs between them is the word naming the kind, which the kind itself supplies.
 //
-// The arguments are named only where the engine needs them to tell two routines of one name
-// apart, which is PostgreSQL and not MySQL — and both spell the drop the same way once that
-// difference travels in the reference itself.
+// The two fields beside the name are each one engine's way of saying *which* object, and each
+// reaches the statement only where that engine needs it. The arguments tell two PostgreSQL
+// functions of one name apart; the table is what PostgreSQL finds a trigger by, a trigger name
+// there being unique per table rather than per schema.
 func (d Dialect) DropSource(ns driver.Namespace, ref driver.SourceRef) string {
+	if ref.Kind == driver.SourceTrigger {
+		statement := "DROP TRIGGER " + d.TriggerName(ns, ref.Name)
+		if d.TriggerOnTable {
+			statement += " ON " + d.TriggerTable(ns, ref.Table)
+		}
+		return statement
+	}
+
 	statement := "DROP " + ref.Kind.Keyword() + " " + d.Table(ns, ref.Name)
 	if ref.Arguments != "" {
 		statement += "(" + ref.Arguments + ")"
@@ -614,13 +641,40 @@ func (d Dialect) DropSource(ns driver.Namespace, ref driver.SourceRef) string {
 	return statement
 }
 
-func (x DDL) DropView(ctx context.Context, ns driver.Namespace, view string) error {
-	ref := driver.SourceRef{Kind: driver.SourceView, Name: view}
-	return x.Run(ctx, ns.Database, x.Dialect.DropSource(ns, ref))
+// TriggerName is how a trigger is addressed, and is the one object name here that is not the one
+// `Table` writes — for a different reason on each of the two engines that differ. A PostgreSQL
+// trigger belongs to its *table*, so its own name carries no namespace at all and the table is
+// named beside it; a SQL Server trigger belongs to its table's schema, and its statements take two
+// parts where every other statement this adapter writes takes three.
+func (d Dialect) TriggerName(ns driver.Namespace, name string) string {
+	switch {
+	case d.TriggerOnTable:
+		return d.QuoteIdent(name)
+	case d.NamespaceIsBoth:
+		return d.Qualify(ns.Schema, name)
+	default:
+		return d.Table(ns, name)
+	}
 }
 
-func (x DDL) DropRoutine(ctx context.Context, ns driver.Namespace, routine driver.Routine) error {
-	return x.Run(ctx, ns.Database, x.Dialect.DropSource(ns, routine.Source()))
+// TriggerTable is the table a trigger fires on, spelled the way a *trigger's* statements spell one
+// — which is not how a read spells it on two engines. SQLite puts the schema on the trigger and
+// refuses one here, exactly as it does for an index; SQL Server takes two parts where every other
+// statement this app writes for it takes three, `CREATE TRIGGER` applying to the database the
+// connection is already in.
+func (d Dialect) TriggerTable(ns driver.Namespace, table string) string {
+	switch {
+	case d.ObjectTableIsBare:
+		return d.QuoteIdent(table)
+	case d.NamespaceIsBoth:
+		return d.Qualify(ns.Schema, table)
+	default:
+		return d.Table(ns, table)
+	}
+}
+
+func (x DDL) DropSource(ctx context.Context, ns driver.Namespace, ref driver.SourceRef) error {
+	return x.runInside(ctx, ns, []string{x.Dialect.DropSource(ns, ref)})
 }
 
 // SourceStatements spells saving a definition: the drop of whatever is there now, and then the
@@ -642,18 +696,47 @@ func (x DDL) SourceStatements(ns driver.Namespace, save driver.SourceSave) []str
 }
 
 // NewSource is the skeleton this engine declares one of these with — see Dialect.Starters, which
-// is where the three shapes live.
-func (x DDL) NewSource(ns driver.Namespace, kind driver.SourceKind, name string) string {
-	return x.Dialect.NewSource(ns, kind, name)
+// is where the four shapes live.
+func (x DDL) NewSource(ns driver.Namespace, ref driver.SourceRef) string {
+	return x.Dialect.NewSource(ns, ref)
 }
 
 // SaveSource runs what SourceStatements showed, in order and stopping at the first failure. A
 // drop that succeeded in front of a create that did not leaves the object gone, which is why the
 // preview shows both statements and why the reader sees the drop before pressing Save.
 func (x DDL) SaveSource(ctx context.Context, ns driver.Namespace, save driver.SourceSave) error {
-	for _, statement := range x.SourceStatements(ns, save) {
-		if err := x.Run(ctx, ns.Database, statement); err != nil {
-			return err
+	return x.runInside(ctx, ns, x.SourceStatements(ns, save))
+}
+
+// runInside executes a definition's statements in order, stopping at the first failure, on a
+// connection put inside the namespace where the adapter has one to give — see Pin, which is the
+// whole reason a definition is not run the way every other statement here is.
+//
+// There is no transaction around them, DDL not being transactional on three of these five engines,
+// which is why the preview has to be exact.
+func (x DDL) runInside(ctx context.Context, ns driver.Namespace, statements []string) error {
+	if len(statements) == 0 {
+		return nil
+	}
+
+	if x.Pin == nil {
+		for _, statement := range statements {
+			if err := x.Run(ctx, ns.Database, statement); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	conn, err := x.Pin(ctx, ns)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	for _, statement := range statements {
+		if _, err := conn.ExecContext(ctx, statement); err != nil {
+			return x.Translate(err)
 		}
 	}
 	return nil
@@ -661,6 +744,31 @@ func (x DDL) SaveSource(ctx context.Context, ns driver.Namespace, save driver.So
 
 func (x DDL) alter(ns driver.Namespace, table string) string {
 	return "ALTER TABLE " + x.Dialect.Table(ns, table)
+}
+
+// ScanTriggers folds a two-column catalogue read — a trigger's name, then the table it fires on —
+// into the list `Objects` carries. It is here rather than in each adapter because what differs
+// between the five engines is the *read*, and the fold does not differ at all.
+//
+// The table is scanned as a pointer because a trigger need not have one: Oracle's may be on the
+// schema and SQL Server's on the database, and either is a trigger that exists and fires on no
+// table. It is listed by the name it has rather than left out.
+func ScanTriggers(rows *sql.Rows) ([]driver.Trigger, error) {
+	defer rows.Close()
+
+	triggers := []driver.Trigger{}
+	for rows.Next() {
+		var found driver.Trigger
+		var table *string
+		if err := rows.Scan(&found.Name, &table); err != nil {
+			return nil, err
+		}
+		if table != nil {
+			found.Table = *table
+		}
+		triggers = append(triggers, found)
+	}
+	return triggers, rows.Err()
 }
 
 // AppendIndexColumn folds the ordered rows of an index read into one entry per index, the way

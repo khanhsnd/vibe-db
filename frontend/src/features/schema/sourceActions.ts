@@ -21,6 +21,14 @@ export interface SourceActions {
   remove: () => void
 }
 
+/** What dropping each kind costs the reader, which is the whole of what the confirmation says. */
+const REMOVAL_COST: Record<SourceKind, string> = {
+  view: 'The rows it read stay where they are; anything selecting from it stops working.',
+  function: 'Anything that calls it stops working.',
+  procedure: 'Anything that calls it stops working.',
+  trigger: 'The rows it has already written stay; nothing fires on that table again.',
+}
+
 /**
  * What can be done to a view or a routine, wherever one is offered. It is `tableActions`' sibling
  * and follows the same two rules: nothing runs without being confirmed or filled in first, and
@@ -44,6 +52,9 @@ export function sourceActions(
     // declaration addresses the object it declares, and there is no second box on the tab
     // repeating what the statement already says. Nothing is sent here — the reader's Save is
     // what reaches a server.
+    //
+    // The table comes from whatever this action was built for, which is how a New Trigger knows
+    // what it fires on: it is offered on a table and on a trigger, and both already name one.
     create: (kind) =>
       deps.ask({
         kind: 'prompt',
@@ -55,7 +66,7 @@ export function sourceActions(
           deps.openSource({
             profileId,
             namespace,
-            ref: { kind, name, arguments: '' },
+            ref: { kind, name, arguments: '', table: ref.table },
             creating: true,
           })
         },
@@ -65,24 +76,15 @@ export function sourceActions(
       deps.ask({
         kind: 'confirm',
         title: `Delete ${SOURCE_NOUN[ref.kind]}`,
-        message:
-          ref.kind === 'view'
-            ? `Drop the view ${ref.name}? The rows it read stay where they are; ` +
-              `anything selecting from it stops working.`
-            : `Drop ${ref.name}? Anything that calls it stops working.`,
+        message: `Drop ${ref.name}? ${REMOVAL_COST[ref.kind]}`,
         submitLabel: 'Delete',
         danger: true,
-        // A routine travels whole rather than by its name, the arguments being part of what names
-        // one on PostgreSQL — the same reason its tab is identified by all three of them.
+        // The reference travels whole rather than by its name: the arguments are part of what
+        // names a PostgreSQL function and the table is part of what names a trigger there — the
+        // same reason a tab is identified by all of them.
         onSubmit: () =>
           deps.changeSchema(profileId, { namespace }, (sessionId) =>
-            ref.kind === 'view'
-              ? schema.dropView(sessionId, namespace, ref.name)
-              : schema.dropRoutine(sessionId, namespace, {
-                  name: ref.name,
-                  procedure: ref.kind === 'procedure',
-                  arguments: ref.arguments,
-                }),
+            schema.dropSource(sessionId, namespace, ref),
           ),
       }),
   }

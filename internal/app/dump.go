@@ -32,7 +32,7 @@ type DumpSelection struct {
 	Namespace
 	Tables []string `json:"tables"`
 	// All asks the server for the complete table list; false with an empty Tables list means none.
-	All    bool     `json:"all"`
+	All bool `json:"all"`
 }
 
 // dumpWhat is which halves of a table go into a file: what would declare it, and the rows it holds.
@@ -168,7 +168,8 @@ func (a *ConnectionAPI) dumpSelections(ctx context.Context, sessionID string, in
 
 // dumpTables is what the dump covers: the one table named, or every table the namespace holds. A
 // view is not among them — it holds no rows of its own and its declaration is not a table's — and
-// nor is a routine, which is why the menu offers this on a table and on the node owning tables.
+// nor is a routine or a trigger, which is why the menu offers this on a table and on the node
+// owning tables. All three are edited as [their own definition](docs/features/definitions.md).
 func (a *ConnectionAPI) dumpTables(
 	ctx context.Context,
 	sessionID string,

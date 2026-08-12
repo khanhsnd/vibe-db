@@ -253,23 +253,21 @@ func (a *ConnectionAPI) SetPrimaryKey(
 	})
 }
 
-func (a *ConnectionAPI) DropView(sessionID string, ns Namespace, view string) error {
-	if err := domain.RequireName("view", view); err != nil {
+// DropSource removes one view, routine or trigger. It takes the whole reference for the reason the
+// driver method does: on three of the four kinds a name alone does not name one.
+func (a *ConnectionAPI) DropSource(sessionID string, ns Namespace, ref SourceRef) error {
+	// The kind is checked before it is quoted into the message, so a word that came off the wire
+	// as something else is answered as the kind it is not rather than echoed back into a DROP.
+	wanted, err := ref.toDriver()
+	if err != nil {
+		return wrapError(err)
+	}
+	if err := domain.RequireName(string(wanted.Kind), wanted.Name); err != nil {
 		return wrapError(err)
 	}
 
 	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
-		return schema.DropView(ctx, ns.toDriver(), view)
-	})
-}
-
-func (a *ConnectionAPI) DropRoutine(sessionID string, ns Namespace, routine RoutineInfo) error {
-	if err := domain.RequireName("routine", routine.Name); err != nil {
-		return wrapError(err)
-	}
-
-	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
-		return schema.DropRoutine(ctx, ns.toDriver(), routine.toDriver())
+		return schema.DropSource(ctx, ns.toDriver(), wanted)
 	})
 }
 
@@ -304,17 +302,17 @@ func (a *ConnectionAPI) LoadSource(sessionID string, ns Namespace, ref SourceRef
 // than altering it. It runs nothing and asks no server anything — it is the engine's own shape for
 // that kind of object — and an engine that has none answers with an empty string, which is what
 // the tab reads as there being nothing to start from.
-func (a *ConnectionAPI) NewSource(sessionID string, ns Namespace, kind, name string) (string, error) {
+func (a *ConnectionAPI) NewSource(sessionID string, ns Namespace, ref SourceRef) (string, error) {
 	schema, err := a.sessions.Schema(sessionID)
 	if err != nil {
 		return "", wrapError(err)
 	}
 
-	wanted, err := SourceRef{Kind: kind, Name: name}.toDriver()
+	wanted, err := ref.toDriver()
 	if err != nil {
 		return "", wrapError(err)
 	}
-	return schema.NewSource(ns.toDriver(), wanted.Kind, name), nil
+	return schema.NewSource(ns.toDriver(), wanted), nil
 }
 
 // PreviewSource is exactly what SaveSource will run, so the editor's Changes pane shows the

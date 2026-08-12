@@ -109,7 +109,7 @@ than in spelling.
 | how it is dialled | MySQL registers a dialler and a TLS configuration **globally by name** before its DSN can refer to them, and deregisters them with the session (`transport.go`). PostgreSQL sets them on a parsed `pgx.ConnConfig`. SQL Server and Oracle build the driver's own connector and put both on it, as the MongoDB adapter does — nothing is written as text only to be parsed back. SQLite dials nothing and **refuses a tunnel** rather than quietly opening a local file instead |
 | `errors.go` | errno → sentinel (MySQL, SQL Server), SQLSTATE → sentinel (PostgreSQL), `ORA-` number → sentinel (Oracle), result code → sentinel plus one text read for the name that is not there (SQLite) |
 | catalogue reads | `information_schema`, `pg_catalog` for `format_type`, `sys.*` three-part, `all_*`, and — SQLite alone — the *pragmas*, which it exposes as table-valued functions |
-| a view's or a routine's **definition** | `SHOW CREATE …` (MySQL), `pg_get_functiondef` and `pg_get_viewdef` (PostgreSQL), `sqlite_master.sql`, `sys.sql_modules` (SQL Server), `all_source` and `all_views` (Oracle). It is a *read* wherever the engine will answer, exactly as `CreateStatements` is; where one answers with the body alone the `CREATE` in front of it is the adapter's to spell. See [features/definitions.md](features/definitions.md) |
+| a view's, a routine's or a trigger's **definition** | `SHOW CREATE …` (MySQL), `pg_get_functiondef`, `pg_get_viewdef` and `pg_get_triggerdef` (PostgreSQL), `sqlite_master.sql`, `sys.sql_modules` (SQL Server), `all_source` and `all_views` (Oracle). It is a *read* wherever the engine will answer, exactly as `CreateStatements` is; where one answers with the body alone the `CREATE` in front of it is the adapter's to spell. It is also the one thing run **inside** its namespace rather than named into one (`DDL.Pin`), its body being the reader's text. See [features/definitions.md](features/definitions.md) |
 | a stored default | MySQL reports the **value** and only marks an expression `DEFAULT_GENERATED`, so a text literal is quoted on the way in (`defaultExpression`). Everywhere else it is already an expression — including SQLite's, which is the text of the declaration, and Oracle's, which is a `LONG` and therefore cannot be trimmed in the query that reads it |
 | levels above a table | one pool and `USE` (MySQL, SQL Server), a pool per database (PostgreSQL), one pool and `ALTER SESSION SET CURRENT_SCHEMA` (Oracle), one pool and one namespace (SQLite) |
 | `ddl.go` | what is left after the Dialect: a rename that is a *procedure* rather than a clause (SQL Server), a key whose constraint name has to be read first (PostgreSQL, SQL Server, Oracle), and what an engine has not got at all (SQLite, Oracle) |
@@ -129,10 +129,17 @@ and because an empty list is already what "this engine has no concept of that" m
 `AlterStatements`, the SQLite adapter needs no override for either half of it.
 
 **A third is a flag holding statements rather than a fact about one.** `Starters` is the skeleton a
-reader begins a new view or routine from, three strings per engine, and it is on `Dialect` for the
-reason everything else here is: a routine's body is *grammar* — `BEGIN … END`, a language-tagged
-string, `AS`, `IS` — so a template in a component would be a component spelling a statement. It runs
-nothing; what a Save runs is the reader's own buffer, which one speller previews whole.
+reader begins a new view, routine or trigger from, four strings per engine, and it is on `Dialect`
+for the reason everything else here is: a body is *grammar* — `BEGIN … END`, a language-tagged
+string, `AS`, `IS`, and for a trigger a `FOR EACH ROW` one engine has not got at all — so a template
+in a component would be a component spelling a statement. It runs nothing; what a Save runs is the
+reader's own buffer, which one speller previews whole.
+
+**A fourth is where a trigger diverges from every other object.** `TriggerOnTable` says a trigger
+belongs to its *table* rather than to the schema, so PostgreSQL alone drops one by naming both and
+gives its own name no namespace at all — and `TriggerName` and `TriggerTable` are the two spellings
+that follow from it, SQL Server's trigger statements taking two parts where the rest of that adapter
+takes three.
 
 It is not only SQL's. `sqlkit.Shell` is a `Dialect` carried by the MongoDB adapter **for the lexer
 alone**: where a command ends, what a string is and what a comment is are the same questions in a
@@ -460,7 +467,7 @@ grammar for the same answer.
 | levels above a collection | one pool for the server; a single connection reads every database on it |
 | `ddl.go` | a field is not a column, so a change to one is a change to the documents that carry it: `$set` to add, `$rename`, `$unset`, and a pipeline `$convert` to alter. `CreateTable` creates the collection and *only* the collection — see [decisions.md](decisions.md) for why a `$jsonSchema` validator built from the declared fields is a trap |
 | `database.go` | there is no `CREATE DATABASE`. A database exists exactly as long as it holds a collection, so making one is making its first — which is why `DatabaseSpec.FirstCollection` exists and why the dialog asks |
-| what it has not got | a foreign key, a primary key other than `_id`, a stored routine, a truncate distinct from an empty. Each says so through `domain.Unsupported` rather than being approximated or left to the server to refuse |
+| what it has not got | a foreign key, a primary key other than `_id`, a stored routine, a trigger — a change stream is a *client* watching, not a program the server keeps — a truncate distinct from an empty. Each says so through `domain.Unsupported` rather than being approximated or left to the server to refuse |
 
 ## The key-value store
 
@@ -548,7 +555,7 @@ on production.
 | `ddl.go` | nothing to declare, so nearly all of it is `domain.Unsupported` naming what is missing. `EmptyTable` is `FLUSHDB` and `AlterStatements` spells nothing at all |
 | `database.go` | there is none. A server is started with a fixed number of databases and they all exist from that moment — the opposite of MongoDB, where one exists only as long as something is in it |
 | a search | `MatchingRows` is a glob over key *names*, case folded into the pattern itself (`[uU][sS][eE][rR]*`) because Redis has no insensitive matching. The two modes a pattern cannot say are refused rather than approximated, and the statement it answers with is `KEYS <glob>` — which returns exactly what it counted |
-| what it has not got | a second table, a column, an index, a foreign key, a routine, a view, a plan, a database it can make or drop, a truncate distinct from an empty. Each says so through `domain.Unsupported` |
+| what it has not got | a second table, a column, an index, a foreign key, a routine, a view, a trigger, a plan, a database it can make or drop, a truncate distinct from an empty. Each says so through `domain.Unsupported` |
 
 ## Two Wails v2 constraints that shaped the design
 

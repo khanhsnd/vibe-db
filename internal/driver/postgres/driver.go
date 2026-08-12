@@ -51,7 +51,7 @@ func (*Driver) Open(
 		tunnel:  tunnel,
 		pools:   map[string]*sql.DB{},
 	}
-	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
+	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run, Pin: s.pinned, Translate: translateError}
 	s.Data = sqlkit.Data{
 		Dialect: dialect,
 		Columns: s.columns,
@@ -264,6 +264,17 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		WHERE n.nspname = $1 AND p.prokind IN ('f', 'p')
 		ORDER BY p.proname`
 
+	// `tgisinternal` is the trigger PostgreSQL made for itself to enforce a foreign key. It is not
+	// the reader's to see, to edit or to drop — the constraint is — so it is left out here exactly
+	// as the index behind a primary key is left out of a dump.
+	const triggers = `
+		SELECT t.tgname, c.relname
+		FROM pg_catalog.pg_trigger t
+		JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1 AND NOT t.tgisinternal
+		ORDER BY t.tgname`
+
 	found, err := s.names(ctx, ns.Database, tables, ns.Schema)
 	if err != nil {
 		return driver.Objects{}, err
@@ -297,7 +308,17 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		return driver.Objects{}, translateError(err)
 	}
 
-	return driver.Objects{Tables: found, Views: seen, Routines: stored}, nil
+	fired, err := db.QueryContext(ctx, triggers, ns.Schema)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	firing, err := sqlkit.ScanTriggers(fired)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	return driver.Objects{Tables: found, Views: seen, Routines: stored, Triggers: firing}, nil
 }
 
 // TableList reads what PostgreSQL keeps about the tables of a schema. There is no modified date

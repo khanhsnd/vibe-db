@@ -982,6 +982,20 @@ export namespace app {
 	        this.schema = source["schema"];
 	    }
 	}
+	export class TriggerInfo {
+	    name: string;
+	    table: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TriggerInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.table = source["table"];
+	    }
+	}
 	export class RoutineInfo {
 	    name: string;
 	    procedure: boolean;
@@ -1002,6 +1016,7 @@ export namespace app {
 	    tables: string[];
 	    views: string[];
 	    routines: RoutineInfo[];
+	    triggers: TriggerInfo[];
 	    keyCount: number;
 	
 	    static createFrom(source: any = {}) {
@@ -1013,6 +1028,7 @@ export namespace app {
 	        this.tables = source["tables"];
 	        this.views = source["views"];
 	        this.routines = this.convertValues(source["routines"], RoutineInfo);
+	        this.triggers = this.convertValues(source["triggers"], TriggerInfo);
 	        this.keyCount = source["keyCount"];
 	    }
 	
@@ -1724,6 +1740,7 @@ export namespace app {
 	    kind: string;
 	    name: string;
 	    arguments: string;
+	    table: string;
 	    definition: string;
 	
 	    static createFrom(source: any = {}) {
@@ -1735,6 +1752,7 @@ export namespace app {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.arguments = source["arguments"];
+	        this.table = source["table"];
 	        this.definition = source["definition"];
 	    }
 	}
@@ -1742,6 +1760,7 @@ export namespace app {
 	    kind: string;
 	    name: string;
 	    arguments: string;
+	    table: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new SourceRef(source);
@@ -1752,6 +1771,7 @@ export namespace app {
 	        this.kind = source["kind"];
 	        this.name = source["name"];
 	        this.arguments = source["arguments"];
+	        this.table = source["table"];
 	    }
 	}
 	export class SourceSaveInput {
@@ -2325,6 +2345,7 @@ export namespace app {
 	        this.writes = source["writes"];
 	    }
 	}
+	
 	
 	
 	export class UpdateInfo {

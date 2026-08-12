@@ -136,15 +136,12 @@ func (*session) AlterStatements(driver.Namespace, string, []driver.TableChange) 
 	return nil
 }
 
-func (*session) DropView(context.Context, driver.Namespace, string) error {
-	return domain.Unsupported("a view")
-}
-
-// DropRoutine has nothing to drop. A Lua script is sent with the call that runs it and a function
-// library is loaded by name rather than kept as an object of a database, so there is no folder for
-// the tree to draw and nothing in it to remove.
-func (*session) DropRoutine(context.Context, driver.Namespace, driver.Routine) error {
-	return domain.Unsupported("a stored routine")
+// DropSource has nothing to drop, whichever kind is asked for. A Lua script is sent with the call
+// that runs it and a function library is loaded by name rather than kept as an object of a database,
+// so there is no folder for the tree to draw and nothing in it to remove — and a key space has
+// neither a view nor a trigger over it.
+func (*session) DropSource(context.Context, driver.Namespace, driver.SourceRef) error {
+	return domain.Unsupported("a declared object: a Redis database holds keys and nothing else")
 }
 
 // A key space declares nothing, so there is no definition to read and none to put back. Both halves
@@ -167,6 +164,6 @@ func (*session) SaveSource(context.Context, driver.Namespace, driver.SourceSave)
 }
 
 // NewSource has no skeleton to give, a key space being declared by nothing at all.
-func (*session) NewSource(driver.Namespace, driver.SourceKind, string) string {
+func (*session) NewSource(driver.Namespace, driver.SourceRef) string {
 	return ""
 }

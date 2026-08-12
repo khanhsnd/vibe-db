@@ -661,6 +661,24 @@ function namespaceNode(
             ),
           ]
         : []),
+      // A trigger belongs to a *table* and is listed under the namespace all the same, because that
+      // is the level every one of these catalogues answers at — and because a trigger is a program
+      // rather than part of a table's shape, which is what the folders under a table draw.
+      ...(info.hasTriggers
+        ? [
+            folder(
+              'triggers',
+              'Triggers',
+              (held?.triggers ?? []).map((trigger) =>
+                objectNode('trigger', trigger.name, {
+                  trigger,
+                  // What it fires on, which is the one fact about a trigger a name does not carry.
+                  ...(trigger.table ? { badge: trigger.table } : {}),
+                }),
+              ),
+            ),
+          ]
+        : []),
       // Under the catalogue's own folders, because it is not one of them: what is in here is files
       // on this machine. It is filled by a read of its own rather than by the one the other three
       // share — a folder on disk is not something the server was asked about — which is why it is
@@ -685,7 +703,12 @@ function namespaceNode(
 // drawing there is how many keys are under it — the driver's own count, since only the server has it.
 function namespaceCount(info: EngineInfo, held: Objects): number {
   if (info.keys) return held.keyCount
-  return held.tables.length + held.views.length + (held.routines?.length ?? 0)
+  return (
+    held.tables.length +
+    held.views.length +
+    (held.routines?.length ?? 0) +
+    (held.triggers?.length ?? 0)
+  )
 }
 
 // A table carries its folders whether or not its shape has been read: they are what the caret is

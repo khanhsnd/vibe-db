@@ -589,17 +589,23 @@ func (s *session) CreateStatements(
 	return statements, nil
 }
 
-// DropView drops the view. A MongoDB view is a collection whose contents are an aggregation over
-// another, so it goes the same way an ordinary collection does — there is no second command for it.
-func (s *session) DropView(ctx context.Context, ns driver.Namespace, view string) error {
-	return s.DropTable(ctx, ns, view)
-}
-
-// DropRoutine refuses. Server-side JavaScript was removed from the server, so a MongoDB deployment
-// holds no stored functions or procedures — which is also why `Objects` never lists any and this can
-// only ever be reached by a caller that invented one.
-func (*session) DropRoutine(context.Context, driver.Namespace, driver.Routine) error {
-	return domain.Unsupported("a stored routine")
+// DropSource drops a view, which is the one of the four kinds this engine has. A MongoDB view is a
+// collection whose contents are an aggregation over another, so it goes the same way an ordinary
+// collection does — there is no second command for it.
+//
+// The other three refuse. Server-side JavaScript was removed from the server, so a deployment holds
+// no stored functions or procedures, and a document store has no trigger at all — a change stream is
+// something a *client* watches rather than a program the server keeps. That is also why `Objects`
+// never lists any, and why this can only be reached by a caller that invented one.
+func (s *session) DropSource(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) error {
+	if ref.Kind != driver.SourceView {
+		return domain.Unsupported(string(ref.Kind))
+	}
+	return s.DropTable(ctx, ns, ref.Name)
 }
 
 // A definition is what this engine has not got, and the reason is the one at the top of this file:
@@ -629,6 +635,6 @@ func (*session) SaveSource(context.Context, driver.Namespace, driver.SourceSave)
 
 // NewSource has no skeleton to give: a MongoDB view is not declared by a statement, so there is
 // no shape of one for a reader to start from — see Source.
-func (*session) NewSource(driver.Namespace, driver.SourceKind, string) string {
+func (*session) NewSource(driver.Namespace, driver.SourceRef) string {
 	return ""
 }

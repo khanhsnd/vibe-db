@@ -81,7 +81,7 @@ func (*Driver) Open(
 	}
 
 	s := &session{db: db}
-	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
+	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run, Pin: s.pinned, Translate: translateError}
 	s.Data = sqlkit.Data{
 		Dialect: dialect,
 		Columns: s.columns,
@@ -161,6 +161,14 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		WHERE owner = :1 AND object_type IN ('PROCEDURE', 'FUNCTION')
 		ORDER BY object_name`
 
+	// A trigger here may be on the schema or on the database rather than on a table, and that one
+	// has no `table_name` — see sqlkit.ScanTriggers, which lists it by the name it has.
+	const triggers = `
+		SELECT trigger_name, table_name
+		FROM all_triggers
+		WHERE owner = :1
+		ORDER BY trigger_name`
+
 	found, err := s.names(ctx, tables, ns.Database)
 	if err != nil {
 		return driver.Objects{}, err
@@ -189,7 +197,17 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		return driver.Objects{}, translateError(err)
 	}
 
-	return driver.Objects{Tables: found, Views: seen, Routines: stored}, nil
+	fired, err := s.db.QueryContext(ctx, triggers, ns.Database)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	firing, err := sqlkit.ScanTriggers(fired)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	return driver.Objects{Tables: found, Views: seen, Routines: stored, Triggers: firing}, nil
 }
 
 // TableList reads what Oracle keeps about the tables of a schema. The row count and the size are

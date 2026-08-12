@@ -139,9 +139,10 @@ func (*session) Schemas(context.Context, string) ([]string, error) {
 	return nil, nil
 }
 
-// Objects reads the two folders a SQLite file has. There are no stored routines — a function here
+// Objects reads the three folders a SQLite file has. There are no stored routines — a function here
 // is registered by the program that opened the file and is gone when it closes — so nothing is
-// read for them and the tree draws no folder.
+// read for them and the tree draws no folder. A trigger is the one program the file itself holds,
+// and it is in the same catalogue table as everything else.
 //
 // The `sqlite_` names are the engine's own bookkeeping, exactly as MongoDB's `system.` ones are,
 // and are not listed.
@@ -150,6 +151,12 @@ func (s *session) Objects(ctx context.Context, _ driver.Namespace) (driver.Objec
 		SELECT name
 		FROM sqlite_master
 		WHERE type = ? AND name NOT LIKE 'sqlite\_%' ESCAPE '\'
+		ORDER BY name`
+
+	const triggers = `
+		SELECT name, tbl_name
+		FROM sqlite_master
+		WHERE type = 'trigger'
 		ORDER BY name`
 
 	tables, err := s.names(ctx, query, "table")
@@ -162,7 +169,22 @@ func (s *session) Objects(ctx context.Context, _ driver.Namespace) (driver.Objec
 		return driver.Objects{}, err
 	}
 
-	return driver.Objects{Tables: tables, Views: views, Routines: []driver.Routine{}}, nil
+	rows, err := s.db.QueryContext(ctx, triggers)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	fired, err := sqlkit.ScanTriggers(rows)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	return driver.Objects{
+		Tables:   tables,
+		Views:    views,
+		Routines: []driver.Routine{},
+		Triggers: fired,
+	}, nil
 }
 
 // TableList reads what SQLite keeps about its tables, which is less than any other engine keeps:

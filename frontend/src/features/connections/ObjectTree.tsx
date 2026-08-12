@@ -18,6 +18,7 @@ import {
   Sigma,
   Table2,
   Terminal,
+  Zap,
 } from 'lucide-react'
 
 import { cn } from '@/lib/cn'
@@ -43,6 +44,7 @@ const ICONS: Record<NodeKind, typeof Table2> = {
   tables: Folder,
   views: Folder,
   routines: Folder,
+  triggers: Folder,
   // Drawn as a folder, being one, and its files as the archives they are — the one branch of the
   // tree whose leaves are on this machine rather than on the server.
   backups: Folder,
@@ -51,6 +53,7 @@ const ICONS: Record<NodeKind, typeof Table2> = {
   view: Eye,
   procedure: Terminal,
   function: Sigma,
+  trigger: Zap,
   fields: Folder,
   field: Columns3,
   indexes: Folder,
@@ -71,12 +74,14 @@ const COLOURS: Record<NodeKind, string> = {
   tables: 'text-kind-table',
   views: 'text-kind-view',
   routines: 'text-kind-routine',
+  triggers: 'text-kind-trigger',
   backups: 'text-kind-backup',
   backup: 'text-kind-backup',
   table: 'text-kind-table',
   view: 'text-kind-view',
   procedure: 'text-kind-routine',
   function: 'text-kind-routine',
+  trigger: 'text-kind-trigger',
   fields: 'text-kind-field',
   field: 'text-kind-field',
   indexes: 'text-kind-index',

@@ -23,16 +23,16 @@ interface SourceEditorProps {
   sessionId: string
   profileId: string
   namespace: Namespace
-  /** Which view or routine is being edited. */
+  /** Which view, routine or trigger is being edited. */
   source: SourceRef
   /** Whether it is being declared rather than altered — see `SourceTab.creating`. */
   creating: boolean
 }
 
 /**
- * A view's or a routine's definition, edited as the statement it is. It is `TableDesigner`'s
- * counterpart for the two objects a grid of fields could never describe: a view is a query and a
- * routine is a program.
+ * A view's, a routine's or a trigger's definition, edited as the statement it is. It is
+ * `TableDesigner`'s counterpart for the objects a grid of fields could never describe: a view is a
+ * query, and a routine and a trigger are both programs.
  *
  * **The buffer is the whole `CREATE` statement**, as the server answered with it, and it travels
  * back verbatim. That is what makes a routine body work with no `DELIMITER` anywhere: a definition
@@ -76,7 +76,7 @@ export function SourceEditor({
     setError(null)
     try {
       const text = creating
-        ? await schema.newSource(sessionId, namespace, source.kind, source.name)
+        ? await schema.newSource(sessionId, namespace, source)
         : (await schema.loadSource(sessionId, namespace, source)).definition
       setDefinition(text)
     } catch (thrown) {

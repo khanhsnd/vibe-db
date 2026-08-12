@@ -10,6 +10,7 @@ The tree has as many levels, and as many folders, as the engine does:
 MySQL         connection → database →          Tables       → table      → Fields       → field
 PostgreSQL    connection → database → schema →  Views        → view              Indexes      → index
                                                 Functions    → function          Foreign Keys → foreign key
+                                                Triggers     → trigger
                                                 Backups      → backup
 
 MongoDB       connection → database →          Collections  → collection → Fields  → field
@@ -18,13 +19,15 @@ MongoDB       connection → database →          Collections  → collection �
 
 **`Backups` is the one folder under a namespace that stands for nothing on the server**: what is in
 it is files on this machine. It asks the server nothing, it is **not filled by the read the other
-three share** — so it has a Refresh of its own — and a press on it both expands the branch and opens
+four share** — so it has a Refresh of its own — and a press on it both expands the branch and opens
 the list beside it. See [features/backup.md](backup.md#the-branch).
 
 **A folder for something the engine has not got is not drawn.** MongoDB has no stored routines —
-server-side JavaScript was removed from the server — and no referential constraints of any kind, so
-neither folder appears rather than appearing permanently empty. `EngineInfo.hasRoutines` and
-`hasForeignKeys` are what say so, and a component never compares against an engine's name.
+server-side JavaScript was removed from the server — no triggers, a change stream being something a
+*client* watches rather than a program the server keeps, and no referential constraints of any kind,
+so none of those folders appears rather than appearing permanently empty. `EngineInfo.hasRoutines`,
+`hasTriggers` and `hasForeignKeys` are what say so, and a component never compares against an
+engine's name.
 
 **What a thing is called is the engine's too.** A collection is not a table and a document is not a
 row, so `engineWords` supplies the nouns for the tree's folder, the right-click menu, the object list
@@ -35,18 +38,18 @@ document store cannot have one, which is also why MongoDB is offered `Empty` alo
 storage to reset, so truncating and emptying would be one command under two names.
 
 Each level loads on first expand and is cached until disconnect: a PostgreSQL database loads its
-schemas, whichever node owns the object folders loads **its tables, views and routines in one
-read**, and a table loads its shape — fields, indexes and foreign keys, also in one read. The reason
-is the same both times: expanding any one folder needs every folder's count, so one read answers all
-three — which is why that read happens on **the namespace's own expand** and not on its folders':
-the three folders arrive with their counts already on them, and there is no second click that only
-fills in numbers. Clicking the node that owns tables — a MySQL database, a PostgreSQL schema, a
+schemas, whichever node owns the object folders loads **its tables, views, routines and triggers in
+one read**, and a table loads its shape — fields, indexes and foreign keys, also in one read. The
+reason is the same both times: expanding any one folder needs every folder's count, so one read
+answers all of them — which is why that read happens on **the namespace's own expand** and not on its
+folders': the folders arrive with their counts already on them, and there is no second click that
+only fills in numbers. Clicking the node that owns tables — a MySQL database, a PostgreSQL schema, a
 MongoDB database — marks it the active namespace for that connection, which is what a new query tab
 inherits, and the row is drawn in the success colour to say so.
 
 **A namespace's badge is how much is in it, and a Redis database's is how many keys.** On every other
-engine that number is what the read already listed — tables, views and routines added up — but a key
-space lists one fixed table, so counting the list would say `1` of every database on the server. The
+engine that number is what the read already listed — tables, views, routines and triggers added up —
+but a key space lists one fixed table, so counting the list would say `1` of every database. The
 count is the server's own `DBSIZE`, arriving with that same read, so the reader can tell which of the
 sixteen databases has anything in it. See [architecture.md](../architecture.md#the-key-value-store).
 
@@ -58,13 +61,23 @@ few hundred, `_id` always among them. What that costs, and where it shows, is in
 A **view opens its rows in the same tab a table does**, and lands there read-only: no column of a
 view is a primary key, so no single stored row can be named. A **function or a procedure** carries
 its argument list as its badge, because on PostgreSQL two of them may share a name and be told apart
-only by what they take — which is also why dropping one sends the whole routine and not its name.
+only by what they take. A **trigger** carries the table it fires on, which is the one fact about a
+trigger its name does not hold — and on PostgreSQL is half of what names one, a trigger name there
+being unique per table rather than per schema. That is why dropping either sends the whole reference
+and not the name.
 
-All three have a **definition**, which is the one thing about them no grid could draw, and it is
-opened from the same right-click: `Design View`, `Design Function`, `Design Procedure`, and a `New …`
-beside each — on the object and on the folder that holds it. What that tab is, and why a Save drops
-before it creates, is [definitions.md](definitions.md). It is not offered where an engine's objects
-are not declared by a statement at all (`EngineInfo.hasSource`), which is MongoDB and Redis.
+**A trigger is listed under the namespace and not under its table.** Every one of these catalogues
+answers at that level, and the folders under a table are its *shape* — fields, indexes, keys — where
+a trigger is a program. The one place the table matters is where a new one is declared: `New Trigger…`
+is on the **table's** right-click, the only row that names one, and the `Triggers` folder says so
+rather than offering an item that could not address anything.
+
+All four have a **definition**, which is the one thing about them no grid could draw, and it is
+opened from the same right-click — `Design View`, `Design Function`, `Design Procedure`,
+`Design Trigger` — or by double-clicking the row, which for an object that is nothing but a
+definition is what "open it" means. What that tab is, and why a Save drops before it creates, is
+[definitions.md](definitions.md). None of it is offered where an engine's objects are not declared by
+a statement at all (`EngineInfo.hasSource`), which is MongoDB and Redis.
 
 A field carries its **bare** type as a badge and a key icon when it is part of the primary key; an
 index carries its columns, and a foreign key the table it points at. The badge is the bare type and

@@ -60,13 +60,13 @@ func (s *session) CreateStatements(
 }
 
 // Source asks MySQL for its own words, exactly as CreateStatements does and for the same reason:
-// `SHOW CREATE VIEW` and `SHOW CREATE PROCEDURE` / `FUNCTION` report the whole declaration — the
-// algorithm, the definer, the SQL security, the parameter list and the body — and no read of
-// information_schema puts all of that back together.
+// `SHOW CREATE VIEW`, `SHOW CREATE PROCEDURE` / `FUNCTION` and `SHOW CREATE TRIGGER` report the
+// whole declaration — the algorithm, the definer, the SQL security, the parameter list and the body
+// — and no read of information_schema puts all of that back together.
 //
 // **The answer's columns differ by statement and by version**, so the row is scanned into as many
-// strings as it turned out to have and the declaration is taken by the name of its column: every
-// one of these statements calls it `Create <something>`, and nothing else here has to know which.
+// strings as it turned out to have and the declaration is taken by the name of its column — see
+// `declaration`, which is where the one statement that does not call it `Create …` is named.
 func (s *session) Source(
 	ctx context.Context,
 	ns driver.Namespace,
@@ -104,7 +104,7 @@ func (s *session) Source(
 	}
 
 	for at, column := range names {
-		if !strings.HasPrefix(column, "Create ") || cells[at] == nil {
+		if !declaration(column) || cells[at] == nil {
 			continue
 		}
 		return driver.Source{
@@ -113,6 +113,16 @@ func (s *session) Source(
 		}, nil
 	}
 	return driver.Source{}, domain.Unsupported("reading this definition: the server did not answer with one")
+}
+
+// declaration says which column of a SHOW CREATE answer holds the statement. Every one of them
+// calls it `Create <something>` except the trigger's, which calls it what it is — MySQL keeps a
+// trigger as the text that was submitted rather than as a declaration it rebuilds, so the rest of
+// that text is the reader's own spelling and the table inside it is usually bare. What makes such a
+// definition land where it was read from is that a save is run *inside* its database — see
+// `sqlkit.DDL.Pin`.
+func declaration(column string) bool {
+	return strings.HasPrefix(column, "Create ") || column == "SQL Original Statement"
 }
 
 // qualified names the database in a declaration the server answered with, which names the object

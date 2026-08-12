@@ -8,12 +8,12 @@ with server version and latency, connect / disconnect, **an environment label th
 connection everywhere and stands between the reader and a statement they cannot take back**,
 **laying a script out and warning about it before it runs**, **a value viewer that reads a cell as
 the JSON, GeoJSON, array or blob it holds**, **creating and dropping a database**,
-**tables, views and routines listed per namespace**, **a table list of what the catalogue keeps about
+**tables, views, routines and triggers listed per namespace**, **a table list of what the catalogue keeps about
 each table**, **a table's fields, indexes and foreign keys in
 the tree and in a designer tab**, **schema changes from the tree's context menu** — new / rename /
 empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index or a
-foreign key, drop a view or a routine — **reading and writing the definition of a view, a function
-or a procedure**, **a namespace drawn as boxes and the foreign keys between them, arranged, annotated
+foreign key, drop a view, a routine or a trigger — **reading and writing the definition of a view, a
+function, a procedure or a trigger**, **a namespace drawn as boxes and the foreign keys between them, arranged, annotated
 and exported — with a dragged line declaring a key**, table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **exporting a grid to CSV, JSON
 or SQL**, **backing a SQL namespace up into a folder the app keeps, and restoring
@@ -51,7 +51,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | Comparing two tables, and making them agree | [features/compare.md](features/compare.md) |
 | Drawing a namespace as boxes and the lines between them | [features/diagram.md](features/diagram.md) |
 | The tree's schema changes, `New Database`, and the designer | [features/schema-changes.md](features/schema-changes.md) |
-| A view's or a routine's definition: reading it, declaring one, and saving it back | [features/definitions.md](features/definitions.md) |
+| A view's, a routine's or a trigger's definition: reading it, declaring one, and saving it back | [features/definitions.md](features/definitions.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |
 | Backing a namespace up, the list of backups, and restoring one | [features/backup.md](features/backup.md) |
 | Running the engine's own mongodump, mysqldump or pg_dump — and putting one back | [features/tools.md](features/tools.md) |

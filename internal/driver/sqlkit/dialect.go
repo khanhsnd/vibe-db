@@ -120,10 +120,11 @@ type Dialect struct {
 	// an object, refuses a qualified name on the create and takes one on the drop, which is why
 	// this is not simply IndexIsObject.
 	QualifiesIndexName bool
-	// IndexTableIsBare says the table of a CREATE INDEX carries no namespace, because the index's
-	// own name already did — SQLite, whose grammar puts the schema on the index and refuses one on
-	// the table. It goes with QualifiesIndexName rather than replacing it: Oracle qualifies both.
-	IndexTableIsBare bool
+	// ObjectTableIsBare says the table an index or a trigger is declared *on* carries no namespace,
+	// because the object's own name already did — SQLite, whose grammar puts the schema on the index
+	// and on the trigger and refuses one on the table. It goes with QualifiesIndexName rather than
+	// replacing it: Oracle qualifies both.
+	ObjectTableIsBare bool
 	// DropsIndexOnTable says an index is dropped by naming it *and* its table — SQL Server's
 	// `DROP INDEX i ON t`, which is neither of the other two spellings.
 	DropsIndexOnTable bool
@@ -156,45 +157,69 @@ type Dialect struct {
 	// piece of that syntax the engines spell differently: `\b` on MySQL's ICU and in Go, and `\y` on
 	// PostgreSQL, where `\b` is a backspace.
 	WordBoundary string
-	// Starters is what a reader begins a *new* view or routine from — see SourceStarter.
+	// TriggerOnTable says a trigger is dropped by naming its table as well as itself — PostgreSQL's
+	// `DROP TRIGGER t ON tbl`, a trigger name there being unique per table rather than per schema.
+	// Everywhere else a trigger is an object of the schema and its own qualified name finds it.
+	TriggerOnTable bool
+	// Starters is what a reader begins a *new* view, routine or trigger from — see SourceStarter.
 	Starters SourceStarter
 }
 
-// SourceStarter is the skeleton a reader starts a new view or routine from: the shape of the
-// declaration with nothing in it yet. It is a **flag** in the sense every other difference here is
-// — three strings per engine — and it is the dialect's rather than the frontend's for the reason
+// SourceStarter is the skeleton a reader starts a new view, routine or trigger from: the shape of
+// the declaration with nothing in it yet. It is a **flag** in the sense every other difference here
+// is — four strings per engine — and it is the dialect's rather than the frontend's for the reason
 // nothing outside a driver ever spells a statement.
 //
-// The three differ in *grammar* rather than in quoting, which is why one speller could not do it:
+// The four differ in *grammar* rather than in quoting, which is why one speller could not do it:
 // MySQL wraps a routine's body in `BEGIN … END`, PostgreSQL puts it in a string tagged with the
-// language it is written in, SQL Server opens with `AS`, and Oracle says `IS`. No reader should
-// have to remember which, and an engine with no routines at all leaves both blank.
+// language it is written in, SQL Server opens with `AS`, and Oracle says `IS`. A trigger's shape
+// diverges further still — PostgreSQL's fires a function it cannot declare inline, and SQL Server's
+// has no `FOR EACH ROW` at all. No reader should have to remember which, and an engine with no
+// routines leaves those blank.
 //
-// Each holds one `%s`, which is the qualified name — the same name every other statement here is
-// addressed by. Nothing runs one of these: what a Save runs is the reader's own buffer, which
-// SourceStatements previews whole.
+// Each holds `%s`, the qualified name every other statement here is addressed by, and a trigger's
+// also holds `%t`, the qualified table it fires on — a trigger being the one of these declared
+// *about* something else. Nothing runs one of these: what a Save runs is the reader's own buffer,
+// which SourceStatements previews whole.
 type SourceStarter struct {
 	View      string
 	Function  string
 	Procedure string
+	Trigger   string
 }
 
-// NewSource is the starter for this kind, addressed to a name. An engine that has no such object
-// answers with nothing, which is what the frontend reads as "there is no starter" — it does not
-// offer a New for a kind this engine has not got in the first place.
-func (d Dialect) NewSource(ns driver.Namespace, kind driver.SourceKind, name string) string {
+// NewSource is the starter for this kind, addressed to the object it declares. An engine that has
+// no such object answers with nothing, which is what the frontend reads as "there is no starter" —
+// it does not offer a New for a kind this engine has not got in the first place.
+//
+// Both placeholders are filled in **one pass**, so a name holding the other's marker is a name and
+// not a second substitution.
+func (d Dialect) NewSource(ns driver.Namespace, ref driver.SourceRef) string {
 	starter := d.Starters.View
-	switch kind {
+	switch ref.Kind {
 	case driver.SourceFunction:
 		starter = d.Starters.Function
 	case driver.SourceProcedure:
 		starter = d.Starters.Procedure
+	case driver.SourceTrigger:
+		starter = d.Starters.Trigger
 	}
 
 	if starter == "" {
 		return ""
 	}
-	return strings.ReplaceAll(starter, "%s", d.Table(ns, name))
+
+	// A trigger is addressed by the two names its own statements take, which on two engines are not
+	// the ones every other statement here writes — see TriggerName and ObjectTable.
+	name := d.Table(ns, ref.Name)
+	if ref.Kind == driver.SourceTrigger {
+		name = d.TriggerName(ns, ref.Name)
+	}
+
+	return strings.NewReplacer(
+		"%s", name,
+		"%t", d.TriggerTable(ns, ref.Table),
+	).Replace(starter)
 }
 
 // PatternIgnoresCase says this engine's own collation already makes LIKE blind to case, so a match
@@ -224,6 +249,10 @@ var (
 			Function: "CREATE FUNCTION %s()\n" +
 				"RETURNS INT\nDETERMINISTIC\nBEGIN\n  RETURN 0;\nEND",
 			Procedure: "CREATE PROCEDURE %s()\nBEGIN\n  SELECT 1;\nEND",
+			// A trigger body may not return rows, so the placeholder statement is an assignment
+			// rather than the `SELECT 1` a procedure starts from.
+			Trigger: "CREATE TRIGGER %s\nBEFORE INSERT ON %t\nFOR EACH ROW\n" +
+				"BEGIN\n  SET @unused = 1;\nEND",
 		},
 	}
 	Postgres = Dialect{
@@ -240,12 +269,17 @@ var (
 		ForeignKeyIsConstraint: true,
 		TextType:               "TEXT",
 		WordBoundary:           `\y`,
+		TriggerOnTable:         true,
 		Starters: SourceStarter{
 			View: "CREATE OR REPLACE VIEW %s AS\nSELECT 1",
 			Function: "CREATE OR REPLACE FUNCTION %s()\nRETURNS integer\nLANGUAGE plpgsql\n" +
 				"AS $$\nBEGIN\n  RETURN 0;\nEND;\n$$",
 			Procedure: "CREATE OR REPLACE PROCEDURE %s()\nLANGUAGE plpgsql\n" +
 				"AS $$\nBEGIN\n  NULL;\nEND;\n$$",
+			// A PostgreSQL trigger has no body of its own: it *calls* a function declared
+			// separately, which is why this skeleton names one rather than opening a BEGIN.
+			Trigger: "CREATE TRIGGER %s\nBEFORE INSERT ON %t\nFOR EACH ROW\n" +
+				"EXECUTE FUNCTION trigger_function()",
 		},
 	}
 	// SQLite is one file and therefore one namespace: `main`, which every name is qualified by
@@ -260,7 +294,7 @@ var (
 		MergesOnConflict:       true,
 		IndexIsObject:          true,
 		QualifiesIndexName:     true,
-		IndexTableIsBare:       true,
+		ObjectTableIsBare:      true,
 		KeepsColumnAsDeclared:  true,
 		ForeignKeyIsConstraint: true,
 		TextType:               "TEXT",
@@ -268,8 +302,12 @@ var (
 		MatchesByRegex:         true,
 		WordBoundary:           `\b`,
 		// A function here belongs to the program that opened the file, so there is no routine to
-		// start — which is the same thing `hasRoutines` says on the frontend.
-		Starters: SourceStarter{View: "CREATE VIEW %s AS\nSELECT 1"},
+		// start — which is the same thing `hasRoutines` says on the frontend. A trigger is the one
+		// program a SQLite file *does* hold, and its body is statements rather than a language.
+		Starters: SourceStarter{
+			View:    "CREATE VIEW %s AS\nSELECT 1",
+			Trigger: "CREATE TRIGGER %s\nAFTER INSERT ON %t\nBEGIN\n  SELECT 1;\nEND",
+		},
 	}
 	// SQLServer names a table by its database *and* its schema, which is what lets one pool read
 	// the whole server. A default there is a constraint rather than a fact of the column, so an
@@ -300,6 +338,9 @@ var (
 			View:      "CREATE VIEW %s AS\nSELECT 1 AS one",
 			Function:  "CREATE FUNCTION %s()\nRETURNS int\nAS\nBEGIN\n  RETURN 0\nEND",
 			Procedure: "CREATE PROCEDURE %s\nAS\nBEGIN\n  SET NOCOUNT ON;\nEND",
+			// SQL Server has no FOR EACH ROW: a trigger there fires once for the statement and reads
+			// the rows out of `inserted` and `deleted`.
+			Trigger: "CREATE TRIGGER %s\nON %t\nAFTER INSERT\nAS\nBEGIN\n  SET NOCOUNT ON;\nEND",
 		},
 	}
 	// Oracle has no databases below its service, so the schema *is* what a Namespace's Database
@@ -327,6 +368,8 @@ var (
 			View:      "CREATE OR REPLACE VIEW %s AS\nSELECT 1 FROM dual",
 			Function:  "CREATE OR REPLACE FUNCTION %s\nRETURN NUMBER\nIS\nBEGIN\n  RETURN 0;\nEND;",
 			Procedure: "CREATE OR REPLACE PROCEDURE %s\nIS\nBEGIN\n  NULL;\nEND;",
+			Trigger: "CREATE OR REPLACE TRIGGER %s\nBEFORE INSERT ON %t\nFOR EACH ROW\n" +
+				"BEGIN\n  NULL;\nEND;",
 		},
 	}
 	// Shell is the lexical half of a document store's own language, and is a Dialect for one

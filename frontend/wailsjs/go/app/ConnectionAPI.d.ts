@@ -50,11 +50,9 @@ export function DropForeignKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:s
 
 export function DropIndex(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
 
-export function DropRoutine(arg1:string,arg2:app.Namespace,arg3:app.RoutineInfo):Promise<void>;
+export function DropSource(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<void>;
 
 export function DropTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
-
-export function DropView(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
 
 export function DumpObjects(arg1:string,arg2:app.DumpInput):Promise<string>;
 
@@ -106,7 +104,7 @@ export function LoadTableStructure(arg1:string,arg2:app.Namespace,arg3:string):P
 
 export function LoadToolkit(arg1:string):Promise<app.Toolkit>;
 
-export function NewSource(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<string>;
+export function NewSource(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<string>;
 
 export function OpenBackupFolder(arg1:string,arg2:app.Namespace):Promise<void>;
 

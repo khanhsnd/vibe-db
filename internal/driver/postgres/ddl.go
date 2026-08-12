@@ -149,6 +149,11 @@ func (s *session) CreateStatements(
 // arguments as well as its name, because on this engine two functions may share the name — the
 // same reason a drop carries them.
 //
+// A **trigger** is answered for whole as well: `pg_get_triggerdef` writes the entire `CREATE
+// TRIGGER`, its timing, its events, its condition and the function it calls. It is found by its
+// table as well as its name, because on this engine a trigger name is unique per table rather than
+// per schema — the same reason a drop names both.
+//
 // A **view** is not: `pg_get_viewdef` answers with the SELECT and nothing else, there being no
 // catalogue function that writes the CREATE. So the CREATE is put in front of it here, which is
 // the driver's to spell like every other statement — and it is spelled `OR REPLACE`, since that is
@@ -158,10 +163,33 @@ func (s *session) Source(
 	ns driver.Namespace,
 	ref driver.SourceRef,
 ) (driver.Source, error) {
-	if ref.Kind == driver.SourceView {
+	switch ref.Kind {
+	case driver.SourceView:
 		return s.viewSource(ctx, ns, ref)
+	case driver.SourceTrigger:
+		return s.triggerSource(ctx, ns, ref)
+	default:
+		return s.routineSource(ctx, ns, ref)
 	}
-	return s.routineSource(ctx, ns, ref)
+}
+
+func (s *session) triggerSource(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	const query = `
+		SELECT pg_catalog.pg_get_triggerdef(t.oid, true)
+		FROM pg_catalog.pg_trigger t
+		JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1 AND c.relname = $2 AND t.tgname = $3 AND NOT t.tgisinternal`
+
+	definition, err := s.sourceText(ctx, ns.Database, query, ns.Schema, ref.Table, ref.Name)
+	if err != nil {
+		return driver.Source{}, err
+	}
+	return driver.Source{SourceRef: ref, Definition: strings.TrimSpace(definition)}, nil
 }
 
 func (s *session) viewSource(

@@ -214,24 +214,26 @@ type TableSchema struct {
 // Routine is one stored function or procedure. Arguments is the identity argument list, which
 // is what PostgreSQL needs to tell two overloads of one name apart and what MySQL, whose
 // routine names are unique, leaves empty.
+//
+// It is a *listing*, and what every statement about one is addressed by is a SourceRef built from
+// it — which is the frontend's to build, the tree's row being where those facts are held.
 type Routine struct {
 	Name      string
 	Procedure bool
 	Arguments string
 }
 
-// Source is the routine as the thing a definition is read and written by, which is the same
-// three facts under the name every statement about one uses.
-func (r Routine) Source() SourceRef {
-	kind := SourceFunction
-	if r.Procedure {
-		kind = SourceProcedure
-	}
-	return SourceRef{Kind: kind, Name: r.Name, Arguments: r.Arguments}
+// Trigger is one trigger of a namespace, named beside the table it fires on. A trigger is the one
+// declared object that is *about* another, so the table travels with the name everywhere the name
+// goes: PostgreSQL will not drop one without being told which table it is on, and no engine will
+// declare one without being told either.
+type Trigger struct {
+	Name  string
+	Table string
 }
 
-// SourceKind is which of the three declared objects a definition belongs to. It is one value
-// rather than a flag beside a flag because the three differ in exactly one word — the one that
+// SourceKind is which of the four declared objects a definition belongs to. It is one value
+// rather than a flag beside a flag because they differ in exactly one word — the one that
 // drops them — and a caller that has the kind has the word.
 type SourceKind string
 
@@ -239,6 +241,7 @@ const (
 	SourceView      SourceKind = "view"
 	SourceFunction  SourceKind = "function"
 	SourceProcedure SourceKind = "procedure"
+	SourceTrigger   SourceKind = "trigger"
 )
 
 // Keyword is the word the engines name this kind of object by, and is total on purpose: a kind
@@ -250,18 +253,23 @@ func (k SourceKind) Keyword() string {
 		return "PROCEDURE"
 	case SourceFunction:
 		return "FUNCTION"
+	case SourceTrigger:
+		return "TRIGGER"
 	default:
 		return "VIEW"
 	}
 }
 
-// SourceRef names one view or one routine. Arguments is PostgreSQL's overload discriminator and
-// is empty wherever a name already identifies one — the same field, for the same reason, that
-// Routine carries.
+// SourceRef names one view, one routine or one trigger. The two fields beside the name are each
+// one engine's way of saying which one: Arguments is PostgreSQL's overload discriminator, since
+// two of its functions may share a name, and Table is the table a trigger fires on, since a
+// trigger is declared and dropped *about* a table rather than on its own. Both are empty wherever
+// the name already identifies the object.
 type SourceRef struct {
 	Kind      SourceKind
 	Name      string
 	Arguments string
+	Table     string
 }
 
 // Source is one view or one routine as the statement that declares it: what a reader is shown,
@@ -292,6 +300,9 @@ type Objects struct {
 	Tables   []string
 	Views    []string
 	Routines []Routine
+	// Triggers is every trigger of the namespace rather than of one table, because that is the
+	// level the catalogue answers at on all five engines and the level the tree draws a folder for.
+	Triggers []Trigger
 	// KeyCount is how many keys the namespace holds, on an engine whose namespace is a key space.
 	// It is what "how much is in here" means there — the lists above are one fixed table and say
 	// nothing — and is zero on every engine that answers the question by being listed.
@@ -717,10 +728,13 @@ type Schema interface {
 	// rather than described: a declaration put back together out of a catalogue is only ever as
 	// complete as the catalogue's columns.
 	CreateStatements(ctx context.Context, ns Namespace, table string) ([]string, error)
-	DropView(ctx context.Context, ns Namespace, view string) error
-	// DropRoutine takes the whole routine rather than its name, because on PostgreSQL the
-	// name alone does not identify one: two functions may share it and differ in arguments.
-	DropRoutine(ctx context.Context, ns Namespace, routine Routine) error
+	// DropSource removes one view, routine or trigger. It takes the whole reference rather than a
+	// name because on three of the four kinds the name alone does not identify one: two PostgreSQL
+	// functions may share it and differ in arguments, and a trigger is dropped about its table.
+	//
+	// One method for all four because they differ in exactly one word, which the kind supplies —
+	// the same reason `Dialect.DropSource` is one speller.
+	DropSource(ctx context.Context, ns Namespace, ref SourceRef) error
 	// Source reads one view or one routine as the statement that declares it. It is the read a
 	// designer opens on, and it is the driver's for the reason every other declaration is: only
 	// the engine knows where it keeps one, and four of the five will answer for themselves.
@@ -745,9 +759,12 @@ type Schema interface {
 	// `BEGIN … END`, PostgreSQL's language-tagged string and Oracle's `IS` are one intention
 	// spelled three ways.
 	//
+	// It takes the whole reference rather than a name because a trigger's skeleton addresses two
+	// things: the trigger, and the table it fires on.
+	//
 	// It runs nothing and needs no connection. An engine with no such object answers with the
 	// empty string, which is what the frontend reads as there being nothing to start.
-	NewSource(ns Namespace, kind SourceKind, name string) string
+	NewSource(ns Namespace, ref SourceRef) string
 }
 
 type Session interface {

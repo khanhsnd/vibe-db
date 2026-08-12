@@ -1,8 +1,9 @@
-import type { Engine, Namespace, Routine } from '@/bridge/connections'
+import type { Engine, Namespace, Routine, Trigger } from '@/bridge/connections'
+import type { SourceRef } from '@/bridge/schema'
 
 /**
- * A folder is named after what it holds — `tables`, `views`, `routines` — the way a table's own
- * folders are, so a right-click knows what it is over without a second field to say so.
+ * A folder is named after what it holds — `tables`, `views`, `routines`, `triggers` — the way a
+ * table's own folders are, so a right-click knows what it is over without a second field to say so.
  */
 export type NodeKind =
   | 'connection'
@@ -11,6 +12,7 @@ export type NodeKind =
   | 'tables'
   | 'views'
   | 'routines'
+  | 'triggers'
   // The one folder under a namespace that stands for nothing on the server, and the files in it:
   // a shelf on this machine. It is filled by a read of its own — see `isObjectFolder`.
   | 'backups'
@@ -19,6 +21,7 @@ export type NodeKind =
   | 'view'
   | 'procedure'
   | 'function'
+  | 'trigger'
   | 'fields'
   | 'field'
   | 'indexes'
@@ -57,6 +60,8 @@ export interface TreeNode {
   primaryKey?: boolean
   /** The routine a `procedure` or `function` row stands for, which is what a drop is addressed to. */
   routine?: Routine
+  /** The trigger a `trigger` row stands for — its name *and* its table, which is what names one. */
+  trigger?: Trigger
 }
 
 /**
@@ -87,10 +92,15 @@ export function isExpandable(node: TreeNode): boolean {
   return node.children !== undefined
 }
 
-const OBJECT_FOLDERS: ReadonlySet<NodeKind> = new Set(['tables', 'views', 'routines'])
+const OBJECT_FOLDERS: ReadonlySet<NodeKind> = new Set([
+  'tables',
+  'views',
+  'routines',
+  'triggers',
+])
 
 /**
- * Whether this node is one of a namespace's object folders. All three are filled by one read,
+ * Whether this node is one of a namespace's object folders. All four are filled by one read,
  * so opening any of them asks for the same thing.
  *
  * `backups` is deliberately not one. Nothing about it comes off the catalogue, so opening it must
@@ -115,10 +125,45 @@ export function hasRows(node: TreeNode): boolean {
   return node.kind === 'table' || node.kind === 'view'
 }
 
+/**
+ * What this row names, for the objects a definition is opened and dropped by. It is here rather
+ * than in a menu because it is a fact about the *node*: three of the four kinds are not identified
+ * by their label alone — a routine carries the arguments that tell two of one name apart, and a
+ * trigger carries the table it fires on.
+ *
+ * `null` is a row that names nothing this way, which is every other row in the tree and a routine
+ * or trigger row the catalogue never filled in.
+ */
+export function sourceRefOf(node: TreeNode): SourceRef | null {
+  if (node.kind === 'view') {
+    return { kind: 'view', name: node.label, arguments: '', table: '' }
+  }
+
+  if (node.kind === 'trigger') {
+    const trigger = node.trigger
+    return trigger
+      ? { kind: 'trigger', name: trigger.name, arguments: '', table: trigger.table }
+      : null
+  }
+
+  if (node.kind !== 'function' && node.kind !== 'procedure') return null
+
+  const routine = node.routine
+  return routine
+    ? {
+        kind: routine.procedure ? 'procedure' : 'function',
+        name: routine.name,
+        arguments: routine.arguments,
+        table: '',
+      }
+    : null
+}
+
 const FOLDERS: ReadonlySet<NodeKind> = new Set([
   'tables',
   'views',
   'routines',
+  'triggers',
   'backups',
   'fields',
   'indexes',

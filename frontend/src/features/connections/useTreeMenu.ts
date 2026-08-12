@@ -12,7 +12,7 @@ import {
 } from '@/bridge/connections'
 import { databases } from '@/bridge/databases'
 import { ICON } from '@/shared/ui/menuIcons'
-import { NEW_SOURCE, schema, type SourceKind, type SourceRef } from '@/bridge/schema'
+import { NEW_SOURCE, schema, type SourceKind } from '@/bridge/schema'
 import type { TableColumn } from '@/bridge/tables'
 import { backupActions, type BackupActions } from '@/features/backup/backupActions'
 import type { DumpTarget } from '@/features/backup/DumpDialog'
@@ -33,7 +33,7 @@ import {
 } from '@/stores/tabs'
 
 import { colourSwatch } from './ConnectionColour'
-import { ownsObjects, type TreeNode } from './tree'
+import { ownsObjects, sourceRefOf, type TreeNode } from './tree'
 
 interface TreeMenuActions {
   onConnect: (profile: Profile) => void
@@ -322,7 +322,7 @@ export function useTreeMenu(
         onSelect: () => void refreshBackups(node.profileId, ns),
       }
 
-      // One read fills all three folders, so Refresh means the same thing wherever it is asked
+      // One read fills every object folder, so Refresh means the same thing wherever it is asked
       // for under a namespace.
       const refreshObjectList: MenuItem = {
         label: 'Refresh',
@@ -393,6 +393,19 @@ export function useTreeMenu(
           return [...newSourceItems(kinds, on.create), refreshObjectList]
         }
 
+        // The one object folder with no New of its own: a trigger is declared *about* a table, and
+        // this folder names none. So the item stays and **says where it is** rather than vanishing —
+        // the same rule Compare follows with its second table, and for the same reason.
+        case 'triggers':
+          return [
+            {
+              label: 'New Trigger — right-click a table',
+              icon: ICON.add,
+              disabled: true,
+            },
+            refreshObjectList,
+          ]
+
         // The one folder under a namespace whose menu asks no server anything. Restore is not here:
         // a restore is addressed to *one* file, and the file is what carries it — the folder offers
         // the list instead, which is where the reader sees which files there are.
@@ -424,7 +437,16 @@ export function useTreeMenu(
             openFolder: () => void openBackupFolder(node.profileId, ns),
           })
 
-        case 'table':
+        // A trigger is declared *about* a table, and this is the only node that names one — which is
+        // why New Trigger is offered here and nowhere else, the `Triggers` folder saying so instead.
+        case 'table': {
+          const trigger = sourceActions(
+            node.profileId,
+            ns,
+            { ...NEW_SOURCE, kind: 'trigger', table: node.label },
+            { ask, changeSchema, openSource: onOpenSource },
+          )
+
           return tableItems(
             on,
             () => void refreshStructure(node.profileId, ns, node.label),
@@ -432,7 +454,11 @@ export function useTreeMenu(
             wizards(node.label),
             compareItem(picked, onCompare),
             info,
+            info.hasTriggers && info.hasSource
+              ? newSourceItems(TRIGGER_KIND, trigger.create)
+              : [],
           )
+        }
 
         // A view has rows and a shape like a table, so it compares like one — and it has a
         // *definition*, which is the one thing about it no grid could ever draw.
@@ -440,7 +466,7 @@ export function useTreeMenu(
           const on = sourceActions(
             node.profileId,
             ns,
-            { kind: 'view', name: node.label, arguments: '' },
+            { ...NEW_SOURCE, kind: 'view', name: node.label },
             { ask, changeSchema, openSource: onOpenSource },
           )
 
@@ -465,17 +491,14 @@ export function useTreeMenu(
         }
 
         // A routine is addressed by the whole of what the tree holds for it and never by its name:
-        // on PostgreSQL two functions may share one and be told apart only by what they take.
+        // on PostgreSQL two functions may share one and be told apart only by what they take. A
+        // trigger is the same arrangement under a different second fact — the table it fires on.
         case 'procedure':
-        case 'function': {
-          const routine = node.routine
-          if (!routine) return [{ ...refreshObjectList, separatorBefore: false }]
+        case 'function':
+        case 'trigger': {
+          const ref = sourceRefOf(node)
+          if (!ref) return [{ ...refreshObjectList, separatorBefore: false }]
 
-          const ref: SourceRef = {
-            kind: routine.procedure ? 'procedure' : 'function',
-            name: routine.name,
-            arguments: routine.arguments,
-          }
           const on = sourceActions(node.profileId, ns, ref, {
             ask,
             changeSchema,
@@ -607,6 +630,14 @@ export function backupItems(
 /** The kinds each object folder holds: no engine has a folder for a function alone. */
 const VIEW_KIND = ['view'] as const satisfies readonly SourceKind[]
 const ROUTINE_KINDS = ['function', 'procedure'] as const satisfies readonly SourceKind[]
+const TRIGGER_KIND = ['trigger'] as const satisfies readonly SourceKind[]
+
+/** The kinds a `New …` beside this one offers, which is whatever its own folder holds. */
+function siblingKinds(kind: SourceKind): readonly SourceKind[] {
+  if (kind === 'view') return VIEW_KIND
+  if (kind === 'trigger') return TRIGGER_KIND
+  return ROUTINE_KINDS
+}
 
 /**
  * Opening one of these definitions, and declaring another beside it — the pair every object with a
@@ -623,7 +654,7 @@ function sourceItems(
 
   return [
     { label: `Design ${SOURCE_NOUN[kind]}`, icon: ICON.design, onSelect: on.design },
-    ...newSourceItems(kind === 'view' ? VIEW_KIND : ROUTINE_KINDS, on.create),
+    ...newSourceItems(siblingKinds(kind), on.create),
   ]
 }
 
@@ -727,6 +758,10 @@ function connectionItems(
  * (`createsTables`). And **Truncate** is left out where it is not a second thing: on a document
  * store every document has to be deleted to empty a collection, and on a key space `FLUSHDB` is
  * both, so the two would be one command under two names (`hasTruncate`).
+ *
+ * `triggers` is the New a trigger has to be offered from, this being the only node that names the
+ * table one would fire on. It arrives built rather than being made here, for the reason `compare`
+ * does: what it opens is a definition tab, which no table action knows about.
  */
 export function tableItems(
   on: TableActions,
@@ -735,6 +770,7 @@ export function tableItems(
   wizards: MenuItem[],
   compare: MenuItem,
   info: EngineInfo = engineInfo(''),
+  triggers: MenuItem[] = [],
 ): MenuItem[] {
   const words = engineWords(info.value)
 
@@ -764,6 +800,9 @@ export function tableItems(
     // items under it all carry the table somewhere else.
     compare,
     ...declaring,
+    // With the rest of what is *declared* here, since that is what it is — and after them, a
+    // trigger being about the table rather than of it.
+    ...triggers,
     // Beside Duplicate rather than beside Delete: both copy the table, and the only difference is
     // whether the copy lands on this server or in a file.
     dump,

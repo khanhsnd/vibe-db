@@ -161,9 +161,12 @@ func (s *session) CreateStatements(
 }
 
 // Source asks the server for its own words, which is the one declaration SQL Server *does* keep:
-// `sys.sql_modules` holds the text of the statement that made every view, function and procedure,
-// exactly as it was submitted. That is why this is a read where CreateStatements above is a
-// description — a table's shape is derived from a dozen catalogue views, and a module is not.
+// `sys.sql_modules` holds the text of the statement that made every view, function, procedure and
+// trigger, exactly as it was submitted. That is why this is a read where CreateStatements above is
+// a description — a table's shape is derived from a dozen catalogue views, and a module is not.
+//
+// A trigger needs no branch of its own. It is an object of its table's schema and a module like the
+// rest, so the same join finds it under the same two names.
 //
 // `OBJECT_DEFINITION` is not used. It reads an object id in whatever database the connection is
 // pointed at, and this adapter has one pool for the whole server — so the read is qualified the

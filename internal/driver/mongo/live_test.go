@@ -310,7 +310,10 @@ func TestLiveAgainstARealServer(t *testing.T) {
 			}),
 			"dropping a foreign key": live.DropForeignKey(ctx, ns, "people", "fk"),
 			"another primary key":    live.SetPrimaryKey(ctx, ns, "people", []string{"name"}),
-			"a routine":              live.DropRoutine(ctx, ns, driver.Routine{Name: "f"}),
+			"a routine": live.DropSource(ctx, ns,
+				driver.SourceRef{Kind: driver.SourceFunction, Name: "f"}),
+			"a trigger": live.DropSource(ctx, ns,
+				driver.SourceRef{Kind: driver.SourceTrigger, Name: "t", Table: "people"}),
 		}
 
 		for what, err := range refusals {
@@ -519,8 +522,9 @@ func TestLiveAgainstARealServer(t *testing.T) {
 			t.Errorf("view rows = %d, want 2", len(rows.Rows))
 		}
 
-		if err := live.DropView(ctx, ns, "adults"); err != nil {
-			t.Fatalf("DropView() error = %v", err)
+		view := driver.SourceRef{Kind: driver.SourceView, Name: "adults"}
+		if err := live.DropSource(ctx, ns, view); err != nil {
+			t.Fatalf("DropSource(view) error = %v", err)
 		}
 	})
 

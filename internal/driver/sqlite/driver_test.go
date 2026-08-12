@@ -38,6 +38,7 @@ func openTestFile(t *testing.T) (*session, dbdriver.Namespace) {
 			user_id INTEGER REFERENCES users (id) ON DELETE CASCADE
 		);
 		CREATE VIEW recent AS SELECT * FROM orders;
+		CREATE TRIGGER users_audit AFTER INSERT ON users BEGIN SELECT 1; END;
 		INSERT INTO users (id, email) VALUES (1, 'ann@example.com'), (2, 'BOB@example.com');`
 
 	if _, err := seed.Exec(schema); err != nil {
@@ -86,6 +87,11 @@ func TestObjectsListsTablesAndViewsButNotTheEnginesOwn(t *testing.T) {
 	}
 	if len(objects.Routines) != 0 {
 		t.Errorf("routines = %v, want none: SQLite stores no routine", objects.Routines)
+	}
+	// A trigger is the one program a SQLite file does hold, and it is listed with the table it
+	// fires on — which is half of what names one.
+	if len(objects.Triggers) != 1 || objects.Triggers[0].Table != "users" {
+		t.Errorf("triggers = %+v, want one on users", objects.Triggers)
 	}
 }
 
@@ -228,6 +234,9 @@ func TestMatchingRowsAnswersEveryModeThroughTheRegisteredRegexp(t *testing.T) {
 
 // A dump here is the engine's own words: SQLite keeps the text of the statement that made each
 // object, so nothing is described back out of a catalogue.
+//
+// The table under test has a **trigger** on it, and the dump does not carry it: a trigger is filed
+// under the table it fires on but is not part of that table's declaration.
 func TestCreateStatementsAreTheDeclarationsTheFileHolds(t *testing.T) {
 	s, ns := openTestFile(t)
 
@@ -236,7 +245,7 @@ func TestCreateStatementsAreTheDeclarationsTheFileHolds(t *testing.T) {
 		t.Fatalf("CreateStatements: %v", err)
 	}
 	if len(statements) != 2 {
-		t.Fatalf("statements = %v, want the table and its index", statements)
+		t.Fatalf("statements = %v, want the table and its index alone", statements)
 	}
 	if got := statements[0]; got[:12] != "CREATE TABLE" {
 		t.Errorf("first statement = %q, want the table before its index", got)
@@ -485,13 +494,81 @@ func TestSourceRefusesAViewThatIsNotThere(t *testing.T) {
 }
 
 // There is no stored routine in a SQLite file — a function belongs to the program that opened it —
-// so a definition for one says which thing is missing rather than coming back blank.
+// so a definition for one says which thing is missing rather than coming back blank. A *trigger* is
+// the one program the file does hold, so the same two calls answer for it.
 func TestSourceRefusesARoutine(t *testing.T) {
 	s, ns := openTestFile(t)
+	ctx := context.Background()
 
 	ref := dbdriver.SourceRef{Kind: dbdriver.SourceFunction, Name: "tax"}
-	_, err := s.Source(context.Background(), ns, ref)
-	if !errors.Is(err, domain.ErrUnsupported) {
+	if _, err := s.Source(ctx, ns, ref); !errors.Is(err, domain.ErrUnsupported) {
 		t.Fatalf("Source = %v, want ErrUnsupported", err)
+	}
+	if err := s.DropSource(ctx, ns, ref); !errors.Is(err, domain.ErrUnsupported) {
+		t.Fatalf("DropSource = %v, want ErrUnsupported", err)
+	}
+}
+
+// The whole of a trigger's life against a real engine: the file's own words for it, the two
+// statements a save runs, the save itself, and the drop the tree offers.
+func TestTriggerIsReadSavedAndDropped(t *testing.T) {
+	s, ns := openTestFile(t)
+	ctx := context.Background()
+	ref := dbdriver.SourceRef{Kind: dbdriver.SourceTrigger, Name: "users_audit", Table: "users"}
+
+	source, err := s.Source(ctx, ns, ref)
+	if err != nil {
+		t.Fatalf("Source: %v", err)
+	}
+	want := "CREATE TRIGGER users_audit AFTER INSERT ON users BEGIN SELECT 1; END"
+	if source.Definition != want {
+		t.Errorf("Definition = %q, want %q", source.Definition, want)
+	}
+
+	// The definition is **one** statement however many semicolons its body holds, and nothing here
+	// re-lexes it: the drop and that same text, in that order.
+	statements := s.SourceStatements(ns, dbdriver.SourceSave{
+		Replaces:   ref,
+		Definition: source.Definition,
+	})
+	dropped := `DROP TRIGGER "main"."users_audit"`
+	if len(statements) != 2 || statements[0] != dropped || statements[1] != source.Definition {
+		t.Fatalf("SourceStatements = %#v", statements)
+	}
+
+	save := dbdriver.SourceSave{Replaces: ref, Definition: source.Definition}
+	if err := s.SaveSource(ctx, ns, save); err != nil {
+		t.Fatalf("SaveSource: %v", err)
+	}
+	if _, err := s.Source(ctx, ns, ref); err != nil {
+		t.Fatalf("Source after save: %v", err)
+	}
+
+	if err := s.DropSource(ctx, ns, ref); err != nil {
+		t.Fatalf("DropSource: %v", err)
+	}
+	if _, err := s.Source(ctx, ns, ref); !errors.Is(err, domain.ErrUnknownDefinition) {
+		t.Fatalf("Source after drop = %v, want ErrUnknownDefinition", err)
+	}
+}
+
+// A new trigger opens on the engine's own grammar addressed to the table it fires on, and what
+// makes that skeleton worth having is that the server accepts it as it stands.
+func TestNewTriggerSkeletonIsAStatementTheFileAccepts(t *testing.T) {
+	s, ns := openTestFile(t)
+	ctx := context.Background()
+	ref := dbdriver.SourceRef{Kind: dbdriver.SourceTrigger, Name: "orders_audit", Table: "orders"}
+
+	skeleton := s.NewSource(ns, ref)
+	if skeleton == "" {
+		t.Fatal("NewSource gave no skeleton for a trigger")
+	}
+
+	err := s.SaveSource(ctx, ns, dbdriver.SourceSave{Definition: skeleton})
+	if err != nil {
+		t.Fatalf("SaveSource(skeleton): %v\n%s", err, skeleton)
+	}
+	if _, err := s.Source(ctx, ns, ref); err != nil {
+		t.Fatalf("Source after declaring: %v", err)
 	}
 }

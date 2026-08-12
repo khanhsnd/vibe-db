@@ -73,8 +73,11 @@ export type Session = app.Session
 export type TestResult = app.TestResult
 export type TableSchema = app.TableSchema
 
-/** One stored function or procedure. It travels back into a drop unchanged — see `schema.dropRoutine`. */
+/** One stored function or procedure, as the tree lists it. */
 export type Routine = app.RoutineInfo
+
+/** One trigger, named beside the table it fires on — which is half of what names one. */
+export type Trigger = app.TriggerInfo
 
 /** Everything the tree draws a folder for under a namespace, read in one call. */
 export type Objects = app.Objects
@@ -304,6 +307,10 @@ export interface EngineInfo {
   // Whether this engine has stored functions and procedures at all. Server-side JavaScript was
   // removed from MongoDB, so there is no folder for the tree to draw.
   hasRoutines: boolean
+  // Whether this engine has triggers at all. Every SQL engine here does; a document store's change
+  // stream is something a *client* watches rather than a program the server keeps, and a key space
+  // has nothing to fire on — so neither has a folder.
+  hasTriggers: boolean
   // Whether emptying and truncating are two different things. They are on a table store, where one
   // deletes the rows and the other resets the storage; a collection has no storage to reset, so
   // offering both would be offering the same command twice under two names.
@@ -403,6 +410,7 @@ export const ENGINES = [
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
+    hasTriggers: true,
     hasTruncate: true,
     hasBackups: true,
     dumpTool: 'mysqldump',
@@ -431,6 +439,7 @@ export const ENGINES = [
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
+    hasTriggers: true,
     hasTruncate: true,
     hasBackups: true,
     dumpTool: 'pg_dump',
@@ -460,6 +469,7 @@ export const ENGINES = [
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: false,
+    hasTriggers: false,
     hasTruncate: false,
     hasBackups: true,
     // A SQLite database is one file, so copying it *is* the dump. There is no client program to
@@ -491,6 +501,7 @@ export const ENGINES = [
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
+    hasTriggers: true,
     hasTruncate: true,
     hasBackups: true,
     // SQL Server's own backup is a statement the *server* runs, writing to a path the server can
@@ -523,6 +534,7 @@ export const ENGINES = [
     databaseNeedsCollection: false,
     hasForeignKeys: true,
     hasRoutines: true,
+    hasTriggers: true,
     hasTruncate: true,
     hasBackups: true,
     // Oracle's Data Pump runs *inside* the instance and writes to a directory object the database
@@ -555,6 +567,7 @@ export const ENGINES = [
     databaseNeedsCollection: true,
     hasForeignKeys: false,
     hasRoutines: false,
+    hasTriggers: false,
     hasTruncate: false,
     // A backup here is a file of statements, and a document store's are commands rather than a
     // declaration and a row — but its *vendor* ships a pair of programs that carry the BSON
@@ -587,6 +600,7 @@ export const ENGINES = [
     databaseNeedsCollection: false,
     hasForeignKeys: false,
     hasRoutines: false,
+    hasTriggers: false,
     hasTruncate: false,
     hasBackups: false,
     // Redis persists itself — an RDB file the server writes where the server is — and there is no

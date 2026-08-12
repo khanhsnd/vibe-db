@@ -69,7 +69,7 @@ func (*Driver) Open(
 	}
 
 	s := &session{db: db, release: transport.release}
-	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
+	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run, Pin: s.pinned, Translate: translateError}
 	s.Data = sqlkit.Data{
 		Dialect: dialect,
 		Columns: s.columns,
@@ -120,7 +120,7 @@ func (*session) Schemas(context.Context, string) ([]string, error) {
 	return nil, nil
 }
 
-// Objects reads the three folders of a namespace in one trip, since the tree needs every count
+// Objects reads the four folders of a namespace in one trip, since the tree needs every count
 // the moment any one of them is opened.
 func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Objects, error) {
 	const tables = `
@@ -140,6 +140,12 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		FROM information_schema.routines
 		WHERE routine_schema = ?
 		ORDER BY routine_name`
+
+	const triggers = `
+		SELECT trigger_name, event_object_table
+		FROM information_schema.triggers
+		WHERE trigger_schema = ?
+		ORDER BY trigger_name`
 
 	found, err := s.names(ctx, tables, ns.Database)
 	if err != nil {
@@ -171,7 +177,17 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		return driver.Objects{}, translateError(err)
 	}
 
-	return driver.Objects{Tables: found, Views: seen, Routines: stored}, nil
+	fired, err := s.db.QueryContext(ctx, triggers, ns.Database)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	firing, err := sqlkit.ScanTriggers(fired)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	return driver.Objects{Tables: found, Views: seen, Routines: stored, Triggers: firing}, nil
 }
 
 // TableList reads what MySQL keeps about the tables of a database. The aliases are what the

@@ -205,6 +205,7 @@ export const SOURCE_NOUN: Record<SourceKind, string> = {
   view: 'View',
   function: 'Function',
   procedure: 'Procedure',
+  trigger: 'Trigger',
 }
 
 /** How a definition reads in the strip: the object's name, then what kind of thing it is. */
@@ -289,8 +290,13 @@ const nextId = () => `tab-${++seq}`
 // What a tab is *about*, for the one-tab-per-thing rule below. A definition is named by all three
 // of its facts, because on PostgreSQL two functions of one name differ only in what they take —
 // which is the same reason a drop carries the arguments.
+// A definition is named by the whole of what identifies one and never by its name alone: two
+// PostgreSQL functions may share a name and differ in their arguments, and two triggers may share
+// one and differ in the table they fire on. Both are empty on every kind that has neither.
 const subjectOf = (tab: Tab | NewTab) => {
-  if (tab.kind === 'source') return `${tab.ref.kind}:${tab.ref.name}(${tab.ref.arguments})`
+  if (tab.kind === 'source') {
+    return `${tab.ref.kind}:${tab.ref.name}(${tab.ref.arguments})@${tab.ref.table}`
+  }
   return 'table' in tab ? tab.table : ''
 }
 

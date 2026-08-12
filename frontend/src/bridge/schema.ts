@@ -1,7 +1,7 @@
 import * as api from '@wailsjs/go/app/ConnectionAPI'
 import type { app } from '@wailsjs/go/models'
 
-import type { Namespace, Routine } from './connections'
+import type { Namespace } from './connections'
 import { call } from './errors'
 import type { TableColumn } from './tables'
 
@@ -66,19 +66,23 @@ export interface ForeignKeySpec {
 }
 
 /**
- * Which of the three declared objects a definition belongs to. It is the same word the Go side
+ * Which of the four declared objects a definition belongs to. It is the same word the Go side
  * checks against before anything spells a `DROP` with it, so nothing else may be sent.
  */
-export type SourceKind = 'view' | 'function' | 'procedure'
+export type SourceKind = 'view' | 'function' | 'procedure' | 'trigger'
 
 /**
- * One view or one routine, named. `arguments` is PostgreSQL's overload discriminator — two of its
- * functions may share a name and differ only in what they take — and is empty everywhere else.
+ * One view, routine or trigger, named. The two fields beside the name are each one engine's way of
+ * saying *which*: `arguments` is PostgreSQL's overload discriminator — two of its functions may
+ * share a name and differ only in what they take — and `table` is the table a trigger fires on,
+ * a trigger being declared and dropped about a table rather than on its own. Both are empty
+ * wherever the name already identifies the object.
  */
 export interface SourceRef {
   kind: SourceKind
   name: string
   arguments: string
+  table: string
 }
 
 /** A definition as the server keeps it: the whole statement that declares the object. */
@@ -87,7 +91,7 @@ export interface Source extends SourceRef {
 }
 
 /** A reference to nothing, which is what an object being declared replaces. */
-export const NEW_SOURCE: SourceRef = { kind: 'view', name: '', arguments: '' }
+export const NEW_SOURCE: SourceRef = { kind: 'view', name: '', arguments: '', table: '' }
 
 export function emptyFieldSpec(): FieldSpec {
   return { name: '', type: '', nullable: true, default: null, primaryKey: false }
@@ -166,22 +170,22 @@ export const schema = {
   dropForeignKey: (sessionId: string, ns: Namespace, table: string, constraint: string) =>
     call(() => api.DropForeignKey(sessionId, ns, table, constraint)),
 
-  dropView: (sessionId: string, ns: Namespace, view: string) =>
-    call(() => api.DropView(sessionId, ns, view)),
-
-  /** The whole routine, not its name: on PostgreSQL two functions may share one name. */
-  dropRoutine: (sessionId: string, ns: Namespace, routine: Routine) =>
-    call(() => api.DropRoutine(sessionId, ns, routine)),
+  /**
+   * The whole reference, not the name: on PostgreSQL two functions may share one name and a
+   * trigger is found by its table as well as its own.
+   */
+  dropSource: (sessionId: string, ns: Namespace, ref: SourceRef) =>
+    call(() => api.DropSource(sessionId, ns, ref as unknown as app.SourceRef)),
 
   /**
    * The declaration a reader starts a *new* one of these from. It asks the server nothing — a
    * routine's body is grammar and so the engine's own — and answers with `''` where this engine
    * has no such object to start.
    */
-  newSource: (sessionId: string, ns: Namespace, kind: SourceKind, name: string): Promise<string> =>
-    call(() => api.NewSource(sessionId, ns, kind, name)) as Promise<string>,
+  newSource: (sessionId: string, ns: Namespace, ref: SourceRef): Promise<string> =>
+    call(() => api.NewSource(sessionId, ns, ref as unknown as app.SourceRef)) as Promise<string>,
 
-  /** One view or one routine as the statement that declares it — what the editor opens on. */
+  /** One view, routine or trigger as the statement that declares it — what the editor opens on. */
   loadSource: (sessionId: string, ns: Namespace, ref: SourceRef): Promise<Source> =>
     call(() =>
       api.LoadSource(sessionId, ns, ref as unknown as app.SourceRef),

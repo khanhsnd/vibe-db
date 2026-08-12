@@ -105,6 +105,7 @@
   --kind-table: #2dc3d4;
   --kind-view: #56d364;
   --kind-routine: #f0883e;
+  --kind-trigger: #e3b341;
   --kind-field: #79c0ff;
   --kind-index: #d2a8ff;
   --kind-relation: #f778ba;
@@ -220,6 +221,7 @@
   --kind-table: #0f7c8a;
   --kind-view: #1a7f37;
   --kind-routine: #bc4c00;
+  --kind-trigger: #9a6700;
   --kind-field: #0550ae;
   --kind-index: #8250df;
   --kind-relation: #bf3989;
@@ -302,6 +304,7 @@
   --color-kind-table: var(--kind-table);
   --color-kind-view: var(--kind-view);
   --color-kind-routine: var(--kind-routine);
+  --color-kind-trigger: var(--kind-trigger);
   --color-kind-field: var(--kind-field);
   --color-kind-index: var(--kind-index);
   --color-kind-relation: var(--kind-relation);

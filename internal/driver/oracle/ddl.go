@@ -135,8 +135,9 @@ func (s *session) CreateStatements(
 }
 
 // Source reads a definition out of the two dictionary views that answer in ordinary character
-// columns: `all_source`, which keeps a routine's body a line at a time, and `all_views`, which
-// keeps a view's query.
+// columns: `all_source`, which keeps a routine's or a trigger's body a line at a time, and
+// `all_views`, which keeps a view's query. A trigger needs no branch of its own — `all_source`
+// keeps one under the same word the kind already is.
 //
 // `DBMS_METADATA.GET_DDL` is not used, for a second reason on top of the one CreateStatements
 // gives: it answers with a CLOB, and a definition arriving as a locator is a definition this

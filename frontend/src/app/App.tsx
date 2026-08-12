@@ -23,6 +23,7 @@ import {
   isObjectFolder,
   ownsObjects,
   searchTree,
+  sourceRefOf,
   type PickHow,
   type TreeNode,
 } from '@/features/connections/tree'
@@ -212,8 +213,8 @@ export function App() {
   )
 
   // Each level loads what the level below it will need: a PostgreSQL database its schemas, any
-  // of a namespace's three folders that namespace's objects, and any of a table's three folders
-  // that table's shape. One read fills all three folders either way.
+  // of a namespace's object folders that namespace's objects, and any of a table's three folders
+  // that table's shape. One read fills all of them either way.
   const revealNode = useCallback(
     (node: TreeNode) => {
       const ns = node.namespace
@@ -223,7 +224,7 @@ export function App() {
         void loadSchemas(node.profileId, ns.database)
       }
       if (ownsObjects(node) || isObjectFolder(node)) void loadObjects(node.profileId, ns)
-      // Backups is not one of those three folders and is not filled by their read: it is a folder
+      // Backups is not one of those object folders and is not filled by their read: it is a folder
       // on this machine, and nothing the catalogue answered with would ever mention it.
       if (node.kind === 'backups') void loadBackups(node.profileId, ns)
       if (node.table !== undefined) void loadStructure(node.profileId, ns, node.table)
@@ -334,12 +335,18 @@ export function App() {
 
   // A table opens its data rather than its folders, even though it now has folders to open: the
   // caret is what expands, and a double-click on a table has always meant "show me the rows".
+  //
+  // A routine and a trigger have no rows and no folders, and a definition is the whole of what they
+  // are — so that is what opens, which is the same promise under a different word.
   const activateNode = useCallback(
     (node: TreeNode) => {
+      const ref = sourceRefOf(node)
       if (hasRows(node)) openNodeRows(node)
-      else if (isExpandable(node)) toggleTreeNode(node)
+      else if (ref && node.namespace) {
+        openSource({ profileId: node.profileId, namespace: node.namespace, ref })
+      } else if (isExpandable(node)) toggleTreeNode(node)
     },
-    [toggleTreeNode, openNodeRows],
+    [toggleTreeNode, openNodeRows, openSource],
   )
 
   // A new editor inherits the selected connection and namespace, falling back to

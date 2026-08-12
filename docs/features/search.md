@@ -30,9 +30,9 @@ with one row per object that holds it and how many times.
   columns hold the text, which is a statement and therefore the driver's
   (`driver.Session.MatchingRows`) — every column is read as text, so a search for `36` finds the
   number as readily as the name. `Structure` counts the **names** that hold it — the table's own, then
-  every field, index and constraint — and asks no server anything at all: those names are what the
-  catalogue reads the tree already makes answer with. One rule matches both (`domain.TextMatch`), so
-  `Contains` cannot mean two things.
+  every field, index, constraint and trigger on it — and asks no server anything at all: those names
+  are what the catalogue reads the tree already makes answer with, the triggers included. One rule
+  matches both (`domain.TextMatch`), so `Contains` cannot mean two things.
 - **`Search Mode` is four modes and the reader's text is literal in three of them.** `Contains` and
   `Prefix` are *patterns*: `%` stands for any run of characters, `_` for one, and `\` makes either of
   them itself — which is what the note beside `Look In` says, and it is shown only while one of those

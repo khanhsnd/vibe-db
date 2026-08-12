@@ -69,7 +69,7 @@ func (*Driver) Open(
 	}
 
 	s := &session{db: db, home: profile.Database}
-	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run}
+	s.DDL = sqlkit.DDL{Dialect: dialect, Run: s.run, Pin: s.pinned, Translate: translateError}
 	s.Data = sqlkit.Data{
 		Dialect: dialect,
 		Columns: s.columns,
@@ -172,6 +172,17 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		WHERE s.name = @p1 AND o.type IN ('P', 'FN', 'IF', 'TF')
 		ORDER BY o.name`
 
+	// `parent_class = 1` is a trigger on a table or a view, which is the only kind that belongs to
+	// a schema; a DDL trigger is on the database or the server and is listed under neither. A trigger
+	// the *server* shipped is left out for the reason an internal PostgreSQL one is.
+	triggers := `
+		SELECT t.name, o.name
+		FROM ` + catalogue + `.sys.triggers t
+		JOIN ` + catalogue + `.sys.objects o ON o.object_id = t.parent_id
+		JOIN ` + catalogue + `.sys.schemas s ON s.schema_id = o.schema_id
+		WHERE s.name = @p1 AND t.parent_class = 1 AND t.is_ms_shipped = 0
+		ORDER BY t.name`
+
 	found, err := s.names(ctx, tables, ns.Schema)
 	if err != nil {
 		return driver.Objects{}, err
@@ -200,7 +211,17 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		return driver.Objects{}, translateError(err)
 	}
 
-	return driver.Objects{Tables: found, Views: seen, Routines: stored}, nil
+	fired, err := s.db.QueryContext(ctx, triggers, ns.Schema)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	firing, err := sqlkit.ScanTriggers(fired)
+	if err != nil {
+		return driver.Objects{}, translateError(err)
+	}
+
+	return driver.Objects{Tables: found, Views: seen, Routines: stored, Triggers: firing}, nil
 }
 
 // TableList reads what SQL Server keeps about the tables of a schema. The row count and the size

@@ -31,7 +31,7 @@ expands onto the names, and the list opens in a tab beside it. The tree has room
 the grid has room for the date, the size and the comment, and a reader reaching for a backup takes
 whichever of the two is nearer. Pressing the caret expands without opening a second tab.
 
-It is filled by **a read of its own**, not by the catalogue read the other three folders share: a
+It is filled by **a read of its own**, not by the catalogue read the other object folders share: a
 folder on this machine is not something a server was ever asked about, which is also why it has a
 `Refresh` of its own.
 

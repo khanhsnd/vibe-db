@@ -98,16 +98,12 @@ export function DropIndex(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['DropIndex'](arg1, arg2, arg3, arg4);
 }
 
-export function DropRoutine(arg1, arg2, arg3) {
-  return window['go']['app']['ConnectionAPI']['DropRoutine'](arg1, arg2, arg3);
+export function DropSource(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['DropSource'](arg1, arg2, arg3);
 }
 
 export function DropTable(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['DropTable'](arg1, arg2, arg3);
-}
-
-export function DropView(arg1, arg2, arg3) {
-  return window['go']['app']['ConnectionAPI']['DropView'](arg1, arg2, arg3);
 }
 
 export function DumpObjects(arg1, arg2) {
@@ -210,8 +206,8 @@ export function LoadToolkit(arg1) {
   return window['go']['app']['ConnectionAPI']['LoadToolkit'](arg1);
 }
 
-export function NewSource(arg1, arg2, arg3, arg4) {
-  return window['go']['app']['ConnectionAPI']['NewSource'](arg1, arg2, arg3, arg4);
+export function NewSource(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['NewSource'](arg1, arg2, arg3);
 }
 
 export function OpenBackupFolder(arg1, arg2) {

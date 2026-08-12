@@ -200,28 +200,40 @@ type TableSchema struct {
 	Columns []string `json:"columns"`
 }
 
-// RoutineInfo is one stored function or procedure. It travels back into a drop unchanged,
-// because on PostgreSQL the name alone does not name one — two functions may share it.
+// RoutineInfo is one stored function or procedure. The arguments travel with the name because on
+// PostgreSQL the name alone does not name one — two functions may share it — and what is addressed
+// by all three is the `SourceRef` a drop and a definition read are both made from.
 type RoutineInfo struct {
 	Name      string `json:"name"`
 	Procedure bool   `json:"procedure"`
 	Arguments string `json:"arguments"`
 }
 
-// SourceRef names one view or one routine on the wire. `Kind` is `view`, `function` or
-// `procedure` and is checked against those three before anything spells a statement with it —
-// see toSourceKind, which is what keeps a word off the wire out of a DROP.
+// TriggerInfo is one trigger, named beside the table it fires on. Both travel back into a drop and
+// into a definition read, because on PostgreSQL the name alone does not name one — a trigger name
+// there is unique per table.
+type TriggerInfo struct {
+	Name  string `json:"name"`
+	Table string `json:"table"`
+}
+
+// SourceRef names one view, routine or trigger on the wire. `Kind` is `view`, `function`,
+// `procedure` or `trigger` and is checked against those four before anything spells a statement
+// with it — see sourceKinds, which is what keeps a word off the wire out of a DROP.
 type SourceRef struct {
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
+	// Table is the table a trigger fires on, and empty for every other kind.
+	Table string `json:"table"`
 }
 
-// Source is one view or one routine as the statement that declares it.
+// Source is one view, routine or trigger as the statement that declares it.
 type Source struct {
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Arguments string `json:"arguments"`
+	Table     string `json:"table"`
 	// Definition is the whole statement, which on four of the five engines is the server's own
 	// words for it. It carries its own semicolons and is still one statement, so nothing that
 	// runs it splits it and no reader has to say DELIMITER.
@@ -241,6 +253,7 @@ type Objects struct {
 	Tables   []string      `json:"tables"`
 	Views    []string      `json:"views"`
 	Routines []RoutineInfo `json:"routines"`
+	Triggers []TriggerInfo `json:"triggers"`
 	// How many keys the namespace holds, on an engine whose namespace is a key space, and zero on
 	// one whose namespace is counted by the lists above — see driver.Objects.
 	KeyCount int64 `json:"keyCount"`
@@ -1149,14 +1162,6 @@ func (in ForeignKeyInput) toDriver() driver.ForeignKeySpec {
 	}
 }
 
-func (in RoutineInfo) toDriver() driver.Routine {
-	return driver.Routine{
-		Name:      in.Name,
-		Procedure: in.Procedure,
-		Arguments: in.Arguments,
-	}
-}
-
 // sourceKinds is the whole of what a definition may be about, and the map is what a kind off the
 // wire is checked against: `Kind` reaches a DROP as the word naming the object, so a value nothing
 // vouched for would be text on its way into a statement.
@@ -1164,6 +1169,7 @@ var sourceKinds = map[string]driver.SourceKind{
 	string(driver.SourceView):      driver.SourceView,
 	string(driver.SourceFunction):  driver.SourceFunction,
 	string(driver.SourceProcedure): driver.SourceProcedure,
+	string(driver.SourceTrigger):   driver.SourceTrigger,
 }
 
 func (in SourceRef) toDriver() (driver.SourceRef, error) {
@@ -1171,10 +1177,15 @@ func (in SourceRef) toDriver() (driver.SourceRef, error) {
 	if !known {
 		return driver.SourceRef{}, domain.ValidationError{
 			Field:   "kind",
-			Message: "must be view, function or procedure",
+			Message: "must be view, function, procedure or trigger",
 		}
 	}
-	return driver.SourceRef{Kind: kind, Name: in.Name, Arguments: in.Arguments}, nil
+	return driver.SourceRef{
+		Kind:      kind,
+		Name:      in.Name,
+		Arguments: in.Arguments,
+		Table:     in.Table,
+	}, nil
 }
 
 // toDriver on a save reads its `replaces` the same way, except that a blank name is an object
@@ -1197,6 +1208,7 @@ func toSourceDTO(source driver.Source) Source {
 		Kind:       string(source.Kind),
 		Name:       source.Name,
 		Arguments:  source.Arguments,
+		Table:      source.Table,
 		Definition: source.Definition,
 	}
 }
@@ -1211,10 +1223,16 @@ func toObjectsDTO(source driver.Objects) Objects {
 		})
 	}
 
+	triggers := make([]TriggerInfo, 0, len(source.Triggers))
+	for _, trigger := range source.Triggers {
+		triggers = append(triggers, TriggerInfo{Name: trigger.Name, Table: trigger.Table})
+	}
+
 	return Objects{
 		Tables:   source.Tables,
 		Views:    source.Views,
 		Routines: routines,
+		Triggers: triggers,
 		KeyCount: source.KeyCount,
 	}
 }
