@@ -356,6 +356,100 @@ type DatabaseOptions struct {
 	Extensions  []string `json:"extensions"`
 }
 
+// AccountRef names one user or role. `host` is MySQL's, where an account *is* the pair; `database`
+// is SQL Server's and MongoDB's, where an account belongs to one. Both are empty everywhere else —
+// see driver.AccountRef.
+type AccountRef struct {
+	Name     string `json:"name"`
+	Host     string `json:"host"`
+	Database string `json:"database"`
+}
+
+// AccountList is one row per account, in the columns this engine's catalogue keeps — the
+// arrangement TableList has. `refs` runs parallel to `rows` and is what a row is acted on by, so
+// nothing on the frontend reads a name back out of a column.
+type AccountList struct {
+	Columns []TableColumn `json:"columns"`
+	Rows    [][]*string   `json:"rows"`
+	Refs    []AccountRef  `json:"refs"`
+}
+
+// Grant is one privilege an account holds, on one thing. One privilege to a Grant, which is what
+// makes the difference between what the server holds and what the editor drew plain set arithmetic.
+type Grant struct {
+	Level     string   `json:"level"`
+	Database  string   `json:"database"`
+	Schema    string   `json:"schema"`
+	Object    string   `json:"object"`
+	Columns   []string `json:"columns"`
+	Privilege string   `json:"privilege"`
+	Grantable bool     `json:"grantable"`
+	// Denied is SQL Server's third verb, and false everywhere else.
+	Denied bool `json:"denied"`
+}
+
+// AccountAttribute is one fact an account carries besides its password, as the editor draws it.
+// No statement travels with it: the clause that sets one is the driver's.
+type AccountAttribute struct {
+	Name    string   `json:"name"`
+	Label   string   `json:"label"`
+	Kind    string   `json:"kind"`
+	Choices []string `json:"choices"`
+	Help    string   `json:"help"`
+}
+
+// PrivilegeSet is what may be granted at one level, in the engine's own words. A level missing from
+// the list is a level this engine has not got, and the editor draws no tab for it.
+type PrivilegeSet struct {
+	Level string   `json:"level"`
+	Names []string `json:"names"`
+}
+
+// AccountOptions is what the account editor fills its boxes and its privilege columns from — the
+// arrangement DatabaseOptions has. An engine answers with nothing for a list it has no concept of.
+type AccountOptions struct {
+	Attributes []AccountAttribute `json:"attributes"`
+	Privileges []PrivilegeSet     `json:"privileges"`
+	Roles      []string           `json:"roles"`
+	Hosts      []string           `json:"hosts"`
+	Databases  []string           `json:"databases"`
+}
+
+// AccountDetail is one account read whole. `source` is the server's own words about it, and is
+// empty on an engine that has none to give.
+type AccountDetail struct {
+	AccountRef
+	Role       bool              `json:"role"`
+	Attributes map[string]string `json:"attributes"`
+	Grants     []Grant           `json:"grants"`
+	Roles      []string          `json:"roles"`
+	Source     []string          `json:"source"`
+}
+
+// AccountChangeInput is one change the editor asks for. Only the field belonging to the kind is
+// read, and a kind this side does not know is refused rather than guessed at.
+//
+// `password` is the one field that never comes back: it goes to the server and into no preview, no
+// log and no history.
+type AccountChangeInput struct {
+	Kind       string            `json:"kind"`
+	Account    AccountRef        `json:"account"`
+	Name       string            `json:"name"`
+	Password   string            `json:"password"`
+	Attributes map[string]string `json:"attributes"`
+	Grant      Grant             `json:"grant"`
+	Role       string            `json:"role"`
+}
+
+// AccountPreview is exactly what applying the changes will run, and whether the reader has to
+// answer for it first. The hazard is a `domain` rule and the frontend receives its answer rather
+// than deriving one — see domain.GrantHazard.
+type AccountPreview struct {
+	Statements []string `json:"statements"`
+	Hazard     string   `json:"hazard"`
+	Confirm    bool     `json:"confirm"`
+}
+
 type QueryInput struct {
 	Namespace
 	RunID   string `json:"runId"`
@@ -981,6 +1075,237 @@ func toDatabaseOptionsDTO(source driver.DatabaseOptions) DatabaseOptions {
 		Tablespaces: names(source.Tablespaces),
 		Extensions:  names(source.Extensions),
 	}
+}
+
+func (in AccountRef) toDriver() driver.AccountRef {
+	return driver.AccountRef{Name: in.Name, Host: in.Host, Database: in.Database}
+}
+
+func toAccountRefDTO(ref driver.AccountRef) AccountRef {
+	return AccountRef{Name: ref.Name, Host: ref.Host, Database: ref.Database}
+}
+
+func toAccountListDTO(list driver.AccountList) AccountList {
+	refs := make([]AccountRef, 0, len(list.Refs))
+	for _, ref := range list.Refs {
+		refs = append(refs, toAccountRefDTO(ref))
+	}
+	return AccountList{
+		Columns: toColumnDTOs(list.Columns),
+		Rows:    accountRows(list.Rows),
+		Refs:    refs,
+	}
+}
+
+// accountRows keeps an empty list an empty list rather than a null, which is what the grid draws
+// as "no accounts" instead of falling over.
+func accountRows(rows [][]*string) [][]*string {
+	if rows == nil {
+		return [][]*string{}
+	}
+	return rows
+}
+
+func toAccountDetailDTO(detail driver.AccountDetail) AccountDetail {
+	grants := make([]Grant, 0, len(detail.Grants))
+	for _, grant := range detail.Grants {
+		grants = append(grants, toGrantDTO(grant))
+	}
+
+	attributes := detail.Attributes
+	if attributes == nil {
+		attributes = map[string]string{}
+	}
+
+	return AccountDetail{
+		AccountRef: toAccountRefDTO(detail.AccountRef),
+		Role:       detail.Role,
+		Attributes: attributes,
+		Grants:     grants,
+		Roles:      names(detail.Roles),
+		Source:     names(detail.Source),
+	}
+}
+
+func toGrantDTO(grant driver.Grant) Grant {
+	return Grant{
+		Level:     string(grant.Level),
+		Database:  grant.Database,
+		Schema:    grant.Schema,
+		Object:    grant.Object,
+		Columns:   names(grant.Columns),
+		Privilege: grant.Privilege,
+		Grantable: grant.Grantable,
+		Denied:    grant.Denied,
+	}
+}
+
+func (in Grant) toDriver() driver.Grant {
+	return driver.Grant{
+		Level:     driver.GrantLevel(in.Level),
+		Namespace: driver.Namespace{Database: in.Database, Schema: in.Schema},
+		Object:    in.Object,
+		Columns:   in.Columns,
+		Privilege: in.Privilege,
+		Grantable: in.Grantable,
+		Denied:    in.Denied,
+	}
+}
+
+func toAccountOptionsDTO(options driver.AccountOptions) AccountOptions {
+	attributes := make([]AccountAttribute, 0, len(options.Attributes))
+	for _, attribute := range options.Attributes {
+		attributes = append(attributes, AccountAttribute{
+			Name:    attribute.Name,
+			Label:   attribute.Label,
+			Kind:    string(attribute.Kind),
+			Choices: names(attribute.Choices),
+			Help:    attribute.Help,
+		})
+	}
+
+	privileges := make([]PrivilegeSet, 0, len(options.Privileges))
+	for _, set := range options.Privileges {
+		// A level the engine named but filled nothing in is a level with nothing to grant at it,
+		// which is one tab of empty check boxes rather than a tab worth drawing.
+		if len(set.Names) == 0 {
+			continue
+		}
+		privileges = append(privileges, PrivilegeSet{
+			Level: string(set.Level),
+			Names: set.Names,
+		})
+	}
+
+	return AccountOptions{
+		Attributes: attributes,
+		Privileges: privileges,
+		Roles:      names(options.Roles),
+		Hosts:      names(options.Hosts),
+		Databases:  names(options.Databases),
+	}
+}
+
+// accountChangeKinds is every change a bound method will accept. It is a closed list checked here
+// rather than in a driver for the reason a SourceRef's kind is: a word that arrived off the wire as
+// something else is answered as the kind it is not, before it reaches anything that spells a
+// statement with it.
+var accountChangeKinds = map[string]driver.AccountChangeKind{
+	"createAccount": driver.ChangeCreateAccount,
+	"alterAccount":  driver.ChangeAlterAccount,
+	"renameAccount": driver.ChangeRenameAccount,
+	"dropAccount":   driver.ChangeDropAccount,
+	"grant":         driver.ChangeGrant,
+	"revoke":        driver.ChangeRevoke,
+	"deny":          driver.ChangeDeny,
+	"grantRole":     driver.ChangeGrantRole,
+	"revokeRole":    driver.ChangeRevokeRole,
+}
+
+// grantLevels is the same closed list for where a privilege lands. An empty level is a change that
+// is not about a privilege at all, which is every kind but three.
+var grantLevels = map[string]driver.GrantLevel{
+	"":         "",
+	"server":   driver.GrantServer,
+	"database": driver.GrantDatabase,
+	"schema":   driver.GrantSchema,
+	"table":    driver.GrantTable,
+	"column":   driver.GrantColumn,
+	"routine":  driver.GrantRoutine,
+}
+
+func (in AccountChangeInput) toDriver() (driver.AccountChange, error) {
+	kind, known := accountChangeKinds[in.Kind]
+	if !known {
+		return driver.AccountChange{}, domain.ValidationError{
+			Field:   "kind",
+			Message: "is not a change this app makes to an account",
+		}
+	}
+	if _, known := grantLevels[in.Grant.Level]; !known {
+		return driver.AccountChange{}, domain.ValidationError{
+			Field:   "level",
+			Message: "is not a level a privilege is granted at",
+		}
+	}
+
+	attributes := in.Attributes
+	if attributes == nil {
+		attributes = map[string]string{}
+	}
+
+	return driver.AccountChange{
+		Kind:       kind,
+		Account:    in.Account.toDriver(),
+		Name:       in.Name,
+		Password:   in.Password,
+		Attributes: attributes,
+		Grant:      in.Grant.toDriver(),
+		Role:       in.Role,
+	}, nil
+}
+
+func toDriverAccountChanges(in []AccountChangeInput) ([]driver.AccountChange, error) {
+	changes := make([]driver.AccountChange, 0, len(in))
+	for _, one := range in {
+		change, err := one.toDriver()
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, change)
+	}
+	return changes, nil
+}
+
+// accountHazard is what the whole list of changes amounts to, which is the **worst** of them: a
+// reader pressing Apply runs all of it, so a batch holding one grant of everything is answered for
+// even where the twenty changes around it are ordinary.
+func accountHazard(changes []driver.AccountChange) domain.Hazard {
+	worst := domain.HazardNone
+	for _, change := range changes {
+		hazard := domain.GrantHazard(
+			accountActions[change.Kind],
+			grantScope(change.Grant),
+			change.Grant.Privilege,
+			change.Grant.Grantable,
+		)
+		if hazardRank[hazard] > hazardRank[worst] {
+			worst = hazard
+		}
+	}
+	return worst
+}
+
+// accountActions is the driver's nine kinds against the six a domain rule is written in. Two of
+// them collapse: a role granted is a grant and a role revoked is a revoke, which is what they are.
+var accountActions = map[driver.AccountChangeKind]domain.AccountAction{
+	driver.ChangeCreateAccount: domain.AccountCreate,
+	driver.ChangeAlterAccount:  domain.AccountAlter,
+	driver.ChangeRenameAccount: domain.AccountRename,
+	driver.ChangeDropAccount:   domain.AccountDrop,
+	driver.ChangeGrant:         domain.AccountGrant,
+	driver.ChangeRevoke:        domain.AccountRevoke,
+	driver.ChangeDeny:          domain.AccountRevoke,
+	driver.ChangeGrantRole:     domain.AccountGrant,
+	driver.ChangeRevokeRole:    domain.AccountRevoke,
+}
+
+// hazardRank orders the four so the worst of a list can be found. It is here rather than on the
+// domain type because it is a question only a *batch* asks, and nothing else in the app has one.
+var hazardRank = map[domain.Hazard]int{
+	domain.HazardNone:        0,
+	domain.HazardWrite:       1,
+	domain.HazardUnfiltered:  2,
+	domain.HazardDestructive: 3,
+}
+
+// grantScope collapses the driver's six levels into the one distinction the rule turns on: a grant
+// that named something, and a grant that named nothing and so named everything.
+func grantScope(grant driver.Grant) domain.GrantScope {
+	if grant.Level == driver.GrantServer || grant.Level == "" {
+		return domain.GrantWhole
+	}
+	return domain.GrantScoped
 }
 
 func names(list []string) []string {

@@ -22,6 +22,8 @@ wails doctor
 | Production build | `wails build` → `build/bin/vibe-db.exe` |
 | Go tests | `go test ./...` |
 | Single Go test | `go test ./internal/driver/postgres -run TestBuildDSNTLSModes -v` |
+| MySQL against a real server | `VIBE_MYSQL_DSN=root:mysql@127.0.0.1:3306 go test ./internal/driver/mysql -run TestLive -v` |
+| PostgreSQL against a real server | `VIBE_POSTGRES_DSN=postgres:postgres@127.0.0.1:5432/postgres go test ./internal/driver/postgres -run TestLive -v` |
 | MongoDB against a real server | `VIBE_MONGO_DSN=root:mongodb@127.0.0.1:27017 go test ./internal/driver/mongo -run TestLive -v` |
 | Redis against a real server | `VIBE_REDIS_DSN=127.0.0.1:6379 go test ./internal/driver/redis -run TestLive -v` |
 | Go vet + format | `go vet ./...` and `gofmt -l internal main.go` |

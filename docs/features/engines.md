@@ -66,6 +66,11 @@ answers [`UNSUPPORTED`](../errors.md) naming which — never a statement left fo
 | Explain a statement | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Back up and restore | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | A manual transaction | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| Users and privileges | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ |
+| Grant a privilege rather than a role | ✓ | ✓ | | ✓ | ✓ | | ✓ |
+| Roles | ✓ | ✓ | | ✓ | ✓ | ✓ | |
+| Column-level grants | ✓ | ✓ | | ✓ | ✓ | | |
+| DENY as well as revoke | | | | ✓ | | | |
 | Its vendor's own dump program | ✓ | ✓ | | | | ✓ | |
 
 Four of those blanks are worth the sentence:

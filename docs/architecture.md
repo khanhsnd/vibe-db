@@ -228,6 +228,39 @@ matches nothing** — `WHERE 1 = 0`, and a filter no document satisfies — beca
 `DELETE` with no `WHERE`. And **whether the run has to be answered for first is `domain`'s**:
 `ImportHazard` is the third grammar for one rule, beside `StatementHazard` and `MongoHazard`.
 
+## Who may do what
+
+`driver.Security` is the third half of a session, beside `Schema` and `Transaction`: the accounts a
+server holds, what each of them has been granted, and the changes that alter it. `internal/app` owns
+five bound methods and no rules; everything below follows the same three the rest of this codebase
+does.
+
+**One speller.** `sqlkit.Auth` spells every account statement there is, and what differs between five
+SQL engines is a **flag** on `sqlkit.Dialect` — whether an account carries a host and is therefore
+two string literals rather than a name, whether a login is a separate object from a user, which
+words a grant's `ON` clause takes, whether the engine has a third verb. An adapter that wrote a
+`GRANT` of its own would have gone wrong in exactly the way [an adapter writing a
+`SELECT`](#the-five-sql-engines) has. MongoDB and Redis touch none of it: an account there is made by
+a **command**, and each writes its own `Security` the way each already writes its own `Format`.
+
+**A preview is the run.** One `[]driver.AccountChange` goes to `AccountStatements` to be spelled and
+to `ApplyAccountChanges` to be run, which is [rule 13](../CLAUDE.md#rules-that-must-not-be-broken)
+applied here. It bends in exactly one place and on purpose: a **password is never spelled into a
+preview**, because the preview is what goes on a screen, into the History Log and into a saved
+history. The speller takes it as an argument, so the two still come from one function — see
+[features/accounts.md](features/accounts.md#the-password-and-why-the-preview-is-not-quite-the-statement).
+
+**What is dangerous is a `domain` rule.** `domain.GrantHazard` is the fifth grammar for one rule, and
+it says the thing worth saying: a grant that named nothing is *unfiltered* in the sense a `DELETE`
+with no `WHERE` is, so it is confirmed on a laptop as well as on production. The frontend receives
+that answer beside the statements and never re-derives it.
+
+**A privilege list is a read wherever the server will answer.** MySQL's `SHOW PRIVILEGES`, SQL
+Server's `sys.fn_builtin_permissions`, Oracle's `system_privilege_map` and Redis's `ACL CAT` are all
+the server enumerating what it understands; PostgreSQL's are a fixed list because that engine
+enumerates them nowhere. It is the same choice `driver.Source` makes about a definition, for the same
+reason: a list this app decided on is a list that goes stale one server version later.
+
 ## Carrying a table to a file
 
 `internal/transfer` is the file formats and nothing else. It knows no databases: a row here is

@@ -108,6 +108,77 @@ func ImportHazard(mode ImportMode, keyed bool) Hazard {
 	}
 }
 
+// AccountAction is what a change to an account does, in the words the driver's own change kinds
+// use. It is a domain type for the reason ImportMode is: what a change is going to do decides
+// whether it has to be answered for before it runs, and the driver spells it rather than deciding
+// it.
+type AccountAction string
+
+const (
+	AccountCreate AccountAction = "create"
+	AccountAlter  AccountAction = "alter"
+	AccountRename AccountAction = "rename"
+	AccountDrop   AccountAction = "drop"
+	AccountGrant  AccountAction = "grant"
+	AccountRevoke AccountAction = "revoke"
+)
+
+// GrantScope is how wide a grant reaches, which is the only thing about *where* a privilege lands
+// that changes whether it is answered for. A driver's own levels below a server all collapse into
+// GrantScoped: what matters here is whether the grant named something.
+type GrantScope string
+
+const (
+	// GrantWhole is the whole server — MySQL's `*.*`, an Oracle system privilege, a SQL Server
+	// server permission. It is the grant that named nothing.
+	GrantWhole GrantScope = "whole"
+	// GrantScoped is a grant that named a database, a schema, a table or a column.
+	GrantScoped GrantScope = "scoped"
+)
+
+// grantAll is every spelling of "all of them" the five SQL engines use. A grant of one of these is
+// treated as reaching the whole of whatever it was granted on, however narrow that was: `ALL
+// PRIVILEGES ON one_table` still hands over the right to drop it.
+var grantAll = map[string]bool{
+	"all":             true,
+	"all privileges":  true,
+	"control":         true,
+	"control server":  true,
+	"superuser":       true,
+	"sysadmin":        true,
+	"grant option":    true,
+	"dba":             true,
+	"alter any table": true,
+}
+
+// GrantHazard is StatementHazard for a change to an account — the fifth grammar for one rule, and
+// here for the reason MongoHazard and RedisHazard are: what is dangerous to run is a domain rule,
+// and only its spelling is the engine's.
+//
+// Three answers, and the middle one is the point:
+//
+//   - **Dropping an account is destructive**, in the same class a DROP is. Nothing puts back what
+//     the account held, and a role dropped takes every grant that came through it with it.
+//   - **A grant that names nothing is unfiltered**, in exactly the sense a DELETE with no WHERE is:
+//     `GRANT ALL PRIVILEGES ON *.*` names no object and so names all of them. So is a grant of
+//     everything however narrowly scoped, and so is one handing on the right to grant — an account
+//     that can grant can grant itself. Environment.NeedsConfirmation answers that class **on a
+//     laptop as well as on production**, which is the whole reason this is not merely a write.
+//   - **Everything else that changes an account is a write**, including a revoke: taking a
+//     privilege away breaks whatever was using it, but it hands nothing to anybody.
+func GrantHazard(action AccountAction, scope GrantScope, privilege string, grantable bool) Hazard {
+	if action == AccountDrop {
+		return HazardDestructive
+	}
+	if action != AccountGrant {
+		return HazardWrite
+	}
+	if scope == GrantWhole || grantable || grantAll[strings.ToLower(strings.TrimSpace(privilege))] {
+		return HazardUnfiltered
+	}
+	return HazardWrite
+}
+
 // mongoHazards is the *method* of a shell command against what it will do, which is where a
 // document store keeps the verb SQL keeps in its first word. A method that is not here reads,
 // and so does everything this side cannot tell apart from a read.

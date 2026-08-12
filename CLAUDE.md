@@ -154,6 +154,23 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     override, only the same `pinned` a definition is run on. What an engine has not got is
     `domain.Unsupported` naming it and `EngineInfo.hasTransactions` saying so to the frontend.
 
+21. **An account is the server's, and one speller grants everything.** `driver.Security` is the third
+    half of a session: who a server knows, what each of them has been granted, and the changes that
+    alter it. A privilege is **read** wherever the engine will answer for itself — `SHOW GRANTS`,
+    `information_schema.*_privileges`, `sys.fn_builtin_permissions`, `dba_sys_privs`, `usersInfo`,
+    `ACL LIST` — and every statement that changes one is spelled by `sqlkit.Auth` alone; what differs
+    between five SQL engines is a **flag** on `Dialect` (an account that *is* `name@host` and so is
+    two string literals, a login separate from a user, a third verb `DENY`, `WITH ADMIN OPTION`
+    against `WITH GRANT OPTION`), never a second speller. `AccountStatements` previews exactly what
+    `ApplyAccountChanges` runs — rule 13 again — with **one deliberate exception: a password is never
+    spelled into a preview**, because a preview is what reaches a screen, the History Log and a saved
+    history; the speller takes it as an argument, so the shown and the run still come from one
+    function. What is dangerous is a `domain` rule (`domain.GrantHazard`, the fifth grammar), and a
+    grant that **named nothing** is unfiltered in the sense a `DELETE` with no `WHERE` is — confirmed
+    on a laptop as well as on production. An engine with no accounts answers `domain.Unsupported`
+    naming it and `EngineInfo.hasAccounts` says so to the frontend; what one is *called* is
+    `accountLabel`, never a comparison against an engine's name.
+
 ## Where to read before changing something
 
 | Task | Read |
@@ -171,6 +188,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Change a view's, a routine's or a trigger's definition | [docs/features/definitions.md](docs/features/definitions.md) |
 | Change a query tab, a console or a file run | [docs/features/query-tab.md](docs/features/query-tab.md), [docs/features/script.md](docs/features/script.md), [docs/features/console.md](docs/features/console.md) |
 | Turn autocommit off, or touch Begin / Commit / Rollback | [docs/features/transaction.md](docs/features/transaction.md) |
+| Touch a user, a role or a privilege | [docs/architecture.md](docs/architecture.md#who-may-do-what), [docs/features/accounts.md](docs/features/accounts.md) |
 | Change what is kept about a statement that has run | [docs/features/log.md](docs/features/log.md), [docs/features/results.md](docs/features/results.md#the-history-pane) |
 | Change a table tab, its paging, filtering or values | [docs/features/table-tab.md](docs/features/table-tab.md), [docs/features/row-limit.md](docs/features/row-limit.md), [docs/features/filter-sort.md](docs/features/filter-sort.md), [docs/features/value-viewer.md](docs/features/value-viewer.md) |
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file), [docs/features/transfer.md](docs/features/transfer.md) |
@@ -191,6 +209,7 @@ A new failure mode needs all four of: a `domain` sentinel, a mapping in `errmap.
 A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `hasTriggers`, `documents`,
 `keys`, `isFile`, `createsTables`, `createsDatabases`, `hasViews`, `hasSource`, `hasBackups`, `hasTransactions`,
+`hasAccounts`, `accountLabel`, `hasRoles`,
 `dumpTool`, `restoreTool`, `needsUser`, `needsDatabase`, `databaseLabel` — and never a comparison
 against an engine's name in a component.
 The two exceptions are the lists that *are* per-engine data rather than a capability: the types a

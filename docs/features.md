@@ -16,7 +16,8 @@ foreign key, drop a view, a routine or a trigger — **reading and writing the d
 function, a procedure or a trigger**, **a namespace drawn as boxes and the foreign keys between them, arranged, annotated
 and exported — with a dragged line declaring a key**, table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **a manual transaction — autocommit
-off, and Commit or Rollback when the reader says so**, **exporting a grid to CSV, JSON
+off, and Commit or Rollback when the reader says so**, **the users a server knows, what each of them
+has been granted, and the statements that change it**, **exporting a grid to CSV, JSON
 or SQL**, **backing a SQL namespace up into a folder the app keeps, and restoring
 one**, **running the engine's own mongodump, mysqldump or pg_dump — and putting one of those files
 back**, query tabs with completion that **run a whole script**, **a console that runs one statement
@@ -53,6 +54,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | Drawing a namespace as boxes and the lines between them | [features/diagram.md](features/diagram.md) |
 | The tree's schema changes, `New Database`, and the designer | [features/schema-changes.md](features/schema-changes.md) |
 | A view's, a routine's or a trigger's definition: reading it, declaring one, and saving it back | [features/definitions.md](features/definitions.md) |
+| The users a server knows, what they may do, and how a grant is made | [features/accounts.md](features/accounts.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |
 | Backing a namespace up, the list of backups, and restoring one | [features/backup.md](features/backup.md) |
 | Running the engine's own mongodump, mysqldump or pg_dump — and putting one back | [features/tools.md](features/tools.md) |

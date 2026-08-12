@@ -21,6 +21,7 @@ const (
 	CodeUnknownSchema    ErrorCode = "UNKNOWN_SCHEMA"
 	CodeUnknownTable     ErrorCode = "UNKNOWN_TABLE"
 	CodeUnknownSource    ErrorCode = "UNKNOWN_DEFINITION"
+	CodeUnknownAccount   ErrorCode = "UNKNOWN_ACCOUNT"
 	CodeTableNotEditable ErrorCode = "TABLE_NOT_EDITABLE"
 	CodeEmptyStatement   ErrorCode = "EMPTY_STATEMENT"
 	CodeSQLError         ErrorCode = "SQL_ERROR"
@@ -85,6 +86,7 @@ var sentinelToWire = []struct {
 	{domain.ErrUnknownSchema, CodeUnknownSchema, "That schema no longer exists. Refresh the database."},
 	{domain.ErrUnknownTable, CodeUnknownTable, "That table no longer exists. Refresh the table list."},
 	{domain.ErrUnknownDefinition, CodeUnknownSource, "That view or routine no longer exists. Refresh the folder it was in."},
+	{domain.ErrUnknownAccount, CodeUnknownAccount, "That user no longer exists on this server. Refresh the list."},
 	{domain.ErrTableNotEditable, CodeTableNotEditable, "This table has no primary key, so a single row cannot be identified for editing."},
 	{domain.ErrEmptyStatement, CodeEmptyStatement, "There is no statement to run."},
 	{domain.ErrTransactionActive, CodeTransactionActive, "A transaction is already open on this connection. Commit or roll it back first."},

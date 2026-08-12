@@ -10,6 +10,10 @@ export function AlterColumn(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['ConnectionAPI']['AlterColumn'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function ApplyAccountChanges(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['ApplyAccountChanges'](arg1, arg2);
+}
+
 export function ApplyRowWrite(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ApplyRowWrite'](arg1, arg2);
 }
@@ -150,6 +154,10 @@ export function InsertRow(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['InsertRow'](arg1, arg2);
 }
 
+export function ListAccounts(arg1) {
+  return window['go']['app']['ConnectionAPI']['ListAccounts'](arg1);
+}
+
 export function ListBackups(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ListBackups'](arg1, arg2);
 }
@@ -176,6 +184,14 @@ export function ListTransferFormats() {
 
 export function ListWorksheets(arg1) {
   return window['go']['app']['ConnectionAPI']['ListWorksheets'](arg1);
+}
+
+export function LoadAccount(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['LoadAccount'](arg1, arg2);
+}
+
+export function LoadAccountOptions(arg1) {
+  return window['go']['app']['ConnectionAPI']['LoadAccountOptions'](arg1);
 }
 
 export function LoadColumnValues(arg1, arg2) {
@@ -224,6 +240,10 @@ export function NewSource(arg1, arg2, arg3) {
 
 export function OpenBackupFolder(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['OpenBackupFolder'](arg1, arg2);
+}
+
+export function PreviewAccountChanges(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['PreviewAccountChanges'](arg1, arg2);
 }
 
 export function PreviewCreateDatabase(arg1, arg2) {

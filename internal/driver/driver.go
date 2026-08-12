@@ -767,6 +767,229 @@ type Schema interface {
 	NewSource(ns Namespace, ref SourceRef) string
 }
 
+// AccountRef names one account on a server. The two fields beside the name are each one engine's
+// way of saying which one, exactly as SourceRef's are:
+//
+//   - Host is MySQL's, where an account *is* the pair: `'app'@'10.%'` and `'app'@'localhost'` are two
+//     accounts, with two passwords and two sets of grants, and a statement naming only the first part
+//     addresses neither.
+//   - Database is SQL Server's, where a **login** belongs to the server and a **user** belongs to a
+//     database. The same name in two databases is two principals, and a login with no user in a
+//     database can reach nothing inside it.
+//
+// Both are empty wherever the name already identifies the account, which is PostgreSQL, Oracle,
+// MongoDB and Redis.
+type AccountRef struct {
+	Name     string
+	Host     string
+	Database string
+}
+
+// AccountList is one row per account of a server, with whatever else this engine's catalogue keeps
+// about one. The columns are the engine's own, for the reason TableList's are — no two engines keep
+// the same facts about an account, and a column neither could fill would say nothing — so a status
+// or a date is already spelled the way the server spells it.
+//
+// Refs runs parallel to Rows and is what the list is *acted on* by. It is a field of its own rather
+// than the first column read back, because an account is not always named by one column and nothing
+// here is matched by position.
+type AccountList struct {
+	Columns []Column
+	Rows    [][]*string
+	Refs    []AccountRef
+}
+
+// GrantLevel is what a privilege is granted *on*. The list is closed and a level this side does not
+// know is refused rather than guessed at, exactly as a filter's operator is.
+//
+// Not every engine has every level, and one it has not got is a level missing from its
+// AccountOptions rather than a level that fails when it is used.
+type GrantLevel string
+
+const (
+	// GrantServer is the whole server: MySQL's `*.*`, SQL Server's server permissions, an Oracle
+	// system privilege. PostgreSQL has none — what it keeps at that level is an *attribute* of the
+	// role rather than a privilege granted to it.
+	GrantServer   GrantLevel = "server"
+	GrantDatabase GrantLevel = "database"
+	// GrantSchema is the level between a database and a table, and exists on the two engines whose
+	// tree has one.
+	GrantSchema GrantLevel = "schema"
+	GrantTable  GrantLevel = "table"
+	// GrantColumn is below a table, and is MySQL's and PostgreSQL's alone.
+	GrantColumn  GrantLevel = "column"
+	GrantRoutine GrantLevel = "routine"
+)
+
+// Grant is one privilege an account holds, at one level, on one object.
+//
+// **One privilege to a Grant**, never a list, which is what makes the difference between what a
+// server holds and what a reader has drawn plain set arithmetic. Putting several back into one
+// `GRANT a, b, c ON x TO y` is the speller's business and happens on the way out.
+type Grant struct {
+	Level GrantLevel
+	Namespace
+	// Object is the table, view or routine the privilege is on, and is empty above that level.
+	Object string
+	// Columns is the columns of it, on the two engines that grant below a table.
+	Columns   []string
+	Privilege string
+	// Grantable says the account may pass this on — `WITH GRANT OPTION`, or `WITH ADMIN OPTION`
+	// where the thing granted is a role or a system privilege.
+	Grantable bool
+	// Denied is SQL Server's third verb. A denial is not the absence of a grant: it outranks one
+	// arriving through a role, which is the whole reason that engine has the word.
+	Denied bool
+}
+
+// AttributeKind is how an account's attribute is drawn and typed — a tick, a number, a line of
+// text, or one of a list. It decides the box and nothing else; what the clause looks like is the
+// dialect's, and never leaves the driver.
+type AttributeKind string
+
+const (
+	AttributeCheck  AttributeKind = "check"
+	AttributeNumber AttributeKind = "number"
+	AttributeText   AttributeKind = "text"
+	AttributeChoice AttributeKind = "choice"
+)
+
+// AccountAttribute is one fact an account carries besides its password, as the editor draws it.
+// It holds no statement: the clause that sets it is a flag on `sqlkit.Dialect`, for the reason
+// nothing outside a driver ever spells one.
+type AccountAttribute struct {
+	Name    string
+	Label   string
+	Kind    AttributeKind
+	Choices []string
+	Help    string
+}
+
+// PrivilegeSet is what may be granted at one level. The names are the **engine's own words** and
+// are never translated, for the reason a plan's step types are not: a reader who knows their engine
+// knows these, and a reader who does not would search for them.
+type PrivilegeSet struct {
+	Level GrantLevel
+	Names []string
+}
+
+// AccountOptions is what the account editor draws its boxes and its privilege columns from — the
+// arrangement DatabaseOptions has, and filled the same way: a **read** wherever the server will
+// answer for itself (MySQL's `SHOW PRIVILEGES`, Oracle's `system_privilege_map`, Redis's `ACL CAT`)
+// and a fixed list where it will not.
+//
+// An engine leaves empty whatever it has no such concept of, and a level missing from Privileges is
+// a level the editor draws no tab for.
+type AccountOptions struct {
+	Attributes []AccountAttribute
+	Privileges []PrivilegeSet
+	// Roles is what may be granted *to* an account, and is empty on an engine that has none.
+	Roles []string
+	// Hosts is the hosts this server already knows accounts at, for the box MySQL alone draws.
+	Hosts []string
+	// Databases and Schemas are what a grant may be addressed to, so the editor offers the ones
+	// that are there rather than a box to mistype one into.
+	Databases []string
+}
+
+// AccountDetail is one account read whole: what the server keeps about it, what it has been
+// granted, the roles it is a member of, and the server's own words for all of it.
+type AccountDetail struct {
+	AccountRef
+	// Role says this account is granted *to* others rather than logged in as — PostgreSQL's
+	// NOLOGIN, a row of Oracle's `dba_roles`, a MySQL account with no authentication.
+	Role bool
+	// Attributes is what the account currently holds, keyed by the names AccountOptions declared.
+	// A name the options never mentioned is a fact the editor draws nothing for.
+	Attributes map[string]string
+	Grants     []Grant
+	Roles      []string
+	// Source is what the server itself says about this account, verbatim — `SHOW GRANTS FOR`,
+	// `ACL GETUSER`, the user document. It is a read rather than a render for the reason
+	// CreateStatements and Source are: an account put back together out of a catalogue is only ever
+	// as complete as the catalogue's columns, and a reader auditing one wants the server's answer.
+	Source []string
+}
+
+// AccountChangeKind is one thing that can be done to an account. The list is closed and a kind this
+// side does not know is refused rather than guessed at, exactly as a table change's is.
+type AccountChangeKind string
+
+const (
+	ChangeCreateAccount AccountChangeKind = "createAccount"
+	ChangeAlterAccount  AccountChangeKind = "alterAccount"
+	ChangeRenameAccount AccountChangeKind = "renameAccount"
+	ChangeDropAccount   AccountChangeKind = "dropAccount"
+	ChangeGrant         AccountChangeKind = "grant"
+	ChangeRevoke        AccountChangeKind = "revoke"
+	// ChangeDeny is SQL Server's alone. An engine without the verb answers Unsupported naming it
+	// rather than quietly revoking instead, the two meaning different things.
+	ChangeDeny       AccountChangeKind = "deny"
+	ChangeGrantRole  AccountChangeKind = "grantRole"
+	ChangeRevokeRole AccountChangeKind = "revokeRole"
+)
+
+// AccountChange is one change to an account, in the form both spelling it and running it take —
+// the arrangement TableChange has, and for the same reason: one list goes to the preview and to the
+// run, so what the reader was shown and what happens cannot drift apart.
+//
+// Only the field belonging to the kind is read.
+type AccountChange struct {
+	Kind    AccountChangeKind
+	Account AccountRef
+	// Name is the rename's target.
+	Name string
+	// Password is what a create or an alter sets. It is the one field **never spelled into a
+	// preview**: see Security.AccountStatements.
+	Password string
+	// Attributes is what the change sets, keyed by the names AccountOptions declared. An attribute
+	// left out is one the change says nothing about rather than one it clears.
+	Attributes map[string]string
+	Grant      Grant
+	Role       string
+}
+
+// Security is the third half of a session: who the server knows, and what each of them may do.
+//
+// It is its own interface for the reason Schema and Transaction are — an adapter keeps its account
+// work in its own file, and `sqlkit.Auth` supplies the whole of the spelling for the five SQL
+// engines. What differs between them is a **flag** on `sqlkit.Dialect`: whether an account carries a
+// host, whether a login is a separate object from a user, which words a privilege is granted with,
+// and whether the engine has a third verb. Never a second speller.
+//
+// An engine with no accounts at all answers `domain.Unsupported` naming it, and the frontend never
+// draws the folder — see `EngineInfo.hasAccounts`.
+type Security interface {
+	// Accounts lists them, in the columns this engine's catalogue keeps — the arrangement TableList
+	// has, for the same reason.
+	Accounts(ctx context.Context) (AccountList, error)
+	// Account reads one whole. An account that is no longer there answers
+	// `domain.ErrUnknownAccount` rather than an empty detail, since a save built on one would then
+	// spell a revoke of everything.
+	Account(ctx context.Context, ref AccountRef) (AccountDetail, error)
+	// AccountOptions reads the lists the editor is filled from. It sits here rather than with the
+	// catalogue reads for the reason DatabaseOptions sits with the DDL: it exists for the editor
+	// alone.
+	AccountOptions(ctx context.Context) (AccountOptions, error)
+	// AccountStatements spells changes as the statements that would make them, in the order they are
+	// given, and **runs none of them** — the arrangement AlterStatements and SourceStatements have.
+	//
+	// It is spelling and not running, so it needs no connection and answers no error: a change this
+	// engine has no concept of contributes **nothing** rather than failing, and the run of that same
+	// change is where `domain.Unsupported` is raised.
+	//
+	// **A password is never in it.** This is what the reader is shown, what the History Log keeps and
+	// what a history holds, and a password in any of the three is a password on a screen — so the
+	// clause is spelled with a placeholder where the literal will go. It is the one thing here that
+	// differs between the preview and the run, and it differs by a single argument to one speller:
+	// see `sqlkit.Auth`, and the same arrangement dbtool makes for a program's command line.
+	AccountStatements(changes []AccountChange) []string
+	// ApplyAccountChanges runs exactly what AccountStatements showed, with the passwords in them, in
+	// that order, **stopping at the first failure**. There is no transaction around it unless the
+	// reader has opened one, which is why the preview has to be exact.
+	ApplyAccountChanges(ctx context.Context, changes []AccountChange) error
+}
+
 // Transaction is the manual half of a session's writing: the reader decides when what they have
 // done becomes true, instead of every statement being true the moment it runs.
 //
@@ -795,6 +1018,7 @@ type Transaction interface {
 
 type Session interface {
 	Schema
+	Security
 	Transaction
 
 	Ping(ctx context.Context) error

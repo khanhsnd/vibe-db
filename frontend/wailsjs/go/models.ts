@@ -1,5 +1,278 @@
 export namespace app {
 	
+	export class AccountAttribute {
+	    name: string;
+	    label: string;
+	    kind: string;
+	    choices: string[];
+	    help: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AccountAttribute(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.label = source["label"];
+	        this.kind = source["kind"];
+	        this.choices = source["choices"];
+	        this.help = source["help"];
+	    }
+	}
+	export class Grant {
+	    level: string;
+	    database: string;
+	    schema: string;
+	    object: string;
+	    columns: string[];
+	    privilege: string;
+	    grantable: boolean;
+	    denied: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Grant(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.level = source["level"];
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.object = source["object"];
+	        this.columns = source["columns"];
+	        this.privilege = source["privilege"];
+	        this.grantable = source["grantable"];
+	        this.denied = source["denied"];
+	    }
+	}
+	export class AccountRef {
+	    name: string;
+	    host: string;
+	    database: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AccountRef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.host = source["host"];
+	        this.database = source["database"];
+	    }
+	}
+	export class AccountChangeInput {
+	    kind: string;
+	    account: AccountRef;
+	    name: string;
+	    password: string;
+	    attributes: Record<string, string>;
+	    grant: Grant;
+	    role: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AccountChangeInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.account = this.convertValues(source["account"], AccountRef);
+	        this.name = source["name"];
+	        this.password = source["password"];
+	        this.attributes = source["attributes"];
+	        this.grant = this.convertValues(source["grant"], Grant);
+	        this.role = source["role"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AccountDetail {
+	    name: string;
+	    host: string;
+	    database: string;
+	    role: boolean;
+	    attributes: Record<string, string>;
+	    grants: Grant[];
+	    roles: string[];
+	    source: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AccountDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.host = source["host"];
+	        this.database = source["database"];
+	        this.role = source["role"];
+	        this.attributes = source["attributes"];
+	        this.grants = this.convertValues(source["grants"], Grant);
+	        this.roles = source["roles"];
+	        this.source = source["source"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TableColumn {
+	    name: string;
+	    type: string;
+	    fullType: string;
+	    nullable: boolean;
+	    primaryKey: boolean;
+	    default?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TableColumn(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.fullType = source["fullType"];
+	        this.nullable = source["nullable"];
+	        this.primaryKey = source["primaryKey"];
+	        this.default = source["default"];
+	    }
+	}
+	export class AccountList {
+	    columns: TableColumn[];
+	    rows: string[][];
+	    refs: AccountRef[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AccountList(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = this.convertValues(source["columns"], TableColumn);
+	        this.rows = source["rows"];
+	        this.refs = this.convertValues(source["refs"], AccountRef);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PrivilegeSet {
+	    level: string;
+	    names: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PrivilegeSet(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.level = source["level"];
+	        this.names = source["names"];
+	    }
+	}
+	export class AccountOptions {
+	    attributes: AccountAttribute[];
+	    privileges: PrivilegeSet[];
+	    roles: string[];
+	    hosts: string[];
+	    databases: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new AccountOptions(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.attributes = this.convertValues(source["attributes"], AccountAttribute);
+	        this.privileges = this.convertValues(source["privileges"], PrivilegeSet);
+	        this.roles = source["roles"];
+	        this.hosts = source["hosts"];
+	        this.databases = source["databases"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class AccountPreview {
+	    statements: string[];
+	    hazard: string;
+	    confirm: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AccountPreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.statements = source["statements"];
+	        this.hazard = source["hazard"];
+	        this.confirm = source["confirm"];
+	    }
+	}
+	
 	export class Backup {
 	    name: string;
 	    path: string;
@@ -194,28 +467,6 @@ export namespace app {
 	        this.left = source["left"];
 	        this.right = source["right"];
 	        this.differs = source["differs"];
-	    }
-	}
-	export class TableColumn {
-	    name: string;
-	    type: string;
-	    fullType: string;
-	    nullable: boolean;
-	    primaryKey: boolean;
-	    default?: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new TableColumn(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.name = source["name"];
-	        this.type = source["type"];
-	        this.fullType = source["fullType"];
-	        this.nullable = source["nullable"];
-	        this.primaryKey = source["primaryKey"];
-	        this.default = source["default"];
 	    }
 	}
 	export class DataDiff {
@@ -675,6 +926,7 @@ export namespace app {
 	        this.onDelete = source["onDelete"];
 	    }
 	}
+	
 	export class HistoryEntry {
 	    database: string;
 	    schema: string;
@@ -1050,6 +1302,7 @@ export namespace app {
 		    return a;
 		}
 	}
+	
 	export class SSHSettings {
 	    enabled: boolean;
 	    host: string;

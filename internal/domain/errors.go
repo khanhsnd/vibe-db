@@ -21,10 +21,15 @@ var (
 	// adapter answers instead of an empty definition, since a save would then have spelled the
 	// drop with nothing after it.
 	ErrUnknownDefinition = errors.New("view or routine does not exist")
-	ErrTableNotEditable  = errors.New("table has no primary key")
-	ErrEmptyStatement    = errors.New("no statement to run")
-	ErrStatementFailed   = errors.New("statement rejected by the server")
-	ErrQueryCancelled    = errors.New("query cancelled")
+	// ErrUnknownAccount is a user or a role the server does not know. It is its own sentinel for
+	// the reason ErrUnknownDefinition is: a reader is answered by *which* thing is missing, and it
+	// is what an adapter answers instead of an empty detail — a save built on one would spell a
+	// revoke of everything the account never had.
+	ErrUnknownAccount   = errors.New("user or role does not exist")
+	ErrTableNotEditable = errors.New("table has no primary key")
+	ErrEmptyStatement   = errors.New("no statement to run")
+	ErrStatementFailed  = errors.New("statement rejected by the server")
+	ErrQueryCancelled   = errors.New("query cancelled")
 
 	// ErrFileUnreadable is a file on this machine the app was pointed at and could not read: a
 	// path that is no longer there, or one this account may not open. Nothing was sent to a

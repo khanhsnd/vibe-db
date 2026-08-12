@@ -163,6 +163,67 @@ type Dialect struct {
 	TriggerOnTable bool
 	// Starters is what a reader begins a *new* view, routine or trigger from — see SourceStarter.
 	Starters SourceStarter
+
+	// The account half. Everything below is one engine's grammar for "who may do what", and it is
+	// here for the reason everything above is: `sqlkit.Auth` spells every account statement there is,
+	// and what differs between five engines is a flag rather than a second speller.
+
+	// AccountHasHost says an account **is** the pair `'name'@'host'` — MySQL's alone. Both halves are
+	// then string literals rather than identifiers, which is the one name in this package that is not
+	// quoted as a name.
+	AccountHasHost bool
+	// AccountKeyword is the word this engine declares one with. Empty takes `USER`; PostgreSQL says
+	// `ROLE`, a role and a user being the same object there and telling apart only by whether it may
+	// log in.
+	AccountKeyword string
+	// PasswordClause is where a password goes, with `%s` for the literal: `IDENTIFIED BY %s` on MySQL
+	// and Oracle, `PASSWORD %s` inside PostgreSQL's `WITH`, `PASSWORD = %s` inside SQL Server's.
+	// Empty is an engine with no password to set.
+	PasswordClause string
+	// PasswordIsIdentifier says the literal is quoted as a **name** rather than as a string, which is
+	// Oracle's grammar and nobody else's.
+	PasswordIsIdentifier bool
+	// AttributesInWith says the clauses that follow the name sit after a `WITH` — PostgreSQL and SQL
+	// Server — rather than being written one after another, which is MySQL's and Oracle's shape.
+	AttributesInWith bool
+	// LoginIsSeparate says a **login** belongs to the server and a **user** to a database, so
+	// declaring an account is two statements and dropping one is two the other way round. SQL
+	// Server's alone, and the reason `driver.AccountRef` carries a database.
+	LoginIsSeparate bool
+	// The three shapes of a grant's `ON` clause; an engine setting none of them names the object and
+	// nothing else, which is Oracle. See GrantTarget for what each spells.
+	GrantsByWildcard bool
+	GrantsOnTable    bool
+	GrantsByClass    bool
+	// ColumnsAfterObject says the columns of a column-level grant sit after the object rather than
+	// after the privilege — `GRANT SELECT ON OBJECT::t (c)` against `GRANT SELECT (c) ON t`. It is
+	// the one difference in that statement that is about placement rather than about words.
+	ColumnsAfterObject bool
+	// HasDeny says this engine has a third verb — SQL Server's `DENY`, which is not the absence of a
+	// grant: it outranks one arriving through a role. An engine without it refuses the change naming
+	// it rather than quietly revoking instead.
+	HasDeny bool
+	// RoleByMembership says a role is granted by altering the **role** — `ALTER ROLE r ADD MEMBER u` —
+	// rather than by granting it to the account. SQL Server's alone.
+	RoleByMembership bool
+	// RoleAdminOption says a granted role may carry the right to grant it on, spelled `WITH ADMIN
+	// OPTION`.
+	RoleAdminOption bool
+	// SystemAdminOption says a privilege over the *server* is administered rather than granted, so
+	// the option after it is `WITH ADMIN OPTION` — Oracle, the one engine whose grammar draws the
+	// distinction.
+	SystemAdminOption bool
+	// RenameAccountSQL is the whole statement, `%s` being the account and `%t` the name it is taking.
+	// Empty is an engine that cannot rename one at all — Oracle, where a user is a schema and its
+	// name is on every object inside it.
+	RenameAccountSQL string
+	// DropAccountSuffix is what follows the name on a drop: Oracle's ` CASCADE`, without which the
+	// statement is refused for any account that owns anything.
+	DropAccountSuffix string
+	// AccountAttrs is what an account carries besides a password, **in the order they are written**:
+	// MySQL's grammar wants a resource option before a lock, and a clause out of place is refused by
+	// the server rather than reordered here. See AccountAttr.
+	AccountAttrs []AccountAttr
 }
 
 // SourceStarter is the skeleton a reader starts a new view, routine or trigger from: the shape of
@@ -254,6 +315,33 @@ var (
 			Trigger: "CREATE TRIGGER %s\nBEFORE INSERT ON %t\nFOR EACH ROW\n" +
 				"BEGIN\n  SET @unused = 1;\nEND",
 		},
+		AccountHasHost:   true,
+		PasswordClause:   "IDENTIFIED BY %s",
+		GrantsByWildcard: true,
+		RoleAdminOption:  true,
+		RenameAccountSQL: "RENAME USER %s TO %t",
+		AccountAttrs: []AccountAttr{
+			// A resource option comes before a lock in MySQL's grammar, which is why the order
+			// these are declared in is the order they are written in.
+			{
+				Name: "maxConnections", Label: "Max connections", Kind: driver.AttributeNumber,
+				On:   "WITH MAX_USER_CONNECTIONS %s",
+				Help: "0 leaves the server's own limit in force.",
+			},
+			{
+				Name: "locked", Label: "Account locked", Kind: driver.AttributeCheck,
+				On: "ACCOUNT LOCK", Off: "ACCOUNT UNLOCK",
+			},
+			// There is no clause that un-expires a password, so this one has no Off: what clears it
+			// is setting a new password. `PASSWORD EXPIRE NEVER` is not the opposite of expired — it
+			// is a *policy* saying it never will be — and writing it here would change a rule the
+			// reader never asked about.
+			{
+				Name: "expired", Label: "Password expired", Kind: driver.AttributeCheck,
+				On:   "PASSWORD EXPIRE",
+				Help: "Setting a new password is what clears this.",
+			},
+		},
 	}
 	Postgres = Dialect{
 		IdentQuote:             '"',
@@ -280,6 +368,55 @@ var (
 			// separately, which is why this skeleton names one rather than opening a BEGIN.
 			Trigger: "CREATE TRIGGER %s\nBEFORE INSERT ON %t\nFOR EACH ROW\n" +
 				"EXECUTE FUNCTION trigger_function()",
+		},
+		// A role and a user are one object here, telling apart only by whether it may log in — which
+		// is why `LOGIN` is an attribute rather than a second kind of thing to declare.
+		AccountKeyword:   "ROLE",
+		PasswordClause:   "PASSWORD %s",
+		AttributesInWith: true,
+		GrantsOnTable:    true,
+		RoleAdminOption:  true,
+		RenameAccountSQL: "ALTER ROLE %s RENAME TO %t",
+		AccountAttrs: []AccountAttr{
+			{
+				Name: "login", Label: "Can log in", Kind: driver.AttributeCheck,
+				On: "LOGIN", Off: "NOLOGIN",
+				Help: "A role that cannot log in is what every other engine calls a role.",
+			},
+			{
+				Name: "superuser", Label: "Superuser", Kind: driver.AttributeCheck,
+				On: "SUPERUSER", Off: "NOSUPERUSER",
+			},
+			{
+				Name: "createdb", Label: "Can create databases", Kind: driver.AttributeCheck,
+				On: "CREATEDB", Off: "NOCREATEDB",
+			},
+			{
+				Name: "createrole", Label: "Can create roles", Kind: driver.AttributeCheck,
+				On: "CREATEROLE", Off: "NOCREATEROLE",
+			},
+			{
+				Name: "inherit", Label: "Inherits its roles' privileges", Kind: driver.AttributeCheck,
+				On: "INHERIT", Off: "NOINHERIT",
+			},
+			{
+				Name: "replication", Label: "Replication", Kind: driver.AttributeCheck,
+				On: "REPLICATION", Off: "NOREPLICATION",
+			},
+			{
+				Name: "bypassrls", Label: "Bypasses row security", Kind: driver.AttributeCheck,
+				On: "BYPASSRLS", Off: "NOBYPASSRLS",
+			},
+			{
+				Name: "connectionLimit", Label: "Connection limit", Kind: driver.AttributeNumber,
+				On:   "CONNECTION LIMIT %s",
+				Help: "-1 is no limit, which is the default.",
+			},
+			{
+				Name: "validUntil", Label: "Password valid until", Kind: driver.AttributeText,
+				On:   "VALID UNTIL %s",
+				Help: "A timestamp the server will parse, such as 2027-01-01.",
+			},
 		},
 	}
 	// SQLite is one file and therefore one namespace: `main`, which every name is qualified by
@@ -342,6 +479,36 @@ var (
 			// the rows out of `inserted` and `deleted`.
 			Trigger: "CREATE TRIGGER %s\nON %t\nAFTER INSERT\nAS\nBEGIN\n  SET NOCOUNT ON;\nEND",
 		},
+		// The one engine where an account is two objects: a **login** the server knows and a **user**
+		// a database knows. A login with no user in a database can sign in and reach nothing inside
+		// it, which is why declaring one is two statements and dropping one is two the other way.
+		LoginIsSeparate:    true,
+		PasswordClause:     "PASSWORD = %s",
+		AttributesInWith:   true,
+		GrantsByClass:      true,
+		ColumnsAfterObject: true,
+		HasDeny:            true,
+		RoleByMembership:   true,
+		RenameAccountSQL:   "ALTER USER %s WITH NAME = %t",
+		AccountAttrs: []AccountAttr{
+			{
+				Name: "defaultDatabase", Label: "Default database", Kind: driver.AttributeChoice,
+				Ident: true, Login: true, On: "DEFAULT_DATABASE = %s",
+			},
+			{
+				Name: "checkPolicy", Label: "Enforce password policy", Kind: driver.AttributeCheck,
+				Login: true, On: "CHECK_POLICY = ON", Off: "CHECK_POLICY = OFF",
+			},
+			{
+				Name: "defaultSchema", Label: "Default schema", Kind: driver.AttributeChoice,
+				Ident: true, On: "DEFAULT_SCHEMA = %s",
+			},
+			// `DISABLE` has no `WITH` to join, so it is a statement of its own — see AccountAttr.Bare.
+			{
+				Name: "disabled", Label: "Login disabled", Kind: driver.AttributeCheck,
+				Login: true, Bare: true, On: "DISABLE", Off: "ENABLE",
+			},
+		},
 	}
 	// Oracle has no databases below its service, so the schema *is* what a Namespace's Database
 	// holds and a name is qualified by one level exactly as MySQL's is. Everything else here is
@@ -370,6 +537,37 @@ var (
 			Procedure: "CREATE OR REPLACE PROCEDURE %s\nIS\nBEGIN\n  NULL;\nEND;",
 			Trigger: "CREATE OR REPLACE TRIGGER %s\nBEFORE INSERT ON %t\nFOR EACH ROW\n" +
 				"BEGIN\n  NULL;\nEND;",
+		},
+		PasswordClause:       "IDENTIFIED BY %s",
+		PasswordIsIdentifier: true,
+		// A privilege over the server is *administered* here rather than granted, which is the one
+		// engine that draws the distinction in its grammar. There is no RenameAccountSQL at all: a
+		// user is a schema, and its name is on every object inside it.
+		SystemAdminOption: true,
+		RoleAdminOption:   true,
+		DropAccountSuffix: " CASCADE",
+		AccountAttrs: []AccountAttr{
+			{
+				Name: "tablespace", Label: "Default tablespace", Kind: driver.AttributeChoice,
+				Ident: true, On: "DEFAULT TABLESPACE %s",
+			},
+			{
+				Name: "temporaryTablespace", Label: "Temporary tablespace",
+				Kind: driver.AttributeChoice, Ident: true, On: "TEMPORARY TABLESPACE %s",
+			},
+			{
+				Name: "profile", Label: "Profile", Kind: driver.AttributeChoice,
+				Ident: true, On: "PROFILE %s",
+			},
+			{
+				Name: "locked", Label: "Account locked", Kind: driver.AttributeCheck,
+				On: "ACCOUNT LOCK", Off: "ACCOUNT UNLOCK",
+			},
+			{
+				Name: "expired", Label: "Password expired", Kind: driver.AttributeCheck,
+				On:   "PASSWORD EXPIRE",
+				Help: "Setting a new password is what clears this.",
+			},
 		},
 	}
 	// Shell is the lexical half of a document store's own language, and is a Dialect for one

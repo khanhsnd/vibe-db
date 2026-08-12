@@ -84,6 +84,12 @@ func (*Driver) Open(
 		Fail:    translateError,
 		Tx:      &s.Txn,
 	}
+	s.Auth = sqlkit.Auth{
+		Dialect:   dialect,
+		Run:       s.run,
+		Translate: translateError,
+		Tx:        &s.Txn,
+	}
 	return s, nil
 }
 
@@ -93,8 +99,11 @@ type session struct {
 	// once the quoting and the paging are the dialect's.
 	sqlkit.DDL
 	sqlkit.Data
-	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data` and the query
-	// path above all run on — see `sqlkit.Txn`.
+	// Auth spells and runs every change to an account; what `account.go` adds beside it is the
+	// catalogue reads that say who exists and what they hold.
+	sqlkit.Auth
+	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data`, `Auth` and the
+	// query path above all run on — see `sqlkit.Txn`.
 	sqlkit.Txn
 
 	db *sql.DB

@@ -2,6 +2,7 @@ import { create, type StoreApi } from 'zustand'
 
 import { namespaceLabel, NO_NAMESPACE, type Namespace } from '@/bridge/connections'
 
+import type { AccountRef } from '@/bridge/accounts'
 import type { SearchMode, SearchScope } from '@/bridge/search'
 import type { SourceKind, SourceRef } from '@/bridge/schema'
 
@@ -26,6 +27,7 @@ export type TabKind =
   | 'backups'
   | 'diagram'
   | 'log'
+  | 'accounts'
 
 /** Which half of two tables a comparison is reading: their shapes, or their rows. */
 export type CompareMode = 'structure' | 'data'
@@ -159,6 +161,20 @@ export interface LogTab extends TabBase {
   kind: 'log'
 }
 
+/**
+ * Who a **connection** knows, and what each of them may do — what the `Users` folder opens. It is
+ * the one tab that names a connection and no namespace: an account belongs to the server rather
+ * than to a database, so its `namespace` is empty and the strip draws none.
+ *
+ * `account` is which row of the list the editor below is open on, and is the tab's own state
+ * rather than its identity: there is **one** of these per connection, and picking a second account
+ * moves the editor rather than opening a second tab — the arrangement a comparison's `mode` has.
+ */
+export interface AccountsTab extends TabBase {
+  kind: 'accounts'
+  account: AccountRef | null
+}
+
 export type Tab =
   | QueryTab
   | TableTab
@@ -171,6 +187,7 @@ export type Tab =
   | BackupsTab
   | DiagramTab
   | LogTab
+  | AccountsTab
 export type NewTab =
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
@@ -183,6 +200,7 @@ export type NewTab =
   | Omit<BackupsTab, 'id'>
   | Omit<DiagramTab, 'id'>
   | Omit<LogTab, 'id'>
+  | Omit<AccountsTab, 'id'>
 
 /** What names a table wherever one is opened: which connection, which namespace, which table. */
 export interface TableTarget {
@@ -242,6 +260,14 @@ interface TabsState {
   openBackups: (profileId: string, namespace: Namespace) => string
   /** A namespace's tables as boxes, with the foreign keys between them drawn as lines. */
   openDiagram: (profileId: string, namespace: Namespace) => string
+  /**
+   * Opens the accounts of a connection, on `account` if one was named. One tab per connection: a
+   * second account is the same tab with its editor moved, which is why the reference is passed to
+   * the open rather than being part of what identifies the tab.
+   */
+  openAccounts: (profileId: string, account?: AccountRef) => string
+  /** Moves the editor to another account, or off one entirely. */
+  setAccount: (id: string, account: AccountRef | null) => void
   /** A console on one connection. One per connection and namespace, like every other tab. */
   openConsole: (profileId: string, namespace: Namespace) => string
   /**
@@ -417,6 +443,27 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   openDiagram: (profileId, namespace) =>
     get().open({ kind: 'diagram', title: 'Diagram', profileId, namespace }),
+
+  openAccounts: (profileId, account) => {
+    const id = get().open({
+      kind: 'accounts',
+      title: 'Users',
+      profileId,
+      namespace: NO_NAMESPACE,
+      account: account ?? null,
+    })
+    // A connection already open is revealed rather than opened again, so the account the reader
+    // just picked is the one the editor lands on — the arrangement openCompare has with its mode.
+    if (account) get().setAccount(id, account)
+    return id
+  },
+
+  setAccount: (id, account) =>
+    set((s) => ({
+      tabs: s.tabs.map((tab) =>
+        tab.id === id && tab.kind === 'accounts' ? { ...tab, account } : tab,
+      ),
+    })),
 
   openCompare: (left, right, mode) => {
     const id = get().open({

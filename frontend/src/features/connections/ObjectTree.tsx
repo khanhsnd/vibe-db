@@ -18,6 +18,7 @@ import {
   Sigma,
   Table2,
   Terminal,
+  UserRound,
   Zap,
 } from 'lucide-react'
 
@@ -49,6 +50,10 @@ const ICONS: Record<NodeKind, typeof Table2> = {
   // tree whose leaves are on this machine rather than on the server.
   backups: Folder,
   backup: Archive,
+  // An account is drawn as a person because that is what it is — the one row in the tree that
+  // stands for somebody rather than for something the server stores.
+  accounts: Folder,
+  account: UserRound,
   table: Table2,
   view: Eye,
   procedure: Terminal,
@@ -77,6 +82,8 @@ const COLOURS: Record<NodeKind, string> = {
   triggers: 'text-kind-trigger',
   backups: 'text-kind-backup',
   backup: 'text-kind-backup',
+  accounts: 'text-kind-account',
+  account: 'text-kind-account',
   table: 'text-kind-table',
   view: 'text-kind-view',
   procedure: 'text-kind-routine',

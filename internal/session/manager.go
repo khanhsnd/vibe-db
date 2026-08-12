@@ -267,6 +267,17 @@ func (m *Manager) Schema(id string) (driver.Schema, error) {
 	return s.driverSession, nil
 }
 
+// Security hands out the account half of a session, and the environment it would run in beside it.
+// The two travel together for the reason Review's do: a change to an account carries a hazard, and
+// turning that into a question the reader has to answer is `domain.Environment.NeedsConfirmation`'s.
+func (m *Manager) Security(id string) (driver.Security, domain.Environment, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return nil, "", err
+	}
+	return s.driverSession, s.Profile.Environment, nil
+}
+
 func (m *Manager) TableRows(
 	ctx context.Context,
 	id string,

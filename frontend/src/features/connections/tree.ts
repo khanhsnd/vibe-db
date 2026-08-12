@@ -1,3 +1,4 @@
+import type { AccountRef } from '@/bridge/accounts'
 import type { Engine, Namespace, Routine, Trigger } from '@/bridge/connections'
 import type { SourceRef } from '@/bridge/schema'
 
@@ -17,6 +18,10 @@ export type NodeKind =
   // a shelf on this machine. It is filled by a read of its own — see `isObjectFolder`.
   | 'backups'
   | 'backup'
+  // The one folder that hangs off a **connection** rather than a namespace, and the accounts in
+  // it. An account is the server's and belongs to no database, which is why it is at that level.
+  | 'accounts'
+  | 'account'
   | 'table'
   | 'view'
   | 'procedure'
@@ -62,6 +67,11 @@ export interface TreeNode {
   routine?: Routine
   /** The trigger a `trigger` row stands for — its name *and* its table, which is what names one. */
   trigger?: Trigger
+  /**
+   * The account an `account` row stands for. It is the whole reference and not the label, because
+   * on MySQL an account **is** `name@host` and two rows of the folder may share a name.
+   */
+  account?: AccountRef
 }
 
 /**
@@ -165,6 +175,7 @@ const FOLDERS: ReadonlySet<NodeKind> = new Set([
   'routines',
   'triggers',
   'backups',
+  'accounts',
   'fields',
   'indexes',
   'foreignKeys',

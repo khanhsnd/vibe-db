@@ -10,10 +10,17 @@ import {
   type Namespace,
   type Profile,
 } from '@/bridge/connections'
+import {
+  accountLabel,
+  applyAccountChanges,
+  type AccountRef,
+} from '@/bridge/accounts'
 import { databases } from '@/bridge/databases'
 import { ICON } from '@/shared/ui/menuIcons'
 import { NEW_SOURCE, schema, type SourceKind } from '@/bridge/schema'
 import type { TableColumn } from '@/bridge/tables'
+import { accountItems } from '@/features/accounts/accountActions'
+import { dropChanges } from '@/features/accounts/accountDraft'
 import { backupActions, type BackupActions } from '@/features/backup/backupActions'
 import type { DumpTarget } from '@/features/backup/DumpDialog'
 import { fieldActions, type FieldActions } from '@/features/schema/fieldActions'
@@ -60,6 +67,8 @@ interface TreeMenuActions {
   onDiagram: (profileId: string, namespace: Namespace) => void
   /** Opens the list of backups kept for a namespace. */
   onBackups: (profileId: string, namespace: Namespace) => void
+  /** Opens the accounts of a connection, on one of them where the row named one. */
+  onAccounts: (profileId: string, account?: AccountRef) => void
   onDump: (targets: DumpTarget[], withData: boolean) => void
 }
 
@@ -137,6 +146,7 @@ export function useTreeMenu(
   const dump = useConnectionsStore((s) => s.dump)
   const openBackupFolder = useConnectionsStore((s) => s.openBackupFolder)
   const refreshBackups = useConnectionsStore((s) => s.refreshBackups)
+  const refreshAccounts = useConnectionsStore((s) => s.refreshAccounts)
   const changeBackups = useConnectionsStore((s) => s.changeBackups)
   const reportError = useConnectionsStore((s) => s.reportError)
   const askBackup = useBackupsStore((s) => s.ask)
@@ -159,6 +169,7 @@ export function useTreeMenu(
     onFind,
     onDiagram,
     onBackups,
+    onAccounts,
     onDump,
   } = actions
 
@@ -200,6 +211,34 @@ export function useTreeMenu(
               onSubmit: (name) => renameProfile(profile.id, name),
             }),
           refreshDatabases,
+        })
+      }
+
+      // The two rows that name an account. They are answered **before** the guard below, because
+      // an account is the server's and carries no namespace at all — the one branch of the tree
+      // that does not.
+      if (node.kind === 'accounts' || node.kind === 'account') {
+        if (!sessions[node.profileId]) return []
+        return accountItems(node, {
+          open: onAccounts,
+          refresh: () => void refreshAccounts(node.profileId),
+          remove: (ref) =>
+            ask({
+              kind: 'confirm',
+              title: `Delete ${info.accountLabel}`,
+              message:
+                `Drop ${accountLabel(ref)}? Everything granted to it goes with it, and anything ` +
+                `connecting as it stops being able to.`,
+              submitLabel: 'Delete',
+              danger: true,
+              onSubmit: async () => {
+                const session = sessions[node.profileId]
+                if (!session) return
+                await applyAccountChanges(session.id, dropChanges(ref))
+                await refreshAccounts(node.profileId)
+              },
+            }),
+          label: info.accountLabel,
         })
       }
 
@@ -579,6 +618,7 @@ export function useTreeMenu(
       onFind,
       onDiagram,
       onBackups,
+      onAccounts,
       onDump,
       picked,
       pickedNamespaces,

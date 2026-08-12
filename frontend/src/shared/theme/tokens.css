@@ -112,6 +112,9 @@
   /** A backup is not a thing the catalogue holds — it is a file on this machine — so it is the one
       entry here that is deliberately off the palette the server's own objects share. */
   --kind-backup: #8b949e;
+  /** An account is not an object of a catalogue either — it is who the *server* knows — so it
+      takes its own entry beside the backup's rather than borrowing a table's or a schema's. */
+  --kind-account: #d29922;
 
   /** One per class of column type, so a grid header says what a column *holds* before its name is
       read. They are the same seven `columnType.tsx` sorts a type into, and nothing else may take
@@ -226,6 +229,7 @@
   --kind-index: #8250df;
   --kind-relation: #bf3989;
   --kind-backup: #57606a;
+  --kind-account: #9a6700;
 
   --type-text: #1a7f37;
   --type-numeric: #0550ae;
@@ -309,6 +313,7 @@
   --color-kind-index: var(--kind-index);
   --color-kind-relation: var(--kind-relation);
   --color-kind-backup: var(--kind-backup);
+  --color-kind-account: var(--kind-account);
 
   --color-type-text: var(--type-text);
   --color-type-numeric: var(--type-numeric);

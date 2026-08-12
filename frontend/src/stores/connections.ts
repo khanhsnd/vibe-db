@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 
+import { accountKey, listAccounts, type AccountList } from '@/bridge/accounts'
 import { backups as backupFiles, type Backup } from '@/bridge/backup'
 import { type AppError, toAppError } from '@/bridge/errors'
 import {
@@ -61,6 +62,12 @@ interface ConnectionsState {
    * somewhere else would be two lists to keep in step.
    */
   backups: Record<string, Backup[]>
+  /**
+   * The accounts a **connection** knows, keyed by connection alone: a user is the server's and
+   * belongs to no namespace, which is why this is the one list here not keyed by one. It lives
+   * beside the others for the same reason the backups do — the tree draws it.
+   */
+  accounts: Record<string, AccountList>
   activeNamespace: Record<string, Namespace>
   /**
    * Which databases each connection draws, keyed by connection: the part of a big server a reader
@@ -94,6 +101,10 @@ interface ConnectionsState {
   /** Re-reads a table's shape whether or not it is already cached, which Refresh needs. */
   refreshStructure: (profileId: string, ns: Namespace, table: string) => Promise<void>
   loadBackups: (profileId: string, ns: Namespace) => Promise<void>
+  /** Reads who a connection knows, once, when its `Users` folder is first opened. */
+  loadAccounts: (profileId: string) => Promise<void>
+  /** Re-reads it whether or not it is already cached, which Refresh and an applied change need. */
+  refreshAccounts: (profileId: string) => Promise<void>
   refreshObjects: (profileId: string, ns: Namespace) => Promise<void>
   /** Re-reads a namespace's backup folder whether or not it is already cached. */
   refreshBackups: (profileId: string, ns: Namespace) => Promise<void>
@@ -159,6 +170,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   schemas: {},
   objects: {},
   backups: {},
+  accounts: {},
   tableSchemas: {},
   structures: {},
   activeNamespace: {},
@@ -268,6 +280,7 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
           schemas: drop(s.schemas),
           objects: drop(s.objects),
           backups: drop(s.backups),
+          accounts: without(s.accounts, profileId),
           tableSchemas: drop(s.tableSchemas),
           structures: drop(s.structures),
           statuses: { ...s.statuses, [profileId]: 'idle' },
@@ -315,6 +328,31 @@ export const useConnectionsStore = create<ConnectionsState>((set, get) => ({
   loadBackups: async (profileId, ns) => {
     if (get().backups[namespaceKey(profileId, ns)]) return
     await get().refreshBackups(profileId, ns)
+  },
+
+  loadAccounts: async (profileId) => {
+    if (get().accounts[profileId]) return
+    await get().refreshAccounts(profileId)
+  },
+
+  refreshAccounts: async (profileId) => {
+    const session = get().sessions[profileId]
+    if (!session) return
+
+    // A list that could not be read is recorded as **empty, with the reason in the bar** rather
+    // than left unset, exactly as a backup folder is: unset is what "nobody has looked yet" means
+    // here, and a folder still waiting on a read that already failed would spin for ever. Reading
+    // who a server knows is a privileged thing to ask on every one of these engines, so a reader
+    // without that privilege meets an empty folder and a sentence, not a broken tree.
+    try {
+      const list = await listAccounts(session.id)
+      set((s) => ({ accounts: { ...s.accounts, [profileId]: list } }))
+    } catch (thrown) {
+      set((s) => ({
+        accounts: { ...s.accounts, [profileId]: { columns: [], rows: [], refs: [] } },
+        error: toAppError(thrown),
+      }))
+    }
   },
 
   // Cached until disconnect, like tables: a schema read costs one catalogue scan, and the
@@ -522,6 +560,7 @@ interface TreeInput {
   schemas: Record<string, string[]>
   objects: Record<string, Objects>
   backups: Record<string, Backup[]>
+  accounts: Record<string, AccountList>
   structures: Record<string, TableStructure>
   activeNamespace: Record<string, Namespace>
   databaseFilters: Record<string, string>
@@ -547,14 +586,21 @@ export function buildTree(input: TreeInput): TreeNode[] {
       // The reader's own narrowing, applied where the branch is built and nowhere else: what the
       // *tree* draws of a big server is a reading preference, and the list the store holds is still
       // the whole one — see `setDatabaseFilter`.
-      children: filterDatabases(
-        input.databases[profile.id] ?? [],
-        input.databaseFilters[profile.id] ?? '',
-      ).map((database) =>
-        info.hasSchemas
-          ? schemaParentNode(input, info, profile.id, database)
-          : namespaceNode(input, info, profile.id, 'database', namespaceOf(database), database),
-      ),
+      children: [
+        ...filterDatabases(
+          input.databases[profile.id] ?? [],
+          input.databaseFilters[profile.id] ?? '',
+        ).map((database) =>
+          info.hasSchemas
+            ? schemaParentNode(input, info, profile.id, database)
+            : namespaceNode(input, info, profile.id, 'database', namespaceOf(database), database),
+        ),
+        // Under the databases, because it is not one of them: an account is the **server's** and
+        // belongs to no namespace, which is why this is the only folder the tree hangs off a
+        // connection. It is filled by a read of its own, like the backups folder, and is left out
+        // entirely for an engine with no accounts — see `hasAccounts`.
+        ...(info.hasAccounts ? [accountsFolder(input, profile.id, info.accountLabel)] : []),
+      ],
     }
   })
 }
@@ -811,3 +857,35 @@ const objectNodeId = (
   table: string,
   name = '',
 ) => `${kind}:${tableKey(profileId, ns, table)}${name === '' ? '' : `:${name}`}`
+
+// The one folder that hangs off a connection rather than a namespace, and the accounts under it.
+// It is named in the engine's own word — `Users` on five of them, `Roles` on PostgreSQL, where a
+// user is a role that may log in and nothing else — which is `accountLabel`, never a comparison
+// against an engine's name.
+//
+// A leaf carries the whole reference rather than its label, for the reason a routine's row carries
+// its arguments: on MySQL an account **is** `name@host` and two rows may share a name.
+function accountsFolder(input: TreeInput, profileId: string, label: string): TreeNode {
+  const held = input.accounts[profileId]
+  const refs = held?.refs ?? []
+
+  return {
+    id: accountsFolderNodeId(profileId),
+    kind: 'accounts',
+    label: `${label}s`,
+    profileId,
+    ...(held ? { badge: String(refs.length) } : {}),
+    children: refs.map((ref) => ({
+      id: `account:${profileId}:${accountKey(ref)}`,
+      kind: 'account' as NodeKind,
+      label: ref.name,
+      profileId,
+      account: ref,
+      // What tells two of one name apart, which on MySQL is the host and on SQL Server and
+      // MongoDB the database. Nothing at all where the name already names one.
+      ...(ref.host !== '' ? { badge: ref.host } : ref.database !== '' ? { badge: ref.database } : {}),
+    })),
+  }
+}
+
+export const accountsFolderNodeId = (profileId: string) => `accounts:${profileId}`

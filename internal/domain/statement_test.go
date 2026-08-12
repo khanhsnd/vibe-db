@@ -189,3 +189,48 @@ func TestAFlushIsConfirmedOnALaptopToo(t *testing.T) {
 		t.Error("a flush on production is not confirmed")
 	}
 }
+
+func TestGrantHazard(t *testing.T) {
+	cases := []struct {
+		name      string
+		action    AccountAction
+		scope     GrantScope
+		privilege string
+		grantable bool
+		want      Hazard
+	}{
+		{"dropping an account", AccountDrop, GrantScoped, "", false, HazardDestructive},
+		{"a grant on the whole server", AccountGrant, GrantWhole, "SELECT", false, HazardUnfiltered},
+		{"a grant of everything", AccountGrant, GrantScoped, "ALL PRIVILEGES", false, HazardUnfiltered},
+		{"a grant that can be passed on", AccountGrant, GrantScoped, "SELECT", true, HazardUnfiltered},
+		{"an ordinary grant", AccountGrant, GrantScoped, "SELECT", false, HazardWrite},
+		{"a revoke", AccountRevoke, GrantScoped, "SELECT", false, HazardWrite},
+		{"making an account", AccountCreate, GrantScoped, "", false, HazardWrite},
+		{"renaming one", AccountRename, GrantScoped, "", false, HazardWrite},
+	}
+
+	for _, one := range cases {
+		t.Run(one.name, func(t *testing.T) {
+			got := GrantHazard(one.action, one.scope, one.privilege, one.grantable)
+			if got != one.want {
+				t.Errorf("GrantHazard = %q, want %q", got, one.want)
+			}
+		})
+	}
+}
+
+// The reason a grant that names nothing is classified unfiltered rather than merely a write: a
+// reader handing out the whole server answers for it on a laptop as surely as in production.
+func TestAGrantOfEverythingIsConfirmedOnALaptopToo(t *testing.T) {
+	everything := GrantHazard(AccountGrant, GrantWhole, "ALL PRIVILEGES", true)
+
+	if !EnvironmentDevelopment.NeedsConfirmation(everything) {
+		t.Error("a grant of the whole server on development is not confirmed")
+	}
+	// An ordinary grant is not, which is what keeps the warning worth reading.
+	if EnvironmentDevelopment.NeedsConfirmation(GrantHazard(
+		AccountGrant, GrantScoped, "SELECT", false,
+	)) {
+		t.Error("an ordinary grant on development is confirmed")
+	}
+}

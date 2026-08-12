@@ -58,6 +58,7 @@ export function App() {
   const openSource = useTabsStore((s) => s.openSource)
   const openTables = useTabsStore((s) => s.openTables)
   const openBackups = useTabsStore((s) => s.openBackups)
+  const openAccounts = useTabsStore((s) => s.openAccounts)
   const openConsole = useTabsStore((s) => s.openConsole)
   const openCompare = useTabsStore((s) => s.openCompare)
   const openFind = useTabsStore((s) => s.openFind)
@@ -71,6 +72,7 @@ export function App() {
   const schemas = useConnectionsStore((s) => s.schemas)
   const objects = useConnectionsStore((s) => s.objects)
   const backups = useConnectionsStore((s) => s.backups)
+  const accounts = useConnectionsStore((s) => s.accounts)
   const structures = useConnectionsStore((s) => s.structures)
   const activeNamespace = useConnectionsStore((s) => s.activeNamespace)
   const databaseFilters = useConnectionsStore((s) => s.databaseFilters)
@@ -83,6 +85,7 @@ export function App() {
   const loadSchemas = useConnectionsStore((s) => s.loadSchemas)
   const loadObjects = useConnectionsStore((s) => s.loadObjects)
   const loadBackups = useConnectionsStore((s) => s.loadBackups)
+  const loadAccounts = useConnectionsStore((s) => s.loadAccounts)
   const loadStructure = useConnectionsStore((s) => s.loadStructure)
   const toggleNode = useConnectionsStore((s) => s.toggleNode)
   const askBackup = useBackupsStore((s) => s.ask)
@@ -96,6 +99,7 @@ export function App() {
         schemas,
         objects,
         backups,
+        accounts,
         structures,
         activeNamespace,
         databaseFilters,
@@ -107,6 +111,7 @@ export function App() {
       schemas,
       objects,
       backups,
+      accounts,
       structures,
       activeNamespace,
       databaseFilters,
@@ -217,6 +222,10 @@ export function App() {
   // that table's shape. One read fills all of them either way.
   const revealNode = useCallback(
     (node: TreeNode) => {
+      // The one folder that hangs off a *connection*: it has no namespace, so it is read before
+      // the guard below sends every namespace-less node away.
+      if (node.kind === 'accounts') void loadAccounts(node.profileId)
+
       const ns = node.namespace
       if (!ns) return
 
@@ -229,7 +238,7 @@ export function App() {
       if (node.kind === 'backups') void loadBackups(node.profileId, ns)
       if (node.table !== undefined) void loadStructure(node.profileId, ns, node.table)
     },
-    [loadSchemas, loadObjects, loadBackups, loadStructure],
+    [loadSchemas, loadObjects, loadBackups, loadAccounts, loadStructure],
   )
 
   // Opening a closed connection means dialling it: a disconnected connection node still carries
@@ -283,6 +292,7 @@ export function App() {
       onFind: openFind,
       onDiagram: openDiagram,
       onBackups: openBackups,
+      onAccounts: openAccounts,
       onDump: (targets, withData) => setDumpFrom({ targets, withData }),
     },
     pickedTables,
@@ -315,10 +325,19 @@ export function App() {
       // database is not that node — its schemas are — so selecting one names nothing.
       if (node.namespace && ownsObjects(node)) selectNamespace(node.profileId, node.namespace)
 
-      // Neither of the two folders that open a list is opened by picking a *second* row, and
-      // neither is opened twice by the caret, which does its own expanding — see `PickHow`.
-      const opens = (how === 'replace' || how === 'caret') && node.namespace !== undefined
-      if (!opens || !node.namespace) return
+      // Neither of the folders that open a list is opened by picking a *second* row, and none of
+      // them is opened twice by the caret, which does its own expanding — see `PickHow`.
+      const opens = how === 'replace' || how === 'caret'
+
+      // Users is the third such folder and the only one that names no namespace, an account being
+      // the server's. It opens and expands together for the reason Backups does: the tree has room
+      // for the names and the grid beside it has room for everything the catalogue keeps.
+      if (opens && node.kind === 'accounts') {
+        openAccounts(node.profileId)
+        if (how === 'replace') toggleTreeNode(node)
+        return
+      }
+      if (!opens || node.namespace === undefined) return
 
       if (node.kind === 'tables') openTables(node.profileId, node.namespace)
 
@@ -330,7 +349,15 @@ export function App() {
         if (how === 'replace') toggleTreeNode(node)
       }
     },
-    [picked.length, pickedIds, selectNamespace, openTables, openBackups, toggleTreeNode],
+    [
+      picked.length,
+      pickedIds,
+      selectNamespace,
+      openTables,
+      openBackups,
+      openAccounts,
+      toggleTreeNode,
+    ],
   )
 
   // A table opens its data rather than its folders, even though it now has folders to open: the
@@ -340,13 +367,20 @@ export function App() {
   // are — so that is what opens, which is the same promise under a different word.
   const activateNode = useCallback(
     (node: TreeNode) => {
+      // An account has no rows and no folders, and the editor is the whole of what it is — the
+      // same promise a routine's row makes under a different word.
+      if (node.kind === 'account' && node.account) {
+        openAccounts(node.profileId, node.account)
+        return
+      }
+
       const ref = sourceRefOf(node)
       if (hasRows(node)) openNodeRows(node)
       else if (ref && node.namespace) {
         openSource({ profileId: node.profileId, namespace: node.namespace, ref })
       } else if (isExpandable(node)) toggleTreeNode(node)
     },
-    [toggleTreeNode, openNodeRows, openSource],
+    [toggleTreeNode, openNodeRows, openSource, openAccounts],
   )
 
   // A new editor inherits the selected connection and namespace, falling back to

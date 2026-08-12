@@ -13,6 +13,7 @@ import {
   SquareTerminal,
   Table2,
   Terminal,
+  UserRound,
   X,
   type LucideIcon,
 } from 'lucide-react'
@@ -50,6 +51,9 @@ export const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: str
   // with room between them, and only the lines say something the tree cannot.
   diagram: { label: 'Diagram', icon: Network, tint: 'text-kind-relation' },
   log: { label: 'History Log', icon: ScrollText, tint: 'text-kind-routine' },
+  // The one tab that stands for somebody rather than for something the server stores, and it wears
+  // the tree's own account colour for the reason every other row here wears the tree's.
+  accounts: { label: 'Users', icon: UserRound, tint: 'text-kind-account' },
 }
 
 export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {

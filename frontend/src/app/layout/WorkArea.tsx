@@ -1,5 +1,6 @@
 import { Terminal } from 'lucide-react'
 
+import { AccountsView } from '@/features/accounts/AccountsView'
 import { BackupListView } from '@/features/backup/BackupListView'
 import { CompareView } from '@/features/compare/CompareView'
 import { ConsoleView } from '@/features/console/ConsoleView'
@@ -87,6 +88,12 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
               profileId={activeTab.profileId}
               namespace={activeTab.namespace}
             />
+          )
+        ) : activeTab.kind === 'accounts' ? (
+          sessionId === null ? (
+            <Empty title="Not connected" hint="Reconnect this connection to read its users." />
+          ) : (
+            <AccountsView key={activeTab.id} tab={activeTab} sessionId={sessionId} />
           )
         ) : activeTab.kind === 'diagram' ? (
           // The picture is this machine's and survives a connection going down, but the fields and

@@ -84,6 +84,14 @@ func (*Driver) Open(
 		Fail:    translateError,
 		Tx:      &s.Txn,
 	}
+	// Account statements go through `runIn` rather than `run`: they are the only ones this adapter
+	// writes that do not name their own database — see `account.go`.
+	s.Auth = sqlkit.Auth{
+		Dialect:   dialect,
+		Run:       s.runIn,
+		Translate: translateError,
+		Tx:        &s.Txn,
+	}
 	return s, nil
 }
 
@@ -92,8 +100,11 @@ type session struct {
 	// that differ, and `Data` is the reads and writes of rows.
 	sqlkit.DDL
 	sqlkit.Data
-	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data` and the query
-	// path all run on — see `sqlkit.Txn`.
+	// Auth spells and runs every change to a login or a user; what `account.go` adds beside it is
+	// the catalogue reads that say who exists and what they hold.
+	sqlkit.Auth
+	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data`, `Auth` and the
+	// query path all run on — see `sqlkit.Txn`.
 	sqlkit.Txn
 
 	db *sql.DB

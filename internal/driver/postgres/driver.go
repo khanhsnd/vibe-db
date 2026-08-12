@@ -66,6 +66,12 @@ func (*Driver) Open(
 		Fail:    translateError,
 		Tx:      &s.Txn,
 	}
+	s.Auth = sqlkit.Auth{
+		Dialect:   dialect,
+		Run:       s.run,
+		Translate: translateError,
+		Tx:        &s.Txn,
+	}
 
 	// The profile's own database is what the session is judged on: reaching it proves the
 	// host, the credentials and the TLS mode, and it is where the database list is read.
@@ -90,8 +96,11 @@ type session struct {
 	// once the quoting and the paging are the dialect's.
 	sqlkit.DDL
 	sqlkit.Data
-	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data` and the query
-	// path all run on — see `sqlkit.Txn`.
+	// Auth spells and runs every change to a role; what `account.go` adds beside it is the
+	// catalogue reads that say who exists and what they hold.
+	sqlkit.Auth
+	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data`, `Auth` and the
+	// query path all run on — see `sqlkit.Txn`.
 	sqlkit.Txn
 
 	profile domain.ConnectionProfile

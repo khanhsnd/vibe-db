@@ -332,6 +332,20 @@ export interface EngineInfo {
   // These mirror `domain.Engine.Toolkit`, which is where the rule lives.
   dumpTool: string
   restoreTool: string
+  // Whether this engine has accounts at all. A SQLite database is a file: whoever can open it can
+  // do everything to it and whoever cannot can do nothing, which is the operating system's answer
+  // rather than the engine's — so there is no `Users` folder under one and no tab to open.
+  hasAccounts: boolean
+  // What this engine calls one, in its own words. PostgreSQL has no users: `CREATE USER` there is
+  // `CREATE ROLE … LOGIN` and nothing else, so a menu saying `New User…` would be naming something
+  // the server does not have. It is a field for the reason `databaseLabel` is one — never a
+  // comparison against an engine's name in a component.
+  accountLabel: string
+  // Whether an account here is granted **roles** rather than privileges. On MongoDB a role is the
+  // only unit there is — a privilege belongs to the role and not to the account — and on Redis
+  // there are no roles at all. Both facts reach the editor as the driver's own `AccountOptions`,
+  // and this is only what keeps a menu item off an engine that has neither.
+  hasRoles: boolean
 }
 
 /**
@@ -423,6 +437,9 @@ export const ENGINES = [
     // The ordinary client, because mysqldump writes a plain script and running one is all it takes
     // to put it back. It is the one of the three whose restore is not a program of its own.
     restoreTool: 'mysql',
+    hasAccounts: true,
+    accountLabel: 'User',
+    hasRoles: true,
   },
   {
     value: 'postgres',
@@ -451,6 +468,10 @@ export const ENGINES = [
     hasTransactions: true,
     dumpTool: 'pg_dump',
     restoreTool: 'pg_restore',
+    hasAccounts: true,
+    // A role and a user are one object here: `CREATE USER` is `CREATE ROLE … LOGIN`.
+    accountLabel: 'Role',
+    hasRoles: true,
   },
   {
     // A SQLite database is a file, so there is no host, no port and nobody to be — the Database box
@@ -484,6 +505,9 @@ export const ENGINES = [
     // run and nothing for one to do that Explorer does not already.
     dumpTool: '',
     restoreTool: '',
+    hasAccounts: false,
+    accountLabel: '',
+    hasRoles: false,
   },
   {
     // SQL Server names a table by its database *and* its schema, so the tree has both levels the
@@ -517,6 +541,9 @@ export const ENGINES = [
     // see rather than one this machine has. There is no client program that carries a database out.
     dumpTool: '',
     restoreTool: '',
+    hasAccounts: true,
+    accountLabel: 'User',
+    hasRoles: true,
   },
   {
     // Oracle has no level between a connection and a schema: the Database box holds the *service*
@@ -551,6 +578,9 @@ export const ENGINES = [
     // owns, so `expdp` is not a program that carries anything to this machine.
     dumpTool: '',
     restoreTool: '',
+    hasAccounts: true,
+    accountLabel: 'User',
+    hasRoles: true,
   },
   {
     // A MongoDB server started without access control takes no credentials at all, which is why
@@ -586,6 +616,9 @@ export const ENGINES = [
     hasTransactions: false,
     dumpTool: 'mongodump',
     restoreTool: 'mongorestore',
+    hasAccounts: true,
+    accountLabel: 'User',
+    hasRoles: true,
   },
   {
     // A Redis database is *numbered* rather than named — `0` to `15` on a default install — so the
@@ -619,6 +652,10 @@ export const ENGINES = [
     // client program that pulls one back to this machine.
     dumpTool: '',
     restoreTool: '',
+    hasAccounts: true,
+    accountLabel: 'User',
+    // A Redis ACL grants command categories and has nothing that is granted in turn.
+    hasRoles: false,
   },
 ] as const satisfies readonly EngineInfo[]
 

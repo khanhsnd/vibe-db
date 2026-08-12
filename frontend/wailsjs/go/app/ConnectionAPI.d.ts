@@ -6,6 +6,8 @@ export function AddColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:app.Co
 
 export function AlterColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:app.ColumnInput):Promise<void>;
 
+export function ApplyAccountChanges(arg1:string,arg2:Array<app.AccountChangeInput>):Promise<void>;
+
 export function ApplyRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<void>;
 
 export function ApplyTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<app.TableChangeInput>):Promise<void>;
@@ -76,6 +78,8 @@ export function InTransaction(arg1:string):Promise<boolean>;
 
 export function InsertRow(arg1:string,arg2:app.RowInsertInput):Promise<void>;
 
+export function ListAccounts(arg1:string):Promise<app.AccountList>;
+
 export function ListBackups(arg1:string,arg2:app.Namespace):Promise<Array<app.Backup>>;
 
 export function ListDatabases(arg1:string):Promise<Array<string>>;
@@ -89,6 +93,10 @@ export function ListTransferEncodings():Promise<Array<app.TransferEncoding>>;
 export function ListTransferFormats():Promise<Array<app.TransferFormat>>;
 
 export function ListWorksheets(arg1:string):Promise<Array<string>>;
+
+export function LoadAccount(arg1:string,arg2:app.AccountRef):Promise<app.AccountDetail>;
+
+export function LoadAccountOptions(arg1:string):Promise<app.AccountOptions>;
 
 export function LoadColumnValues(arg1:string,arg2:app.ColumnValuesInput):Promise<Array<string>>;
 
@@ -113,6 +121,8 @@ export function LoadToolkit(arg1:string):Promise<app.Toolkit>;
 export function NewSource(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<string>;
 
 export function OpenBackupFolder(arg1:string,arg2:app.Namespace):Promise<void>;
+
+export function PreviewAccountChanges(arg1:string,arg2:Array<app.AccountChangeInput>):Promise<app.AccountPreview>;
 
 export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<Array<string>>;
 
