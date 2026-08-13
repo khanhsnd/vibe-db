@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 
 import type { Cell } from '@/bridge/tables'
+import { APPLY_HINT, onApplyKey } from '@/features/results/applyShortcut'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import {
   focusOf,
@@ -197,8 +198,17 @@ export function KeyEditor({
     setClockAs(next)
   }
 
+  /** Absent for exactly the reasons Apply is disabled, so the button and Ctrl+S cannot disagree. */
+  const apply =
+    dirty && !blocked && !busy
+      ? () => onApply({ name, type: kind, value: draft, ttl: nextTtl })
+      : undefined
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-canvas">
+    <div
+      onKeyDown={(event) => onApplyKey(event, apply)}
+      className="flex h-full min-h-0 flex-col bg-canvas"
+    >
       <div
         className="grid min-h-0 flex-1 items-center gap-x-2 gap-y-1.5 p-2"
         style={{
@@ -374,8 +384,9 @@ export function KeyEditor({
         </Button>
         <Button
           variant="primary"
-          onClick={() => onApply({ name, type: kind, value: draft, ttl: nextTtl })}
-          disabled={!dirty || blocked || busy}
+          title={APPLY_HINT}
+          onClick={apply}
+          disabled={apply === undefined}
         >
           Apply
         </Button>

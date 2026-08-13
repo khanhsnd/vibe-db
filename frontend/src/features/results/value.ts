@@ -18,6 +18,7 @@ export type ValueKind =
   | 'json'
   | 'document'
   | 'array'
+  | 'html'
   | 'text'
 
 /**
@@ -30,6 +31,65 @@ export type ValueKind =
  * so it arrives through `ValueViewer.formatValue` and nothing here writes a second formatter.
  */
 const DOCUMENT_TYPES = new Set(['object', 'array'])
+
+/**
+ * The element names a value has to **open** with to be read as markup. A leading `<` is not enough
+ * and never was: an XML document begins with one, so does a `<?xml` declaration, and so does a
+ * `<foo>` of somebody's own. What decides is whether the first tag names an element a browser has
+ * heard of — the same bargain JSON's leading `{` strikes, cheap and wrong about nothing it accepts.
+ *
+ * A fragment that opens with prose — `Hello <b>world</b>` — reads as text, exactly as a `42` that
+ * happens to be JSON reads as a number.
+ */
+const HTML_TAGS = new Set([
+  '!doctype',
+  'html',
+  'head',
+  'body',
+  'div',
+  'span',
+  'p',
+  'a',
+  'img',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'td',
+  'th',
+  'ul',
+  'ol',
+  'li',
+  'dl',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'b',
+  'i',
+  'em',
+  'strong',
+  'pre',
+  'code',
+  'blockquote',
+  'section',
+  'article',
+  'header',
+  'footer',
+  'nav',
+  'main',
+  'aside',
+  'figure',
+  'form',
+  'label',
+  'button',
+  'style',
+  'center',
+  'font',
+  'svg',
+])
 
 export interface DetectedValue {
   kind: ValueKind
@@ -65,6 +125,11 @@ export function detect(value: string | null, columnType = ''): DetectedValue {
   // still reads in the notation the grid drew it in and its own parser reads back.
   if (DOCUMENT_TYPES.has(columnType)) return { kind: 'document', label: columnType }
 
+  // A `<` is neither JSON nor a PostgreSQL array literal, so where this reads among the three is
+  // free. What it takes is the tag alone — see `HTML_TAGS`.
+  const tag = firstTag(value)
+  if (tag !== null && HTML_TAGS.has(tag)) return { kind: 'html', label: 'HTML' }
+
   const parsed = parseJSON(value)
   if (parsed !== undefined) {
     if (isGeoJSON(parsed)) return { kind: 'geojson', label: geoLabel(parsed) }
@@ -83,6 +148,18 @@ export function detect(value: string | null, columnType = ''): DetectedValue {
   }
 
   return { kind: 'text', label: `${value.length} characters` }
+}
+
+/**
+ * The name of the tag a value opens with, lower-cased, or `null` where it does not open with one.
+ * A `<?xml`, a `<!-- comment -->` and a `<3` all come back as nothing to match, which is the point.
+ *
+ * The name has to **end** where a tag's name ends — at a space, a slash or the `>` — so a custom
+ * element is its whole name and never the prefix before its hyphen: `<p-thing>` is nobody's `<p>`.
+ */
+function firstTag(value: string): string | null {
+  const match = /^\s*<([a-z!][a-z0-9]*)(?=[\s/>]|$)/i.exec(value)
+  return match === null ? null : match[1]!.toLowerCase()
 }
 
 function parseJSON(value: string): unknown {

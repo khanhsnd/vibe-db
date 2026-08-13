@@ -4,6 +4,7 @@ import { cn } from '@/lib/cn'
 
 import { DocumentView, type Notation } from './DocumentView'
 import { GeoShape } from './GeoShape'
+import { HtmlView } from './HtmlView'
 import {
   decodeBinary,
   detect,
@@ -141,7 +142,7 @@ function useArrived(value: string | null, onChange?: (next: string) => void) {
   }
 }
 
-type ViewKind = 'raw' | 'json' | 'document' | 'map' | 'list' | 'hex' | 'image'
+type ViewKind = 'raw' | 'json' | 'document' | 'map' | 'list' | 'hex' | 'image' | 'html'
 
 const VIEW_LABEL: Record<ViewKind, string> = {
   raw: 'Raw',
@@ -151,6 +152,7 @@ const VIEW_LABEL: Record<ViewKind, string> = {
   list: 'Items',
   hex: 'Hex',
   image: 'Image',
+  html: 'Page',
 }
 
 /**
@@ -177,6 +179,10 @@ function viewsFor(
       // `Items` is a reading view. An editable cell editor must open on its text input, not make
       // the reader select Raw before they can change a PostgreSQL array literal.
       return editable ? ['raw', 'list'] : ['list', 'raw']
+    case 'html':
+      // A drawn page is a reading view for the same reason `Items` is: it is a rendering of the
+      // markup and not the markup, so a cell that can be written opens on the text that writes it.
+      return editable ? ['raw', 'html'] : ['html', 'raw']
     case 'binary':
       return ['image', 'hex', 'raw']
     default:
@@ -221,6 +227,9 @@ function View({
 
     case 'image':
       return <Picture value={opened} />
+
+    case 'html':
+      return <HtmlView markup={opened} />
 
     default:
       return (

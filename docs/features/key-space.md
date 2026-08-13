@@ -203,7 +203,8 @@ again on it, a draft typed against a sample never having been writable anyway.
 **Apply stages, and the footer's Apply writes** — the same two steps the cell editor has on every
 other surface, and the reason it matters here is that a rename, a new value and a new clock are three
 cells and become **one** press: three commands in the order they have to run, a rename last, because
-every command before it names the key by the name it had.
+every command before it names the key by the name it had. It is `Ctrl+S` as well as a button, on the
+panel and not on the window, for the reason [the cell editor's is](table-tab.md).
 
 A value the grid could only sample, a **stream** and a module's own type all refuse to be written, and
 the panel says which before anything is typed rather than after Apply.

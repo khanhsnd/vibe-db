@@ -43,6 +43,14 @@ it — see [frontend.md](../frontend.md) on `panelIds`.
   **A query result has the same panel**, from the button on its own head strip beside Export: it is
   one `CellEditor` on both surfaces, and the line under it says why a value cannot be written back
   where it cannot — a table with no primary key here, a result no `UPDATE` can name there.
+- **`Ctrl+S` inside an editor panel is that panel's Apply**, and is bound *on the panel* rather than
+  on the window — which is the whole design. The grid above it has an Apply of its own that writes to
+  the server, so one keystroke that could mean either would be a write nobody asked for; bound on the
+  panel it fires where the reader is typing, which is inside it, and stages the value exactly as the
+  button does. It is disabled for exactly the reasons the button is, since both read one answer. The
+  keystroke's default is stopped whether or not there is anything staged, because the WebView's own
+  `Ctrl+S` is a Save As dialog. The [key space](key-space.md#the-key-panel-is-always-open)'s panel
+  takes it from here, being the same shape.
 - **`Transaction`** turns autocommit off for the whole **connection**, and is the same menu the
   query tab carries. What it means and why it is not a fact of this tab is
   [transaction.md](transaction.md).

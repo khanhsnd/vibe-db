@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { Cell } from '@/bridge/tables'
 import { Button } from '@/shared/ui/Button'
 
+import { APPLY_HINT, onApplyKey } from './applyShortcut'
 import type { ResultColumn } from './resultSet'
 import { ValueViewer } from './ValueViewer'
 
@@ -50,8 +51,14 @@ export function CellEditor({
     setIsNull(value === null)
   }
 
+  /** Absent for exactly the reasons Apply is disabled, so the button and Ctrl+S cannot disagree. */
+  const apply = dirty && editable && !busy ? () => onApply(next) : undefined
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-canvas">
+    <div
+      onKeyDown={(event) => onApplyKey(event, apply)}
+      className="flex h-full min-h-0 flex-col bg-canvas"
+    >
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-line bg-panel px-2">
         <span className="truncate text-xs font-medium text-fg">{column.name}</span>
         <span className="shrink-0 font-mono text-2xs text-faint uppercase">
@@ -84,8 +91,9 @@ export function CellEditor({
         </Button>
         <Button
           variant="primary"
-          onClick={() => onApply(next)}
-          disabled={!dirty || !editable || busy}
+          title={APPLY_HINT}
+          onClick={apply}
+          disabled={apply === undefined}
         >
           Apply
         </Button>

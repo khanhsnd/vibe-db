@@ -20,6 +20,7 @@ cell is read, and it reads nothing else.
 | **The laid-out view itself** | `DocumentView` — numbered lines, a **fold arrow beside every object and array**, and the editor's own syntax colours with the keys apart from the values they name. It is CodeMirror, the SQL editor's own engine, for two reasons: a document worth opening whole is often far larger than a screen and CodeMirror lays out only the lines in view, where a `<pre>` of a megabyte freezes the window; and the grammar is the library's, so nothing here is a second scanner. JSON is read by `@codemirror/lang-json`; a document store's notation by the JavaScript parser under its **`SingleExpression`** top rule, because read as a *script* a bare `{ … }` is a block, its first field a label and every field after it a syntax error. It is **editable wherever the surface can write**, with the editor's own history under it, and read-only where it cannot |
 | **GeoJSON** — a `type` from the GeoJSON set *and* the member that type is defined by | **Shape**, then **JSON**, then **Raw**. A `{"type": "Point"}` with no coordinates is malformed, and drawing nothing says more than drawing the origin |
 | A **PostgreSQL array** — `{a,"b,c",NULL}` | **Items**, then **Raw**. Read as an array only where the column says it is one, since `{a,b}` is also perfectly good text. An unquoted `NULL` inside one is the absence of a value and is drawn in the grid's own NULL colour; a nested `{…}` is kept whole, because a two-dimensional array is a list of lists |
+| **HTML** — a value whose **first tag names an HTML element** | **Page**, then **Raw**. A leading `<` is not enough and never was: an XML document begins with one, so does a `<?xml` declaration, and so does a `<foo>` of somebody's own — so what decides is the tag, which is the same bargain JSON's leading `{` strikes. A fragment opening with prose — `Hello <b>world</b>` — reads as text, exactly as a `42` that happens to parse reads as a number |
 | **Bytes** — a `\x…` value | **Image**, then **Hex**, then **Raw**. A reader who opened a blob wants to know whether it is a picture before they want its bytes |
 | Anything else | **Raw** alone |
 
@@ -30,8 +31,10 @@ cell is read, and it reads nothing else.
   document is the thing a reader most often opens the viewer to *change* and sending them to `Raw`
   to change it is sending them to the one view that does not lay it out. What is typed goes back in
   the notation it was shown in, which is the notation that engine's own parser reads. The rest —
-  **Shape**, **Items**, **Hex**, **Image** — are renderings of a shape or of bytes rather than of
-  text, and writing one back would write the rendering; `Raw` is beside them for that.
+  **Shape**, **Items**, **Hex**, **Image**, **Page** — are renderings of a shape, of bytes or of
+  markup rather than of text, and writing one back would write the rendering; `Raw` is beside them
+  for that. Which is why a writable cell editor **opens on `Raw`** where the value is a PostgreSQL
+  array or a page: the reader would otherwise have to leave the first tab before they could type.
 - **What a value *is* is read when it arrives, not while it is typed.** The tab strip follows the
   cell the viewer opened on, a Discard or a NULL ticked — never a keystroke, or half a typed
   document would count as plain text and take its own tab away mid-word. Opening another view reads
@@ -63,6 +66,18 @@ cell is read, and it reads nothing else.
   database is ever sent anywhere to be rendered. Which image it is comes from the **first bytes** —
   PNG, JPEG, GIF, BMP, WebP — because a blob column carries no type and its magic number is the only
   honest evidence there is. Bytes that begin like nothing say so, with the Hex view beside them.
+- **A page is drawn in a frame that may do nothing at all.** A cell's markup is somebody else's text
+  and this window holds the app's own bridge to their database, so it goes into an `<iframe>` with an
+  opaque origin, no scripts, no forms and no way to navigate anything — `sandbox` with nothing
+  allowed back — and a `Content-Security-Policy` inside the frame as well: `default-src 'none'`, an
+  image only from `data:`, a style only inline. So nothing in a reader's database is ever sent
+  anywhere to be drawn, which is the same rule a shape is drawn without a tile server under and an
+  image is drawn from the bytes already in hand. A second policy cannot loosen the first, so markup
+  carrying a `<meta>` of its own is no way round it.
+- **The page is drawn on the app's own ground, not on a colour of its own.** A frame inherits no
+  custom property, so the tokens the app is themed with are copied into it — the canvas, the
+  foreground, the UI font, a link's accent — and each is a rule the value's own stylesheet overrides.
+  They are copied again when the reader switches theme under an open preview.
 - The hex dump is offset, hex and printable characters, sixteen bytes to a line, capped at 4 096
   bytes — beyond that a reader is not reading bytes, they are scrolling — and the cap says how much
   of how many it showed.
