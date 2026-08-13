@@ -96,8 +96,48 @@ jobs:
           name: macos-release
           path: build/bin/vibe-db-*-macos-universal.zip
 
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install WebKit
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libgtk-3-dev libwebkit2gtk-4.0-dev
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+      - name: Set release version
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('wails.json')); p.info.productVersion=process.env.VERSION.replace(/^v/,''); fs.writeFileSync('wails.json', JSON.stringify(p,null,2)+'\n')"
+      - name: Build Linux archive
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          version="${VERSION#v}"
+          wails build -platform linux/amd64 -ldflags "-X main.version=$version"
+          staging="vibe-db-$version-linux-x64"
+          mkdir -p "$staging"
+          cp build/bin/vibe-db "$staging/vibe-db"
+          cp build/linux/vibe-db.desktop "$staging/vibe-db.desktop"
+          cp build/appicon.png "$staging/vibe-db.png"
+          tar -czf "build/bin/$staging.tar.gz" "$staging"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: build/bin/vibe-db-*-linux-x64.tar.gz
+
   publish:
-    needs: [windows, macos]
+    needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4

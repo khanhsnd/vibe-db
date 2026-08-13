@@ -24,6 +24,7 @@ type Platform string
 const (
 	Windows Platform = "windows"
 	MacOS   Platform = "darwin"
+	Linux   Platform = "linux"
 )
 
 type Release struct {
@@ -174,10 +175,14 @@ func (s *Service) get(ctx context.Context, url string) (*http.Response, error) {
 }
 
 func installerName(version string, platform Platform) string {
-	if platform == Windows {
+	switch platform {
+	case Windows:
 		return "vibe-db-" + version + "-windows-x64-setup.exe"
+	case Linux:
+		return "vibe-db-" + version + "-linux-x64.tar.gz"
+	default:
+		return "vibe-db-" + version + "-macos-universal.zip"
 	}
-	return "vibe-db-" + version + "-macos-universal.zip"
 }
 
 func IsNewer(current, latest string) (bool, error) {

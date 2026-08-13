@@ -26,7 +26,8 @@ type UpdateInfo struct {
 }
 
 // UpdateAPI is deliberately small: releases live on GitHub, Windows installs the downloaded NSIS
-// package, and macOS remains managed by Homebrew or a manually replaced app bundle.
+// package, macOS remains managed by Homebrew or a manually replaced app bundle, and Linux is an
+// archive the reader unpacks over their own copy.
 type UpdateAPI struct {
 	apiContext
 	service *update.Service
@@ -104,8 +105,9 @@ func (a *UpdateAPI) InstallWindowsUpdate() error {
 	return nil
 }
 
-// OpenRelease opens the public release page for a direct macOS download. It intentionally does not
-// install anything: Homebrew owns the app when that is how it was installed.
+// OpenRelease opens the public release page for a direct macOS or Linux download. It intentionally
+// does not install anything: Homebrew owns the app when that is how it was installed, and a Linux
+// archive was unpacked wherever its reader chose.
 func (a *UpdateAPI) OpenRelease() error {
 	info, err := a.Check()
 	if err != nil {
@@ -119,10 +121,14 @@ func (a *UpdateAPI) OpenRelease() error {
 }
 
 func updatePlatform() update.Platform {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		return update.Windows
+	case "linux":
+		return update.Linux
+	default:
+		return update.MacOS
 	}
-	return update.MacOS
 }
 
 func updateFailure(action string, err error) error {

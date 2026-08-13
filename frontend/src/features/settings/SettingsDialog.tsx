@@ -150,10 +150,16 @@ function Updates() {
         {info && !info.development && !info.available ? (
           <p className="text-xs text-muted">You are on the latest version.</p>
         ) : null}
-        {info?.available && info.platform === 'darwin' ? (
+        {info?.available && info.platform !== 'windows' ? (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-muted">
-              Version {info.latestVersion} is available. Update Homebrew installs with <code>{info.command}</code>.
+              Version {info.latestVersion} is available.
+              {info.command ? (
+                <>
+                  {' '}
+                  Update Homebrew installs with <code>{info.command}</code>.
+                </>
+              ) : null}
             </p>
             <Button variant="subtle" onClick={() => void openRelease()}>
               Open release page

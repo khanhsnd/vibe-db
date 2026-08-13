@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Vibe DB
+Comment=Vibe DB database client
+Exec=vibe-db
+Icon=vibe-db
+Categories=Development;Database;
+Terminal=false
