@@ -3,10 +3,12 @@
 A **job on a clock**: back this namespace up every night at two, export it to CSV every hour, run
 mysqldump into a folder every Sunday, or watch two tables and say when they have drifted apart.
 
-It is opened from **`Tools ▸ Automation`**, and from nowhere else. A job belongs to the *window*
-rather than to a connection — it names the connection it dials, and the list holds jobs on all of
-them, including ones nobody has opened today — so there is no node in the tree it could hang off.
-That is the arrangement the [History Log](log.md) has, and for the same reason.
+It is opened from **`Tools ▸ Automation`** and from **`Automation` on the command bar**, beside
+[`Backup`](backup.md) — both open the one tab. A job belongs to the *window* rather than to a
+connection — it names the connection it dials, and the list holds jobs on all of them, including
+ones nobody has opened today — so there is no node in the tree it could hang off, and neither way in
+is ever dead the way `Backup` beside it is. That is the arrangement the [History Log](log.md) has,
+and for the same reason.
 
 ## What a job does when it fires
 

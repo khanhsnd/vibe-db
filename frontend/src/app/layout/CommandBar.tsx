@@ -1,11 +1,22 @@
 import { useState } from 'react'
-import { Archive, Database, Moon, PanelLeft, Plus, Settings, Sun, Terminal } from 'lucide-react'
+import {
+  Archive,
+  CalendarClock,
+  Database,
+  Moon,
+  PanelLeft,
+  Plus,
+  Settings,
+  Sun,
+  Terminal,
+} from 'lucide-react'
 
 import { SettingsDialog } from '@/features/settings/SettingsDialog'
 import { IconButton } from '@/shared/ui/IconButton'
 import { Button } from '@/shared/ui/Button'
 import { useTheme } from '@/shared/theme/useTheme'
 import { useConnectionsStore } from '@/stores/connections'
+import { useTabsStore } from '@/stores/tabs'
 import { useUIStore } from '@/stores/ui'
 
 interface CommandBarProps {
@@ -23,6 +34,10 @@ interface CommandBarProps {
 export function CommandBar({ onNewConnection, onNewQuery, onBackup }: CommandBarProps) {
   const { theme, toggleTheme } = useTheme()
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
+  // The one action here that is nobody's target: a job names the connection it dials, so this asks
+  // the shell for nothing and is never dead — which is why it comes from the store rather than
+  // being handed down as the other three are.
+  const openAutomation = useTabsStore((s) => s.openAutomation)
   const [options, setOptions] = useState(false)
 
   const open = useConnectionsStore((s) => Object.keys(s.sessions).length)
@@ -58,6 +73,10 @@ export function CommandBar({ onNewConnection, onNewQuery, onBackup }: CommandBar
         onClick={() => onBackup?.()}
       >
         Backup
+      </Button>
+
+      <Button variant="subtle" icon={<CalendarClock size={14} />} onClick={openAutomation}>
+        Automation
       </Button>
 
       <div className="flex-1" />
