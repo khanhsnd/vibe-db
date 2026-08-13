@@ -38,6 +38,11 @@ type Secrets struct {
 	Secret string
 }
 
+// Dial is the hop that carries this tunnel's own connection to the bastion. It is nil for a bastion
+// this machine reaches directly, and a proxy's dial for one it does not — which is what makes a
+// proxy the *outer* hop, and is the same shape this package hands out at the other end.
+type Dial func(ctx context.Context, network, address string) (net.Conn, error)
+
 // Tunnel is one live SSH connection. Its Dial is handed to a driver and used for the whole life
 // of the session, so the tunnel is closed when the session is and not before.
 type Tunnel struct {
@@ -49,7 +54,10 @@ type Tunnel struct {
 
 // Open dials the bastion and authenticates. It does *not* reach the database — that happens on
 // the first Dial, which is when the engine asks for it.
-func Open(ctx context.Context, config domain.SSHTunnel, secrets Secrets) (*Tunnel, error) {
+//
+// `under` is what carries the connection to the bastion, and is nil for a bastion this machine
+// reaches directly.
+func Open(ctx context.Context, config domain.SSHTunnel, secrets Secrets, under Dial) (*Tunnel, error) {
 	// An agent signs during the handshake, so its socket outlives this call by exactly the
 	// handshake and not a moment longer.
 	auth, held, err := authMethod(config, secrets)
@@ -65,12 +73,9 @@ func Open(ctx context.Context, config domain.SSHTunnel, secrets Secrets) (*Tunne
 		return nil, err
 	}
 
-	// x/crypto/ssh has no context-aware dial of its own, so the deadline is applied to the TCP
-	// connection under it and the handshake then runs against that connection.
-	dialer := net.Dialer{Timeout: dialTimeout}
-	conn, err := dialer.DialContext(ctx, "tcp", config.Address())
+	conn, err := dialBastion(ctx, config, under)
 	if err != nil {
-		return nil, fmt.Errorf("%w: ssh %s: %w", domain.ErrTunnelFailed, config.Address(), err)
+		return nil, err
 	}
 
 	if deadline, ok := ctx.Deadline(); ok {
@@ -99,6 +104,24 @@ func Open(ctx context.Context, config domain.SSHTunnel, secrets Secrets) (*Tunne
 	tunnel := &Tunnel{client: ssh.NewClient(client, chans, reqs), done: make(chan struct{})}
 	go tunnel.keepAlive()
 	return tunnel, nil
+}
+
+// dialBastion opens the connection the handshake then runs over. x/crypto/ssh has no context-aware
+// dial of its own, so the deadline is applied to that connection instead.
+//
+// A failure on the outer hop is handed back **as it is**: it is already a proxy's own failure, and
+// re-wrapping it as a tunnel's would send the reader to the wrong box in the dialog.
+func dialBastion(ctx context.Context, config domain.SSHTunnel, under Dial) (net.Conn, error) {
+	if under != nil {
+		return under(ctx, "tcp", config.Address())
+	}
+
+	dialer := net.Dialer{Timeout: dialTimeout}
+	conn, err := dialer.DialContext(ctx, "tcp", config.Address())
+	if err != nil {
+		return nil, fmt.Errorf("%w: ssh %s: %w", domain.ErrTunnelFailed, config.Address(), err)
+	}
+	return conn, nil
 }
 
 // keepAlive says the tunnel is still wanted. An idle SSH connection is dropped by plenty of

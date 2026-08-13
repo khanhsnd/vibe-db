@@ -25,7 +25,8 @@ has been granted, and the statements that change it**, **what a server is doing 
 started with, and ending a statement or a connection**, **exporting a grid to CSV, JSON
 or SQL**, **backing a SQL namespace up into a folder the app keeps, and restoring
 one**, **running the engine's own mongodump, mysqldump or pg_dump — and putting one of those files
-back**, query tabs with completion that **run a whole script**, **a console that runs one statement
+back**, **any of those jobs on a clock — a nightly backup, an hourly export, a comparison that
+watches two tables for drift**, query tabs with completion that **run a whole script**, **a console that runs one statement
 at a time and keeps the transcript**, **running a file of statements against a connection**,
 **marking a connection with a colour that washes down the sidebar**, **a history of every statement
 run, kept on disk and put back in the editor by a double-click**, **a library of the statements the
@@ -33,7 +34,11 @@ reader named, kept in a file and offered by that name in every editor**, **a log
 has run, across every connection, on one clock**, passwords in Windows Credential
 Manager, and the full layout shell with dark and light themes and a **data font the reader picks**.
 
-Not there yet: a server **variable cannot be changed** from the monitor — reading one is the same
+Not there yet: a scheduled job **fires only while the app is open** — nothing is installed on the
+machine and no service is left behind, so a laptop that was shut at two in the morning ran nothing at
+two in the morning; and **nothing is put back on a schedule**, a restore and an import being the two
+jobs whose outcome cannot be read off a log afterwards. A server **variable cannot be changed** from
+the monitor — reading one is the same
 question on every engine and setting one is five different statements, two of which do not take effect
 until a restart, so it is done in a query tab where the server answers for itself. An **Oracle
 routine that hands a value back** is not run from the definition tab: a PL/SQL block answers with
@@ -55,7 +60,8 @@ to reach the one they came for. How the docs are laid out is written down in
 
 | Feature | Read |
 |---|---|
-| Picking an engine, filling a profile in, TLS, SSH, the environment guard, a connection's colour | [features/connections.md](features/connections.md) |
+| Picking an engine, filling a profile in, TLS, a proxy, SSH, the environment guard, a connection's colour | [features/connections.md](features/connections.md) |
+| A connection that refuses to send anything that writes | [features/read-only.md](features/read-only.md) |
 | What each of the seven engines has, and what it has not | [features/engines.md](features/engines.md) |
 | The tree, what a level loads, filtering it, and the table list | [features/schema-tree.md](features/schema-tree.md) |
 | A Redis key space: the grid of keys, the prefix tree, the search bar, the key panel | [features/key-space.md](features/key-space.md) |
@@ -70,6 +76,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | What a server is doing, its status and its variables, and ending a process | [features/monitor.md](features/monitor.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |
 | Backing a namespace up, the list of backups, and restoring one | [features/backup.md](features/backup.md) |
+| Running a backup, an export, a dump or a comparison on a clock | [features/automation.md](features/automation.md) |
 | Running the engine's own mongodump, mysqldump or pg_dump — and putting one back | [features/tools.md](features/tools.md) |
 | The table tab: opening it, paging it, and its two panels | [features/table-tab.md](features/table-tab.md) |
 | Query tabs, Explain, a MongoDB tab, a Redis tab, running a whole script | [features/query-tab.md](features/query-tab.md) |

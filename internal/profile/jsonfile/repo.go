@@ -24,6 +24,7 @@ type record struct {
 	Engine      string `json:"engine"`
 	Environment string `json:"environment,omitempty"`
 	Colour      string `json:"colour,omitempty"`
+	Access      string `json:"access,omitempty"`
 	Host        string `json:"host"`
 	Port        int    `json:"port"`
 	User        string `json:"user"`
@@ -45,6 +46,12 @@ type record struct {
 	SSHKeyPath       string `json:"sshKeyPath,omitempty"`
 	SSHKnownHosts    string `json:"sshKnownHosts,omitempty"`
 	SSHStrictHostKey bool   `json:"sshStrictHostKey,omitempty"`
+
+	ProxyEnabled bool   `json:"proxyEnabled,omitempty"`
+	ProxyKind    string `json:"proxyKind,omitempty"`
+	ProxyHost    string `json:"proxyHost,omitempty"`
+	ProxyPort    int    `json:"proxyPort,omitempty"`
+	ProxyUser    string `json:"proxyUser,omitempty"`
 
 	SavePassword bool `json:"savePassword"`
 }
@@ -143,6 +150,7 @@ func toDomain(rec record) domain.ConnectionProfile {
 		Engine:      domain.Engine(rec.Engine),
 		Environment: domain.Environment(rec.Environment),
 		Colour:      domain.Colour(rec.Colour),
+		Access:      domain.Access(rec.Access),
 		Host:        rec.Host,
 		Port:        rec.Port,
 		User:        rec.User,
@@ -166,6 +174,13 @@ func toDomain(rec record) domain.ConnectionProfile {
 			KnownHosts:    rec.SSHKnownHosts,
 			StrictHostKey: rec.SSHStrictHostKey,
 		},
+		Proxy: domain.ProxyOptions{
+			Enabled: rec.ProxyEnabled,
+			Kind:    domain.ProxyKind(rec.ProxyKind),
+			Host:    rec.ProxyHost,
+			Port:    rec.ProxyPort,
+			User:    rec.ProxyUser,
+		},
 		SavePassword: rec.SavePassword,
 	}
 }
@@ -177,6 +192,7 @@ func fromDomain(profile domain.ConnectionProfile) record {
 		Engine:      string(profile.Engine),
 		Environment: string(profile.Environment),
 		Colour:      string(profile.Colour),
+		Access:      string(profile.Access),
 		Host:        profile.Host,
 		Port:        profile.Port,
 		User:        profile.User,
@@ -198,6 +214,12 @@ func fromDomain(profile domain.ConnectionProfile) record {
 		SSHKeyPath:       profile.SSH.KeyPath,
 		SSHKnownHosts:    profile.SSH.KnownHosts,
 		SSHStrictHostKey: profile.SSH.StrictHostKey,
+
+		ProxyEnabled: profile.Proxy.Enabled,
+		ProxyKind:    string(profile.Proxy.Kind),
+		ProxyHost:    profile.Proxy.Host,
+		ProxyPort:    profile.Proxy.Port,
+		ProxyUser:    profile.Proxy.User,
 
 		SavePassword: profile.SavePassword,
 	}

@@ -10,9 +10,11 @@ reader of a desktop client looks for them, and nothing behind them. Items are `M
 `MenuButton`, the same object the tree's right-click menu is built from, so an action offered both
 ways stays one object, and a menu given no items draws its name alone.
 
-- **`Tools` opens the History Log**, which is asked for here and nowhere else: it belongs to the
-  window rather than to a connection, so there is no node in the tree it could hang off. What it
-  shows is [features/log.md](log.md).
+- **`Tools` opens the History Log and Automation**, both asked for here and nowhere else: each
+  belongs to the window rather than to a connection, so there is no node in the tree either could
+  hang off. What they show is [features/log.md](log.md) and
+  [features/automation.md](automation.md) — the first everything this window has run, the second
+  every job waiting on a clock, on whichever connection it names.
 - **`Window` lists every open tab**, in the order the strip draws them, and picking one is exactly
   what clicking it in the strip is. It is the one place that names all of them at once: the strip
   truncates each title and scrolls the moment it holds more tabs than it can draw. Each row wears

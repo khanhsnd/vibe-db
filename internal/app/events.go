@@ -37,3 +37,18 @@ type ToolLine struct {
 	RunID string `json:"runId"`
 	Text  string `json:"text"`
 }
+
+// EventTaskRun is a scheduled job starting or ending, pushed both times.
+//
+// It is pushed rather than polled because a schedule fires when it fires: a reader with the list open
+// at two in the morning is exactly the reader who wants to watch it happen, and a list that only
+// changed when it was re-read would be a list that lied for as long as nobody touched it.
+const EventTaskRun = "task:run"
+
+// TaskEvent is that firing. `Running` true is a job that has just started, and its `Run` is empty —
+// there being nothing yet to say about it.
+type TaskEvent struct {
+	TaskID  string  `json:"taskId"`
+	Running bool    `json:"running"`
+	Run     TaskRun `json:"run"`
+}

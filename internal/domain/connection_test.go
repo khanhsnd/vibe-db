@@ -30,6 +30,16 @@ func validTunnel() SSHTunnel {
 	}
 }
 
+func validProxy() ProxyOptions {
+	return ProxyOptions{
+		Enabled: true,
+		Kind:    ProxySOCKS5,
+		Host:    "10.0.0.9",
+		Port:    DefaultSOCKSPort,
+		User:    "reader",
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -129,6 +139,48 @@ func TestValidate(t *testing.T) {
 			// A tunnel nobody turned on is not half-filled-in, it is off.
 			"a disabled tunnel is not checked",
 			func(p *ConnectionProfile) { p.SSH = SSHTunnel{} },
+			"",
+		},
+		{"unknown access mode", func(p *ConnectionProfile) { p.Access = "append-only" }, "access"},
+		{"read-only is an access mode", func(p *ConnectionProfile) { p.Access = AccessReadOnly }, ""},
+		{"a valid proxy", func(p *ConnectionProfile) { p.Proxy = validProxy() }, ""},
+		{
+			"unknown proxy kind",
+			func(p *ConnectionProfile) {
+				p.Proxy = validProxy()
+				p.Proxy.Kind = "socks4"
+			},
+			"proxyKind",
+		},
+		{
+			"blank proxy host",
+			func(p *ConnectionProfile) {
+				p.Proxy = validProxy()
+				p.Proxy.Host = "  "
+			},
+			"proxyHost",
+		},
+		{
+			"proxy port out of range",
+			func(p *ConnectionProfile) {
+				p.Proxy = validProxy()
+				p.Proxy.Port = 70000
+			},
+			"proxyPort",
+		},
+		{
+			// The same rule the tunnel follows: off is off, not half-filled-in.
+			"a disabled proxy is not checked",
+			func(p *ConnectionProfile) { p.Proxy = ProxyOptions{} },
+			"",
+		},
+		{
+			// A proxy on a private network usually asks for nobody at all.
+			"a proxy needs no user",
+			func(p *ConnectionProfile) {
+				p.Proxy = validProxy()
+				p.Proxy.User = ""
+			},
 			"",
 		},
 	}
@@ -287,5 +339,56 @@ func TestValidateReadsARedisDatabaseAsANumber(t *testing.T) {
 		if err := profile.Validate(); !errors.As(err, &invalid) || invalid.Field != "database" {
 			t.Errorf("Validate() with database %q = %v, want it refused on the database", named, err)
 		}
+	}
+}
+
+// TestAccessRefusesEveryHazard is the read-only rule against the one it is the counterpart of: an
+// Environment turns a hazard into a question, and this turns one into a refusal.
+func TestAccessRefusesEveryHazard(t *testing.T) {
+	hazards := []Hazard{HazardWrite, HazardUnfiltered, HazardDestructive}
+
+	for _, hazard := range hazards {
+		if !AccessReadOnly.Refuses(hazard, "delete") {
+			t.Errorf("read-only allowed %s", hazard)
+		}
+		if AccessReadWrite.Refuses(hazard, "delete") {
+			t.Errorf("read and write refused %s", hazard)
+		}
+	}
+
+	if AccessReadOnly.Refuses(HazardNone, "select") {
+		t.Error("read-only refused a SELECT")
+	}
+}
+
+// TestAccessRefusesAWritingClause is where the two rules part company: a CTE writes without saying
+// so in its first word, so a confirmation lets it by and a refusal does not.
+func TestAccessRefusesAWritingClause(t *testing.T) {
+	if !AccessReadOnly.Refuses(HazardNone, "with") {
+		t.Error("read-only allowed a WITH, which may hold a DELETE")
+	}
+	if !AccessReadOnly.Refuses(HazardNone, " WITH ") {
+		t.Error("read-only read the keyword without trimming or folding it")
+	}
+	if Environment("").NeedsConfirmation(HazardNone) {
+		t.Error("a confirmation asked about a statement that reads")
+	}
+}
+
+// TestProxyDefaultPortPerKind is why the default is not one number: a SOCKS proxy and an HTTP one
+// are on different ports, and a single default would be wrong half the time.
+func TestProxyDefaultPortPerKind(t *testing.T) {
+	if got := ProxySOCKS5.DefaultPort(); got != DefaultSOCKSPort {
+		t.Errorf("SOCKS5 default port = %d, want %d", got, DefaultSOCKSPort)
+	}
+	if got := ProxyHTTP.DefaultPort(); got != DefaultHTTPProxyPort {
+		t.Errorf("HTTP default port = %d, want %d", got, DefaultHTTPProxyPort)
+	}
+}
+
+func TestProxyAddressBracketsIPv6(t *testing.T) {
+	proxy := ProxyOptions{Host: "::1", Port: DefaultSOCKSPort}
+	if got, want := proxy.Address(), "[::1]:1080"; got != want {
+		t.Errorf("Address() = %q, want %q", got, want)
 	}
 }

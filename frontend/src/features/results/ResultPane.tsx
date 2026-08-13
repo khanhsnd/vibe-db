@@ -12,6 +12,7 @@ import { Empty } from '@/shared/ui/Empty'
 import { ErrorStrip } from '@/shared/ui/ErrorStrip'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import type { QueryRun } from '@/stores/queries'
+import { useReadOnlySession } from '@/stores/connections'
 import { useTransactionsStore } from '@/stores/transactions'
 
 import { CellEditor, EDITOR_HEIGHT, EDITOR_MIN_HEIGHT } from './CellEditor'
@@ -67,7 +68,11 @@ export function ResultPane({ tabId, run, sessionId, onRefresh, onFetch, onStop }
   const { running, result, error } = run
 
   const grid = result !== null && result.columns.length > 0 ? result : null
-  const editable = grid !== null && grid.table !== '' && sessionId !== null
+  // A read-only connection's result is read whatever it selected from: the write behind an edit
+  // would be refused, and a cell that takes what is typed and then throws it away is worse than one
+  // that never opened. See `domain.Access`.
+  const readOnly = useReadOnlySession(sessionId)
+  const editable = grid !== null && grid.table !== '' && sessionId !== null && !readOnly
   const edits = useGridEdits(tabId, sourceOf(grid), sessionId, onRefresh)
 
   // A transaction belongs to the connection, so what it failed with is read per session and shown

@@ -272,6 +272,13 @@ func (a *ConnectionAPI) RunToolRestore(sessionID string, input ToolRestoreInput)
 		return ToolResult{}, wrapError(err)
 	}
 
+	// The one write in this app that no session carries: the vendor's program opens its own
+	// connection, so the wrapper guarding every other write never sees it and the refusal is made
+	// here instead. The matching dump only reads and is left alone. See domain.Access.
+	if err := a.refuseReadOnly(sessionID, "a restore"); err != nil {
+		return ToolResult{}, wrapError(err)
+	}
+
 	request.Include = input.Tables
 	request.Drop = input.Drop && kit.Drops
 	request.DryRun = input.DryRun && kit.DryRuns

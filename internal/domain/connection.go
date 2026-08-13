@@ -26,6 +26,10 @@ const (
 	DefaultSQLServerPort = 1433
 	DefaultOraclePort    = 1521
 	DefaultSSHPort       = 22
+	// The two ports a proxy is nearly always on. They differ per kind, which is why the dialog
+	// fills one in from the picker rather than offering a single number that is wrong half the time.
+	DefaultSOCKSPort     = 1080
+	DefaultHTTPProxyPort = 8080
 )
 
 // DefaultPort is the port an engine listens on when the profile names none. A file engine has
@@ -157,6 +161,61 @@ func (e Environment) NeedsConfirmation(h Hazard) bool {
 		return false
 	}
 	return e.Guarded() || h == HazardUnfiltered
+}
+
+// Access is what this app will let a connection do at all. It is the second fact about a profile
+// that changes how the app *behaves* rather than how it connects, and it is the harder of the two:
+// an Environment turns a hazard into a **question**, and this turns one into a **refusal**.
+//
+// It is a client-side guard and says so plainly. A read-only profile refuses to *send* what would
+// write — nothing reaches the server to be rejected by it — which is exactly what protects a reader
+// who opened the wrong tab, and exactly what does not protect a database from anybody who can point
+// another client at it. **A read-only account on the server is the protection**; this is the guard.
+type Access string
+
+const (
+	// AccessReadWrite is a connection with nothing held back, which is every profile written before
+	// this field existed.
+	AccessReadWrite Access = ""
+	AccessReadOnly  Access = "read-only"
+)
+
+func (a Access) Valid() bool {
+	switch a {
+	case AccessReadWrite, AccessReadOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+func (a Access) ReadOnly() bool {
+	return a == AccessReadOnly
+}
+
+// writesInAClause is every leading keyword whose statement may write without saying so in its first
+// word. There is one: `WITH names AS (DELETE FROM …) SELECT …` is a single statement whose verb is
+// inside a parenthesis, and PostgreSQL and SQL Server both run it.
+//
+// StatementHazard leaves it alone on purpose — a warning on every ordinary CTE is a warning a reader
+// stops reading — and this is where the two rules part company. **A confirmation defaults to
+// allowing and a refusal defaults to refusing**, because being wrong costs the opposite thing in
+// each: a question nobody needed is a nuisance, and a write nobody expected is the mistake the mode
+// exists to prevent.
+var writesInAClause = map[string]bool{"with": true}
+
+// Refuses is the rule a read-only connection is held to, and is Environment.NeedsConfirmation's
+// counterpart: the same Hazard, read by the same reviewer, answered with "not at all" rather than
+// with "are you sure".
+//
+// What it cannot see it says so about: a hazard is read off a statement's first word, so a procedure
+// whose body writes is a `CALL` — which *is* refused — while a statement this side cannot tell apart
+// from a read is not. See the note on Access.
+func (a Access) Refuses(hazard Hazard, keyword string) bool {
+	if !a.ReadOnly() {
+		return false
+	}
+	return hazard != HazardNone || writesInAClause[strings.ToLower(strings.TrimSpace(keyword))]
 }
 
 // Colour is the tint a connection wears down the sidebar, and is the only thing a profile carries
@@ -331,6 +390,76 @@ func (t SSHTunnel) Address() string {
 	return net.JoinHostPort(t.Host, strconv.Itoa(t.Port))
 }
 
+// ProxyKind is which of the two protocols the proxy speaks. Both do the same job — they take an
+// address and hand back a connection to it — and they differ in one thing this app cares about:
+// SOCKS5 carries the address as its own field and HTTP carries it in a `CONNECT` request line.
+//
+// There is no SOCKS4 here. It cannot carry a name, so every host would have to be resolved on
+// *this* machine, which is exactly what a reader puts a proxy in front of a private network to
+// avoid.
+type ProxyKind string
+
+const (
+	ProxySOCKS5 ProxyKind = "socks5"
+	ProxyHTTP   ProxyKind = "http"
+)
+
+func (k ProxyKind) Valid() bool {
+	switch k {
+	case ProxySOCKS5, ProxyHTTP:
+		return true
+	default:
+		return false
+	}
+}
+
+// DefaultPort is the port this kind of proxy is usually on, which is what the dialog fills in when
+// the kind is picked.
+func (k ProxyKind) DefaultPort() int {
+	if k == ProxyHTTP {
+		return DefaultHTTPProxyPort
+	}
+	return DefaultSOCKSPort
+}
+
+// ProxyOptions is the proxy every connection of this profile is carried through. It is **the outer
+// hop**: a proxy is how this machine reaches the network at all, so a profile that has both a proxy
+// and a bastion dials the bastion *through* the proxy and then the database through the bastion.
+//
+// The address it is asked for is resolved on the far side, exactly as a tunnel's is — which is the
+// whole reason a proxy is worth having in front of a private network, and why the host and port on
+// the General tab are left alone.
+//
+// A password is a secret and lives in the credential store under `<id>:proxy`, never here.
+type ProxyOptions struct {
+	Enabled bool
+	Kind    ProxyKind
+	Host    string
+	Port    int
+	// User is empty for a proxy that asks for nobody, which is most of them on a private network.
+	User string
+}
+
+func (o ProxyOptions) Validate() error {
+	if !o.Enabled {
+		return nil
+	}
+	if !o.Kind.Valid() {
+		return ValidationError{Field: "proxyKind", Message: "is not a known proxy type"}
+	}
+	if strings.TrimSpace(o.Host) == "" {
+		return ValidationError{Field: "proxyHost", Message: "is required"}
+	}
+	if o.Port < 1 || o.Port > 65535 {
+		return ValidationError{Field: "proxyPort", Message: "must be between 1 and 65535"}
+	}
+	return nil
+}
+
+func (o ProxyOptions) Address() string {
+	return net.JoinHostPort(o.Host, strconv.Itoa(o.Port))
+}
+
 // AuthMethod is what the *database* authenticates the reader by. A password is one the reader
 // knows; the other two are tokens this app mints per connection from a cloud identity the machine
 // already holds, and are therefore never stored — a token that lasts a quarter of an hour is not
@@ -368,16 +497,22 @@ type ConnectionProfile struct {
 	Engine      Engine
 	Environment Environment
 	Colour      Colour
-	Host        string
-	Port        int
-	User        string
-	Database    string
-	Auth        AuthMethod
+	// Access is what this app will let the connection do at all — see Access, and note that it is
+	// the second fact about a profile that changes how the app *behaves* rather than how it
+	// connects. Environment decides what is answered for; this decides what is not sent.
+	Access   Access
+	Host     string
+	Port     int
+	User     string
+	Database string
+	Auth     AuthMethod
 	// Region is the AWS region the IAM token is signed for. Empty reads it out of the host name,
 	// which is where an RDS endpoint already carries it.
-	Region       string
-	TLS          TLSOptions
-	SSH          SSHTunnel
+	Region string
+	TLS    TLSOptions
+	SSH    SSHTunnel
+	// Proxy is the outer hop, and carries the bastion as well as the database — see ProxyOptions.
+	Proxy        ProxyOptions
 	SavePassword bool
 }
 
@@ -410,6 +545,9 @@ func (p ConnectionProfile) Validate() error {
 	if !p.Colour.Valid() {
 		return ValidationError{Field: "colour", Message: "is not a known colour"}
 	}
+	if !p.Access.Valid() {
+		return ValidationError{Field: "access", Message: "is not a known access mode"}
+	}
 	// Three engines cannot be connected to without one: a PostgreSQL session is bound to its
 	// database for life, an Oracle listener is asked for a service by name, and a SQLite database
 	// *is* the file. See Engine.NeedsDatabase.
@@ -431,6 +569,9 @@ func (p ConnectionProfile) Validate() error {
 		return ValidationError{Field: "auth", Message: "is not a known authentication method"}
 	}
 	if err := p.TLS.Validate(); err != nil {
+		return err
+	}
+	if err := p.Proxy.Validate(); err != nil {
 		return err
 	}
 	return p.SSH.Validate()

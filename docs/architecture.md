@@ -39,6 +39,14 @@ internal/app  ->  session / profile / secret / history / snippet / transfer / co
   address the engine asks for is resolved on the far side. It is the one package in the app that
   reads an error's *message*, because `x/crypto/ssh` gives no code to switch on; see
   [errors.md](errors.md).
+- **`internal/netproxy`** — a database connection carried through a SOCKS5 or an HTTP proxy. It is
+  the same shape `sshtunnel` has and for the same reason: it hands back a function that opens
+  connections *through* the proxy, which is what `driver.Dialer` is, so no adapter has heard of a
+  proxy either. It holds no connection of its own — both protocols are negotiated per connection —
+  so there is nothing to keep alive and nothing to close, which is the one way it differs from a
+  tunnel. **It is the outer hop**: where a profile has both, the bastion is dialled through it. It is
+  the third package that reads an error's *message*, `x/net/proxy` giving no code to switch on; see
+  [errors.md](errors.md).
 - **`internal/cloudauth`** — the password for a connection that authenticates by a cloud identity
   rather than by something the reader knows: an RDS IAM token, signed here with SigV4 from the
   machine's AWS environment, and a Google OAuth access token from its application default
@@ -164,12 +172,26 @@ It hangs off the `Driver` rather than off a `Session`, because a reader lays out
 a script whether or not anything is dialled — `sqlkit.Dialect` is the whole implementation, and both
 adapters return theirs from one line.
 
-**Three things happen above the adapters, before either is handed anything**, because none of them
-varies by engine: the profile is validated, the bastion is stood up, and a cloud password is minted.
-All three are in `session.Manager.Open`. The tunnel arrives at the adapter as a `driver.Dialer` and
-the token as an ordinary `driver.Credentials.Password`, so neither adapter knows either exists. The
-tunnel then lives exactly as long as the session and is closed after its pools, since every pool is
-carried over it.
+**Four things happen above the adapters, before any of them is handed anything**, because none of
+them varies by engine: the profile is validated, the hops that carry the connection are stood up, a
+cloud password is minted, and a read-only profile is wrapped. All of them are in
+`session.Manager.Open`. Whatever carries the connection arrives at the adapter as one
+`driver.Dialer` and the token as an ordinary `driver.Credentials.Password`, so no adapter knows
+either exists. The tunnel then lives exactly as long as the session and is closed after its pools,
+since every pool is carried over it.
+
+**The hops are stood up outermost first**, and that order is the whole of what having both means: a
+proxy is how this machine reaches the network, so the *bastion* is dialled through the proxy and the
+database through the bastion. What the adapter is given is the innermost of them — the tunnel where
+there is one, the proxy where there is not, and nil for a direct connection. See
+[features/connections.md](features/connections.md#proxy).
+
+**A read-only profile is wrapped once and the whole app is then handed the wrapper**, so its schema,
+its accounts, its monitor and its rows are all the guarded ones and there is no second seam a change
+could go round. What is refused is `domain.Access.Refuses` — the same `Hazard` the confirmation rule
+reads, answered with "not at all" rather than with "are you sure" — and a typed statement is decided
+by the engine's own `driver.Text.Review`, so the guard and the editor's warning cannot disagree. See
+[features/read-only.md](features/read-only.md).
 
 `driver.Schema` is the DDL half of a session, and `sqlkit.DDL` supplies the part of it that does not
 vary: an adapter embeds it, hands it one `Run(ctx, database, statement)`, and writes only the
@@ -414,6 +436,44 @@ Two profiles are refused rather than run wrongly, both `domain.Unsupported`: a c
 **SSH tunnel**, because that tunnel is an in-process dialer and listens on nothing, so there is no
 address to give a child process; and one signing in with a **cloud identity**, whose token is minted
 for one connection at the moment it is made. See [features/tools.md](features/tools.md).
+
+## Running a job on a clock
+
+**`internal/schedule` runs nothing.** It is a task, a cadence, and what the last few firings came to
+— one JSON document at `<config>/vibe-db/schedules.json`, read whole and written whole like the
+profiles and the snippet library. It knows how to take a backup exactly as much as
+`internal/history` knows how to run a statement.
+
+What fires is `internal/app/schedule_run.go`, and every one of its four kinds is **a bound method a
+button already calls**: `RunBackup`, `RunExport`, `RunToolDump`, and the pair of `Compare` reads. A
+backup taken at two in the morning is therefore byte for byte the file `New Backup` writes — there is
+no second way to take one, which is [rule 13](../CLAUDE.md#rules-that-must-not-be-broken)'s reason
+applied where nobody is watching. Only reads are scheduled: a restore and an import are left out on
+purpose, so a [read-only](features/read-only.md) connection carries all four kinds.
+
+**When a task is due is a rule and lives with the task.** `Cadence.Next` is the first moment strictly
+after the one given, and `Task.Next` counts from whichever is later — the moment the task was armed,
+or the moment it last ran. Arming is what a save, an enable and `Store.Arm` all do, and it is the
+whole of why editing a daily two o'clock job at noon does not fire it at noon. A moment that went by
+while the app was shut is the reader's own answer (`CatchUp`), acted on **once** when the scheduler
+starts, so opening a laptop twice cannot fire a job twice.
+
+`internal/app/scheduler.go` is the clock and owns two things: a ticker, and which tasks are firing
+right now. Each due task fires on its own goroutine — a two-hour backup must not be two hours in
+which nothing else can fire — and one task may not overlap *itself*, which is also what `Run Now`
+is refused by. The tick is half a minute because the finest cadence is a minute.
+
+A firing dials **its own** session from the profile and shuts it afterwards. A session the reader has
+open is not borrowed: a job that fired inside somebody's [open transaction](features/transaction.md)
+would be one `Rollback` could undo. Nothing is typed, because nobody is there — the credential store
+answers, or a token is minted for a cloud identity.
+
+**A firing is an outcome and not an error.** There is no dialog to throw one to, so `doTask` answers
+with a word, a summary and a detail, all three kept in the task's own history; only two things are
+thrown, and both are the reader pressing something (`TASK_RUNNING`, `TASK_NOT_FOUND`). The third
+outcome is `differs`, which a comparison answers with: two sides that have drifted apart is what the
+job was asked to notice, and drawing it beside a server that was unreachable would be the wrong
+sentence. See [features/automation.md](features/automation.md).
 
 ## Comparing two tables
 

@@ -28,6 +28,7 @@ import {
   type TreeNode,
 } from '@/features/connections/tree'
 import { useTreeMenu } from '@/features/connections/useTreeMenu'
+import { TaskDialog } from '@/features/schedule/TaskDialog'
 import { SchemaDialogs } from '@/features/schema/SchemaDialogs'
 import { ExportWizard, type ExportTarget } from '@/features/transfer/ExportWizard'
 import { ImportWizard, type ImportTarget } from '@/features/transfer/ImportWizard'
@@ -458,6 +459,8 @@ export function App() {
         engine: profile?.engine ?? null,
         environment: profile?.environment ?? '',
         serverVersion: null,
+        // Nothing is open, so nothing is refusing anything: read-only is a fact of a *session*.
+        readOnly: false,
         namespace: '',
         connections: open,
         rowCount: null,
@@ -476,6 +479,7 @@ export function App() {
       engine: profile?.engine ?? null,
       environment: profile?.environment ?? '',
       serverVersion: session.serverVersion,
+      readOnly: session.readOnly,
       namespace: namespaceLabel(ns),
       connections: open,
       rowCount: null,
@@ -574,6 +578,9 @@ export function App() {
       <RestoreBackupDialog />
 
       <ToolDialog />
+
+      {/* The one dialog here that belongs to no connection: a job names the one it dials. */}
+      <TaskDialog />
 
       <SchemaDialogs />
 

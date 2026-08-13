@@ -67,7 +67,7 @@ func (*Driver) Open(
 	tunnel driver.Dialer,
 ) (driver.Session, error) {
 	if tunnel != nil {
-		return nil, domain.Unsupported("reaching a file through an SSH tunnel")
+		return nil, domain.Unsupported("reaching a file through a tunnel or a proxy")
 	}
 	if _, err := os.Stat(profile.Database); err != nil {
 		return nil, domain.FileError{Err: err}

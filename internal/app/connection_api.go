@@ -11,6 +11,7 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/profile"
+	"github.com/khanhsnd/vibe-db/internal/schedule"
 	"github.com/khanhsnd/vibe-db/internal/secret"
 	"github.com/khanhsnd/vibe-db/internal/session"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -21,7 +22,10 @@ const (
 	// tunnelTimeout is what a connection through a bastion is given *on top of* the above: the
 	// dial and the handshake are a hop of their own before the database has been reached at all.
 	tunnelTimeout = 12 * time.Second
-	queryTimeout  = 15 * time.Second
+	// proxyTimeout is the same allowance for the hop in front of both. It is smaller than a
+	// bastion's because a proxy negotiates and does not authenticate a key.
+	proxyTimeout = 6 * time.Second
+	queryTimeout = 15 * time.Second
 
 	// noDeadline leaves a read bounded by StopTableRows rather than by a clock — see rowsTimeout.
 	noDeadline = 0
@@ -37,7 +41,11 @@ type ConnectionAPI struct {
 	// tools is where an engine's own dump and restore programs are found on this machine. It is
 	// not a driver and not a session: nothing it runs is this app, and nothing it runs is SQL.
 	tools *dbtool.Locator
-	runs  *runRegistry
+	// tasks is the jobs this app runs on a clock, and scheduler is the clock itself. Neither knows
+	// how to take a backup: what a task fires is the bound method beside it — see doTask.
+	tasks     *schedule.Store
+	scheduler *scheduler
+	runs      *runRegistry
 }
 
 func NewConnectionAPI(
@@ -46,16 +54,20 @@ func NewConnectionAPI(
 	sessions *session.Manager,
 	backups *backup.Store,
 	tools *dbtool.Locator,
+	tasks *schedule.Store,
 ) *ConnectionAPI {
-	return &ConnectionAPI{
+	api := &ConnectionAPI{
 		apiContext: newAPIContext(),
 		profiles:   profiles,
 		secrets:    secrets,
 		sessions:   sessions,
 		backups:    backups,
 		tools:      tools,
+		tasks:      tasks,
 		runs:       newRunRegistry(),
 	}
+	api.scheduler = newScheduler(api)
+	return api
 }
 
 func (a *ConnectionAPI) ListProfiles() ([]Profile, error) {
@@ -96,6 +108,9 @@ func (a *ConnectionAPI) SaveProfile(input ProfileInput) (Profile, error) {
 	if err := a.persistSSHSecret(target, input.SSHSecret); err != nil {
 		return Profile{}, wrapError(err)
 	}
+	if err := a.persistProxySecret(target, input.ProxySecret); err != nil {
+		return Profile{}, wrapError(err)
+	}
 
 	return a.profileDTO(target), nil
 }
@@ -110,6 +125,9 @@ func (a *ConnectionAPI) DeleteProfile(id string) error {
 	if err := a.secrets.Delete(sshSecretKey(id)); err != nil {
 		return wrapError(err)
 	}
+	if err := a.secrets.Delete(proxySecretKey(id)); err != nil {
+		return wrapError(err)
+	}
 	return nil
 }
 
@@ -119,7 +137,7 @@ func (a *ConnectionAPI) TestConnection(input ProfileInput) (TestResult, error) {
 		return TestResult{}, wrapError(err)
 	}
 
-	secrets, err := a.resolveSecrets(target, input.Password, input.SSHSecret)
+	secrets, err := a.resolveSecrets(target, input.Password, input.SSHSecret, input.ProxySecret)
 	if err != nil {
 		return TestResult{}, wrapError(err)
 	}
@@ -155,7 +173,7 @@ func (a *ConnectionAPI) Connect(profileID, password string) (Session, error) {
 		return Session{}, wrapError(err)
 	}
 
-	secrets, err := a.resolveSecrets(stored, password, "")
+	secrets, err := a.resolveSecrets(stored, password, "", "")
 	if err != nil {
 		return Session{}, wrapError(err)
 	}
@@ -173,6 +191,9 @@ func (a *ConnectionAPI) Connect(profileID, password string) (Session, error) {
 		ProfileID:     stored.ID,
 		Target:        stored.Target(),
 		ServerVersion: opened.ServerVersion,
+		// What is refused is decided once, by the profile the session was opened from, and travels
+		// with the session. Nothing in the frontend re-derives it — see domain.Access.
+		ReadOnly: stored.Access.ReadOnly(),
 	}, nil
 }
 
@@ -341,21 +362,46 @@ func (a *ConnectionAPI) DeleteRow(sessionID string, removal RowDeleteInput) erro
 	return wrapError(a.sessions.DeleteRow(ctx, sessionID, removal.toDriver()))
 }
 
-// openTimeout is how long a connection is given to come up. A tunnelled one has two hops to make
-// — the bastion, then the database through it — and cutting the second one off because the first
-// took its time would report a working server as unreachable.
+// openTimeout is how long a connection is given to come up, and it is a *sum of hops*: a proxy is
+// one, a bastion behind it is another, and the database behind both is the third. Cutting a later
+// hop off because an earlier one took its time would report a working server as unreachable.
 func openTimeout(target domain.ConnectionProfile) time.Duration {
-	if target.SSH.Enabled {
-		return connectTimeout + tunnelTimeout
+	timeout := connectTimeout
+	if target.Proxy.Enabled {
+		timeout += proxyTimeout
 	}
-	return connectTimeout
+	if target.SSH.Enabled {
+		timeout += tunnelTimeout
+	}
+	return timeout
 }
 
-// sshSecretKey is where a bastion's own secret lives in the credential store. The store is keyed
-// by string and a profile has two secrets rather than one, so the connection's password keeps the
-// profile's id and the bastion's takes a suffix — one profile, two entries, both deleted with it.
+// refuseReadOnly holds back something a read-only connection would not send. It exists for the one
+// write that no session carries — one of the engine's **own** programs, which opens its own
+// connection — and is not a second guard: every other write in the app goes through the session, and
+// `session.readOnly` is where those are refused. See docs/features/read-only.md.
+func (a *ConnectionAPI) refuseReadOnly(sessionID, what string) error {
+	held, err := a.sessions.Get(sessionID)
+	if err != nil {
+		return err
+	}
+	if held.Profile.Access.ReadOnly() {
+		return domain.ReadOnly(what)
+	}
+	return nil
+}
+
+// sshSecretKey is where a bastion's own secret lives in the credential store. The store is keyed by
+// string and a profile has up to three secrets rather than one, so the connection's password keeps
+// the profile's id and the other two take a suffix — one profile, three entries, all deleted with
+// it.
 func sshSecretKey(profileID string) string {
 	return profileID + ":ssh"
+}
+
+// proxySecretKey is the third of them, and follows the same rule.
+func proxySecretKey(profileID string) string {
+	return profileID + ":proxy"
 }
 
 // resolveSecrets is what a connection is opened with: whatever was typed just now, falling back to
@@ -363,7 +409,7 @@ func sshSecretKey(profileID string) string {
 // profile whose password was never saved, which is what the prompt is for.
 func (a *ConnectionAPI) resolveSecrets(
 	target domain.ConnectionProfile,
-	password, sshSecret string,
+	password, sshSecret, proxySecret string,
 ) (session.Secrets, error) {
 	// A minted password is signed for at the moment of connecting, so nothing typed or stored is
 	// read for one: passing a stale token along would fail in a way that looked like a bad
@@ -386,7 +432,15 @@ func (a *ConnectionAPI) resolveSecrets(
 		sshSecret = stored
 	}
 
-	return session.Secrets{Password: password, SSH: sshSecret}, nil
+	if proxySecret == "" && target.Proxy.Enabled {
+		stored, err := a.storedSecret(target, proxySecretKey(target.ID))
+		if err != nil {
+			return session.Secrets{}, err
+		}
+		proxySecret = stored
+	}
+
+	return session.Secrets{Password: password, SSH: sshSecret, Proxy: proxySecret}, nil
 }
 
 // storedSecret reads one entry of the credential store, answering blank where the profile does not
@@ -419,6 +473,13 @@ func (a *ConnectionAPI) persistSSHSecret(target domain.ConnectionProfile, secret
 	return a.persistSecret(target, sshSecretKey(target.ID), secret)
 }
 
+func (a *ConnectionAPI) persistProxySecret(target domain.ConnectionProfile, secret string) error {
+	if !target.Proxy.Enabled {
+		return a.secrets.Delete(proxySecretKey(target.ID))
+	}
+	return a.persistSecret(target, proxySecretKey(target.ID), secret)
+}
+
 // persistSecret writes one entry, and forgets it where the profile has stopped keeping secrets.
 // A blank secret leaves what is stored alone, which is what "leave it blank to keep the saved
 // password" means in the dialog.
@@ -435,11 +496,15 @@ func (a *ConnectionAPI) persistSecret(
 	return a.secrets.Set(key, secret)
 }
 
-// profileDTO answers the two questions the dialog asks about secrets it must never be shown: is
-// there a password stored, and is there a pass phrase for the bastion.
+// profileDTO answers the three questions the dialog asks about secrets it must never be shown: is
+// there a password stored, is there a pass phrase for the bastion, and is there one for the proxy.
 func (a *ConnectionAPI) profileDTO(target domain.ConnectionProfile) Profile {
-	return toProfileDTO(target, a.hasSecret(target, target.ID),
-		target.SSH.Enabled && a.hasSecret(target, sshSecretKey(target.ID)))
+	return toProfileDTO(
+		target,
+		a.hasSecret(target, target.ID),
+		target.SSH.Enabled && a.hasSecret(target, sshSecretKey(target.ID)),
+		target.Proxy.Enabled && a.hasSecret(target, proxySecretKey(target.ID)),
+	)
 }
 
 func (a *ConnectionAPI) hasSecret(target domain.ConnectionProfile, key string) bool {

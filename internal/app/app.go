@@ -17,6 +17,7 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/history"
 	historyfile "github.com/khanhsnd/vibe-db/internal/history/jsonfile"
 	profilefile "github.com/khanhsnd/vibe-db/internal/profile/jsonfile"
+	"github.com/khanhsnd/vibe-db/internal/schedule"
 	"github.com/khanhsnd/vibe-db/internal/secret/keyring"
 	"github.com/khanhsnd/vibe-db/internal/session"
 	snippetfile "github.com/khanhsnd/vibe-db/internal/snippet/jsonfile"
@@ -57,6 +58,11 @@ func New(version ...string) (*App, error) {
 		return nil, fmt.Errorf("resolve config path: %w", err)
 	}
 
+	schedulePath, err := schedule.DefaultPath()
+	if err != nil {
+		return nil, fmt.Errorf("resolve config path: %w", err)
+	}
+
 	sessions := session.NewManager(engines())
 	currentVersion := "dev"
 	if len(version) > 0 {
@@ -70,6 +76,7 @@ func New(version ...string) (*App, error) {
 			sessions,
 			backup.New(backupRoot),
 			dbtool.New(toolPath),
+			schedule.New(schedulePath),
 		),
 		Queries: NewQueryAPI(
 			sessions,
@@ -104,9 +111,14 @@ func (a *App) Startup(ctx context.Context) {
 	a.Queries.useContext(ctx)
 	a.System.useContext(ctx)
 	a.Updates.useContext(ctx)
+
+	// The clock starts once the window is up, and not before: a job that fires has a list to report
+	// to, and nothing here is a service — see internal/app/scheduler.go.
+	a.Connections.scheduler.start(ctx)
 }
 
 func (a *App) Shutdown(context.Context) {
+	a.Connections.scheduler.close()
 	a.sessions.CloseAll()
 }
 

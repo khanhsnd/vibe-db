@@ -12,6 +12,7 @@ require (
 	github.com/zalando/go-keyring v0.2.8
 	go.mongodb.org/mongo-driver/v2 v2.8.0
 	golang.org/x/crypto v0.51.0
+	golang.org/x/net v0.54.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.37.0
 	modernc.org/sqlite v1.56.0
@@ -60,7 +61,6 @@ require (
 	github.com/xdg-go/scram v1.2.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78 // indirect
-	golang.org/x/net v0.54.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	modernc.org/libc v1.74.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

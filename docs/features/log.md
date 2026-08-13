@@ -89,4 +89,6 @@ at all.
   happened, and a strip of red over it would be reporting on the reader's own log rather than on
   anything they asked for.
 - The tab **belongs to no connection**. Its `profileId` and namespace are empty, the strip draws
-  neither, and there is only ever one of it.
+  neither, and there is only ever one of it. [Automation](automation.md) is the other tab shaped
+  that way, and for the same reason: a job names the connection it dials, and the list holds jobs on
+  all of them.

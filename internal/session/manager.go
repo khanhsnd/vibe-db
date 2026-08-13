@@ -9,18 +9,21 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/cloudauth"
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
+	"github.com/khanhsnd/vibe-db/internal/netproxy"
 	"github.com/khanhsnd/vibe-db/internal/sshtunnel"
 )
 
 // Secrets is everything a connection is opened with that the profile does not hold: the password
-// the *database* takes, and — for a profile that reaches it through a bastion — what the *bastion*
-// takes, which is a password or the pass phrase of a private key.
+// the *database* takes, what the *bastion* takes for a profile that reaches it through one — a
+// password or the pass phrase of a private key — and what the *proxy* takes for a profile carried
+// through one.
 //
 // A profile authenticating by a cloud identity leaves Password empty and it is minted here; see
 // Open.
 type Secrets struct {
 	Password string
 	SSH      string
+	Proxy    string
 }
 
 type Session struct {
@@ -48,11 +51,12 @@ func NewManager(registry *driver.Registry) *Manager {
 	}
 }
 
-// Open dials a server, doing in order the three things that have to happen before an engine
-// adapter is given anything: the profile is checked, the bastion is stood up, and the password is
-// minted where the profile says it is not known but signed for. All three are here rather than in
-// an adapter because none of them varies by engine — see the dependency rule in
-// docs/architecture.md.
+// Open dials a server, doing in order the four things that have to happen before an engine adapter
+// is given anything: the profile is checked, the hops that carry the connection are stood up — the
+// proxy first and the bastion through it — and the password is minted where the profile says it is
+// not known but signed for. All of them are here rather than in an adapter because none of them
+// varies by engine, and a read-only profile is wrapped here for the same reason: see the dependency
+// rule in docs/architecture.md.
 func (m *Manager) Open(
 	ctx context.Context,
 	profile domain.ConnectionProfile,
@@ -67,12 +71,20 @@ func (m *Manager) Open(
 		return nil, err
 	}
 
-	tunnel, err := openTunnel(ctx, profile, secrets)
+	// The proxy is the outer hop: it is how this machine reaches the network, so the bastion is
+	// dialled *through* it and the database through the bastion. See domain.ProxyOptions.
+	proxied, err := openProxy(profile, secrets)
 	if err != nil {
 		return nil, err
 	}
 
-	// Anything that fails from here on has a tunnel to take down with it.
+	tunnel, err := openTunnel(ctx, profile, secrets, proxied)
+	if err != nil {
+		return nil, err
+	}
+
+	// Anything that fails from here on has a tunnel to take down with it. A proxy holds no
+	// connection of its own, so there is nothing of it to close.
 	fail := func(err error) (*Session, error) {
 		if tunnel != nil {
 			tunnel.Close()
@@ -85,9 +97,16 @@ func (m *Manager) Open(
 		return fail(err)
 	}
 
-	driverSession, err := engineDriver.Open(ctx, profile, creds, dialerFor(tunnel))
+	driverSession, err := engineDriver.Open(ctx, profile, creds, carrier(tunnel, proxied))
 	if err != nil {
 		return fail(err)
+	}
+
+	// A read-only profile is wrapped **once, here**, so every half of the session the rest of the
+	// app is handed — its schema, its accounts, its monitor, its rows — is already the guarded one.
+	// See readOnly, which is the whole of that rule.
+	if profile.Access.ReadOnly() {
+		driverSession = readOnly{Session: driverSession, text: engineDriver.Text()}
 	}
 
 	info, err := driverSession.ServerInfo(ctx)
@@ -121,19 +140,43 @@ func openTunnel(
 	ctx context.Context,
 	profile domain.ConnectionProfile,
 	secrets Secrets,
+	under driver.Dialer,
 ) (*sshtunnel.Tunnel, error) {
 	if !profile.SSH.Enabled {
 		return nil, nil
 	}
-	return sshtunnel.Open(ctx, profile.SSH, sshtunnel.Secrets{Secret: secrets.SSH})
+
+	var carried sshtunnel.Dial
+	if under != nil {
+		carried = sshtunnel.Dial(under)
+	}
+	return sshtunnel.Open(ctx, profile.SSH, sshtunnel.Secrets{Secret: secrets.SSH}, carried)
 }
 
-// dialerFor is the tunnel as the driver layer sees it: a function, and nil where there is none.
-// A typed nil pointer would not be nil once it were a `driver.Dialer`, which is exactly the bug
-// that would make every direct connection try to dial through nothing.
-func dialerFor(tunnel *sshtunnel.Tunnel) driver.Dialer {
+// openProxy is the proxy as the rest of this file sees it: a function, and nil where there is none.
+// It reaches nothing — a proxy is spoken to per connection — so a profile naming one that is not
+// there fails on the first dial rather than here.
+func openProxy(profile domain.ConnectionProfile, secrets Secrets) (driver.Dialer, error) {
+	if !profile.Proxy.Enabled {
+		return nil, nil
+	}
+
+	opened, err := netproxy.Open(profile.Proxy, netproxy.Secrets{Secret: secrets.Proxy})
+	if err != nil {
+		return nil, err
+	}
+	return opened.Dial, nil
+}
+
+// carrier is what the driver layer is handed: the innermost hop there is. A tunnel is already
+// carried through the proxy, so where there is one it is the answer; where there is not, the proxy
+// itself is; and where there is neither the connection is direct and this is nil.
+//
+// A typed nil pointer would not be nil once it were a `driver.Dialer`, which is exactly the bug that
+// would make every direct connection try to dial through nothing.
+func carrier(tunnel *sshtunnel.Tunnel, proxied driver.Dialer) driver.Dialer {
 	if tunnel == nil {
-		return nil
+		return proxied
 	}
 	return tunnel.Dial
 }

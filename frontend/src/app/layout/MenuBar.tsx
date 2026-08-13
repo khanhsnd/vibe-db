@@ -1,4 +1,4 @@
-import { Check, ScrollText } from 'lucide-react'
+import { CalendarClock, Check, ScrollText } from 'lucide-react'
 
 import { namespaceLabel, type Profile } from '@/bridge/connections'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
@@ -15,14 +15,19 @@ export function MenuBar() {
   const activeId = useTabsStore((s) => s.activeId)
   const activate = useTabsStore((s) => s.activate)
   const openLog = useTabsStore((s) => s.openLog)
+  const openAutomation = useTabsStore((s) => s.openAutomation)
   const profiles = useConnectionsStore((s) => s.profiles)
 
   // A menu with no items is a name that does nothing, which is what the other five still are — see
   // `MenuButton`, which draws its trigger alone when it is given none.
   const menus: Partial<Record<string, MenuItem[]>> = {
-    // The log belongs to the window rather than to a connection, so it is asked for here and
-    // nowhere else: there is no node in the tree it could hang off.
-    Tools: [{ label: 'History Log', icon: <ScrollText size={13} />, onSelect: openLog }],
+    // Both of these belong to the window rather than to a connection, so they are asked for here
+    // and nowhere else: there is no node in the tree either could hang off. A job on the clock names
+    // the connection it dials, and the list holds jobs on all of them.
+    Tools: [
+      { label: 'History Log', icon: <ScrollText size={13} />, onSelect: openLog },
+      { label: 'Automation', icon: <CalendarClock size={13} />, onSelect: openAutomation },
+    ],
     Window: windowItems(tabs, activeId, profiles, activate),
   }
 

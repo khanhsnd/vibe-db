@@ -1482,6 +1482,26 @@ export namespace app {
 	    }
 	}
 	
+	export class ProxySettings {
+	    enabled: boolean;
+	    kind: string;
+	    host: string;
+	    port: number;
+	    user: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProxySettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.kind = source["kind"];
+	        this.host = source["host"];
+	        this.port = source["port"];
+	        this.user = source["user"];
+	    }
+	}
 	export class SSHSettings {
 	    enabled: boolean;
 	    host: string;
@@ -1534,6 +1554,7 @@ export namespace app {
 	    engine: string;
 	    environment: string;
 	    colour: string;
+	    access: string;
 	    host: string;
 	    port: number;
 	    user: string;
@@ -1542,9 +1563,11 @@ export namespace app {
 	    region: string;
 	    tls: TLSSettings;
 	    ssh: SSHSettings;
+	    proxy: ProxySettings;
 	    savePassword: boolean;
 	    hasPassword: boolean;
 	    hasSshSecret: boolean;
+	    hasProxySecret: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
@@ -1557,6 +1580,7 @@ export namespace app {
 	        this.engine = source["engine"];
 	        this.environment = source["environment"];
 	        this.colour = source["colour"];
+	        this.access = source["access"];
 	        this.host = source["host"];
 	        this.port = source["port"];
 	        this.user = source["user"];
@@ -1565,9 +1589,11 @@ export namespace app {
 	        this.region = source["region"];
 	        this.tls = this.convertValues(source["tls"], TLSSettings);
 	        this.ssh = this.convertValues(source["ssh"], SSHSettings);
+	        this.proxy = this.convertValues(source["proxy"], ProxySettings);
 	        this.savePassword = source["savePassword"];
 	        this.hasPassword = source["hasPassword"];
 	        this.hasSshSecret = source["hasSshSecret"];
+	        this.hasProxySecret = source["hasProxySecret"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1594,6 +1620,7 @@ export namespace app {
 	    engine: string;
 	    environment: string;
 	    colour: string;
+	    access: string;
 	    host: string;
 	    port: number;
 	    user: string;
@@ -1603,7 +1630,9 @@ export namespace app {
 	    region: string;
 	    tls: TLSSettings;
 	    ssh: SSHSettings;
+	    proxy: ProxySettings;
 	    sshSecret: string;
+	    proxySecret: string;
 	    savePassword: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -1617,6 +1646,7 @@ export namespace app {
 	        this.engine = source["engine"];
 	        this.environment = source["environment"];
 	        this.colour = source["colour"];
+	        this.access = source["access"];
 	        this.host = source["host"];
 	        this.port = source["port"];
 	        this.user = source["user"];
@@ -1626,7 +1656,9 @@ export namespace app {
 	        this.region = source["region"];
 	        this.tls = this.convertValues(source["tls"], TLSSettings);
 	        this.ssh = this.convertValues(source["ssh"], SSHSettings);
+	        this.proxy = this.convertValues(source["proxy"], ProxySettings);
 	        this.sshSecret = source["sshSecret"];
+	        this.proxySecret = source["proxySecret"];
 	        this.savePassword = source["savePassword"];
 	    }
 	
@@ -1648,6 +1680,7 @@ export namespace app {
 		    return a;
 		}
 	}
+	
 	export class QueryInput {
 	    database: string;
 	    schema: string;
@@ -2280,6 +2313,7 @@ export namespace app {
 	    profileId: string;
 	    target: string;
 	    serverVersion: string;
+	    readOnly: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Session(source);
@@ -2291,6 +2325,7 @@ export namespace app {
 	        this.profileId = source["profileId"];
 	        this.target = source["target"];
 	        this.serverVersion = source["serverVersion"];
+	        this.readOnly = source["readOnly"];
 	    }
 	}
 	export class Snippet {
@@ -2721,6 +2756,208 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class TaskRun {
+	    taskId: string;
+	    at: string;
+	    elapsedMs: number;
+	    outcome: string;
+	    summary: string;
+	    detail: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskRun(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.taskId = source["taskId"];
+	        this.at = source["at"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.outcome = source["outcome"];
+	        this.summary = source["summary"];
+	        this.detail = source["detail"];
+	    }
+	}
+	export class TaskTarget {
+	    profileId: string;
+	    database: string;
+	    schema: string;
+	    table: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskTarget(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.table = source["table"];
+	    }
+	}
+	export class Task {
+	    database: string;
+	    schema: string;
+	    id: string;
+	    name: string;
+	    kind: string;
+	    enabled: boolean;
+	    catchUp: boolean;
+	    profileId: string;
+	    every: string;
+	    minutes: number;
+	    hour: number;
+	    minute: number;
+	    weekday: number;
+	    tables: string[];
+	    withStructure: boolean;
+	    withData: boolean;
+	    comment: string;
+	    keep: number;
+	    format: string;
+	    folder: string;
+	    maxRows: number;
+	    compress: boolean;
+	    table: string;
+	    right: TaskTarget;
+	    nextRunAt: string;
+	    lastRunAt: string;
+	    running: boolean;
+	    runs: TaskRun[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Task(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.kind = source["kind"];
+	        this.enabled = source["enabled"];
+	        this.catchUp = source["catchUp"];
+	        this.profileId = source["profileId"];
+	        this.every = source["every"];
+	        this.minutes = source["minutes"];
+	        this.hour = source["hour"];
+	        this.minute = source["minute"];
+	        this.weekday = source["weekday"];
+	        this.tables = source["tables"];
+	        this.withStructure = source["withStructure"];
+	        this.withData = source["withData"];
+	        this.comment = source["comment"];
+	        this.keep = source["keep"];
+	        this.format = source["format"];
+	        this.folder = source["folder"];
+	        this.maxRows = source["maxRows"];
+	        this.compress = source["compress"];
+	        this.table = source["table"];
+	        this.right = this.convertValues(source["right"], TaskTarget);
+	        this.nextRunAt = source["nextRunAt"];
+	        this.lastRunAt = source["lastRunAt"];
+	        this.running = source["running"];
+	        this.runs = this.convertValues(source["runs"], TaskRun);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TaskInput {
+	    database: string;
+	    schema: string;
+	    id: string;
+	    name: string;
+	    kind: string;
+	    enabled: boolean;
+	    catchUp: boolean;
+	    profileId: string;
+	    every: string;
+	    minutes: number;
+	    hour: number;
+	    minute: number;
+	    weekday: number;
+	    tables: string[];
+	    withStructure: boolean;
+	    withData: boolean;
+	    comment: string;
+	    keep: number;
+	    format: string;
+	    folder: string;
+	    maxRows: number;
+	    compress: boolean;
+	    table: string;
+	    right: TaskTarget;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.kind = source["kind"];
+	        this.enabled = source["enabled"];
+	        this.catchUp = source["catchUp"];
+	        this.profileId = source["profileId"];
+	        this.every = source["every"];
+	        this.minutes = source["minutes"];
+	        this.hour = source["hour"];
+	        this.minute = source["minute"];
+	        this.weekday = source["weekday"];
+	        this.tables = source["tables"];
+	        this.withStructure = source["withStructure"];
+	        this.withData = source["withData"];
+	        this.comment = source["comment"];
+	        this.keep = source["keep"];
+	        this.format = source["format"];
+	        this.folder = source["folder"];
+	        this.maxRows = source["maxRows"];
+	        this.compress = source["compress"];
+	        this.table = source["table"];
+	        this.right = this.convertValues(source["right"], TaskTarget);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
 	export class TestResult {
 	    serverVersion: string;
 	    latencyMs: number;

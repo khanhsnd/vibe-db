@@ -28,6 +28,18 @@ export interface SSHSettings {
   strictHostKey: boolean
 }
 
+/**
+ * The outer hop: the SOCKS5 or HTTP proxy the connection is carried through, the bastion included.
+ * Its password is not here — it travels in `ProfileInput.proxySecret` and never comes back out.
+ */
+export interface ProxySettings {
+  enabled: boolean
+  kind: string
+  host: string
+  port: number
+  user: string
+}
+
 export interface Profile {
   id: string
   name: string
@@ -35,6 +47,8 @@ export interface Profile {
   environment: string
   /** The tint the sidebar washes this connection and everything under it with. */
   colour: string
+  /** What this connection will be let do at all — see `ACCESS_MODES`. */
+  access: string
   host: string
   port: number
   user: string
@@ -43,10 +57,12 @@ export interface Profile {
   region: string
   tls: TLSSettings
   ssh: SSHSettings
+  proxy: ProxySettings
   savePassword: boolean
   /** Whether the credential store already holds one — never the secret itself. */
   hasPassword: boolean
   hasSshSecret: boolean
+  hasProxySecret: boolean
 }
 
 export interface ProfileInput {
@@ -55,6 +71,7 @@ export interface ProfileInput {
   engine: string
   environment: string
   colour: string
+  access: string
   host: string
   port: number
   user: string
@@ -64,8 +81,11 @@ export interface ProfileInput {
   region: string
   tls: TLSSettings
   ssh: SSHSettings
+  proxy: ProxySettings
   /** The bastion's password, or the pass phrase of its key. Blank keeps whatever is stored. */
   sshSecret: string
+  /** The proxy's own password. Blank keeps whatever is stored, the same rule. */
+  proxySecret: string
   savePassword: boolean
 }
 
@@ -233,6 +253,62 @@ export const SSH_AUTHS: ReadonlyArray<{ value: SSHAuth; label: string }> = [
   { value: 'password', label: 'Password' },
   { value: 'agent', label: 'SSH Agent' },
 ]
+
+/**
+ * Which protocol the proxy speaks. There is no SOCKS4: it cannot carry a name, so every host would
+ * be resolved on *this* machine — which is the thing a proxy in front of a private network exists to
+ * avoid. The port beside each is what the dialog fills in when the kind is picked, since one default
+ * would be wrong half the time.
+ */
+export type ProxyKind = 'socks5' | 'http'
+
+export interface ProxyKindInfo {
+  value: ProxyKind
+  label: string
+  /** The port this kind is usually on, which is what the dialog fills in when it is picked. */
+  port: number
+}
+
+export const PROXY_KINDS = [
+  { value: 'socks5', label: 'SOCKS5', port: 1080 },
+  { value: 'http', label: 'HTTP CONNECT', port: 8080 },
+] as const satisfies readonly ProxyKindInfo[]
+
+export function proxyPort(kind: string): number {
+  return PROXY_KINDS.find((one) => one.value === kind)?.port ?? PROXY_KINDS[0].port
+}
+
+/**
+ * What a connection is let do at all. It is the second fact about a profile that changes how the app
+ * *behaves* rather than how it connects, and it is the harder of the two: an environment turns a
+ * hazard into a **question**, and this turns one into a **refusal**.
+ *
+ * It mirrors `domain.Access`, which is where the rule lives. Nothing here decides what is refused —
+ * a session says whether it is read-only and the Go side says what it held back.
+ */
+export type Access = '' | 'read-only'
+
+export interface AccessInfo {
+  value: Access
+  label: string
+  hint: string
+}
+
+export const ACCESS_MODES = [
+  { value: '', label: 'Read & write', hint: 'Nothing is held back.' },
+  {
+    value: 'read-only',
+    label: 'Read-only',
+    hint:
+      'Anything that would write is refused before it is sent — no edits, no schema changes, no ' +
+      'INSERT, UPDATE, DELETE or DROP. It is a guard on this app, not on the server: a read-only ' +
+      'account is what protects the database from every other client.',
+  },
+] as const satisfies readonly AccessInfo[]
+
+export function accessInfo(access: string): AccessInfo {
+  return ACCESS_MODES.find((info) => info.value === access) ?? ACCESS_MODES[0]
+}
 
 export type Engine =
   | 'mysql'
@@ -808,6 +884,7 @@ export function emptyProfileInput(): ProfileInput {
     engine: value,
     environment: '',
     colour: '',
+    access: '',
     host: '127.0.0.1',
     port,
     user,
@@ -829,6 +906,16 @@ export function emptyProfileInput(): ProfileInput {
       strictHostKey: true,
     },
     sshSecret: '',
+    // A proxy starts off, and starts SOCKS5 — which is what a database client is nearly always put
+    // behind, an HTTP proxy being built for requests rather than for sockets.
+    proxy: {
+      enabled: false,
+      kind: PROXY_KINDS[0].value,
+      host: '',
+      port: PROXY_KINDS[0].port,
+      user: '',
+    },
+    proxySecret: '',
     savePassword: true,
   }
 }
@@ -840,6 +927,7 @@ export function toProfileInput(profile: Profile): ProfileInput {
     engine: profile.engine,
     environment: profile.environment,
     colour: profile.colour,
+    access: profile.access,
     host: profile.host,
     port: profile.port,
     user: profile.user,
@@ -851,7 +939,9 @@ export function toProfileInput(profile: Profile): ProfileInput {
     region: profile.region,
     tls: { ...profile.tls },
     ssh: { ...profile.ssh },
+    proxy: { ...profile.proxy },
     sshSecret: '',
+    proxySecret: '',
     savePassword: profile.savePassword,
   }
 }

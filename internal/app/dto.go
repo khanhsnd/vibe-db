@@ -48,6 +48,17 @@ type SSHSettings struct {
 	StrictHostKey bool   `json:"strictHostKey"`
 }
 
+// ProxySettings is the outer hop: the SOCKS5 or HTTP proxy every connection of this profile is
+// carried through, the bastion included. Its password is *not* here either — it travels in
+// ProfileInput.ProxySecret on its way in, and never comes back out.
+type ProxySettings struct {
+	Enabled bool   `json:"enabled"`
+	Kind    string `json:"kind"`
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
+	User    string `json:"user"`
+}
+
 type Profile struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -55,7 +66,10 @@ type Profile struct {
 	Environment string `json:"environment"`
 	// Colour is the tint the sidebar draws this connection and everything under it in. It is the
 	// one field of a profile no server hears about — see domain.Colour.
-	Colour   string `json:"colour"`
+	Colour string `json:"colour"`
+	// Access is what this connection will be let do at all — `''` for read and write, `read-only`
+	// for a connection that refuses to send anything that writes. See domain.Access.
+	Access   string `json:"access"`
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	User     string `json:"user"`
@@ -63,14 +77,17 @@ type Profile struct {
 	Auth     string `json:"auth"`
 	Region   string `json:"region"`
 
-	TLS TLSSettings `json:"tls"`
-	SSH SSHSettings `json:"ssh"`
+	TLS   TLSSettings   `json:"tls"`
+	SSH   SSHSettings   `json:"ssh"`
+	Proxy ProxySettings `json:"proxy"`
 
 	SavePassword bool `json:"savePassword"`
 	HasPassword  bool `json:"hasPassword"`
 	// HasSSHSecret is the same fact about the bastion's own secret, so the dialog can say a pass
 	// phrase is already stored rather than making the reader type one they have saved.
 	HasSSHSecret bool `json:"hasSshSecret"`
+	// HasProxySecret is the third of them, about the proxy's own password.
+	HasProxySecret bool `json:"hasProxySecret"`
 }
 
 type ProfileInput struct {
@@ -79,6 +96,7 @@ type ProfileInput struct {
 	Engine      string `json:"engine"`
 	Environment string `json:"environment"`
 	Colour      string `json:"colour"`
+	Access      string `json:"access"`
 	Host        string `json:"host"`
 	Port        int    `json:"port"`
 	User        string `json:"user"`
@@ -87,11 +105,14 @@ type ProfileInput struct {
 	Auth        string `json:"auth"`
 	Region      string `json:"region"`
 
-	TLS TLSSettings `json:"tls"`
-	SSH SSHSettings `json:"ssh"`
+	TLS   TLSSettings   `json:"tls"`
+	SSH   SSHSettings   `json:"ssh"`
+	Proxy ProxySettings `json:"proxy"`
 	// SSHSecret is the bastion's password, or the pass phrase of its private key. Blank means
 	// "keep whatever is stored", exactly as a blank Password does.
 	SSHSecret string `json:"sshSecret"`
+	// ProxySecret is the proxy's own password, and follows the same rule.
+	ProxySecret string `json:"proxySecret"`
 
 	SavePassword bool `json:"savePassword"`
 }
@@ -106,6 +127,11 @@ type Session struct {
 	ProfileID     string `json:"profileId"`
 	Target        string `json:"target"`
 	ServerVersion string `json:"serverVersion"`
+	// ReadOnly says this connection refuses to send anything that writes. It travels on the
+	// **session** rather than being looked up from the profile, for the reason `confirm` travels on
+	// a statement: it is what a surface draws itself from, and nothing in the frontend re-derives
+	// what is refused — see domain.Access.
+	ReadOnly bool `json:"readOnly"`
 }
 
 // Namespace is where a table lives. Schema is empty on MySQL, whose database is its schema.
@@ -862,13 +888,17 @@ type RowDeleteInput struct {
 	Key   map[string]string `json:"key"`
 }
 
-func toProfileDTO(profile domain.ConnectionProfile, hasPassword, hasSSHSecret bool) Profile {
+func toProfileDTO(
+	profile domain.ConnectionProfile,
+	hasPassword, hasSSHSecret, hasProxySecret bool,
+) Profile {
 	return Profile{
 		ID:          profile.ID,
 		Name:        profile.Name,
 		Engine:      string(profile.Engine),
 		Environment: string(profile.Environment),
 		Colour:      string(profile.Colour),
+		Access:      string(profile.Access),
 		Host:        profile.Host,
 		Port:        profile.Port,
 		User:        profile.User,
@@ -892,9 +922,17 @@ func toProfileDTO(profile domain.ConnectionProfile, hasPassword, hasSSHSecret bo
 			KnownHosts:    profile.SSH.KnownHosts,
 			StrictHostKey: profile.SSH.StrictHostKey,
 		},
-		SavePassword: profile.SavePassword,
-		HasPassword:  hasPassword,
-		HasSSHSecret: hasSSHSecret,
+		Proxy: ProxySettings{
+			Enabled: profile.Proxy.Enabled,
+			Kind:    string(profile.Proxy.Kind),
+			Host:    profile.Proxy.Host,
+			Port:    profile.Proxy.Port,
+			User:    profile.Proxy.User,
+		},
+		SavePassword:   profile.SavePassword,
+		HasPassword:    hasPassword,
+		HasSSHSecret:   hasSSHSecret,
+		HasProxySecret: hasProxySecret,
 	}
 }
 
@@ -1944,6 +1982,7 @@ func (in ProfileInput) toDomain() domain.ConnectionProfile {
 		Engine:      engine,
 		Environment: domain.Environment(in.Environment),
 		Colour:      domain.Colour(in.Colour),
+		Access:      domain.Access(in.Access),
 		Host:        in.Host,
 		Port:        port,
 		User:        in.User,
@@ -1957,7 +1996,8 @@ func (in ProfileInput) toDomain() domain.ConnectionProfile {
 			ClientKey:  in.TLS.ClientKey,
 			ServerName: in.TLS.ServerName,
 		},
-		SSH: in.SSH.toDomain(),
+		SSH:   in.SSH.toDomain(),
+		Proxy: in.Proxy.toDomain(),
 		// A minted password is not one there is anything to save: it lasts minutes, and one read
 		// back out of the credential store later would only fail.
 		SavePassword: in.SavePassword && !auth.Minted(),
@@ -1986,5 +2026,28 @@ func (in SSHSettings) toDomain() domain.SSHTunnel {
 		KeyPath:       in.KeyPath,
 		KnownHosts:    in.KnownHosts,
 		StrictHostKey: in.StrictHostKey,
+	}
+}
+
+// toDomain fills in the proxy's own default port, which follows the *kind* rather than being one
+// number: a SOCKS proxy is on 1080 and an HTTP one on 8080, and a single default would be wrong half
+// the time. An unnamed kind is SOCKS5, which is what a database client is nearly always put behind.
+func (in ProxySettings) toDomain() domain.ProxyOptions {
+	kind := domain.ProxyKind(in.Kind)
+	if kind == "" {
+		kind = domain.ProxySOCKS5
+	}
+
+	port := in.Port
+	if port == 0 {
+		port = kind.DefaultPort()
+	}
+
+	return domain.ProxyOptions{
+		Enabled: in.Enabled,
+		Kind:    kind,
+		Host:    in.Host,
+		Port:    port,
+		User:    in.User,
 	}
 }

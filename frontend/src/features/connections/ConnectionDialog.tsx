@@ -11,14 +11,18 @@ import {
 } from 'lucide-react'
 
 import {
+  ACCESS_MODES,
   AUTH_METHODS,
+  accessInfo,
   authInfo,
   ENVIRONMENTS,
+  PROXY_KINDS,
   SSH_AUTHS,
   TLS_MODES,
   emptyProfileInput,
   engineInfo,
   connections,
+  proxyPort,
   tlsUsesFiles,
   withEngine,
   type Engine,
@@ -95,6 +99,21 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
     value: ProfileInput['ssh'][K],
   ) => update('ssh', { ...form.ssh, [key]: value })
 
+  const updateProxy = <K extends keyof ProfileInput['proxy']>(
+    key: K,
+    value: ProfileInput['proxy'][K],
+  ) => update('proxy', { ...form.proxy, [key]: value })
+
+  // Changing the kind brings its own default port with it, but only where the box still holds the
+  // other kind's default — the rule `withEngine` follows, for the same reason: a typed port is the
+  // reader's.
+  const changeProxyKind = (kind: string) =>
+    update('proxy', {
+      ...form.proxy,
+      kind,
+      port: form.proxy.port === proxyPort(form.proxy.kind) ? proxyPort(kind) : form.proxy.port,
+    })
+
   const changeEngine = (value: Engine) => {
     setForm((prev) => withEngine(prev, value))
     setProbe({ state: 'idle' })
@@ -168,6 +187,7 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
   }
 
   const auth = authInfo(form.auth)
+  const access = accessInfo(form.access)
 
   return (
     <Dialog
@@ -340,6 +360,26 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                     )}
                   </Field>
 
+                  {/* What is *refused* sits beside what is confirmed, because they are the same
+                      kind of fact about a connection and are read together: an environment turns a
+                      hazard into a question, and this turns one into a refusal. */}
+                  <Field label="Access" hint={access.hint} error={fieldError('access')}>
+                    {(id, invalid) => (
+                      <SelectInput
+                        id={id}
+                        invalid={invalid}
+                        value={form.access}
+                        onChange={(e) => update('access', e.target.value)}
+                      >
+                        {ACCESS_MODES.map((one) => (
+                          <option key={one.value} value={one.value}>
+                            {one.label}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    )}
+                  </Field>
+
                   <Checkbox
                     label="Save password in Windows Credential Manager"
                     checked={form.savePassword}
@@ -445,6 +485,100 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                       />
                     )}
                   </Field>
+                </Pane>
+              ),
+            },
+            {
+              id: 'proxy',
+              label: 'Proxy',
+              content: (
+                <Pane>
+                  <Checkbox
+                    label="Connect through a proxy"
+                    checked={form.proxy.enabled}
+                    onChange={(e) => updateProxy('enabled', e.target.checked)}
+                  />
+
+                  <p className="text-xs text-faint">
+                    The <em>outer</em> hop: a proxy is how this machine reaches the network, so a
+                    connection that also uses SSH dials the bastion through the proxy. The address is
+                    resolved on the far side, exactly as a tunnel’s is.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Proxy type" error={fieldError('proxyKind')}>
+                      {(id, invalid) => (
+                        <SelectInput
+                          id={id}
+                          invalid={invalid}
+                          disabled={!form.proxy.enabled}
+                          value={form.proxy.kind}
+                          onChange={(e) => changeProxyKind(e.target.value)}
+                        >
+                          {PROXY_KINDS.map((one) => (
+                            <option key={one.value} value={one.value}>
+                              {one.label}
+                            </option>
+                          ))}
+                        </SelectInput>
+                      )}
+                    </Field>
+
+                    <Field label="Proxy port" error={fieldError('proxyPort')}>
+                      {(id, invalid) => (
+                        <TextInput
+                          id={id}
+                          invalid={invalid}
+                          inputMode="numeric"
+                          disabled={!form.proxy.enabled}
+                          value={form.proxy.port === 0 ? '' : String(form.proxy.port)}
+                          placeholder={String(proxyPort(form.proxy.kind))}
+                          onChange={(e) =>
+                            updateProxy('port', Number(e.target.value.replace(/\D/g, '')) || 0)
+                          }
+                        />
+                      )}
+                    </Field>
+                  </div>
+
+                  <Field label="Proxy host" error={fieldError('proxyHost')}>
+                    {(id, invalid) => (
+                      <TextInput
+                        id={id}
+                        invalid={invalid}
+                        disabled={!form.proxy.enabled}
+                        value={form.proxy.host}
+                        placeholder="proxy.example.com"
+                        onChange={(e) => updateProxy('host', e.target.value)}
+                      />
+                    )}
+                  </Field>
+
+                  {/* Most proxies on a private network ask for nobody at all, so the box says so
+                      rather than being refused when it is left empty. */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Proxy user" hint="Optional">
+                      {(id) => (
+                        <TextInput
+                          id={id}
+                          disabled={!form.proxy.enabled}
+                          value={form.proxy.user}
+                          onChange={(e) => updateProxy('user', e.target.value)}
+                        />
+                      )}
+                    </Field>
+
+                    <Field label="Proxy password" hint={proxySecretHint(form)}>
+                      {(id) => (
+                        <PasswordInput
+                          id={id}
+                          disabled={!form.proxy.enabled || form.proxy.user === ''}
+                          value={form.proxySecret}
+                          onChange={(e) => update('proxySecret', e.target.value)}
+                        />
+                      )}
+                    </Field>
+                  </div>
                 </Pane>
               ),
             },
@@ -662,6 +796,12 @@ function passwordHint(form: ProfileInput, minted: boolean, editing: boolean): st
 
 function sshSecretHint(form: ProfileInput): string | undefined {
   return form.ssh.enabled ? 'Leave blank to keep what is saved' : undefined
+}
+
+function proxySecretHint(form: ProfileInput): string | undefined {
+  return form.proxy.enabled && form.proxy.user !== ''
+    ? 'Leave blank to keep what is saved'
+    : undefined
 }
 
 function ProbeResult({ probe, engine }: { probe: Probe; engine: string }) {

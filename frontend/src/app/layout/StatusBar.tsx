@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Cable, Clock, Database, Rows3, Server, TriangleAlert } from 'lucide-react'
+import { Cable, Clock, Database, Lock, Rows3, Server, TriangleAlert } from 'lucide-react'
 
 import { EngineIcon } from '@/features/connections/EngineIcon'
 import { EnvironmentBadge } from '@/features/connections/EnvironmentDot'
@@ -17,6 +17,12 @@ export interface StatusInfo {
   /** What that connection is for, drawn as its badge. Empty for one that names none. */
   environment: string
   serverVersion: string | null
+  /**
+   * Whether this connection refuses to send anything that writes. It is the session's own answer —
+   * see `domain.Access` — and it is reported here because a reader who cannot see it finds out by
+   * being refused, which is the wrong moment to learn it.
+   */
+  readOnly: boolean
   /** Where the tab in front is pointed — `shop.public`. Empty where it names no namespace. */
   namespace: string
   /** How many connections are open at all, which is what says this bar reports on one of several. */
@@ -46,6 +52,7 @@ export function StatusBar({
   engine,
   environment,
   serverVersion,
+  readOnly,
   namespace,
   connections,
   rowCount,
@@ -61,6 +68,14 @@ export function StatusBar({
       {name ? <span className="shrink-0 truncate font-medium text-fg">{name}</span> : null}
 
       <Fact icon={<Server size={11} />}>{target ?? 'No connection'}</Fact>
+
+      {/* Beside the server rather than out at the right-hand end, because it is a fact about
+          *this* connection and not about what the app is holding. */}
+      {readOnly ? (
+        <Fact icon={<Lock size={11} />} tint="text-warning">
+          Read-only
+        </Fact>
+      ) : null}
 
       {namespace ? (
         <Fact icon={<Database size={11} />} tint="text-kind-database" bright>

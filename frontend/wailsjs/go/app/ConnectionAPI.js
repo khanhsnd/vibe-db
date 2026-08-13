@@ -98,6 +98,10 @@ export function DeleteRow(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['DeleteRow'](arg1, arg2);
 }
 
+export function DeleteTask(arg1) {
+  return window['go']['app']['ConnectionAPI']['DeleteTask'](arg1);
+}
+
 export function Disconnect(arg1) {
   return window['go']['app']['ConnectionAPI']['Disconnect'](arg1);
 }
@@ -140,6 +144,10 @@ export function DuplicateTable(arg1, arg2, arg3, arg4, arg5) {
 
 export function EmptyTable(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['EmptyTable'](arg1, arg2, arg3);
+}
+
+export function EnableTask(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['EnableTask'](arg1, arg2);
 }
 
 export function ExportRows(arg1, arg2) {
@@ -192,6 +200,10 @@ export function ListProfiles() {
 
 export function ListSchemas(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ListSchemas'](arg1, arg2);
+}
+
+export function ListTasks() {
+  return window['go']['app']['ConnectionAPI']['ListTasks']();
 }
 
 export function ListTransferEncodings() {
@@ -346,6 +358,10 @@ export function RunImport(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['RunImport'](arg1, arg2);
 }
 
+export function RunTask(arg1) {
+  return window['go']['app']['ConnectionAPI']['RunTask'](arg1);
+}
+
 export function RunToolDump(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['RunToolDump'](arg1, arg2);
 }
@@ -360,6 +376,10 @@ export function SaveProfile(arg1) {
 
 export function SaveSource(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['SaveSource'](arg1, arg2, arg3);
+}
+
+export function SaveTask(arg1) {
+  return window['go']['app']['ConnectionAPI']['SaveTask'](arg1);
 }
 
 export function SetPrimaryKey(arg1, arg2, arg3, arg4) {

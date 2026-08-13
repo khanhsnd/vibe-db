@@ -52,6 +52,10 @@ these objects again, for putting a table back on a server. The wizards carry the
 formats something other than a database reads. That is why SQL is not in the wizard's format list and
 no wizard format is in the dump menu.
 
+An export is also one of the four jobs a [clock](automation.md) can fire, on the wizard's own
+defaults — and it writes the same file names every time, so a scheduled export is a *mirror* of the
+namespace rather than a pile of dated copies. **An import is not scheduled**, being a write.
+
 | | Reads | Writes |
 |---|---|---|
 | CSV (`.csv`), Text (`.txt`) | ✓ | ✓ |

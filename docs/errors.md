@@ -73,15 +73,25 @@ layer, and the three transport rows are mapped once in `sqlkit.TransportError`.
 | `TUNNEL_CREDENTIALS` | The bastion refused the user, the key, or the pass phrase; also a key file that cannot be read, and an agent that is not running |
 | `TUNNEL_HOST_KEY` | The bastion is not in `known_hosts`, or the key there is not the one it presented. The one failure of the three that may mean something is *wrong* rather than mistyped, which is why it is its own code |
 | `TOKEN_UNAVAILABLE` | A cloud identity this machine could not produce a token from. Nothing was sent to a database, so it is not a rejection; `detail` names the variable to set or the command to run |
+| `PROXY_FAILED` | The proxy could not be reached, or would not open the connection it was asked for — refused, no route, a SOCKS reply that is not success, an HTTP status that is not 200. It is raised before the far side has been reached at all, whether that far side is a database or a bastion — see [features/connections.md](features/connections.md#proxy) |
+| `PROXY_CREDENTIALS` | The proxy refused the user and password: `407 Proxy Authentication Required`, or a SOCKS5 authentication the server would not take. Its own code because the reader answers it in a different box from the one above |
+| `READ_ONLY` | This app refused to send something because the connection was opened **read-only**. Nothing reached the server, so there is nothing to retry and it is not a rejection; `detail` is the statement's own keyword — `DELETE`, `TRUNCATE` — or the change that was held back, such as `dropping a column`. See [features/read-only.md](features/read-only.md) |
 | `TOOL_NOT_FOUND` | One of the engine's **own** programs is not on this machine — not on the `PATH`, and not in the folder the app was pointed at. `field` names which of the two, and the reader answers it with `Locate…` on the dialog that raised it. Nothing was run — see [features/tools.md](features/tools.md#finding-the-program) |
 | `TOOL_FAILED` | One of those programs ran and ended badly. `message` is **its own last line**, because mongorestore knows why it refused a document and this app does not; `detail` is the program and the status it exited with. The whole of what it printed is in the dialog's Message Log rather than in the error |
+| `TASK_NOT_FOUND` | A scheduled job that is no longer in the file — deleted in another window, or since the list was drawn. Nothing fired, and the reader answers it with `Refresh` — see [features/automation.md](features/automation.md) |
+| `TASK_RUNNING` | `Run Now` on a job that is already going. It is a wait rather than a mistake: the two runs would write the same file, so the second is refused instead of started. **A job that fails while it runs is not one of these** — that is an outcome, kept in the job's own history rather than thrown |
 | `INTERNAL` | Anything unmapped; `detail` carries the original message |
 
-**The three tunnel codes are raised before the database is reached at all.** They come from
-`internal/sshtunnel`, which maps them from `x/crypto/ssh`'s own failures — and that package is one of
-two in the app that read an error's *message*, because `x/crypto/ssh` offers no code to switch on. It
-is the same trade an engine adapter makes with an errno: the text is the library's and not anything a
-reader typed, and what the UI switches on is still the code it produces.
+**The three tunnel codes and the two proxy codes are raised before the database is reached at all.**
+The tunnel's come from `internal/sshtunnel` and the proxy's from `internal/netproxy`, and both read
+their library's own *message* to tell a rejected credential from a hop that never came up, because
+neither `x/crypto/ssh` nor `x/net/proxy` offers a code to switch on. It is the same trade an engine
+adapter makes with an errno: the text is the library's and not anything a reader typed, and what the
+UI switches on is still the code it produces.
+
+**A profile with both hops reports whichever one failed**, and never the wrong one: a proxy that will
+not carry the connection to the bastion is a `PROXY_FAILED`, because the bastion was never spoken to
+— see `sshtunnel.dialBastion`, which hands the outer hop's failure back untouched.
 
 **The other two are `driver/mongo` and `driver/redis`**, for the same reason. A MongoDB handshake
 that fails at authentication arrives wrapped in a connection error whose type carries nothing to

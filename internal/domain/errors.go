@@ -58,10 +58,29 @@ var (
 	ErrTunnelCredentials = errors.New("SSH server rejected the credentials")
 	ErrTunnelHostKey     = errors.New("SSH host key is not known or does not match")
 
+	// The two ways a connection through a proxy fails before the far side is ever reached. They are
+	// separate sentinels for the reason the tunnel's are: one is a proxy that is not there or would
+	// not open the connection, and one is a proxy that refused the reader — and the second is fixed
+	// in a different box.
+	ErrProxyFailed      = errors.New("cannot reach the proxy")
+	ErrProxyCredentials = errors.New("proxy rejected the credentials")
+
+	// ErrReadOnly is something this app refused to send because the connection was opened
+	// read-only. Nothing reached the server, which is the whole point: it is not a server's
+	// rejection and there is nothing to retry — see Access.
+	ErrReadOnly = errors.New("this connection is read-only")
+
 	// ErrTokenUnavailable is a cloud identity this machine could not produce a token from. It is
 	// not a rejection by the database — nothing was sent to one — and the reader fixes it where
 	// their cloud credentials live rather than in the profile.
 	ErrTokenUnavailable = errors.New("no cloud credentials to sign in with")
+
+	// The two ways a scheduled job is asked for something it cannot give. They are separate
+	// sentinels because a reader answers them differently: the first is a task that has been
+	// deleted — in another window, or since the list was drawn — and the second is a task the
+	// reader pressed Run on while it was already going, which is a wait rather than a mistake.
+	ErrTaskNotFound = errors.New("scheduled task not found")
+	ErrTaskRunning  = errors.New("that task is already running")
 
 	// The two ways running one of an engine's own programs fails — see Toolkit. They are separate
 	// sentinels because a reader answers them in different places: the first is a program that is
@@ -156,6 +175,26 @@ func (e UnsupportedError) Unwrap() error {
 // Unsupported refuses a request this engine has no concept of: `Unsupported("a foreign key")`.
 func Unsupported(what string) error {
 	return UnsupportedError{What: what}
+}
+
+// ReadOnlyError names what was refused, so the reader is told which thing was not sent rather than
+// only that something was held back. What it names is the reader's own word for it — the statement's
+// keyword, or the change the tree asked for.
+type ReadOnlyError struct {
+	What string
+}
+
+func (e ReadOnlyError) Error() string {
+	return e.What + ": " + ErrReadOnly.Error()
+}
+
+func (e ReadOnlyError) Unwrap() error {
+	return ErrReadOnly
+}
+
+// ReadOnly refuses a request that would write on a read-only connection: `ReadOnly("DROP TABLE")`.
+func ReadOnly(what string) error {
+	return ReadOnlyError{What: what}
 }
 
 type ValidationError struct {

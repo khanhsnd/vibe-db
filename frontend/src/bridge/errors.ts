@@ -21,6 +21,16 @@ export type ErrorCode =
   | 'TLS_UNSUPPORTED'
   | 'TLS_NOT_VERIFIED'
   | 'PASSWORD_NOT_FOUND'
+  // The two ways the hop in front of everything else fails. The reader fixes each in a different
+  // box of the Proxy tab — see `features/connections.md`.
+  | 'PROXY_FAILED'
+  | 'PROXY_CREDENTIALS'
+  /**
+   * Something this app refused to send because the connection was opened read-only. Its own code
+   * because nothing reached the server: there is nothing to retry, and the `detail` is the statement
+   * or the change that was held back — see `features/connections.md`.
+   */
+  | 'READ_ONLY'
   // The two ways one of an engine's *own* programs fails: it is not on this machine, or it ran and
   // refused. Neither is a server saying anything — see `features/tools.md`.
   | 'TOOL_NOT_FOUND'

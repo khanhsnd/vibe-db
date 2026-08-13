@@ -1,6 +1,7 @@
 import {
   Activity,
   Archive,
+  CalendarClock,
   Columns3,
   FileCode2,
   GitCompareArrows,
@@ -58,6 +59,9 @@ export const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: str
   // A process is a statement in flight, so it wears the colour a *program* wears everywhere here —
   // the same one a query tab has, and the same one its row in the tree has.
   monitor: { label: 'Server Monitor', icon: Activity, tint: 'text-kind-routine' },
+  // A job on the clock wears the backup's colour, because that is what all but one of them writes —
+  // and the one that does not is watching a backup's worth of drift.
+  automation: { label: 'Automation', icon: CalendarClock, tint: 'text-kind-backup' },
 }
 
 export function TabBar({ onNewQuery }: { onNewQuery: () => void }) {

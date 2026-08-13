@@ -68,10 +68,11 @@ Some engines differ rather than just defaulting:
 
 ## Filling a connection in
 
-The form is three tabs, because the three answer different questions and only the first is asked
-every time: **General** is where the server is, **Security** is what it is held to, and **SSH** is
-what carries the connection there. Every tab is the same height, so switching one never moves the
-footer under it.
+The form is four tabs, because they answer different questions and only the first is asked every
+time: **General** is where the server is, **Security** is what it is held to, and **Proxy** and
+**SSH** are what carries the connection there — two tabs rather than one because they are two
+different hops, and a connection may have either, both, or neither. Every tab is the same height, so
+switching one never moves the footer under it.
 
 **Every password box has an eye.** The password, the SSH pass phrase and the prompt that asks for one
 at connect time are all the same control, and all three open hidden with a button that reads the
@@ -114,6 +115,31 @@ password never comes back out of the credential store to be looked at.
   fill them for. **Nothing is read**: the path is saved on the profile and the file is opened at
   connect time, which is also where a wrong one is reported.
 
+### Proxy
+
+**A proxy is the outer hop.** It is how this machine reaches the network at all, so a profile that
+has both dials the *bastion* through the proxy and the database through the bastion. The host and
+port on the General tab are resolved on the far side, exactly as a tunnel's are — which is the whole
+reason a proxy in front of a private network is worth having.
+
+- **Two protocols, and no third.** `SOCKS5` and `HTTP CONNECT` both take an address and hand back a
+  connection to it. SOCKS4 is deliberately absent: it cannot carry a *name*, so every host would be
+  resolved on this machine, which is the one thing the proxy was put there to avoid.
+- **The port follows the type.** Picking `SOCKS5` fills in 1080 and `HTTP CONNECT` fills in 8080, and
+  only where the box still holds the other one's default — a typed port is the reader's, the same
+  rule switching engine follows.
+- **The user is optional and most proxies want none**, so the box says `Optional` rather than
+  refusing a profile that leaves it blank. The password box is dead until a user is named, there
+  being nobody for it to be the password *of*, and the secret lives in the credential store under the
+  profile's id with a `:proxy` suffix — a third entry beside the connection's own and the bastion's,
+  all three deleted with the profile. It never comes back out: the dialog is told *that* one is
+  stored, never what it is.
+- **Nothing is dialled when the profile is saved**, a proxy being spoken to per connection; and the
+  two ways it then fails are told apart, because they are fixed in different boxes — see
+  `PROXY_FAILED` and `PROXY_CREDENTIALS` in [errors.md](../errors.md). It is given a hop's worth of
+  extra time, the same allowance a tunnel gets.
+- **SQLite refuses one**, as it refuses a tunnel: there is nothing to dial.
+
 ### SSH
 
 A connection through a bastion dials the bastion first and the database *from* it. **The host and
@@ -135,8 +161,9 @@ can reach the tunnel.
   has not changed. That is the `knownhosts: key mismatch` a reader sees on a host that connects
   perfectly well from `ssh` or from another client; see [decisions.md](../decisions.md).
 - The pass phrase or password lives in the credential store beside the connection's own, under the
-  profile's id with a `:ssh` suffix — one profile, two entries, both forgotten when it is deleted.
-  Neither ever comes back out: the dialog is told *that* one is stored, never what it is.
+  profile's id with a `:ssh` suffix — one profile, up to three entries with the proxy's, all
+  forgotten when it is deleted. None ever comes back out: the dialog is told *that* one is stored,
+  never what it is.
 - A tunnelled connection is given the ordinary connect timeout **plus** a tunnel's own, because it
   has two hops to make and cutting the second off for the first taking its time would report a
   working server as unreachable.

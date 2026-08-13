@@ -9,6 +9,7 @@ import { QueryWorkspace } from '@/features/editor/QueryWorkspace'
 import { LogView } from '@/features/log/LogView'
 import { MonitorView } from '@/features/monitor/MonitorView'
 import { ObjectListView } from '@/features/objects/ObjectListView'
+import { AutomationView } from '@/features/schedule/AutomationView'
 import { SourceEditor } from '@/features/schema/SourceEditor'
 import { TableDesigner } from '@/features/schema/TableDesigner'
 import { FindInSchemaView } from '@/features/search/FindInSchemaView'
@@ -123,6 +124,10 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
         ) : activeTab.kind === 'log' ? (
           // It belongs to no connection and needs none: what it holds has already run.
           <LogView key={activeTab.id} />
+        ) : activeTab.kind === 'automation' ? (
+          // It belongs to no connection either: a job names the one it dials, and the list holds
+          // jobs on all of them — including connections nobody has opened today.
+          <AutomationView key={activeTab.id} />
         ) : activeTab.kind === 'compare' ? (
           <CompareView key={activeTab.id} tab={activeTab} />
         ) : activeTab.kind === 'find' ? (

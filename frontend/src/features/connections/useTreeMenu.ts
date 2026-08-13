@@ -178,7 +178,7 @@ export function useTreeMenu(
     onDump,
   } = actions
 
-  return useCallback(
+  const menu = useCallback(
     (node: TreeNode): MenuItem[] => {
       const profile = profiles.find((p) => p.id === node.profileId)
       if (!profile) return []
@@ -191,6 +191,7 @@ export function useTreeMenu(
       const newDatabase: MenuItem | null = info.createsDatabases
         ? {
             label: 'New Database…',
+            writes: true,
             icon: ICON.newDatabase,
             onSelect: () => ask({ kind: 'database', profileId: node.profileId }),
           }
@@ -321,6 +322,7 @@ export function useTreeMenu(
       const wizards = (table: string): MenuItem[] => [
         {
           label: 'Import Wizard…',
+          writes: true,
           icon: ICON.importWizard,
           separatorBefore: true,
           onSelect: () => onImport({ profileId: node.profileId, namespace: ns, table }),
@@ -345,6 +347,10 @@ export function useTreeMenu(
             label: `${mode === 'dump' ? info.dumpTool : info.restoreTool}…`,
             icon: mode === 'dump' ? ICON.toolDump : ICON.toolRestore,
             separatorBefore: at === 0,
+            // The vendor's own restore puts rows and objects back, so it is a write like any
+            // other; its dump only reads. They are one item built twice, and this is the one
+            // fact that differs between them.
+            writes: mode === 'restore',
             onSelect: () => askTool({ profileId: node.profileId, namespace: ns, mode }),
           }))
         : []
@@ -412,6 +418,7 @@ export function useTreeMenu(
             newDatabase,
             {
               label: 'Delete Database',
+              writes: true,
               icon: ICON.delete,
               danger: true,
               onSelect: () =>
@@ -544,6 +551,7 @@ export function useTreeMenu(
             compareItem(picked, onCompare),
             {
               label: 'Delete View',
+              writes: true,
               icon: ICON.delete,
               danger: true,
               separatorBefore: true,
@@ -575,6 +583,7 @@ export function useTreeMenu(
             ...sourceItems(info, 'materializedView', on),
             {
               label: 'Refresh Data',
+              writes: true,
               icon: ICON.refresh,
               separatorBefore: true,
               // Nothing is confirmed: a refresh loses nothing and changes no shape. It can take as
@@ -585,6 +594,7 @@ export function useTreeMenu(
             },
             {
               label: 'Delete Materialized View',
+              writes: true,
               icon: ICON.delete,
               danger: true,
               separatorBefore: true,
@@ -617,6 +627,7 @@ export function useTreeMenu(
             ...sourceItems(info, ref.kind, on),
             {
               label: `Delete ${SOURCE_NOUN[ref.kind]}`,
+              writes: true,
               icon: ICON.delete,
               danger: true,
               separatorBefore: true,
@@ -697,6 +708,46 @@ export function useTreeMenu(
       pickedNamespaces,
     ],
   )
+
+  // A read-only connection never offers what it would refuse. The session says whether it is one and
+  // nothing here re-derives it — see `domain.Access`, which is where the rule lives. This is the
+  // *courtesy*; what holds is the Go side, which refuses a change however it was asked for.
+  return useCallback(
+    (node: TreeNode): MenuItem[] => {
+      const items = menu(node)
+      return sessions[node.profileId]?.readOnly ? withoutWrites(items) : items
+    },
+    [menu, sessions],
+  )
+}
+
+/**
+ * The menu without the items that would change something on the server. They are **left out** rather
+ * than greyed, for the reason a shut connection's are: a column of dead items says only that.
+ *
+ * It walks submenus too, and one left holding nothing goes with them — an empty `Duplicate ▸` is
+ * worse than no Duplicate at all. A separator leading what is now the first item is dropped with the
+ * item that used to be above it, which is what stops a menu opening on a divider.
+ */
+function withoutWrites(items: MenuItem[]): MenuItem[] {
+  const kept: MenuItem[] = []
+
+  for (const item of items) {
+    if (item.writes) continue
+
+    if (item.items) {
+      const inner = withoutWrites(item.items)
+      if (inner.length === 0) continue
+      kept.push({ ...item, items: inner })
+      continue
+    }
+    kept.push(item)
+  }
+
+  const first = kept[0]
+  if (first?.separatorBefore) kept[0] = { ...first, separatorBefore: false }
+
+  return kept
 }
 
 function namespacesFor(node: TreeNode, picked: readonly DumpTarget[]): DumpTarget[] {
@@ -717,7 +768,7 @@ export function backupItems(
   on: BackupActions & { refresh: MenuItem; openFolder: () => void },
 ): MenuItem[] {
   return [
-    { label: 'Restore Backup…', icon: ICON.restoreBackup, onSelect: on.restore },
+    { label: 'Restore Backup…', icon: ICON.restoreBackup, writes: true, onSelect: on.restore },
     { label: 'Extract SQL…', icon: ICON.dump, separatorBefore: true, onSelect: on.extractSQL },
     // A copy is named after the original rather than asked for, the original's name being a
     // moment and a moment being the one thing a copy of it does not have a new one of.
@@ -917,9 +968,16 @@ export function tableItems(
   const declaring: MenuItem[] = info.createsTables
     ? [
         { label: `New ${words.table}`, icon: ICON.add, separatorBefore: true, onSelect: on.create },
-        { label: `Rename ${words.table}…`, icon: ICON.rename, shortcut: 'F2', onSelect: on.rename },
+        {
+          label: `Rename ${words.table}…`,
+          icon: ICON.rename,
+          shortcut: 'F2',
+          writes: true,
+          onSelect: on.rename,
+        },
         {
           label: `Duplicate ${words.table}`,
+          writes: true,
           icon: ICON.duplicate,
           // The copy is one action asked in two ways, so the submenu is where the reader says which
           // — and both still ask for the name, as everything that makes an object here does.
@@ -947,12 +1005,33 @@ export function tableItems(
     // whether the copy lands on this server or in a file.
     dump,
     ...wizards,
-    { label: `Empty ${words.table}`, icon: ICON.empty, separatorBefore: true, onSelect: on.empty },
+    {
+      label: `Empty ${words.table}`,
+      icon: ICON.empty,
+      separatorBefore: true,
+      writes: true,
+      onSelect: on.empty,
+    },
     ...(info.hasTruncate
-      ? [{ label: `Truncate ${words.table}`, icon: ICON.truncate, onSelect: on.truncate }]
+      ? [
+          {
+            label: `Truncate ${words.table}`,
+            icon: ICON.truncate,
+            writes: true,
+            onSelect: on.truncate,
+          },
+        ]
       : []),
     ...(info.createsTables
-      ? [{ label: `Delete ${words.table}`, icon: ICON.delete, danger: true, onSelect: on.remove }]
+      ? [
+          {
+            label: `Delete ${words.table}`,
+            icon: ICON.delete,
+            danger: true,
+            writes: true,
+            onSelect: on.remove,
+          },
+        ]
       : []),
     { label: 'Refresh', icon: ICON.refresh, separatorBefore: true, onSelect: refresh },
   ]
@@ -973,6 +1052,7 @@ function fieldItems(node: TreeNode, stored: TableColumn | undefined, on: FieldAc
     { label: 'Edit Field', icon: ICON.design, onSelect: on.edit },
     {
       label: 'Rename Field…',
+      writes: true,
       icon: ICON.rename,
       shortcut: 'F2',
       onSelect: () => on.rename(stored),
@@ -980,6 +1060,7 @@ function fieldItems(node: TreeNode, stored: TableColumn | undefined, on: FieldAc
     addField,
     {
       label: 'Delete Field',
+      writes: true,
       icon: ICON.delete,
       danger: true,
       separatorBefore: true,
@@ -1015,6 +1096,7 @@ function partitionItems(
 
   const add: MenuItem = {
     label: 'Add Partition…',
+    writes: true,
     icon: ICON.add,
     onSelect: () =>
       deps.ask({
@@ -1050,6 +1132,7 @@ function partitionItems(
     add,
     {
       label: 'Empty Partition',
+      writes: true,
       icon: ICON.empty,
       separatorBefore: true,
       onSelect: () =>
@@ -1069,6 +1152,7 @@ function partitionItems(
     },
     {
       label: 'Delete Partition',
+      writes: true,
       icon: ICON.delete,
       danger: true,
       onSelect: () =>
@@ -1108,6 +1192,7 @@ function constraintItems(node: TreeNode, ns: Namespace, deps: ConstraintMenuDeps
     return [
       {
         label: 'Delete Index',
+        writes: true,
         icon: ICON.delete,
         danger: true,
         // The index behind a primary key is the key, and neither engine will drop it as an
@@ -1134,6 +1219,7 @@ function constraintItems(node: TreeNode, ns: Namespace, deps: ConstraintMenuDeps
     return [
       {
         label: 'Delete Foreign Key',
+        writes: true,
         icon: ICON.delete,
         danger: true,
         onSelect: () =>

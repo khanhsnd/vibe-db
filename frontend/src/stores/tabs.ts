@@ -29,6 +29,7 @@ export type TabKind =
   | 'log'
   | 'accounts'
   | 'monitor'
+  | 'automation'
 
 /** Which half of two tables a comparison is reading: their shapes, or their rows. */
 export type CompareMode = 'structure' | 'data'
@@ -198,6 +199,19 @@ export interface MonitorTab extends TabBase {
   every: number
 }
 
+/**
+ * Every job this app runs on a clock — what `Tools ▸ Automation` opens. It is the **second** tab that
+ * belongs to no connection: a job names the connection it dials, and the list holds jobs on all of
+ * them, so its `profileId` and namespace are empty and the strip draws neither. There is one of it
+ * for the same reason there is one History Log.
+ *
+ * It holds no state of its own: the jobs are in `stores/schedules.ts`, where they have to be, because
+ * one fires whether or not this tab is open.
+ */
+export interface AutomationTab extends TabBase {
+  kind: 'automation'
+}
+
 export type Tab =
   | QueryTab
   | TableTab
@@ -212,6 +226,7 @@ export type Tab =
   | LogTab
   | AccountsTab
   | MonitorTab
+  | AutomationTab
 export type NewTab =
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
@@ -226,6 +241,7 @@ export type NewTab =
   | Omit<LogTab, 'id'>
   | Omit<AccountsTab, 'id'>
   | Omit<MonitorTab, 'id'>
+  | Omit<AutomationTab, 'id'>
 
 /** What names a table wherever one is opened: which connection, which namespace, which table. */
 export interface TableTarget {
@@ -325,6 +341,8 @@ interface TabsState {
   openFind: (profileId: string, namespace: Namespace) => string
   /** Every statement the app has run. One tab, belonging to no connection — see `LogTab`. */
   openLog: () => string
+  /** Every job on the clock. One tab, belonging to no connection — see `AutomationTab`. */
+  openAutomation: () => string
   close: (id: string) => void
   closeAll: () => void
   closeOthers: (id: string) => void
@@ -569,6 +587,9 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   openLog: () =>
     get().open({ kind: 'log', title: 'History Log', profileId: '', namespace: NO_NAMESPACE }),
+
+  openAutomation: () =>
+    get().open({ kind: 'automation', title: 'Automation', profileId: '', namespace: NO_NAMESPACE }),
 
   close: (id) => {
     closeTabs(set, [id])

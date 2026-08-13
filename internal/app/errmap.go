@@ -52,12 +52,29 @@ const (
 	CodeTunnelHostKey     ErrorCode = "TUNNEL_HOST_KEY"
 	CodeTokenUnavailable  ErrorCode = "TOKEN_UNAVAILABLE"
 
+	// The two ways the hop in front of everything else fails. They are their own codes for the
+	// reason the tunnel's are: the reader fixes each of them in a different box.
+	CodeProxyFailed      ErrorCode = "PROXY_FAILED"
+	CodeProxyCredentials ErrorCode = "PROXY_CREDENTIALS"
+
+	// CodeReadOnly is something this app refused to send because the connection was opened
+	// read-only. It is its own code so the UI can say so plainly rather than drawing it as a
+	// failure the reader could retry — nothing reached the server, and retrying is not the answer.
+	CodeReadOnly ErrorCode = "READ_ONLY"
+
 	// The two ways one of an engine's *own* programs fails. Neither is a server saying anything:
 	// the first is a program this machine has not got, and the second is that program's own
 	// verdict, carried through in its words.
 	CodeToolNotFound ErrorCode = "TOOL_NOT_FOUND"
 	CodeToolFailed   ErrorCode = "TOOL_FAILED"
 	CodeUpdateFailed ErrorCode = "UPDATE_FAILED"
+
+	// The two ways a scheduled job is asked for something it cannot give. They are their own codes
+	// because the reader answers each differently: the first is a job that has been deleted, and
+	// the second is one they pressed Run on while it was already going — see
+	// docs/features/automation.md.
+	CodeTaskNotFound ErrorCode = "TASK_NOT_FOUND"
+	CodeTaskRunning  ErrorCode = "TASK_RUNNING"
 
 	CodeInternal ErrorCode = "INTERNAL"
 )
@@ -106,11 +123,24 @@ var sentinelToWire = []struct {
 	{domain.ErrTunnelCredentials, CodeTunnelCredentials, "The SSH server rejected the credentials. Check the user, the key and its pass phrase."},
 	{domain.ErrTunnelHostKey, CodeTunnelHostKey, "The SSH server's host key is not in known_hosts, or does not match the one stored there."},
 	{domain.ErrTokenUnavailable, CodeTokenUnavailable, "No cloud credentials on this machine to sign in with. The detail says what to set."},
+	{domain.ErrProxyFailed, CodeProxyFailed, "Could not reach the far side through the proxy. Check the proxy's type, host and port."},
+	{domain.ErrProxyCredentials, CodeProxyCredentials, "The proxy rejected the credentials. Check its user and password."},
+	{domain.ErrTaskNotFound, CodeTaskNotFound, "That scheduled job no longer exists. Refresh the list."},
+	{domain.ErrTaskRunning, CodeTaskRunning, "That job is already running. Wait for it to finish."},
 }
 
 func wrapError(err error) error {
 	if err == nil {
 		return nil
+	}
+
+	// An error that has already been through here is left exactly as it is. One bound method
+	// calling another — which is what a scheduled job does, firing `RunBackup` — would otherwise
+	// have the answer it was given re-wrapped as INTERNAL, and the reader would be shown "something
+	// went wrong" in place of the server's own words.
+	var already wireError
+	if errors.As(err, &already) {
+		return already
 	}
 
 	var validationErr domain.ValidationError
@@ -140,6 +170,18 @@ func wrapError(err error) error {
 		return wireError{
 			Code:    CodeUnsupported,
 			Message: "This database does not support " + unsupportedErr.What + ".",
+		}
+	}
+
+	// What a read-only connection held back is named, so the message says which statement or which
+	// change was not sent rather than only that something was refused. Nothing reached the server:
+	// that is what the wording has to convey, since there is nothing here to retry.
+	var readOnlyErr domain.ReadOnlyError
+	if errors.As(err, &readOnlyErr) {
+		return wireError{
+			Code:    CodeReadOnly,
+			Message: "This connection is read-only. " + readOnlyErr.What + " was not sent to the server.",
+			Detail:  readOnlyErr.What,
 		}
 	}
 

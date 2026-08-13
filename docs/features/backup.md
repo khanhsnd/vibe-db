@@ -24,6 +24,9 @@ Three places, all naming the same namespace:
   there is nothing to back up: no live connection, or an engine that has none.
 - **`New Backup`** on the list's own toolbar.
 
+A fourth is not a place but a clock: a [scheduled job](automation.md) takes the same backup on its
+own, and can prune the folder to the last few.
+
 ## The branch
 
 `Backups` is a folder like `Tables` is, and **a press opens it two ways at once**: the branch

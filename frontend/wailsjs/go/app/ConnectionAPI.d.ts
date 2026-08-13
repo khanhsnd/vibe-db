@@ -50,6 +50,8 @@ export function DeleteProfile(arg1:string):Promise<void>;
 
 export function DeleteRow(arg1:string,arg2:app.RowDeleteInput):Promise<void>;
 
+export function DeleteTask(arg1:string):Promise<void>;
+
 export function Disconnect(arg1:string):Promise<void>;
 
 export function DropColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
@@ -71,6 +73,8 @@ export function DumpObjects(arg1:string,arg2:app.DumpInput):Promise<string>;
 export function DuplicateTable(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:boolean):Promise<void>;
 
 export function EmptyTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
+
+export function EnableTask(arg1:string,arg2:boolean):Promise<app.Task>;
 
 export function ExportRows(arg1:string,arg2:app.ExportInput):Promise<string>;
 
@@ -97,6 +101,8 @@ export function ListProcesses(arg1:string):Promise<app.ProcessList>;
 export function ListProfiles():Promise<Array<app.Profile>>;
 
 export function ListSchemas(arg1:string,arg2:string):Promise<Array<string>>;
+
+export function ListTasks():Promise<Array<app.Task>>;
 
 export function ListTransferEncodings():Promise<Array<app.TransferEncoding>>;
 
@@ -174,6 +180,8 @@ export function RunExport(arg1:string,arg2:app.ExportJobInput):Promise<app.Expor
 
 export function RunImport(arg1:string,arg2:app.ImportInput):Promise<app.ImportResult>;
 
+export function RunTask(arg1:string):Promise<app.TaskRun>;
+
 export function RunToolDump(arg1:string,arg2:app.ToolDumpInput):Promise<app.ToolResult>;
 
 export function RunToolRestore(arg1:string,arg2:app.ToolRestoreInput):Promise<app.ToolResult>;
@@ -181,6 +189,8 @@ export function RunToolRestore(arg1:string,arg2:app.ToolRestoreInput):Promise<ap
 export function SaveProfile(arg1:app.ProfileInput):Promise<app.Profile>;
 
 export function SaveSource(arg1:string,arg2:app.Namespace,arg3:app.SourceSaveInput):Promise<void>;
+
+export function SaveTask(arg1:app.TaskInput):Promise<app.Task>;
 
 export function SetPrimaryKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<string>):Promise<void>;
 

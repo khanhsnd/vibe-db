@@ -7,6 +7,10 @@
 staging table against the production one is the case the feature exists for, and each side carries
 its own session.
 
+A comparison is also one of the four jobs a [clock](automation.md) can fire — the only one of the
+four that writes nothing. It reports instead: two sides that have drifted apart come back as
+`Differs`, which is the answer it was asked for and not a failure.
+
 The item is on a table's and a view's menu, and it is **there even when only one thing is picked**,
 drawn dead and reading `Compare — Ctrl-click a second table`. That is the exception to the rule that
 an item with nothing to do is left out: the gesture is the whole feature, and a gesture nobody can

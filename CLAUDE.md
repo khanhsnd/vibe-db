@@ -18,7 +18,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 
 1. **The dependency rule is one-way:**
    `internal/app` →
-   `session / profile / secret / history / snippet / transfer / compare / backup / dbtool` →
+   `session / profile / secret / history / snippet / transfer / compare / backup / dbtool / schedule` →
    `internal/driver` → `internal/domain`.
    Business rules live in `domain`, not in the API layer. `internal/app` speaks `dto.go` wire types,
    never domain types. `frontend/src/bridge` is the only frontend directory allowed to import
@@ -229,6 +229,44 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     `domain.Unsupported` naming which.
 
 
+25. **What carries a connection is stood up above every adapter, and the outer hop is dialled first.**
+    A proxy and a bastion are two hops and one shape — a function that opens a connection to an
+    address, which is `driver.Dialer` — so `internal/netproxy` and `internal/sshtunnel` both hand one
+    back and **no adapter has heard of either**. A proxy is how this machine reaches the network at
+    all, so the order is fixed: the bastion is dialled *through* the proxy and the database through
+    the bastion, and what the adapter is given is the innermost of them. A failure on an outer hop
+    travels back **untouched** — a proxy that would not carry the connection to a bastion is a proxy's
+    failure and never a tunnel's, because the reader fixes each in a different box. No secret is an
+    argument here either: a proxy's password is the credential store's, under `<id>:proxy`.
+
+26. **What a connection may do is decided once, and refusing is one wrapper.** `domain.Access` is the
+    rule — `Environment.NeedsConfirmation`'s counterpart, reading the same `Hazard` and answering
+    "not at all" rather than "are you sure" — and `session.readOnly` is the only thing that acts on
+    it: the session handed out is already wrapped, so a schema change, an account change, a kill, a
+    cell edit and a typed statement are all guarded by one seam and there is no second one to go
+    round. A statement is decided by the engine's own `driver.Text.Review`, so the guard and the
+    editor's underline cannot disagree, and **a refusal defaults to refusing where a confirmation
+    defaults to allowing** — which is why `WITH` is refused and not merely flagged. It is a guard on
+    this app and the docs say so: nothing reaches the server, so a read-only *account* is what
+    protects the database. The frontend never re-derives it — a session says `readOnly`, a menu item
+    says `writes`, and `withoutWrites` is the one place the two meet.
+
+27. **A job on a clock fires the bound method the button fires, and there is no second one.**
+    `internal/schedule` is a task, a cadence and what the last few firings came to — it runs
+    **nothing**, and knows how to take a backup exactly as much as `internal/history` knows how to run
+    a statement. What fires is `RunBackup`, `RunExport`, `RunToolDump` or the two `Compare` reads, so
+    a backup taken at two in the morning is byte for byte the one `New Backup` would have written; a
+    second speller here would be rule 13's failure with nobody watching. Only **four** kinds exist and
+    every one of them *reads*: a restore and an import are not scheduled, because a job that ran while
+    nobody was looking is the wrong place to find out a table was overwritten — which is also why a
+    read-only connection carries all four. The clock runs **only while the app is open** and the docs
+    say so; a moment that went by while it was shut is the reader's answer (`CatchUp`) and never a
+    default, decided once when the scheduler starts so that opening a laptop twice cannot fire a job
+    twice. A firing is an **outcome and not an error** — there is nobody in front of a dialog to throw
+    one to — and `differs` is the third of them, because a comparison that found two sides apart did
+    what it was asked. A job dials **its own** session and never borrows the reader's, a firing inside
+    somebody's open transaction being exactly the accident rule 20 makes possible.
+
 ## Where to read before changing something
 
 | Task | Read |
@@ -241,7 +279,8 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Touch anything Redis | [docs/architecture.md](docs/architecture.md#the-key-value-store), [docs/features/key-space.md](docs/features/key-space.md) |
 | Add or change a failure mode | [docs/errors.md](docs/errors.md) |
 | Find out what exists at all | [docs/features.md](docs/features.md) — the index, one file per feature under [docs/features/](docs/features/) |
-| Change how a connection is made or guarded | [docs/features/connections.md](docs/features/connections.md) |
+| Change how a connection is made or guarded — a proxy, a bastion, TLS | [docs/features/connections.md](docs/features/connections.md) |
+| Turn a connection read-only, or change what a read-only one refuses | [docs/features/read-only.md](docs/features/read-only.md) |
 | Change the tree, the table list or a schema change | [docs/features/schema-tree.md](docs/features/schema-tree.md), [docs/features/schema-changes.md](docs/features/schema-changes.md) |
 | Change a view's, a routine's or a trigger's definition — or a materialized view, a sequence, an event | [docs/features/definitions.md](docs/features/definitions.md) |
 | Touch a partition of a table | [docs/features/partitions.md](docs/features/partitions.md) |
@@ -256,6 +295,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Touch a file format, an import or an export | [docs/architecture.md](docs/architecture.md#carrying-a-table-to-a-file), [docs/features/transfer.md](docs/features/transfer.md) |
 | Touch a backup or a restore | [docs/architecture.md](docs/architecture.md#backing-a-database-up), [docs/features/backup.md](docs/features/backup.md) |
 | Touch mongodump, mysqldump, pg_dump — or anything this app *runs* | [docs/architecture.md](docs/architecture.md#running-the-engines-own-programs), [docs/features/tools.md](docs/features/tools.md) |
+| Put a job on a clock, or change what one fires | [docs/architecture.md](docs/architecture.md#running-a-job-on-a-clock), [docs/features/automation.md](docs/features/automation.md) |
 | Touch a comparison of two tables | [docs/architecture.md](docs/architecture.md#comparing-two-tables), [docs/features/compare.md](docs/features/compare.md) |
 | Touch the diagram: a box, a line, a note, the canvas | [docs/features/diagram.md](docs/features/diagram.md) |
 | Touch a search across a schema | [docs/architecture.md](docs/architecture.md#looking-for-text-across-a-schema), [docs/features/search.md](docs/features/search.md) |
@@ -275,7 +315,8 @@ A new engine capability the UI has to know about is a field on `EngineInfo` in
 `processLabel`, `hasMaterializedViews`, `hasSequences`, `hasEvents`, `hasPartitions`,
 `hasColumnComments`,
 `dumpTool`, `restoreTool`, `needsUser`, `needsDatabase`, `databaseLabel` — and never a comparison
-against an engine's name in a component.
+against an engine's name in a component. What a *connection* is rather than what its engine is goes
+on the **session** instead (`readOnly`), for the reason `confirm` travels on a statement.
 The two exceptions are the lists that *are* per-engine data rather than a capability: the types a
 designer offers (`features/schema/dataTypes.ts`) and the dialect the editor highlights with
 (`features/editor/sqlLanguage.ts`).

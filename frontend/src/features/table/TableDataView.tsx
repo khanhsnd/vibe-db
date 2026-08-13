@@ -41,7 +41,7 @@ import { FetchProgress } from '@/shared/ui/FetchProgress'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
-import { useConnectionsStore } from '@/stores/connections'
+import { useConnectionsStore, useReadOnlySession } from '@/stores/connections'
 import { IDLE_VIEW, useTableViewsStore } from '@/stores/tableViews'
 import { useTransactionsStore } from '@/stores/transactions'
 
@@ -139,13 +139,17 @@ export function TableDataView({
     (s) => s.views[tabId] ?? IDLE_VIEW,
   )
   const change = useTableViewsStore((s) => s.change)
+  const readOnly = useReadOnlySession(sessionId)
   const [selection, setSelection] = useState<Selection | null>(null)
   const [curlOpen, setCurlOpen] = useState(false)
 
   const setFilterShown = (shown: boolean) => change(tabId, { filterShown: shown })
 
   const columns = data?.columns ?? []
-  const editable = columns.some((column) => column.primaryKey)
+  // A read-only connection is not editable however many keys the table has: the write would be
+  // refused, and a cell that takes what is typed and then throws it away is worse than one that
+  // never opened. See `domain.Access`.
+  const editable = !readOnly && columns.some((column) => column.primaryKey)
   const edits = useGridEdits(tabId, sourceOf(data, namespace, table), sessionId, refresh)
 
   /** The columns in the reader's own order, each keeping the place it holds in a row. */

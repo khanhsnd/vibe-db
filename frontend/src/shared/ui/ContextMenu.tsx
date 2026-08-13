@@ -14,6 +14,16 @@ export interface MenuItem {
   disabled?: boolean
   danger?: boolean
   separatorBefore?: boolean
+  /**
+   * Whether this item asks a server to *change* something. It is what a **read-only connection**
+   * leaves the item out by — see `withoutWrites` in `features/connections/useTreeMenu.ts`, which is
+   * the one place that reads it. The item is left out rather than greyed for the reason a shut
+   * connection's items are: a column of dead items says only that it is dead.
+   *
+   * It is not the same as `danger`. Deleting a connection is dangerous and writes to nothing but
+   * this machine; refreshing a materialized view is neither dangerous nor free of writing.
+   */
+  writes?: boolean
   /** A submenu, for an action that has to be told which of several things it means. */
   items?: MenuItem[]
 }

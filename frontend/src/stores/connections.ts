@@ -553,6 +553,22 @@ function without<T>(source: Record<string, T>, key: string): Record<string, T> {
   return Object.fromEntries(Object.entries(source).filter(([held]) => held !== key))
 }
 
+/**
+ * Whether the connection this session belongs to refuses to send anything that writes. It is what a
+ * grid asks before it lets a cell be edited, and it is the **session's** own answer — nothing here
+ * re-derives what is refused, exactly as nothing re-derives what is confirmed. See `domain.Access`.
+ *
+ * Sessions are kept by connection and a grid knows only its session's id, which is what this looks
+ * up. It answers a boolean, so the selector is referentially stable.
+ */
+export function useReadOnlySession(sessionId: string | null): boolean {
+  return useConnectionsStore((s) =>
+    sessionId === null
+      ? false
+      : Object.values(s.sessions).some((one) => one.id === sessionId && one.readOnly),
+  )
+}
+
 interface TreeInput {
   profiles: Profile[]
   statuses: Record<string, ConnectionStatus>

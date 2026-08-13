@@ -19,6 +19,9 @@ every field of every document, the indexes and the collection options with it.
 | Which engines | The five SQL engines | MySQL, PostgreSQL, MongoDB |
 | Needs anything installed | No | Yes, and says so |
 
+A dump is also one of the four jobs a [clock](automation.md) can fire, which names its file for the
+moment it was taken so that two firings never write over each other.
+
 ## Where they are reached
 
 Right-clicking a **database**, a **schema**, or the **Tables** folder, below the two transfer

@@ -63,6 +63,7 @@ export function accountItems(node: TreeNode, on: AccountHandlers): MenuItem[] {
       icon: ICON.delete,
       separatorBefore: true,
       danger: true,
+      writes: true,
       onSelect: () => on.remove(account),
     },
     refresh,
