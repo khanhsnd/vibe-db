@@ -3,6 +3,67 @@
 A desktop database client in the Navicat Premium mould. MySQL first, other engines behind the
 same port.
 
+## Install
+
+Builds are published to
+[khanhsnd/vibe-db-releases](https://github.com/khanhsnd/vibe-db-releases/releases/latest). **Nothing
+there is code-signed or notarized**, so each platform asks once before it runs an unknown publisher.
+How a version is built and how the app updates itself are in
+[docs/features/updates.md](docs/features/updates.md).
+
+### Windows 10/11 x64
+
+Download `vibe-db-<version>-windows-x64-setup.exe` and run it. Defender SmartScreen shows *"Windows
+protected your PC"* — choose **More info → Run anyway**. The installer then raises the ordinary
+elevation prompt. Later versions install themselves from Settings → Updates.
+
+### macOS 12+, Intel or Apple Silicon
+
+```sh
+brew tap khanhsnd/tap
+brew install --cask vibe-db
+```
+
+Or download `vibe-db-<version>-macos-universal.zip`, unzip it and move `vibe-db.app` into
+`/Applications`. Gatekeeper refuses the first launch of a direct download; open it once from the
+Finder context menu with **Open**, or clear the quarantine flag:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/vibe-db.app
+```
+
+### Linux x64
+
+The archive holds a binary rather than a package, so it is unpacked wherever you keep one:
+
+```sh
+tar -xzf vibe-db-1.0.7-linux-x64.tar.gz
+cd vibe-db-1.0.7-linux-x64
+install -Dm755 vibe-db ~/.local/bin/vibe-db
+install -Dm644 vibe-db.png ~/.local/share/icons/hicolor/512x512/apps/vibe-db.png
+install -Dm644 vibe-db.desktop ~/.local/share/applications/vibe-db.desktop
+```
+
+The desktop entry runs `vibe-db` by name, so `~/.local/bin` has to be on `PATH` — otherwise put the
+binary somewhere that already is, such as `/usr/local/bin`.
+
+Three runtime libraries have to be present. On Debian and Ubuntu:
+
+```sh
+sudo apt-get install libgtk-3-0 libwebkit2gtk-4.0-37 gnome-keyring
+```
+
+Elsewhere they are that distribution's GTK 3, its **WebKit2GTK 4.0**, and any Secret Service
+provider — `gnome-keyring` or KWallet. The keyring is not optional: it is where a connection
+password is kept, and there is no fallback that writes one to disk.
+
+**The published binary links against WebKit2GTK 4.0, not 4.1.** A distribution that ships only 4.1 —
+Ubuntu 24.04 among them — will not run it. Build from source there instead:
+
+```sh
+wails build -platform linux/amd64 -tags webkit2_41
+```
+
 ## Stack
 
 | Layer | Choice |

@@ -17,7 +17,7 @@ the installed application directory, so installing a new version does not migrat
 Create these public repositories:
 
 1. `khanhsnd/vibe-db-releases` — initialize it with a README on the `master` branch; GitHub Actions will
-   create the releases and upload the installer, macOS ZIP and `checksums.txt`.
+   create the releases and upload the installer, the macOS ZIP, the Linux archive and `checksums.txt`.
 2. `khanhsnd/homebrew-tap` — initialize it with a README. The release workflow creates `Casks/vibe-db.rb`
    here.
 
@@ -38,14 +38,8 @@ The workflow builds a Windows x64 NSIS installer, a universal macOS app and a Li
 SHA-256 checksums, publishes the assets to the public release repository, and updates the Homebrew Cask.
 A release is not complete until every publish job is green.
 
-Users can install the macOS Cask with:
-
-```sh
-brew tap khanhsnd/tap
-brew install --cask vibe-db
-```
-
-They update it with:
+What a reader does with those assets is the Install section of [the README](../../README.md#install).
+A Homebrew install is updated with:
 
 ```sh
 brew upgrade --cask vibe-db
