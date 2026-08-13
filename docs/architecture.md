@@ -591,6 +591,18 @@ can be edited in the notation it was drawn in — without which no document coul
 own `_id`. And for a field the sample never saw — the first document of an empty collection — the
 grammar alone, because there is nothing else to go on and `36` there is the number a reader meant.
 
+What holds the two halves together is that **a cell is drawn in a spelling that carries the whole
+value**, `_id` included. Bytes are the one place that has a choice: the `\x…` hex every engine's bytes
+arrive as carries no *subtype*, so it is the spelling for the plain one alone and anything with a
+subtype is drawn as `BinData(subtype, …)` — a UUID `_id` drawn as bare hex would be read back as plain
+bytes and address no document. See `cell` and `binaryData`, and
+[features/value-viewer.md](features/value-viewer.md#why-bytes-arrive-as-x) for the hex itself.
+
+**A write that matched nothing is a failure**, and MongoDB is the one engine where the adapter has to
+say so: `UpdateOne` and `DeleteOne` report a filter that matched no document as success, so `UpdateCell`
+and `DeleteRow` read the *matched* count and answer `ROW_GONE` — see [errors.md](errors.md). Matched and
+not modified, a value rewritten as itself being no missing row.
+
 **The verb is a method, not a first word.** `mql.go` reads a whole command — `db.users.find({…})`,
 its Extended-JSON-ish arguments and the cursor methods bounding it — over the same tokens
 `sqlkit.Lex` produces. It is a *reader of one command* and not an interpreter of a language: there

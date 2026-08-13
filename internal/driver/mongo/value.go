@@ -68,8 +68,17 @@ func cell(value bson.RawValue) *string {
 	// Bytes that are not text become `\x…` hex, the same spelling `sqlkit` gives a `bytea`: a byte
 	// sequence that is not text cannot survive the trip to the WebView as a JSON string, and the
 	// value viewer already decodes that form into an image or a hex dump.
+	//
+	// **That spelling carries no subtype**, so it is only the answer for the plain one. A UUID is
+	// `BinData(4, …)`, and a cell drawn without the 4 would be read back as the plain subtype and
+	// address no document — which is what an `_id` stored as a UUID is. Anything with a subtype is
+	// therefore written in the shell's own constructor, which `coerce` reads straight back.
 	case bson.TypeBinary:
-		_, data := value.Binary()
+		subtype, data := value.Binary()
+		if subtype != bson.TypeBinaryGeneric {
+			text := literal(value)
+			return &text
+		}
 		text := sqlkit.BinaryPrefix + hex.EncodeToString(data)
 		return &text
 

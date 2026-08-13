@@ -60,14 +60,34 @@ func TestCellDrawsAnAbsentFieldAsNothing(t *testing.T) {
 
 // Bytes that are not text cannot survive the trip to the WebView as a JSON string, so they are
 // written as hex — the same spelling `sqlkit` gives a `bytea`, and the one the value viewer decodes.
-func TestCellDrawsBinaryAsHex(t *testing.T) {
-	got := cell(wrapped(t, bson.Binary{Subtype: 0, Data: []byte{0x89, 0x50, 0x4e, 0x47}}))
-
-	if got == nil {
-		t.Fatal("cell() = nothing, want hex")
+// The hex carries no **subtype**, so anything that has one is drawn as its own constructor instead:
+// a UUID `_id` drawn as bare hex would be read back as plain bytes and address no document.
+func TestCellDrawsBinaryAsHexAndKeepsItsSubtype(t *testing.T) {
+	tests := []struct {
+		name  string
+		value bson.Binary
+		want  string
+	}{
+		{"plain bytes", bson.Binary{Subtype: bson.TypeBinaryGeneric, Data: []byte{0x89, 0x50, 0x4e, 0x47}}, sqlkit.BinaryPrefix + "89504e47"},
+		{"a UUID", bson.Binary{Subtype: 4, Data: []byte{1, 2, 3, 4}}, `BinData(4, "AQIDBA==")`},
 	}
-	if *got != sqlkit.BinaryPrefix+"89504e47" {
-		t.Errorf("cell() = %q, want %q", *got, sqlkit.BinaryPrefix+"89504e47")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			drawn := cell(wrapped(t, tt.value))
+			if drawn == nil {
+				t.Fatal("cell() = nothing, want a value")
+			}
+			if *drawn != tt.want {
+				t.Errorf("cell() = %q, want %q", *drawn, tt.want)
+			}
+
+			// Whichever spelling it was drawn in, `coerce` is what a write reads it back with — an
+			// `_id` that came back as different bytes names a different document, or none.
+			if got := valueText(coerce(*drawn, "binData")); got != valueText(tt.value) {
+				t.Errorf("coerce(%q) = %s, want %s", *drawn, got, valueText(tt.value))
+			}
+		})
 	}
 }
 

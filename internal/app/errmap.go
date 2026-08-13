@@ -23,7 +23,10 @@ const (
 	CodeUnknownSource    ErrorCode = "UNKNOWN_DEFINITION"
 	CodeUnknownAccount   ErrorCode = "UNKNOWN_ACCOUNT"
 	CodeTableNotEditable ErrorCode = "TABLE_NOT_EDITABLE"
-	CodeEmptyStatement   ErrorCode = "EMPTY_STATEMENT"
+	// CodeRowGone is a write whose key named no stored row. It is its own code because the answer is
+	// to refresh and look again, not to retry the write — see domain.ErrRowGone.
+	CodeRowGone        ErrorCode = "ROW_GONE"
+	CodeEmptyStatement ErrorCode = "EMPTY_STATEMENT"
 	// CodeEmptySnippet is a library entry saved with no body. It is its own code rather than
 	// EMPTY_STATEMENT because nothing was being run — see docs/features/snippets.md.
 	CodeEmptySnippet ErrorCode = "EMPTY_SNIPPET"
@@ -108,6 +111,7 @@ var sentinelToWire = []struct {
 	{domain.ErrUnknownDefinition, CodeUnknownSource, "That view or routine no longer exists. Refresh the folder it was in."},
 	{domain.ErrUnknownAccount, CodeUnknownAccount, "That user no longer exists on this server. Refresh the list."},
 	{domain.ErrTableNotEditable, CodeTableNotEditable, "This table has no primary key, so a single row cannot be identified for editing."},
+	{domain.ErrRowGone, CodeRowGone, "That row is no longer there. Refresh the table and make the change again."},
 	{domain.ErrEmptyStatement, CodeEmptyStatement, "There is no statement to run."},
 	{domain.ErrEmptySnippet, CodeEmptySnippet, "A snippet needs a statement in it."},
 	{domain.ErrTransactionActive, CodeTransactionActive, "A transaction is already open on this connection. Commit or roll it back first."},

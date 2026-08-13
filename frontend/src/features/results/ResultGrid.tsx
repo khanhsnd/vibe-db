@@ -61,6 +61,7 @@ import {
   parseCell,
   NO_SORT,
   rowRange,
+  selectedCells,
   toTSV,
   type Cell,
   type CellBounds,
@@ -489,16 +490,30 @@ export function ResultGrid({
    * Writes a clipboard block outwards from one cell — a line per row, a tab per column — and
    * never past the rows or columns the grid shows, so a paste can only overwrite what is there.
    * A copied row therefore goes back whole, which is what pasting into a fresh row means.
+   *
+   * **One value over a range fills it**, every cell the selection covers and not just the corner:
+   * dragging a column and pasting is one gesture, and the block has no shape of its own to lay out.
+   * A block bigger than one cell does carry a shape, so that one is written outwards as ever.
    */
   const paste = async (at: CellRef) => {
     const text = await readText()
     if (!onEditCell || text === '') return
 
-    text.split(/\r?\n/).forEach((line, down) => {
+    const block = text.split(/\r?\n/).map((line) => line.split('\t'))
+    const first = block[0]
+    const covered = selectedCells(current, result.rows.length, result.columns.length)
+
+    if (block.length === 1 && first?.length === 1 && covered.length > 1) {
+      const value = parseCell(first[0] ?? '')
+      for (const ref of covered) if (writable(ref.column)) onEditCell(ref, value)
+      return
+    }
+
+    block.forEach((line, down) => {
       const row = at.row + down
       if (row >= result.rows.length) return
 
-      line.split('\t').forEach((value, across) => {
+      line.forEach((value, across) => {
         const column = at.column + across
         if (column < result.columns.length) onEditCell({ row, column }, parseCell(value))
       })

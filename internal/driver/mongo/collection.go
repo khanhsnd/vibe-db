@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
@@ -167,6 +168,11 @@ func (s *session) MatchingRows(
 // UpdateCell writes one field of one document, addressed by `_id`. A cell the reader emptied is set
 // to null rather than removed: null is what the grid drew and what it will draw again, and a field
 // quietly unset would leave the collection's own field list one field shorter than the reader left it.
+//
+// **A write that matched no document is a failure**, and this is where it is caught: the server
+// reports one as success, so the app would discard the edit, read the page again and show the reader
+// their own change undone with nothing said. It is the *matched* count and not the modified one —
+// writing a value the field already held changed nothing and is not a missing row.
 func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 	known, err := s.fields(ctx, edit.Namespace, edit.Table)
 	if err != nil {
@@ -183,8 +189,14 @@ func (s *session) UpdateCell(ctx context.Context, edit driver.CellEdit) error {
 		Value: bson.D{{Key: edit.Column, Value: coerced(edit.Value, typeOf(known, edit.Column))}},
 	}}
 
-	_, err = s.collection(edit.Namespace, edit.Table).UpdateOne(ctx, identity, update)
-	return translateError(err)
+	outcome, err := s.collection(edit.Namespace, edit.Table).UpdateOne(ctx, identity, update)
+	if err != nil {
+		return translateError(err)
+	}
+	if outcome.MatchedCount == 0 {
+		return domain.ErrRowGone
+	}
+	return nil
 }
 
 // InsertRow writes a new document carrying only the fields the reader filled in, so a field left
@@ -244,6 +256,8 @@ func typeOf(known []driver.Column, name string) string {
 	return ""
 }
 
+// DeleteRow removes one document, addressed by `_id`. A delete that removed nothing is answered for
+// the reason an update that matched nothing is — see UpdateCell.
 func (s *session) DeleteRow(ctx context.Context, removal driver.RowDelete) error {
 	known, err := s.fields(ctx, removal.Namespace, removal.Table)
 	if err != nil {
@@ -255,8 +269,14 @@ func (s *session) DeleteRow(ctx context.Context, removal driver.RowDelete) error
 		return err
 	}
 
-	_, err = s.collection(removal.Namespace, removal.Table).DeleteOne(ctx, identity)
-	return translateError(err)
+	outcome, err := s.collection(removal.Namespace, removal.Table).DeleteOne(ctx, identity)
+	if err != nil {
+		return translateError(err)
+	}
+	if outcome.DeletedCount == 0 {
+		return domain.ErrRowGone
+	}
+	return nil
 }
 
 // identity is the document that names exactly one stored document, which in a document store is

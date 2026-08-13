@@ -9,6 +9,8 @@ export type ErrorCode =
   | 'UNKNOWN_TABLE'
   | 'UNKNOWN_DEFINITION'
   | 'TABLE_NOT_EDITABLE'
+  /** A write whose key named no stored row: refresh and look again, never retry. */
+  | 'ROW_GONE'
   | 'EMPTY_STATEMENT'
   /** A snippet saved with no body. Its own code because nothing was being run — see `snippets.ts`. */
   | 'EMPTY_SNIPPET'

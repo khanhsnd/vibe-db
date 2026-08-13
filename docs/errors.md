@@ -59,6 +59,7 @@ layer, and the three transport rows are mapped once in `sqlkit.TransportError`.
 | Code | Cause |
 |---|---|
 | `TABLE_NOT_EDITABLE` | Cell edit or row delete attempted on a table with no primary key, or with only part of one supplied — `sqlkit.EditableKeys` refuses both, MongoDB included, where the key is always `_id` |
+| `ROW_GONE` | A cell edit or a row delete whose key named no stored row: somebody changed or removed it since the page was read. **MongoDB only**, and not because the other engines cannot lose a row but because this is the one engine that will not say so — an `UpdateOne` or a `DeleteOne` matching nothing is a success on the wire, so the adapter reads the *matched* count and answers this. It is the matched count and not the modified one: writing a value the field already held is not a missing row |
 | `EMPTY_STATEMENT` | Run requested with nothing the splitter could find a statement in — whitespace, semicolons, or comments alone |
 | `EMPTY_SNIPPET` | A snippet saved with a blank body. Its own code rather than `EMPTY_STATEMENT` because nothing was being run: a library entry with no body is a name the reader would reach for and get nothing back from, and it is answered under the box it was missing from — see [features/snippets.md](features/snippets.md#failing) |
 | `TRANSACTION_ACTIVE` | `Begin` while this connection is already holding a transaction open. The menu greys the item out, so it is reachable only by two windows racing — see [features/transaction.md](features/transaction.md#failing) |

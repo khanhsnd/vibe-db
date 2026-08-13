@@ -27,9 +27,14 @@ var (
 	// revoke of everything the account never had.
 	ErrUnknownAccount   = errors.New("user or role does not exist")
 	ErrTableNotEditable = errors.New("table has no primary key")
-	ErrEmptyStatement   = errors.New("no statement to run")
-	ErrStatementFailed  = errors.New("statement rejected by the server")
-	ErrQueryCancelled   = errors.New("query cancelled")
+	// ErrRowGone is a write whose key named no stored row. It is its own sentinel because the table
+	// is there and the *row* is not, and it exists because a write that matched nothing is otherwise
+	// indistinguishable from one that worked: a document store reports no error for it, so the edit
+	// would be discarded, the page read again, and the reader shown their change quietly undone.
+	ErrRowGone         = errors.New("row is no longer there")
+	ErrEmptyStatement  = errors.New("no statement to run")
+	ErrStatementFailed = errors.New("statement rejected by the server")
+	ErrQueryCancelled  = errors.New("query cancelled")
 
 	// ErrFileUnreadable is a file on this machine the app was pointed at and could not read: a
 	// path that is no longer there, or one this account may not open. Nothing was sent to a

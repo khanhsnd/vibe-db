@@ -299,8 +299,10 @@ func coerce(value, kind string) any {
 	return value
 }
 
-// binaryData reads the `\x…` hex a binary field was drawn as, which is the one form bytes that are
-// not text survive the trip to the grid in — see sqlkit.TextOrNil, whose spelling this is.
+// binaryData reads the `\x…` hex a binary field was drawn as, which is the form bytes that are not
+// text survive the trip to the grid in — see sqlkit.TextOrNil, whose spelling this is. It names the
+// **plain** subtype and only that one, the hex carrying none: a value with a subtype is drawn as its
+// own constructor instead, and reaches this function's caller through parseValue — see cell.
 func binaryData(value string) (bson.Binary, error) {
 	if !strings.HasPrefix(value, sqlkit.BinaryPrefix) {
 		return bson.Binary{}, statementError("binary data is written as " + sqlkit.BinaryPrefix + "hex")
@@ -309,7 +311,7 @@ func binaryData(value string) (bson.Binary, error) {
 	if err != nil {
 		return bson.Binary{}, err
 	}
-	return bson.Binary{Subtype: 0, Data: data}, nil
+	return bson.Binary{Subtype: bson.TypeBinaryGeneric, Data: data}, nil
 }
 
 // matchDoc is a Find in Schema's data half as the document the server takes: any of the fields the
