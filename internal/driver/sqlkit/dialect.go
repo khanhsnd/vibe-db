@@ -735,7 +735,14 @@ func (d Dialect) QuoteAll(names []string) []string {
 
 // Qualify names a table inside the namespace the UI addresses it by — a database in
 // MySQL, a schema in PostgreSQL.
+//
+// An empty namespace is the table alone rather than a name with an empty part in front of it: a
+// statement written to be run *somewhere* names no database, and which one it lands in is then the
+// connection's answer. That is what a SQL export of rows asks for — see ExportRows.
 func (d Dialect) Qualify(namespace, table string) string {
+	if namespace == "" {
+		return d.QuoteIdent(table)
+	}
 	return d.QuoteIdent(namespace) + "." + d.QuoteIdent(table)
 }
 

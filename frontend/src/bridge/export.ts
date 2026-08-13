@@ -15,12 +15,14 @@ export const EXPORT_FORMATS: ReadonlyArray<{ value: ExportFormat; label: string 
 ]
 
 /**
- * The rows to write and where they came from. They travel from the grid rather than being read
+ * The rows to write and what table they came from. They travel from the grid rather than being read
  * again, because what a reader asked to export is what they can see. `table` is empty for a
  * result no single table can be traced to, which only the SQL format has to make up a name for.
+ *
+ * There is no namespace: a SQL export names the table alone, so the file runs against whichever
+ * database the connection is on.
  */
 export interface ExportRequest {
-  namespace: Namespace
   table: string
   columns: string[]
   rows: Cell[][]
@@ -31,7 +33,6 @@ export const rowExport = {
   run: (sessionId: string, format: ExportFormat, request: ExportRequest): Promise<string> =>
     call(() =>
       api.ExportRows(sessionId, {
-        ...request.namespace,
         format,
         table: request.table,
         columns: request.columns,

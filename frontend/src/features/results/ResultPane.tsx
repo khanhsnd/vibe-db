@@ -234,7 +234,6 @@ export function ResultPane({ tabId, run, sessionId, onRefresh, onFetch, onStop }
     if (grid === null || sessionId === null) return
 
     void rowExport.run(sessionId, format, {
-      namespace: { database: grid.database, schema: grid.schema },
       table: grid.table,
       columns: arranged.map((one) => one.column.name),
       rows: ordered.map((row) => arranged.map((one) => row[one.index] ?? null)),

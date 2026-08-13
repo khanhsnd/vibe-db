@@ -470,7 +470,6 @@ export function TableDataView({
    */
   const exportRows = (format: ExportFormat) =>
     void rowExport.run(sessionId, format, {
-      namespace,
       table,
       columns: visible.map((entry) => entry.column.name),
       rows: flatRows,

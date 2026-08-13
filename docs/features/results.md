@@ -87,6 +87,18 @@ has. A hidden column is not exported: it is one nobody asked for. **A reader who
 table rather than what is on screen wants [`Dump SQL File`](transfer.md#dumping-a-table-or-a-schema-to-a-file)**
 in the tree instead, which reads every row out of the server rather than off the grid.
 
+### A SQL export names the table alone
+
+`INSERT INTO \`users\` (…)`, never ``INSERT INTO `shop`.`users` (…)``. A file of INSERTs exists to be
+*run somewhere*, and the only place a qualified name can be run is the database it was read from —
+which is the one place nobody exports a file to reach. Which database the rows land in is therefore
+the connection's answer: open the target and run the file, or point `mysql`/`psql` at it. It is what
+MongoDB's commands already do, naming `db` and never the database.
+
+A [dump](transfer.md#dumping-a-table-or-a-schema-to-a-file) keeps its namespace, and the two do not
+disagree about anything else: a dump is a *rebuild* of the database it came from, where an export is
+a carriage of rows out of one.
+
 **The cell menu's Save Data As ▸ is the same three formats**, so a reader who is already in the menu
 need not travel to the button; **Copy As ▸** beside it puts the selection on the clipboard in the
 clipboard's own shapes — tab-separated with field names, CSV, JSON — and treats a `NULL` the way the

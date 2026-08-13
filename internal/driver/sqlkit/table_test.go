@@ -138,8 +138,10 @@ func TestUpdateCellNumbersPlaceholdersWhereTheEngineDoes(t *testing.T) {
 		t.Errorf("query =\n%s\nwant\n%s", query, want)
 	}
 
+	// Oracle qualifies by the database rather than by the schema, which this edit does not carry:
+	// an empty namespace names the table alone, never a name with an empty part in front of it.
 	query, _ = Oracle.UpdateCell(edit, []string{"id"})
-	want = `UPDATE ""."users" SET "email" = :1 WHERE "id" = :2`
+	want = `UPDATE "users" SET "email" = :1 WHERE "id" = :2`
 	if query != want {
 		t.Errorf("query =\n%s\nwant\n%s", query, want)
 	}

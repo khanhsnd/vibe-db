@@ -637,21 +637,17 @@ export namespace app {
 	}
 	
 	export class ExportInput {
-	    database: string;
-	    schema: string;
 	    format: string;
 	    table: string;
 	    columns: string[];
 	    rows: string[][];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ExportInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.database = source["database"];
-	        this.schema = source["schema"];
 	        this.format = source["format"];
 	        this.table = source["table"];
 	        this.columns = source["columns"];

@@ -14,8 +14,9 @@ import (
 // ExportInput is the rows on screen and how to write them. They travel back from the frontend
 // rather than being read again, because what a reader asked to export is what they can see —
 // a replay could return something else.
+//
+// There is no namespace on it, and that is the point: see render.
 type ExportInput struct {
-	Namespace
 	Format string `json:"format"`
 	// Table names the INSERT statements of a SQL export and the file the dialog suggests. It is
 	// empty for a result no single table can be traced to.
@@ -90,8 +91,14 @@ func (a *ConnectionAPI) render(
 		return "", err
 	}
 
+	// The table is named **alone**. A file of INSERTs exists to be run somewhere, and the only
+	// place a qualified name can be run is the database it was read from — which is the one place
+	// nobody exports a file to reach. Which database the rows land in is therefore the connection's
+	// answer, exactly as it already is on MongoDB, whose commands name `db` and never the database.
+	// A [dump](../../docs/features/transfer.md) keeps its namespace, being a rebuild of what it came
+	// from rather than a carriage of rows.
 	statements := schema.RowStatements(
-		input.Namespace.toDriver(),
+		driver.Namespace{},
 		input.tableName(),
 		driver.RowWrite{
 			Mode:    driver.WriteAppend,

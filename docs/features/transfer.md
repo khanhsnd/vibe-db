@@ -39,7 +39,9 @@ is whether the copy lands on this server or in a file.
   [Execute SQL File](console.md#execute-sql-file) is: a long job going fine is not a job to cut off.
 - **A `NULL` and a value are written exactly as the SQL export writes them** — the same
   `RowStatements` the grid's `Export as SQL` calls, so a dump and an export of one table's rows
-  agree to the character. See [Exporting a grid](results.md#exporting-a-grid).
+  differ in one thing only: **a dump names the namespace and an export names the table alone**,
+  because a dump puts a database back where it came from and an export carries rows out of it. See
+  [A SQL export names the table alone](results.md#a-sql-export-names-the-table-alone).
 
 ## The Import and Export wizards
 

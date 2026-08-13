@@ -56,6 +56,27 @@ func TestAppendWithABatchOfOneIsOneRowPerStatement(t *testing.T) {
 	}
 }
 
+// An empty namespace names the table alone, which is what a SQL export of a grid asks for: a file
+// that named the database it was read from could only ever be run back into that database.
+func TestAnEmptyNamespaceNamesTheTableAlone(t *testing.T) {
+	write := sample
+	write.Mode, write.Batch = driver.WriteAppend, 1
+
+	for _, one := range []struct {
+		dialect Dialect
+		want    string
+	}{
+		{MySQL, "INSERT INTO `users` (`id`, `name`) VALUES ('1', 'Ada')"},
+		{Postgres, `INSERT INTO "users" ("id", "name") VALUES ('1', 'Ada')`},
+		{SQLServer, "INSERT INTO [users] ([id], [name]) VALUES ('1', 'Ada')"},
+	} {
+		got := ddl(one.dialect).RowStatements(driver.Namespace{}, "users", write)
+		if got[0] != one.want {
+			t.Errorf("statement =\n%s\nwant\n%s", got[0], one.want)
+		}
+	}
+}
+
 // A batch above one is what an import uses: the round trips are what makes a hundred thousand rows
 // take minutes instead of hours.
 func TestAppendBatchesRowsIntoOneStatement(t *testing.T) {
