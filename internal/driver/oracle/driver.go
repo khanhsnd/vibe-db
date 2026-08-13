@@ -181,8 +181,26 @@ func (*session) Schemas(context.Context, string) ([]string, error) {
 // deliberately not listed — dropping one drops every routine in it, and a folder whose delete
 // removes things it never showed is worse than a folder that does not claim them.
 func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Objects, error) {
-	const tables = `SELECT table_name FROM all_tables WHERE owner = :1 ORDER BY table_name`
+	// The container table a materialized view keeps its rows in is left out: it carries the view's
+	// own name and is listed under Materialized Views instead, where dropping it means something.
+	const tables = `
+		SELECT t.table_name
+		FROM all_tables t
+		WHERE t.owner = :1
+		  AND NOT EXISTS (
+		    SELECT 1 FROM all_mviews m
+		    WHERE m.owner = t.owner AND m.mview_name = t.table_name
+		  )
+		ORDER BY t.table_name`
 	const views = `SELECT view_name FROM all_views WHERE owner = :1 ORDER BY view_name`
+
+	const materialized = `
+		SELECT mview_name FROM all_mviews WHERE owner = :1 ORDER BY mview_name`
+	const sequences = `
+		SELECT sequence_name
+		FROM all_sequences
+		WHERE sequence_owner = :1
+		ORDER BY sequence_name`
 
 	const routines = `
 		SELECT object_name, object_type
@@ -204,6 +222,16 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 	}
 
 	seen, err := s.names(ctx, views, ns.Database)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	kept, err := s.names(ctx, materialized, ns.Database)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	counting, err := s.names(ctx, sequences, ns.Database)
 	if err != nil {
 		return driver.Objects{}, err
 	}
@@ -236,7 +264,14 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		return driver.Objects{}, translateError(err)
 	}
 
-	return driver.Objects{Tables: found, Views: seen, Routines: stored, Triggers: firing}, nil
+	return driver.Objects{
+		Tables:            found,
+		Views:             seen,
+		Routines:          stored,
+		Triggers:          firing,
+		MaterializedViews: kept,
+		Sequences:         counting,
+	}, nil
 }
 
 // TableList reads what Oracle keeps about the tables of a schema. The row count and the size are
@@ -251,8 +286,12 @@ func (s *session) TableList(ctx context.Context, ns driver.Namespace) (driver.Ta
 		       tablespace_name AS "Tablespace",
 		       last_analyzed AS "Analyzed",
 		       partitioned AS "Partitioned"
-		FROM all_tables
-		WHERE owner = :1
+		FROM all_tables t
+		WHERE t.owner = :1
+		  AND NOT EXISTS (
+		    SELECT 1 FROM all_mviews m
+		    WHERE m.owner = t.owner AND m.mview_name = t.table_name
+		  )
 		ORDER BY table_name`
 
 	result, err := sqlkit.Read(ctx, s.db, query, 0, nil, ns.Database)

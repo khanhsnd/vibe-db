@@ -249,6 +249,9 @@ export const SOURCE_NOUN: Record<SourceKind, string> = {
   function: 'Function',
   procedure: 'Procedure',
   trigger: 'Trigger',
+  materializedView: 'Materialized View',
+  sequence: 'Sequence',
+  event: 'Event',
 }
 
 /** How a definition reads in the strip: the object's name, then what kind of thing it is. */

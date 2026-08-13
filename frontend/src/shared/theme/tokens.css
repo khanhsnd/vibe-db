@@ -109,6 +109,12 @@
   --kind-field: #79c0ff;
   --kind-index: #d2a8ff;
   --kind-relation: #f778ba;
+  /** A sequence hands out numbers and belongs to the schema rather than to a table, so it takes an
+      entry of its own rather than borrowing a field's. A partition is a *piece of a table*, so it
+      is the table's colour cooled a step — near enough to read as "part of that", far enough to
+      tell the folder apart from the tables above it. */
+  --kind-sequence: #ffa657;
+  --kind-partition: #39c5cf;
   /** A backup is not a thing the catalogue holds — it is a file on this machine — so it is the one
       entry here that is deliberately off the palette the server's own objects share. */
   --kind-backup: #8b949e;
@@ -228,6 +234,8 @@
   --kind-field: #0550ae;
   --kind-index: #8250df;
   --kind-relation: #bf3989;
+  --kind-sequence: #953800;
+  --kind-partition: #1b7c83;
   --kind-backup: #57606a;
   --kind-account: #9a6700;
 
@@ -312,6 +320,8 @@
   --color-kind-field: var(--kind-field);
   --color-kind-index: var(--kind-index);
   --color-kind-relation: var(--kind-relation);
+  --color-kind-sequence: var(--kind-sequence);
+  --color-kind-partition: var(--kind-partition);
   --color-kind-backup: var(--kind-backup);
   --color-kind-account: var(--kind-account);
 

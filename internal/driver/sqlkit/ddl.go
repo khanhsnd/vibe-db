@@ -61,8 +61,16 @@ func (x DDL) exec(ctx context.Context, database, statement string) error {
 	return nil
 }
 
+// CreateTable declares the table and then describes its columns, which on two of these engines is
+// more than one statement: a description there is `COMMENT ON COLUMN`, not a clause. See
+// CreateTableStatements, which is what a dump writes as well.
 func (x DDL) CreateTable(ctx context.Context, spec driver.TableSpec) error {
-	return x.exec(ctx, spec.Database, x.Dialect.CreateTable(spec))
+	for _, statement := range x.Dialect.CreateTableStatements(spec) {
+		if err := x.exec(ctx, spec.Database, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // RunAll executes statements in order, each in the database it names — which is what creating
@@ -117,7 +125,59 @@ func (x DDL) AddColumn(
 	table string,
 	spec driver.ColumnSpec,
 ) error {
-	return x.exec(ctx, ns.Database, x.Dialect.AddColumn(ns, table, spec))
+	return x.runAll(ctx, ns, x.Dialect.AddColumn(ns, table, spec))
+}
+
+// AddPartition, DropPartition and TruncatePartition each run exactly what AlterStatements would
+// have shown, from the same speller. An engine that spells nothing has no way to address one piece
+// of a table, and says so rather than reporting a change that never happened.
+func (x DDL) AddPartition(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+	spec driver.PartitionSpec,
+) error {
+	return x.runOne(ctx, ns, "a partition", x.Dialect.AddPartition(ns, table, spec))
+}
+
+func (x DDL) DropPartition(ctx context.Context, ns driver.Namespace, table, partition string) error {
+	return x.runOne(ctx, ns, "a partition", x.Dialect.DropPartition(ns, table, partition))
+}
+
+func (x DDL) TruncatePartition(
+	ctx context.Context,
+	ns driver.Namespace,
+	table, partition string,
+) error {
+	return x.runOne(ctx, ns, "a partition", x.Dialect.TruncatePartition(ns, table, partition))
+}
+
+// RefreshMaterializedView recomputes the rows such a view stores. An engine with none spells
+// nothing and says so, rather than succeeding at having done nothing.
+func (x DDL) RefreshMaterializedView(ctx context.Context, ns driver.Namespace, name string) error {
+	return x.runOne(ctx, ns, "a materialized view", x.Dialect.Refresh(ns, name))
+}
+
+// runOne executes a statement this engine had a grammar for, and answers `domain.Unsupported`
+// **naming the thing** where it had none — which is what an empty spelling means everywhere in this
+// package, and the answer rule 9 asks for: a reader is told what their engine has not got rather
+// than being shown a statement the server refused.
+func (x DDL) runOne(ctx context.Context, ns driver.Namespace, what, statement string) error {
+	if statement == "" {
+		return domain.Unsupported(what)
+	}
+	return x.exec(ctx, ns.Database, statement)
+}
+
+// runAll executes statements in order, stopping at the first failure. It is what a change that is
+// more than one statement on some engines runs through — a column and the description beside it.
+func (x DDL) runAll(ctx context.Context, ns driver.Namespace, statements []string) error {
+	for _, statement := range statements {
+		if err := x.exec(ctx, ns.Database, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AlterStatements spells changes to a table as the statements that would make them, and runs none
@@ -133,7 +193,7 @@ func (x DDL) AlterStatements(
 	for _, change := range changes {
 		switch change.Kind {
 		case driver.ChangeAddColumn:
-			statements = append(statements, x.Dialect.AddColumn(ns, table, change.Column))
+			statements = append(statements, x.Dialect.AddColumn(ns, table, change.Column)...)
 		case driver.ChangeAlterColumn:
 			statements = append(statements,
 				x.Dialect.AlterColumn(ns, table, change.Name, change.Column)...)
@@ -147,6 +207,14 @@ func (x DDL) AlterStatements(
 			statements = append(statements, x.Dialect.AddForeignKey(ns, table, change.Key))
 		case driver.ChangeDropForeignKey:
 			statements = append(statements, x.Dialect.DropForeignKey(ns, table, change.Name))
+		case driver.ChangeAddPartition:
+			statements = appendSpelled(statements,
+				x.Dialect.AddPartition(ns, table, change.Partition))
+		case driver.ChangeDropPartition:
+			statements = appendSpelled(statements, x.Dialect.DropPartition(ns, table, change.Name))
+		case driver.ChangeTruncatePartition:
+			statements = appendSpelled(statements,
+				x.Dialect.TruncatePartition(ns, table, change.Name))
 		}
 	}
 
@@ -156,8 +224,147 @@ func (x DDL) AlterStatements(
 // AddColumn is that statement as text rather than as a run, the arrangement AddForeignKey already
 // has and for the same reason: a migration writes the clause the designer would have executed
 // instead of a second spelling of it.
-func (d Dialect) AddColumn(ns driver.Namespace, table string, spec driver.ColumnSpec) string {
-	return "ALTER TABLE " + d.Table(ns, table) + " ADD COLUMN " + d.ColumnClause(spec)
+//
+// It answers with a list because a column's *description* is a statement of its own on two of these
+// engines — see ColumnComment, which is the whole of that difference.
+//
+// A column being **added** with nothing written about it spells no description at all, where an
+// altered one always spells its own: there is nothing on a new column to clear. That is
+// ColumnComments' rule and it is asked for by name rather than repeated here.
+func (d Dialect) AddColumn(ns driver.Namespace, table string, spec driver.ColumnSpec) []string {
+	added := "ALTER TABLE " + d.Table(ns, table) + " ADD COLUMN " + d.ColumnClause(spec)
+	return append([]string{added}, d.ColumnComments(ns, table, []driver.ColumnSpec{spec})...)
+}
+
+// ColumnComment is what somebody wrote about a column, as the statement that records it — and the
+// empty string on the engine that writes it as a clause of the column instead, which has already
+// said it by the time this is asked. See ColumnCommentInline.
+//
+// A blank description is still spelled, because clearing one is a change like any other: what says
+// "there is nothing written here" is the empty literal, and leaving the statement out would leave
+// whatever was there before.
+//
+// The text is quoted as a string literal, which is the only thing between a reader's own words and
+// a statement — DDL binds no arguments.
+func (d Dialect) ColumnComment(ns driver.Namespace, table, column, comment string) string {
+	if !d.CommentsOnObject {
+		return ""
+	}
+	return "COMMENT ON COLUMN " + d.Table(ns, table) + "." + d.QuoteIdent(column) +
+		" IS " + d.QuoteString(comment)
+}
+
+// ColumnComments is every description of a table's columns as its own statement, which is what
+// follows a CREATE TABLE on an engine that keeps them separately. A column with nothing written
+// about it contributes nothing here — unlike a *change* to one, where the empty literal is how a
+// description is cleared.
+func (d Dialect) ColumnComments(
+	ns driver.Namespace,
+	table string,
+	columns []driver.ColumnSpec,
+) []string {
+	statements := []string{}
+	for _, column := range columns {
+		if strings.TrimSpace(column.Comment) == "" {
+			continue
+		}
+		statements = appendSpelled(statements, d.ColumnComment(ns, table, column.Name, column.Comment))
+	}
+	return statements
+}
+
+// Refresh recomputes the rows a materialized view stores. It is the one statement about such a view
+// that an ordinary one has no counterpart for, and an engine with no materialized views spells
+// nothing — which is what the run beside it answers `domain.Unsupported` for.
+func (d Dialect) Refresh(ns driver.Namespace, name string) string {
+	if d.RefreshViewSQL == "" {
+		return ""
+	}
+	if d.RefreshNamesString {
+		return strings.Replace(d.RefreshViewSQL, "%s", d.QuoteString(qualifiedName(ns, name)), 1)
+	}
+	return strings.Replace(d.RefreshViewSQL, "%s", d.Table(ns, name), 1)
+}
+
+// qualifiedName is a namespace and an object as one **unquoted** name, which is what an engine that
+// takes an object as a string argument wants: `SHOP.SALES`, inside a literal. Nothing else here
+// writes a name this way, and nothing else should — see RefreshNamesString.
+func qualifiedName(ns driver.Namespace, name string) string {
+	where := ns.Database
+	if ns.Schema != "" {
+		where = ns.Schema
+	}
+	if where == "" {
+		return name
+	}
+	return where + "." + name
+}
+
+// AddPartition declares one more piece of a partitioned table. The bounds are the reader's own text
+// and travel verbatim, for the reason a column's type does: what a piece may hold is a different
+// grammar per engine *and* per partitioning method, and a clause built here would only ever cover
+// the methods somebody thought of.
+//
+// The three shapes are PartitionStyle's whole reason for existing, and an engine with no partition
+// to address spells nothing.
+func (d Dialect) AddPartition(
+	ns driver.Namespace,
+	table string,
+	spec driver.PartitionSpec,
+) string {
+	bounds := strings.TrimSpace(spec.Bounds)
+
+	switch d.Partitions {
+	case PartitionAsTable:
+		// A partition here **is** a table, so it is declared as one — and the table it belongs to is
+		// named in the middle of the statement rather than in front of it.
+		return "CREATE TABLE " + d.Table(ns, spec.Name) +
+			" PARTITION OF " + d.Table(ns, table) + " " + bounds
+	case PartitionInList:
+		return "ALTER TABLE " + d.Table(ns, table) +
+			" ADD PARTITION (PARTITION " + d.QuoteIdent(spec.Name) + " " + bounds + ")"
+	case PartitionAsClause:
+		return "ALTER TABLE " + d.Table(ns, table) +
+			" ADD PARTITION " + d.QuoteIdent(spec.Name) + " " + bounds
+	default:
+		return ""
+	}
+}
+
+// DropPartition removes a piece of a table **and the rows in it**, which is why it is previewed like
+// every other change rather than run from a menu.
+func (d Dialect) DropPartition(ns driver.Namespace, table, partition string) string {
+	switch d.Partitions {
+	case PartitionAsTable:
+		return "DROP TABLE " + d.Table(ns, partition)
+	case PartitionInList, PartitionAsClause:
+		return "ALTER TABLE " + d.Table(ns, table) + " DROP PARTITION " + d.QuoteIdent(partition)
+	default:
+		return ""
+	}
+}
+
+// TruncatePartition empties a piece and leaves it there, which is the difference TruncateTable has
+// from DropTable one level up.
+func (d Dialect) TruncatePartition(ns driver.Namespace, table, partition string) string {
+	switch d.Partitions {
+	case PartitionAsTable:
+		return "TRUNCATE TABLE " + d.Table(ns, partition)
+	case PartitionInList, PartitionAsClause:
+		return "ALTER TABLE " + d.Table(ns, table) + " TRUNCATE PARTITION " + d.QuoteIdent(partition)
+	default:
+		return ""
+	}
+}
+
+// appendSpelled adds a statement unless there was none to add, which is what an engine that has no
+// grammar for a change contributes — nothing, rather than an empty statement the server would then
+// be asked to run.
+func appendSpelled(statements []string, statement string) []string {
+	if statement == "" {
+		return statements
+	}
+	return append(statements, statement)
 }
 
 func (d Dialect) DropColumn(ns driver.Namespace, table, column string) string {
@@ -189,6 +396,9 @@ func (d Dialect) AlterColumn(
 	head := "ALTER TABLE " + d.Table(ns, table) + " "
 	quoted := d.QuoteIdent(column)
 	fallen := strings.TrimSpace(defaultOf(spec))
+	// The description follows the change wherever it is a statement of its own, and is already in
+	// the restated clause on the engine that writes it as one — see ColumnComment.
+	described := d.ColumnComment(ns, table, column, spec.Comment)
 
 	if d.RestatesColumn {
 		restated := spec
@@ -209,7 +419,7 @@ func (d Dialect) AlterColumn(
 		if d.SeparatesDefault && fallen != "" {
 			statements = append(statements, head+"ADD DEFAULT "+fallen+" FOR "+quoted)
 		}
-		return statements
+		return appendSpelled(statements, described)
 	}
 
 	actions := []string{"ALTER COLUMN " + quoted + " TYPE " + strings.TrimSpace(spec.Type)}
@@ -226,7 +436,7 @@ func (d Dialect) AlterColumn(
 		actions = append(actions, "ALTER COLUMN "+quoted+" DROP DEFAULT")
 	}
 
-	return []string{head + strings.Join(actions, ", ")}
+	return appendSpelled([]string{head + strings.Join(actions, ", ")}, described)
 }
 
 // defaultOf is the expression a column is to fall back to, and empty for a column that falls back
@@ -334,13 +544,7 @@ func (x DDL) AlterColumn(
 	if len(statements) == 0 {
 		return domain.Unsupported("changing a column")
 	}
-
-	for _, statement := range statements {
-		if err := x.exec(ctx, ns.Database, statement); err != nil {
-			return err
-		}
-	}
-	return nil
+	return x.runAll(ctx, ns, statements)
 }
 
 func (x DDL) CreateIndex(
@@ -613,6 +817,7 @@ func TableSpecOf(
 			Nullable:   column.Nullable,
 			Default:    column.Default,
 			PrimaryKey: column.PrimaryKey,
+			Comment:    column.Comment,
 		})
 	}
 	return driver.TableSpec{Namespace: ns, Table: table, Columns: specs}
@@ -794,6 +999,43 @@ func ScanTriggers(rows *sql.Rows) ([]driver.Trigger, error) {
 	return triggers, rows.Err()
 }
 
+// ScanPartitions folds a five-column catalogue read — a partition's name, the method the table is
+// cut by, the expression it is cut on, what this piece holds, and how many rows the server thinks
+// are in it — into the list a `TableStructure` carries. It is here rather than in each adapter
+// because what differs between the engines is the *read*, and the fold does not differ at all.
+//
+// Every column but the name is scanned as a pointer, because every one of them is a fact a
+// catalogue may not have: a hash partition is cut on no expression it will name, a piece of a
+// default partition holds no bounds, and a row count is NULL until something has gathered
+// statistics. A partition is listed by the name it has rather than left out.
+func ScanPartitions(rows *sql.Rows) ([]driver.Partition, error) {
+	defer rows.Close()
+
+	partitions := []driver.Partition{}
+	for rows.Next() {
+		var found driver.Partition
+		var method, expression, bounds *string
+		if err := rows.Scan(&found.Name, &method, &expression, &bounds, &found.Rows); err != nil {
+			return nil, err
+		}
+		found.Method = textOf(method)
+		found.Expression = textOf(expression)
+		found.Bounds = strings.TrimSpace(textOf(bounds))
+		partitions = append(partitions, found)
+	}
+	return partitions, rows.Err()
+}
+
+// textOf is a catalogue column that may not be there at all, as the empty string every reader of
+// one wants: a hash partition is cut on no expression the server will name, and a default piece
+// holds no bounds.
+func textOf(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 // AppendIndexColumn folds the ordered rows of an index read into one entry per index, the way
 // AppendColumn folds a schema read: only the last entry can still be growing.
 func AppendIndexColumn(indexes []driver.Index, found driver.Index, column string) []driver.Index {
@@ -855,6 +1097,16 @@ func (d Dialect) CreateTable(spec driver.TableSpec) string {
 
 	return "CREATE TABLE " + d.Table(spec.Namespace, spec.Table) +
 		" (\n  " + strings.Join(clauses, ",\n  ") + "\n)"
+}
+
+// CreateTableStatements is the whole of declaring a table: the table itself, and then what is
+// written about its columns on an engine that keeps a description separately. It is one method so
+// that a dump and a create run the same statements — the arrangement AlterStatements has.
+func (d Dialect) CreateTableStatements(spec driver.TableSpec) []string {
+	return append(
+		[]string{d.CreateTable(spec)},
+		d.ColumnComments(spec.Namespace, spec.Table, spec.Columns)...,
+	)
 }
 
 // CopyTable declares a table shaped like another one, and the engines have four words for it.
@@ -982,6 +1234,12 @@ func (d Dialect) ColumnClause(spec driver.ColumnSpec) string {
 	}
 	if spec.Default != nil && strings.TrimSpace(*spec.Default) != "" {
 		clause += " DEFAULT " + strings.TrimSpace(*spec.Default)
+	}
+	// A blank description writes no clause, and clears one all the same: the engine that keeps a
+	// description here is the engine that restates a column whole, so a comment left out is a
+	// comment dropped — which is exactly what clearing it means.
+	if d.ColumnCommentInline && strings.TrimSpace(spec.Comment) != "" {
+		clause += " COMMENT " + d.QuoteString(spec.Comment)
 	}
 	return clause
 }

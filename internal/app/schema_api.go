@@ -440,6 +440,74 @@ func (a *ConnectionAPI) DropForeignKey(
 	})
 }
 
+// AddPartition declares one more piece of a partitioned table. The bounds are the reader's own
+// clause and are required: a piece that says what it holds is the whole of what declaring one is,
+// and an empty clause would be a statement the server refuses for a reason nobody could read.
+func (a *ConnectionAPI) AddPartition(
+	sessionID string,
+	ns Namespace,
+	table string,
+	spec PartitionInput,
+) error {
+	if err := domain.RequireNames("table", table, "partition", spec.Name); err != nil {
+		return wrapError(err)
+	}
+	if strings.TrimSpace(spec.Bounds) == "" {
+		return wrapError(domain.ValidationError{
+			Field:   "bounds",
+			Message: "must say what the partition holds",
+		})
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.AddPartition(ctx, ns.toDriver(), table, spec.toDriver())
+	})
+}
+
+// DropPartition removes a piece **and the rows in it**; TruncatePartition removes the rows alone.
+// The difference is the one DropTable and TruncateTable have, one level down, and it is the reason
+// they are two methods rather than one with a flag.
+func (a *ConnectionAPI) DropPartition(
+	sessionID string,
+	ns Namespace,
+	table, partition string,
+) error {
+	if err := domain.RequireNames("table", table, "partition", partition); err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.DropPartition(ctx, ns.toDriver(), table, partition)
+	})
+}
+
+func (a *ConnectionAPI) TruncatePartition(
+	sessionID string,
+	ns Namespace,
+	table, partition string,
+) error {
+	if err := domain.RequireNames("table", table, "partition", partition); err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.TruncatePartition(ctx, ns.toDriver(), table, partition)
+	})
+}
+
+// RefreshMaterializedView recomputes the rows such a view stores. It is a schema change rather than
+// a read even though it changes no shape: it runs for as long as the query behind it takes, and it
+// is the one thing done to a materialized view that is not done to an ordinary one.
+func (a *ConnectionAPI) RefreshMaterializedView(sessionID string, ns Namespace, name string) error {
+	if err := domain.RequireName("materialized view", name); err != nil {
+		return wrapError(err)
+	}
+
+	return a.changeSchema(sessionID, func(ctx context.Context, schema driver.Schema) error {
+		return schema.RefreshMaterializedView(ctx, ns.toDriver(), name)
+	})
+}
+
 // changeSchema is the shape every schema change shares: find the session, give the statement
 // its own deadline, and wrap whatever comes back. Only the statement itself differs.
 func (a *ConnectionAPI) changeSchema(

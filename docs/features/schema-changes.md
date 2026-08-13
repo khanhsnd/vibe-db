@@ -108,10 +108,24 @@ fields and the primary key and nothing else.
   **all three are edited in place**: one click on a cell opens it, `Escape` closes it again, and
   the arrows walk the rows a cell at a time.
 - Its columns are the parts a field is *declared* from, not the string the server reports back:
-  `Name`, `Type`, `Length`, `Decimal`, `Not null`, `Key`, `Default`. Length and decimals are parts
+  `Name`, `Type`, `Length`, `Decimal`, `Not null`, `Key`, `Default` — and `Comment` where the engine
+  keeps one. Length and decimals are parts
   of the type and travel as one string — `varchar(255)`, `numeric(10,2)` — and read as `0` when the
   type declares none. A `Default` is an **expression**, which is what a server-side default is:
   `now()`, `'IN_PROGRESS'`, `0`.
+- **`Comment` is what somebody wrote about the field on the server**, and it is the one column here
+  that no statement ever reads: it is documentation the catalogue keeps beside the column. It is
+  **left out entirely** on an engine with nowhere to put one rather than drawn dead, because what a
+  reader typed into it would be thrown away by the `Save` — `EngineInfo.hasColumnComments` is what
+  says so. It exists on MySQL, where it is a *clause of the column*, and on PostgreSQL and Oracle,
+  where it is a `COMMENT ON COLUMN` **statement of its own**; SQL Server's is an extended property
+  written by a stored procedure rather than a comment, and SQLite has none.
+
+  Clearing it clears the description, which is why an altered column on the two `COMMENT ON` engines
+  spells that statement whether or not anything was written: leaving it out would leave whatever was
+  there before. An **added** column with a blank comment spells nothing — there is no earlier
+  description on a column that does not exist yet for an empty one to clear. Which of the two
+  shapes an engine takes is a **flag** on `sqlkit.Dialect`, never a second speller.
 - **`Type` is a list, and the list is the engine's.** Clicking the cell offers MySQL's types,
   PostgreSQL's, or MongoDB's BSON types — `dataTypes.ts`, read off the connection's own profile — and
   typing filters them. It still takes **anything typed into it**, because a server also has domains,
@@ -150,6 +164,9 @@ fields and the primary key and nothing else.
   where MongoDB keeps what SQL puts in a `USING` clause.
 - **An index behind the primary key is not in the Indexes grid.** It is the key, and the Fields grid
   is what moves a key.
+- **There is no Partitions pane.** How a table's rows are *stored* is not part of what the three
+  grids declare, and a piece is added, emptied and dropped from the tree — see
+  [partitions.md](partitions.md).
 - **Nothing is sent until `Save`.** A pending cell carries the grid's warning ring; a field the
   server has not seen is ringed whole, and so is *any* pending index or foreign key — neither engine
   can alter which columns one covers, so an edited one is dropped and made again rather than changed

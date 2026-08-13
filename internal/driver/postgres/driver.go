@@ -272,11 +272,15 @@ func (s *session) Schemas(ctx context.Context, database string) ([]string, error
 // are dropped by a statement of their own, and a list that cannot be acted on is worse than one
 // that does not claim them.
 func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Objects, error) {
+	// A partition is a table in this catalogue and is left out here, because it is drawn under the
+	// table it is a piece of rather than beside it — see `partitions`. Listing both would put every
+	// piece of a partitioned table in the tree twice and make the Tables count say something other
+	// than how many tables there are.
 	const tables = `
 		SELECT c.relname
 		FROM pg_catalog.pg_class c
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-		WHERE n.nspname = $1 AND c.relkind IN ('r', 'p')
+		WHERE n.nspname = $1 AND c.relkind IN ('r', 'p') AND NOT c.relispartition
 		ORDER BY c.relname`
 
 	const views = `
@@ -284,6 +288,28 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		FROM pg_catalog.pg_class c
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = $1 AND c.relkind = 'v'
+		ORDER BY c.relname`
+
+	// `m` is a materialized view and `S` a sequence, which are objects of the schema here rather
+	// than facts of a column. There are no events: PostgreSQL ships no scheduler.
+	const materialized = `
+		SELECT c.relname
+		FROM pg_catalog.pg_class c
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1 AND c.relkind = 'm'
+		ORDER BY c.relname`
+
+	// A sequence a serial column owns is left out: it is that column's own and is dropped with it,
+	// so listing it would offer the reader an object they must not drop on its own.
+	const sequences = `
+		SELECT c.relname
+		FROM pg_catalog.pg_class c
+		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = $1 AND c.relkind = 'S'
+		  AND NOT EXISTS (
+		    SELECT 1 FROM pg_catalog.pg_depend d
+		    WHERE d.objid = c.oid AND d.deptype IN ('a', 'i')
+		  )
 		ORDER BY c.relname`
 
 	// The identity arguments, not the full ones: a drop names the types alone, and defaults
@@ -314,6 +340,16 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 	}
 
 	seen, err := s.names(ctx, ns.Database, views, ns.Schema)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	kept, err := s.names(ctx, ns.Database, materialized, ns.Schema)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	counting, err := s.names(ctx, ns.Database, sequences, ns.Schema)
 	if err != nil {
 		return driver.Objects{}, err
 	}
@@ -351,12 +387,23 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		return driver.Objects{}, translateError(err)
 	}
 
-	return driver.Objects{Tables: found, Views: seen, Routines: stored, Triggers: firing}, nil
+	return driver.Objects{
+		Tables:            found,
+		Views:             seen,
+		Routines:          stored,
+		Triggers:          firing,
+		MaterializedViews: kept,
+		Sequences:         counting,
+	}, nil
 }
 
 // TableList reads what PostgreSQL keeps about the tables of a schema. There is no modified date
 // among them, because the server keeps none, and the row estimate is NULL until something has
 // analysed the table — `(Null)` there says the server has no number, which is the truth of it.
+//
+// It lists **the same tables `Objects` does**, partitions included out, so the list and the tree's
+// own count cannot say two different numbers — a piece of a partitioned table is drawn under that
+// table rather than beside it.
 func (s *session) TableList(
 	ctx context.Context,
 	ns driver.Namespace,
@@ -371,7 +418,7 @@ func (s *session) TableList(
 		FROM pg_catalog.pg_class c
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 		LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
-		WHERE n.nspname = $1 AND c.relkind IN ('r', 'p')
+		WHERE n.nspname = $1 AND c.relkind IN ('r', 'p') AND NOT c.relispartition
 		ORDER BY c.relname`
 
 	db, err := s.pool(ns.Database)

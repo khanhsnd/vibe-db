@@ -48,7 +48,76 @@ func (s *session) TableStructure(
 		return driver.TableStructure{}, err
 	}
 
-	return driver.TableStructure{Columns: columns, Indexes: indexes, ForeignKeys: keys}, nil
+	pieces, err := s.partitions(ctx, ns, table)
+	if err != nil {
+		return driver.TableStructure{}, err
+	}
+
+	return driver.TableStructure{
+		Columns:     columns,
+		Indexes:     indexes,
+		ForeignKeys: keys,
+		Partitions:  pieces,
+	}, nil
+}
+
+// partitions reads the pieces a table's rows are stored in. What the table is cut *by* is a fact of
+// the table and lives in `all_part_tables`, so the join repeats it on every piece — see
+// `driver.Partition`, which is where that arrangement is explained.
+//
+// `high_value` is a `LONG`, which is a type nothing may be done to in a query: it cannot be trimmed,
+// cast or coalesced, so it is read as it lies exactly as a column's default is. It is the *upper*
+// bound of a range piece, which is what `VALUES LESS THAN` takes, and the list a list piece holds.
+//
+// A table that is not partitioned has no rows here and answers with no partitions.
+func (s *session) partitions(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) ([]driver.Partition, error) {
+	const query = `
+		SELECT p.partition_name,
+		       t.partitioning_type,
+		       (SELECT LISTAGG(k.column_name, ', ') WITHIN GROUP (ORDER BY k.column_position)
+		        FROM all_part_key_columns k
+		        WHERE k.owner = t.owner AND k.name = t.table_name),
+		       p.high_value,
+		       p.num_rows
+		FROM all_tab_partitions p
+		JOIN all_part_tables t ON t.owner = p.table_owner AND t.table_name = p.table_name
+		WHERE p.table_owner = :1 AND p.table_name = :2
+		ORDER BY p.partition_position`
+
+	rows, err := s.db.QueryContext(ctx, query, ns.Database, table)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	found, err := sqlkit.ScanPartitions(rows)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	for at, piece := range found {
+		found[at].Bounds = partitionBounds(piece.Method, piece.Bounds)
+	}
+	return found, nil
+}
+
+// partitionBounds is the `VALUES` clause a piece was declared with, put back together from the high
+// value the dictionary keeps — the same job MySQL's does, and for the same reason: what a reader is
+// shown and what an ALTER takes are one text.
+func partitionBounds(method, high string) string {
+	switch {
+	case high == "":
+		return ""
+	case strings.HasPrefix(method, "RANGE"), strings.HasPrefix(method, "INTERVAL"):
+		return "VALUES LESS THAN (" + high + ")"
+	case strings.HasPrefix(method, "LIST"):
+		return "VALUES (" + high + ")"
+	default:
+		return ""
+	}
 }
 
 // columns reads a table's declared shape. Two things about it are Oracle's own.
@@ -67,7 +136,8 @@ func (s *session) columns(
 		       c.data_type,` + fullType + `,
 		       c.nullable,
 		       CASE WHEN k.column_name IS NULL THEN 0 ELSE 1 END,
-		       c.data_default
+		       c.data_default,
+		       m.comments
 		FROM all_tab_columns c
 		LEFT JOIN (
 		    SELECT cc.owner, cc.table_name, cc.column_name
@@ -77,6 +147,8 @@ func (s *session) columns(
 		    WHERE t.constraint_type = 'P'
 		) k ON k.owner = c.owner AND k.table_name = c.table_name
 		   AND k.column_name = c.column_name
+		LEFT JOIN all_col_comments m ON m.owner = c.owner AND m.table_name = c.table_name
+		   AND m.column_name = c.column_name
 		WHERE c.owner = :1 AND c.table_name = :2
 		ORDER BY c.column_id`
 
@@ -90,9 +162,11 @@ func (s *session) columns(
 	for rows.Next() {
 		var name, dataType, declared, nullable string
 		var primaryKey int
-		var defaultValue sql.NullString
+		var defaultValue, comment sql.NullString
 
-		err := rows.Scan(&name, &dataType, &declared, &nullable, &primaryKey, &defaultValue)
+		err := rows.Scan(
+			&name, &dataType, &declared, &nullable, &primaryKey, &defaultValue, &comment,
+		)
 		if err != nil {
 			return nil, translateError(err)
 		}
@@ -104,6 +178,7 @@ func (s *session) columns(
 			Nullable:   nullable == "Y",
 			PrimaryKey: primaryKey == 1,
 			Default:    trimmed(defaultValue),
+			Comment:    comment.String,
 		})
 	}
 	if err := rows.Err(); err != nil {

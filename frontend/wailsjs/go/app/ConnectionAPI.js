@@ -6,6 +6,10 @@ export function AddColumn(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['AddColumn'](arg1, arg2, arg3, arg4);
 }
 
+export function AddPartition(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['ConnectionAPI']['AddPartition'](arg1, arg2, arg3, arg4);
+}
+
 export function AlterColumn(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['app']['ConnectionAPI']['AlterColumn'](arg1, arg2, arg3, arg4, arg5);
 }
@@ -108,6 +112,10 @@ export function DropForeignKey(arg1, arg2, arg3, arg4) {
 
 export function DropIndex(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['DropIndex'](arg1, arg2, arg3, arg4);
+}
+
+export function DropPartition(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['ConnectionAPI']['DropPartition'](arg1, arg2, arg3, arg4);
 }
 
 export function DropSource(arg1, arg2, arg3) {
@@ -286,6 +294,10 @@ export function PreviewTableChanges(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['PreviewTableChanges'](arg1, arg2, arg3, arg4);
 }
 
+export function RefreshMaterializedView(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['RefreshMaterializedView'](arg1, arg2, arg3);
+}
+
 export function RenameBackup(arg1, arg2, arg3, arg4) {
   return window['go']['app']['ConnectionAPI']['RenameBackup'](arg1, arg2, arg3, arg4);
 }
@@ -356,6 +368,10 @@ export function StopTool(arg1) {
 
 export function TestConnection(arg1) {
   return window['go']['app']['ConnectionAPI']['TestConnection'](arg1);
+}
+
+export function TruncatePartition(arg1, arg2, arg3, arg4) {
+  return window['go']['app']['ConnectionAPI']['TruncatePartition'](arg1, arg2, arg3, arg4);
 }
 
 export function TruncateTable(arg1, arg2, arg3) {

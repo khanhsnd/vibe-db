@@ -24,7 +24,8 @@ func (s *session) columns(
 		       pg_catalog.format_type(a.atttypid, a.atttypmod),
 		       NOT a.attnotnull,
 		       COALESCE(a.attnum = ANY (i.indkey), false),
-		       pg_catalog.pg_get_expr(d.adbin, d.adrelid)
+		       pg_catalog.pg_get_expr(d.adbin, d.adrelid),
+		       pg_catalog.col_description(c.oid, a.attnum)
 		FROM pg_catalog.pg_attribute a
 		JOIN pg_catalog.pg_class c ON c.oid = a.attrelid
 		JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -49,9 +50,11 @@ func (s *session) columns(
 	for rows.Next() {
 		var name, dataType, fullType string
 		var nullable, primaryKey bool
-		var defaultValue sql.NullString
+		var defaultValue, comment sql.NullString
 
-		err := rows.Scan(&name, &dataType, &fullType, &nullable, &primaryKey, &defaultValue)
+		err := rows.Scan(
+			&name, &dataType, &fullType, &nullable, &primaryKey, &defaultValue, &comment,
+		)
 		if err != nil {
 			return nil, translateError(err)
 		}
@@ -63,6 +66,7 @@ func (s *session) columns(
 			Nullable:   nullable,
 			PrimaryKey: primaryKey,
 			Default:    sqlkit.TextOrNil(defaultValue),
+			Comment:    comment.String,
 		})
 	}
 	if err := rows.Err(); err != nil {

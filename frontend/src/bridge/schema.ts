@@ -23,11 +23,36 @@ export interface ForeignKey {
   onDelete: string
 }
 
+/**
+ * One piece a table's rows are stored in. `method` and `expression` are facts of the *table*
+ * repeated on every one of its pieces — a list of pieces that did not say what it was cut by would
+ * say very little — and `bounds` is the piece's own, in the engine's own words.
+ */
+export interface Partition {
+  name: string
+  method: string
+  expression: string
+  bounds: string
+  /** What the server *estimates*, and `null` where it has no number. */
+  rows: number | null
+}
+
+/** A partition as the reader declares it; `bounds` is their own clause and travels verbatim. */
+export interface PartitionSpec {
+  name: string
+  bounds: string
+}
+
 /** A table's shape rather than its rows: what the tree draws under a table. */
 export interface TableStructure {
   columns: TableColumn[]
   indexes: TableIndex[]
   foreignKeys: ForeignKey[]
+  /**
+   * Empty both for a table that is not partitioned and on an engine that does not partition at all
+   * — see `hasPartitions`, which is what tells the two apart.
+   */
+  partitions: Partition[]
 }
 
 /**
@@ -41,6 +66,12 @@ export interface FieldSpec {
   nullable: boolean
   default: string | null
   primaryKey: boolean
+  /**
+   * What the field is to be described as on the server. `''` is a field with nothing written about
+   * it, and setting it back to `''` is what clears a description — the rule an altered column
+   * already follows for its default. It is ignored by an engine with nowhere to keep one.
+   */
+  comment: string
 }
 
 /** An index as the designer declares it; `method` empty takes the engine's own default. */
@@ -66,10 +97,20 @@ export interface ForeignKeySpec {
 }
 
 /**
- * Which of the four declared objects a definition belongs to. It is the same word the Go side
- * checks against before anything spells a `DROP` with it, so nothing else may be sent.
+ * Which of the declared objects a definition belongs to. It is the same word the Go side checks
+ * against before anything spells a `DROP` with it, so nothing else may be sent.
+ *
+ * The last three are the kinds only some engines have — see `hasMaterializedViews`, `hasSequences`
+ * and `hasEvents`, which is what keeps a folder that could only ever be empty off the tree.
  */
-export type SourceKind = 'view' | 'function' | 'procedure' | 'trigger'
+export type SourceKind =
+  | 'view'
+  | 'function'
+  | 'procedure'
+  | 'trigger'
+  | 'materializedView'
+  | 'sequence'
+  | 'event'
 
 /**
  * One view, routine or trigger, named. The two fields beside the name are each one engine's way of
@@ -94,7 +135,7 @@ export interface Source extends SourceRef {
 export const NEW_SOURCE: SourceRef = { kind: 'view', name: '', arguments: '', table: '' }
 
 export function emptyFieldSpec(): FieldSpec {
-  return { name: '', type: '', nullable: true, default: null, primaryKey: false }
+  return { name: '', type: '', nullable: true, default: null, primaryKey: false, comment: '' }
 }
 
 /** The field a column already stored would be declared by, which is what an edit starts from. */
@@ -105,6 +146,7 @@ export function fieldSpecOf(column: TableColumn): FieldSpec {
     nullable: column.nullable,
     default: column.default,
     primaryKey: column.primaryKey,
+    comment: column.comment ?? '',
   }
 }
 
@@ -170,6 +212,22 @@ export const schema = {
   dropForeignKey: (sessionId: string, ns: Namespace, table: string, constraint: string) =>
     call(() => api.DropForeignKey(sessionId, ns, table, constraint)),
 
+  /** One more piece of a partitioned table; `bounds` is the reader's own clause. */
+  addPartition: (sessionId: string, ns: Namespace, table: string, spec: PartitionSpec) =>
+    call(() => api.AddPartition(sessionId, ns, table, spec as unknown as app.PartitionInput)),
+
+  /** Removes the piece **and the rows in it** — which is what its confirmation has to say. */
+  dropPartition: (sessionId: string, ns: Namespace, table: string, partition: string) =>
+    call(() => api.DropPartition(sessionId, ns, table, partition)),
+
+  /** Removes the rows and leaves the piece, the way Truncate does one level up. */
+  truncatePartition: (sessionId: string, ns: Namespace, table: string, partition: string) =>
+    call(() => api.TruncatePartition(sessionId, ns, table, partition)),
+
+  /** Recomputes the rows a materialized view stores, which is the one thing only it needs. */
+  refreshMaterializedView: (sessionId: string, ns: Namespace, name: string) =>
+    call(() => api.RefreshMaterializedView(sessionId, ns, name)),
+
   /**
    * The whole reference, not the name: on PostgreSQL two functions may share one name and a
    * trigger is found by its table as well as its own.
@@ -220,6 +278,7 @@ function toColumnInput(field: FieldSpec): app.ColumnInput {
     type: field.type,
     nullable: field.nullable,
     primaryKey: field.primaryKey,
+    comment: field.comment,
     ...(field.default === null ? {} : { default: field.default }),
   } as app.ColumnInput
 }

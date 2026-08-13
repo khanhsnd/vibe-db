@@ -176,12 +176,26 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		WHERE trigger_schema = ?
 		ORDER BY trigger_name`
 
+	// The one engine here with an event, which is a statement the server runs on a schedule of its
+	// own. There is no materialized view and no sequence to read: a number generator on MySQL is a
+	// column's `AUTO_INCREMENT` rather than an object of the schema.
+	const events = `
+		SELECT event_name
+		FROM information_schema.events
+		WHERE event_schema = ?
+		ORDER BY event_name`
+
 	found, err := s.names(ctx, tables, ns.Database)
 	if err != nil {
 		return driver.Objects{}, err
 	}
 
 	seen, err := s.names(ctx, views, ns.Database)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	scheduled, err := s.names(ctx, events, ns.Database)
 	if err != nil {
 		return driver.Objects{}, err
 	}
@@ -216,7 +230,13 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		return driver.Objects{}, translateError(err)
 	}
 
-	return driver.Objects{Tables: found, Views: seen, Routines: stored, Triggers: firing}, nil
+	return driver.Objects{
+		Tables:   found,
+		Views:    seen,
+		Routines: stored,
+		Triggers: firing,
+		Events:   scheduled,
+	}, nil
 }
 
 // TableList reads what MySQL keeps about the tables of a database. The aliases are what the

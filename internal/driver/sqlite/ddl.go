@@ -149,8 +149,11 @@ func (s *session) Source(
 	_ driver.Namespace,
 	ref driver.SourceRef,
 ) (driver.Source, error) {
+	// A SQLite file holds tables, views, indexes and triggers and nothing else, so every other kind
+	// is named back rather than looked for: `sqlite_master` would simply answer with no row, which
+	// reads as "it is not there" when the truth is that it could not be.
 	if ref.Kind != driver.SourceView && ref.Kind != driver.SourceTrigger {
-		return driver.Source{}, domain.Unsupported("a stored routine")
+		return driver.Source{}, domain.Unsupported(string(ref.Kind))
 	}
 
 	const query = `

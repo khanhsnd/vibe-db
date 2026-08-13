@@ -216,12 +216,27 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		WHERE s.name = @p1 AND t.parent_class = 1 AND t.is_ms_shipped = 0
 		ORDER BY t.name`
 
+	// A sequence is the one object of these three this engine has. An indexed view is a view with an
+	// index on it rather than an object of its own, and a scheduled job belongs to SQL Server Agent
+	// — a service beside the engine, whose jobs live in `msdb` and are made by calling a procedure.
+	sequences := `
+		SELECT q.name
+		FROM ` + catalogue + `.sys.sequences q
+		JOIN ` + catalogue + `.sys.schemas s ON s.schema_id = q.schema_id
+		WHERE s.name = @p1
+		ORDER BY q.name`
+
 	found, err := s.names(ctx, tables, ns.Schema)
 	if err != nil {
 		return driver.Objects{}, err
 	}
 
 	seen, err := s.names(ctx, views, ns.Schema)
+	if err != nil {
+		return driver.Objects{}, err
+	}
+
+	counting, err := s.names(ctx, sequences, ns.Schema)
 	if err != nil {
 		return driver.Objects{}, err
 	}
@@ -254,7 +269,13 @@ func (s *session) Objects(ctx context.Context, ns driver.Namespace) (driver.Obje
 		return driver.Objects{}, translateError(err)
 	}
 
-	return driver.Objects{Tables: found, Views: seen, Routines: stored, Triggers: firing}, nil
+	return driver.Objects{
+		Tables:    found,
+		Views:     seen,
+		Routines:  stored,
+		Triggers:  firing,
+		Sequences: counting,
+	}, nil
 }
 
 // TableList reads what SQL Server keeps about the tables of a schema. The row count and the size

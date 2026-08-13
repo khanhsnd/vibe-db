@@ -31,6 +31,12 @@ type Column struct {
 	Nullable   bool
 	PrimaryKey bool
 	Default    *string
+	// Comment is what somebody wrote about this column *on the server*, and is the one fact here
+	// that no statement ever reads: it is documentation the catalogue keeps beside the column. It is
+	// empty both for a column nobody has described and on an engine that has nowhere to keep one —
+	// the two are the same to every reader — and what tells those engines apart is
+	// `EngineInfo.hasColumnComments`.
+	Comment string
 }
 
 // Namespace is where a table lives. MySQL has one level and fills Database alone;
@@ -232,9 +238,14 @@ type Trigger struct {
 	Table string
 }
 
-// SourceKind is which of the four declared objects a definition belongs to. It is one value
-// rather than a flag beside a flag because they differ in exactly one word — the one that
-// drops them — and a caller that has the kind has the word.
+// SourceKind is which of the declared objects a definition belongs to. It is one value rather than
+// a flag beside a flag because they differ in exactly one word — the one that drops them — and a
+// caller that has the kind has the word.
+//
+// The last three are the kinds only some engines have. They are here rather than in a machinery of
+// their own because they are declared the same way the first four are — one statement, read back
+// from the catalogue, edited as text and saved by being dropped and made again — and an engine that
+// has not got one answers `domain.Unsupported` naming it, exactly as it does for a routine.
 type SourceKind string
 
 const (
@@ -242,6 +253,17 @@ const (
 	SourceFunction  SourceKind = "function"
 	SourceProcedure SourceKind = "procedure"
 	SourceTrigger   SourceKind = "trigger"
+	// SourceMaterializedView is a view whose rows are *stored*, so it is refreshed rather than
+	// recomputed — see Schema.RefreshMaterializedView. PostgreSQL and Oracle have one.
+	SourceMaterializedView SourceKind = "materializedView"
+	// SourceSequence is a number generator that belongs to the schema rather than to a column.
+	// PostgreSQL, Oracle and SQL Server have one; MySQL's `AUTO_INCREMENT` is a column's own fact
+	// and not an object, so that engine has none.
+	SourceSequence SourceKind = "sequence"
+	// SourceEvent is a statement the server runs on a schedule of its own. MySQL alone keeps one as
+	// a declaration; every other scheduler here is a procedure called with arguments rather than an
+	// object declared by a statement, which is not a thing this editor could put back.
+	SourceEvent SourceKind = "event"
 )
 
 // Keyword is the word the engines name this kind of object by, and is total on purpose: a kind
@@ -255,6 +277,12 @@ func (k SourceKind) Keyword() string {
 		return "FUNCTION"
 	case SourceTrigger:
 		return "TRIGGER"
+	case SourceMaterializedView:
+		return "MATERIALIZED VIEW"
+	case SourceSequence:
+		return "SEQUENCE"
+	case SourceEvent:
+		return "EVENT"
 	default:
 		return "VIEW"
 	}
@@ -303,6 +331,13 @@ type Objects struct {
 	// Triggers is every trigger of the namespace rather than of one table, because that is the
 	// level the catalogue answers at on all five engines and the level the tree draws a folder for.
 	Triggers []Trigger
+	// The three lists an engine may simply not have. Each is empty on an engine with no such object,
+	// and the frontend draws no folder for one — see `EngineInfo.hasMaterializedViews`,
+	// `hasSequences` and `hasEvents`, which is what keeps a folder that could only ever be empty off
+	// the tree.
+	MaterializedViews []string
+	Sequences         []string
+	Events            []string
 	// KeyCount is how many keys the namespace holds, on an engine whose namespace is a key space.
 	// It is what "how much is in here" means there — the lists above are one fixed table and say
 	// nothing — and is zero on every engine that answers the question by being listed.
@@ -341,12 +376,44 @@ type ForeignKey struct {
 	OnDelete          string
 }
 
+// Partition is one piece a table's rows are stored in. It is part of a table's *shape* rather than
+// an object of the schema, even on the engine where each piece is itself a table, because that is
+// how a reader looks at one: a table is partitioned, and these are its partitions.
+//
+// Method and Expression are facts of the **table** and are repeated on every one of its partitions,
+// because the catalogues answer for them that way and because a list of pieces that did not say what
+// it was cut by would say very little. Bounds is the piece's own — what it holds, in the engine's
+// own words: `VALUES LESS THAN (2027)`, `FOR VALUES FROM ('2026-01-01') TO ('2027-01-01')`, a hash
+// remainder. It travels verbatim into a statement for the reason a column's type does.
+//
+// Rows is what the server *estimates*, and is nil where it has no number rather than zero — the
+// same bargain a table list's row count is.
+type Partition struct {
+	Name       string
+	Method     string
+	Expression string
+	Bounds     string
+	Rows       *int64
+}
+
+// PartitionSpec is a partition as the reader declares it. Bounds is their own text and reaches the
+// statement verbatim, which is the honest shape for a clause whose grammar is different on every
+// engine that has one and different again per partitioning method.
+type PartitionSpec struct {
+	Name   string
+	Bounds string
+}
+
 // TableStructure is a table's shape rather than its rows: what the tree draws underneath it
 // and what the designer shows.
 type TableStructure struct {
 	Columns     []Column
 	Indexes     []Index
 	ForeignKeys []ForeignKey
+	// Partitions is empty both for a table that is not partitioned and on an engine that does not
+	// partition at all, the two being the same to a reader looking at this table; what tells those
+	// engines apart is `EngineInfo.hasPartitions`.
+	Partitions []Partition
 }
 
 // ColumnSpec is a column as the user declares it, which is not what Column reports back.
@@ -359,6 +426,11 @@ type ColumnSpec struct {
 	Nullable   bool
 	Default    *string
 	PrimaryKey bool
+	// Comment is what the column is to be described as. It is a plain string rather than a pointer
+	// because a designer sends the whole column every time: an empty one is a column with nothing
+	// written about it, and setting it back to empty is what clears the description. It is quoted as
+	// a **string literal** wherever it reaches a statement, DDL binding no arguments.
+	Comment string
 }
 
 // TableSpec is a CREATE TABLE: a name and its columns, its primary key taken from whichever
@@ -407,17 +479,24 @@ const (
 	ChangeDropIndex        TableChangeKind = "dropIndex"
 	ChangeCreateForeignKey TableChangeKind = "createForeignKey"
 	ChangeDropForeignKey   TableChangeKind = "dropForeignKey"
+	// The three that change how a table's rows are stored rather than what they are. Adding one is
+	// the reader's own bounds clause; dropping one **takes its rows with it**, which is what makes it
+	// a change worth a preview even more than the rest.
+	ChangeAddPartition      TableChangeKind = "addPartition"
+	ChangeDropPartition     TableChangeKind = "dropPartition"
+	ChangeTruncatePartition TableChangeKind = "truncatePartition"
 )
 
 // TableChange is one change to a table's shape, in the form both spelling it and running it take.
 // Name is what the change is addressed to — the column, index or constraint — and only the field
 // belonging to the kind is read.
 type TableChange struct {
-	Kind   TableChangeKind
-	Name   string
-	Column ColumnSpec
-	Index  IndexSpec
-	Key    ForeignKeySpec
+	Kind      TableChangeKind
+	Name      string
+	Column    ColumnSpec
+	Index     IndexSpec
+	Key       ForeignKeySpec
+	Partition PartitionSpec
 }
 
 // DatabaseSpec is a CREATE DATABASE as the dialog declares it. How much of it an engine reads
@@ -695,6 +774,20 @@ type Schema interface {
 	DropIndex(ctx context.Context, ns Namespace, table, index string) error
 	CreateForeignKey(ctx context.Context, ns Namespace, table string, spec ForeignKeySpec) error
 	DropForeignKey(ctx context.Context, ns Namespace, table, constraint string) error
+	// The three partition changes, each beside its spelling in AlterStatements for the reason every
+	// other change is: one list goes to the preview and to the run. An engine that partitions nothing
+	// spells nothing and answers `domain.Unsupported` here.
+	//
+	// DropPartition removes the rows with the piece and TruncatePartition removes the rows alone —
+	// the same difference DropTable and TruncateTable have, one level down.
+	AddPartition(ctx context.Context, ns Namespace, table string, spec PartitionSpec) error
+	DropPartition(ctx context.Context, ns Namespace, table, partition string) error
+	TruncatePartition(ctx context.Context, ns Namespace, table, partition string) error
+	// RefreshMaterializedView recomputes the rows a materialized view stores. It is the one thing
+	// done to such a view that is not done to an ordinary one, and it is a *run* with no spelling
+	// beside it because there is nothing to choose: a refresh is one statement with no options this
+	// app offers. An engine with no materialized views answers `domain.Unsupported` naming it.
+	RefreshMaterializedView(ctx context.Context, ns Namespace, name string) error
 	// AlterStatements spells changes to a table's shape as the statements that would make them, in
 	// the order they are given, and **runs none of them**. It is what a migration shows the reader
 	// before anything happens, and it is the driver's for the reason every other statement is:

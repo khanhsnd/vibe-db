@@ -27,6 +27,13 @@ const REMOVAL_COST: Record<SourceKind, string> = {
   function: 'Anything that calls it stops working.',
   procedure: 'Anything that calls it stops working.',
   trigger: 'The rows it has already written stay; nothing fires on that table again.',
+  // The one of these whose drop loses rows: a materialized view *stores* what it read, and the
+  // tables behind it are the only place that comes back from.
+  materializedView: 'The rows it stored go with it; the tables it read from stay.',
+  // And the one whose drop loses a *number*: a sequence made again starts wherever its new
+  // declaration says, which is not necessarily past the values rows already hold.
+  sequence: 'Where it had got to goes with it; anything taking a value from it stops working.',
+  event: 'Nothing it was scheduled to do runs again.',
 }
 
 /**

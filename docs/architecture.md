@@ -139,11 +139,13 @@ and because an empty list is already what "this engine has no concept of that" m
 `AlterStatements`, the SQLite adapter needs no override for either half of it.
 
 **A third is a flag holding statements rather than a fact about one.** `Starters` is the skeleton a
-reader begins a new view, routine or trigger from, four strings per engine, and it is on `Dialect`
+reader begins a new declared object from, seven strings per engine, and it is on `Dialect`
 for the reason everything else here is: a body is *grammar* — `BEGIN … END`, a language-tagged
 string, `AS`, `IS`, and for a trigger a `FOR EACH ROW` one engine has not got at all — so a template
 in a component would be a component spelling a statement. It runs nothing; what a Save runs is the
-reader's own buffer, which one speller previews whole.
+reader's own buffer, which one speller previews whole. Three of those seven are blank on most
+engines, a starter that is empty being how a `Dialect` says this engine has no such object at all:
+a materialized view, a sequence and an event.
 
 **A fourth is where a trigger diverges from every other object.** `TriggerOnTable` says a trigger
 belongs to its *table* rather than to the schema, so PostgreSQL alone drops one by naming both and
@@ -196,7 +198,10 @@ contributes nothing, which is how SQLite says it cannot alter a column at all.
 Every statement of it lives on `Dialect` behind a flag, which is the form every difference between
 the engines takes — `RestatesColumn` and `RestateClause` (`MODIFY COLUMN` and `MODIFY` against one
 `ALTER COLUMN` action per fact), `SeparatesDefault`, `MethodBeforeTable`, `IndexIsObject`,
-`QualifiesIndexName`, `IndexTableIsBare`, `DropsIndexOnTable`, `ForeignKeyIsConstraint`. What is left
+`QualifiesIndexName`, `IndexTableIsBare`, `DropsIndexOnTable`, `ForeignKeyIsConstraint`,
+`ColumnCommentInline` and `CommentsOnObject` (a description of a column is a clause of it or a
+statement of its own), and `Partitions`, whose three values are the three grammars for naming one
+piece of a table — see [features/partitions.md](features/partitions.md). What is left
 in an adapter's `ddl.go` is what genuinely cannot be shared: the catalogue reads, `SetPrimaryKey`
 where the old key's constraint name has to be *read* before it can be dropped, and the rename that
 is a procedure rather than a clause.

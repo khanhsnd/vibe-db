@@ -238,9 +238,11 @@ func TestAlterStatementsSpellsEachChangeTheEnginesOwnWay(t *testing.T) {
 			Column: driver.ColumnSpec{Name: "note", Type: "varchar(20)", Nullable: true, Default: &note},
 		},
 		{
-			Kind:   driver.ChangeAlterColumn,
-			Name:   "name",
-			Column: driver.ColumnSpec{Name: "name", Type: "varchar(100)"},
+			Kind: driver.ChangeAlterColumn,
+			Name: "name",
+			Column: driver.ColumnSpec{
+				Name: "name", Type: "varchar(100)", Comment: "who they are",
+			},
 		},
 		{
 			Kind:  driver.ChangeCreateIndex,
@@ -254,7 +256,10 @@ func TestAlterStatementsSpellsEachChangeTheEnginesOwnWay(t *testing.T) {
 		"ALTER TABLE `shop`.`users` DROP INDEX `by_email`",
 		"ALTER TABLE `shop`.`users` DROP COLUMN `gone`",
 		"ALTER TABLE `shop`.`users` ADD COLUMN `note` varchar(20) DEFAULT 'x'",
-		"ALTER TABLE `shop`.`users` MODIFY COLUMN `name` varchar(100) NOT NULL",
+		// The description is a clause of the column here, so a restated column carries it and the
+		// change is still one statement.
+		"ALTER TABLE `shop`.`users` MODIFY COLUMN `name` varchar(100) NOT NULL " +
+			"COMMENT 'who they are'",
 		"CREATE UNIQUE INDEX `by_email` USING btree ON `shop`.`users` (`email`)",
 	}
 	for at := range want {
@@ -273,6 +278,9 @@ func TestAlterStatementsSpellsEachChangeTheEnginesOwnWay(t *testing.T) {
 		`ALTER TABLE "public"."users" DROP COLUMN "gone"`,
 		`ALTER TABLE "public"."users" ADD COLUMN "note" varchar(20) DEFAULT 'x'`,
 		`ALTER TABLE "public"."users" ALTER COLUMN "name" TYPE varchar(100), ALTER COLUMN "name" SET NOT NULL, ALTER COLUMN "name" DROP DEFAULT`,
+		// The description is a statement of its own here, which is why an altered column can be two
+		// — the same shape a SQL Server default takes, one engine over.
+		`COMMENT ON COLUMN "public"."users"."name" IS 'who they are'`,
 		`CREATE UNIQUE INDEX "by_email" ON "public"."users" USING btree ("email")`,
 	}
 	for at := range wantPG {

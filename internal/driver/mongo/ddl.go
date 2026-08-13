@@ -415,6 +415,32 @@ func (*session) DropForeignKey(context.Context, driver.Namespace, string, string
 	return domain.Unsupported("a foreign key")
 }
 
+// A collection is sharded rather than partitioned, and a shard is a *server* the cluster chose
+// rather than a piece of a collection the reader declared — there is nothing here to add, drop or
+// empty by name. A MongoDB view is a pipeline read on demand and stores no rows, so there is nothing
+// to refresh either; what that engine has instead is an on-demand materialized view, which is a
+// pipeline ending in `$merge` and so an aggregation a reader runs rather than an object.
+func (*session) AddPartition(
+	context.Context,
+	driver.Namespace,
+	string,
+	driver.PartitionSpec,
+) error {
+	return domain.Unsupported("a partition: a collection is sharded rather than partitioned")
+}
+
+func (*session) DropPartition(context.Context, driver.Namespace, string, string) error {
+	return domain.Unsupported("a partition: a collection is sharded rather than partitioned")
+}
+
+func (*session) TruncatePartition(context.Context, driver.Namespace, string, string) error {
+	return domain.Unsupported("a partition: a collection is sharded rather than partitioned")
+}
+
+func (*session) RefreshMaterializedView(context.Context, driver.Namespace, string) error {
+	return domain.Unsupported("a materialized view: a MongoDB view stores no rows")
+}
+
 // RowStatements spells documents as the commands that write them into a collection, which is what
 // an export, the data half of a dump and an import all are.
 //

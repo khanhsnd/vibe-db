@@ -1,4 +1,4 @@
-# Views, routines and triggers
+# Definitions
 
 [← Features and UI behaviour](../features.md)
 
@@ -7,7 +7,8 @@
 A table is a *shape*, and [the designer](schema-changes.md) draws it as three grids of fields,
 indexes and keys. A view, a routine and a trigger are not: a view is a query and the other two are
 programs, and none of them is a list of anything. So they are edited as what they are — the
-**statement that declares them** — in a tab of their own.
+**statement that declares them** — in a tab of their own. A **materialized view**, a **sequence**
+and an **event** join them, for exactly the same reason and through exactly the same machinery.
 
 **The buffer is the whole `CREATE`**, exactly as the server answered with it. Four of the five SQL
 engines will say what they hold:
@@ -19,6 +20,24 @@ engines will say what they hold:
 | SQLite | `sqlite_master.sql` — the statement the file stores | — | `sqlite_master.sql`, the same read |
 | SQL Server | `sys.sql_modules.definition` | the same | the same |
 | Oracle | `all_views.text`, under a `CREATE OR REPLACE` spelled by the driver | `all_source`, under one | `all_source`, under one |
+
+The three kinds only some engines have are read the same way where the engine answers, and
+*described* where it keeps numbers rather than a statement:
+
+| Kind | Where it exists | Its definition comes from |
+|---|---|---|
+| **Materialized view** | PostgreSQL, Oracle | `pg_get_viewdef` and `all_mviews.query` — the query alone, under a `CREATE MATERIALIZED VIEW` spelled by the driver |
+| **Sequence** | PostgreSQL, Oracle, SQL Server | `pg_sequences`, `all_sequences`, `sys.sequences` — **numbers, not a statement**, so the whole `CREATE SEQUENCE` is put together out of them |
+| **Event** | MySQL | `SHOW CREATE EVENT`, whole — schedule, definer and body |
+
+A sequence's `START WITH` is **where it has got to** rather than where it began, because a save
+drops it and makes it again: a sequence restarted at its original number would hand out values rows
+already hold. That is the one place a description here is deliberately not the declaration that was
+originally run, and it is the honest one.
+
+Neither a materialized view nor a sequence is spelled `OR REPLACE` — no engine has that form for
+either — so a save of one is the drop and the create the Changes pane shows, and **a drop takes what
+was stored with it**: a materialized view's rows, a sequence's current value.
 
 It is a **read** and not a render wherever it can be, for the reason a dump's `CREATE TABLE` is on
 the engines that answer for themselves: a declaration put back together out of a catalogue is only
@@ -73,10 +92,14 @@ of anything that *is* one — a routine or a trigger, which have no rows and no 
 | Where | What it offers |
 |---|---|
 | A **view** | `Open View` — its rows, read-only, in a table tab — then `Design View`, `New View…`, Compare, and `Delete View` |
+| A **materialized view** | `Open Materialized View` — its *stored* rows — then `Design`, `New…`, **`Refresh Data`**, and `Delete` |
+| A **sequence** | `Design Sequence`, `New Sequence…`, and `Delete Sequence` |
+| An **event** | `Design Event`, `New Event…`, and `Delete Event` |
 | A **function** or a **procedure** | `Design Function` / `Design Procedure`, `New Function…`, `New Procedure…`, and `Delete …` |
 | A **trigger** | `Design Trigger`, `New Trigger…` on the same table, and `Delete Trigger` |
 | A **table** | `New Trigger…`, with the rest of what is declared there — the only row that names the table one would fire on |
 | The **`Views`** folder | `New View…` |
+| The **`Materialized Views`**, **`Sequences`** and **`Events`** folders | `New …` for the one kind each of them holds. None is drawn at all on an engine that has not got that object — see [engines.md](engines.md#what-each-engine-can-be-asked-to-do) |
 | The **`Routines`** folder | `New Function…` and `New Procedure…` — no engine has a folder for one of them alone |
 | The **`Triggers`** folder | `New Trigger — right-click a table`, drawn dead. A trigger is declared *about* a table and this folder names none, so the item says where it is rather than vanishing — the rule [Compare's second table](../grid.md) follows |
 
@@ -133,9 +156,21 @@ having never left this machine.
 business — `CALL …` or `SELECT f(…)` — and this tab declares rather than calls. A trigger is not run
 from anywhere: what fires it is a write to its table.
 
-**A materialised view is not listed at all**, so it has no definition to open either: it is dropped
-and refreshed by statements of its own, and a list that cannot be acted on is worse than one that
-does not claim it. See [schema-tree.md](schema-tree.md#browsing-a-schema).
+**`Refresh Data` is the one item a materialized view has that an ordinary one does not.** Its rows
+are *stored*, so they go stale rather than being re-read: `REFRESH MATERIALIZED VIEW` on PostgreSQL
+and `DBMS_MVIEW.REFRESH` on Oracle, which is a **flag** on `sqlkit.Dialect` and not a second
+speller. It is not confirmed — it loses nothing and changes no shape — and it takes as long as the
+query behind it takes.
+
+**A sequence's value is not edited from here.** `ALTER SEQUENCE … RESTART` and `setval` are not the
+same statement on any two engines and one of them is a function call; changing where a generator has
+got to is a query tab's business, where the server answers for itself. The definition tab **shows**
+where it has got to, which is the fact a reader came for.
+
+**An event exists on MySQL alone.** Every other scheduler here is a *procedure called with
+arguments* — Oracle's `DBMS_SCHEDULER.CREATE_JOB`, SQL Server Agent's `msdb.dbo.sp_add_job` — which
+is not a declaration anything could read back and put again, so those engines answer
+[`UNSUPPORTED`](../errors.md) naming it rather than listing a folder they could not fill.
 
 **A trigger the server made for itself is not listed**, and neither is one the reader could not act
 on: PostgreSQL's internal triggers are how a foreign key is enforced — the *constraint* is the thing

@@ -174,6 +174,10 @@ type TableColumn struct {
 	Nullable   bool    `json:"nullable"`
 	PrimaryKey bool    `json:"primaryKey"`
 	Default    *string `json:"default"`
+	// What somebody wrote about this column on the server, and `''` both for a column nobody has
+	// described and on an engine with nowhere to keep one — see `EngineInfo.hasColumnComments`,
+	// which is what tells the two apart.
+	Comment string `json:"comment"`
 }
 
 // TableRows is one page of a table. `statement` is the read that produced it, exactly as it ran,
@@ -254,6 +258,11 @@ type Objects struct {
 	Views    []string      `json:"views"`
 	Routines []RoutineInfo `json:"routines"`
 	Triggers []TriggerInfo `json:"triggers"`
+	// The three folders an engine may not have at all. Each is empty where it has not, and the tree
+	// draws no folder for one — see `EngineInfo.hasMaterializedViews`, `hasSequences`, `hasEvents`.
+	MaterializedViews []string `json:"materializedViews"`
+	Sequences         []string `json:"sequences"`
+	Events            []string `json:"events"`
 	// How many keys the namespace holds, on an engine whose namespace is a key space, and zero on
 	// one whose namespace is counted by the lists above — see driver.Objects.
 	KeyCount int64 `json:"keyCount"`
@@ -277,12 +286,33 @@ type ForeignKeyInfo struct {
 	OnDelete          string   `json:"onDelete"`
 }
 
+// PartitionInfo is one piece a table's rows are stored in. `method` and `expression` are facts of
+// the *table* repeated on each of its pieces, and `bounds` is the piece's own — what it holds, in
+// the engine's own words. `rows` is what the server estimates and is null where it has no number.
+type PartitionInfo struct {
+	Name       string `json:"name"`
+	Method     string `json:"method"`
+	Expression string `json:"expression"`
+	Bounds     string `json:"bounds"`
+	Rows       *int64 `json:"rows"`
+}
+
+// PartitionInput is a partition as the reader declares it. `bounds` is their own clause and reaches
+// the statement verbatim, the way a column's type does — see driver.PartitionSpec for why.
+type PartitionInput struct {
+	Name   string `json:"name"`
+	Bounds string `json:"bounds"`
+}
+
 // TableStructure is a table's shape rather than its rows: what the tree draws under a table
 // and what the designer shows.
 type TableStructure struct {
 	Columns     []TableColumn    `json:"columns"`
 	Indexes     []IndexInfo      `json:"indexes"`
 	ForeignKeys []ForeignKeyInfo `json:"foreignKeys"`
+	// Empty both for a table that is not partitioned and on an engine that does not partition at
+	// all — see `EngineInfo.hasPartitions`, which is what tells the two apart.
+	Partitions []PartitionInfo `json:"partitions"`
 }
 
 // IndexInput is an index as the designer declares it. `method` reaches the statement verbatim,
@@ -316,6 +346,10 @@ type ColumnInput struct {
 	Nullable   bool    `json:"nullable"`
 	Default    *string `json:"default"`
 	PrimaryKey bool    `json:"primaryKey"`
+	// What the column is to be described as, quoted as a string literal on its way into a statement.
+	// An empty one is a column with nothing written about it, and setting it back to empty is what
+	// clears a description — the rule an altered column already follows for its default.
+	Comment string `json:"comment"`
 }
 
 type TableSpecInput struct {
@@ -749,11 +783,12 @@ type DataDiff struct {
 // It is the *same* list for both halves of the round trip: PreviewTableChanges spells it and
 // ApplyTableChanges runs it, so what the reader was shown and what happened cannot be two things.
 type TableChangeInput struct {
-	Kind   string          `json:"kind"`
-	Name   string          `json:"name"`
-	Column ColumnInput     `json:"column"`
-	Index  IndexInput      `json:"index"`
-	Key    ForeignKeyInput `json:"key"`
+	Kind      string          `json:"kind"`
+	Name      string          `json:"name"`
+	Column    ColumnInput     `json:"column"`
+	Index     IndexInput      `json:"index"`
+	Key       ForeignKeyInput `json:"key"`
+	Partition PartitionInput  `json:"partition"`
 }
 
 // RowWriteInput is a batch of rows and what they are to do to a table — the data half of a
@@ -1089,12 +1124,17 @@ func toLogDTOs(entries []domain.LogEntry) []LogEntry {
 // answered in one place rather than guessed at in two.
 func (in TableChangeInput) toDriver() driver.TableChange {
 	return driver.TableChange{
-		Kind:   driver.TableChangeKind(in.Kind),
-		Name:   in.Name,
-		Column: in.Column.toDriver(),
-		Index:  in.Index.toDriver(),
-		Key:    in.Key.toDriver(),
+		Kind:      driver.TableChangeKind(in.Kind),
+		Name:      in.Name,
+		Column:    in.Column.toDriver(),
+		Index:     in.Index.toDriver(),
+		Key:       in.Key.toDriver(),
+		Partition: in.Partition.toDriver(),
 	}
+}
+
+func (in PartitionInput) toDriver() driver.PartitionSpec {
+	return driver.PartitionSpec{Name: in.Name, Bounds: in.Bounds}
 }
 
 func toDriverChanges(in []TableChangeInput) []driver.TableChange {
@@ -1124,6 +1164,7 @@ func (in ColumnInput) toDriver() driver.ColumnSpec {
 		Nullable:   in.Nullable,
 		Default:    in.Default,
 		PrimaryKey: in.PrimaryKey,
+		Comment:    in.Comment,
 	}
 }
 
@@ -1505,10 +1546,22 @@ func toTableStructureDTO(source driver.TableStructure) TableStructure {
 		keys = append(keys, toForeignKeyDTO(key))
 	}
 
+	pieces := make([]PartitionInfo, 0, len(source.Partitions))
+	for _, piece := range source.Partitions {
+		pieces = append(pieces, PartitionInfo{
+			Name:       piece.Name,
+			Method:     piece.Method,
+			Expression: piece.Expression,
+			Bounds:     piece.Bounds,
+			Rows:       piece.Rows,
+		})
+	}
+
 	return TableStructure{
 		Columns:     toColumnDTOs(source.Columns),
 		Indexes:     indexes,
 		ForeignKeys: keys,
+		Partitions:  pieces,
 	}
 }
 
@@ -1657,10 +1710,13 @@ func (in ForeignKeyInput) toDriver() driver.ForeignKeySpec {
 // wire is checked against: `Kind` reaches a DROP as the word naming the object, so a value nothing
 // vouched for would be text on its way into a statement.
 var sourceKinds = map[string]driver.SourceKind{
-	string(driver.SourceView):      driver.SourceView,
-	string(driver.SourceFunction):  driver.SourceFunction,
-	string(driver.SourceProcedure): driver.SourceProcedure,
-	string(driver.SourceTrigger):   driver.SourceTrigger,
+	string(driver.SourceView):             driver.SourceView,
+	string(driver.SourceFunction):         driver.SourceFunction,
+	string(driver.SourceProcedure):        driver.SourceProcedure,
+	string(driver.SourceTrigger):          driver.SourceTrigger,
+	string(driver.SourceMaterializedView): driver.SourceMaterializedView,
+	string(driver.SourceSequence):         driver.SourceSequence,
+	string(driver.SourceEvent):            driver.SourceEvent,
 }
 
 func (in SourceRef) toDriver() (driver.SourceRef, error) {
@@ -1720,11 +1776,14 @@ func toObjectsDTO(source driver.Objects) Objects {
 	}
 
 	return Objects{
-		Tables:   source.Tables,
-		Views:    source.Views,
-		Routines: routines,
-		Triggers: triggers,
-		KeyCount: source.KeyCount,
+		Tables:            source.Tables,
+		Views:             source.Views,
+		Routines:          routines,
+		Triggers:          triggers,
+		MaterializedViews: names(source.MaterializedViews),
+		Sequences:         names(source.Sequences),
+		Events:            names(source.Events),
+		KeyCount:          source.KeyCount,
 	}
 }
 
@@ -1756,6 +1815,7 @@ func toColumnDTO(column driver.Column) TableColumn {
 		Nullable:   column.Nullable,
 		PrimaryKey: column.PrimaryKey,
 		Default:    column.Default,
+		Comment:    column.Comment,
 	}
 }
 

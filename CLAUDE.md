@@ -84,8 +84,12 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     what differs between the engines is a **flag** on `Dialect`, never a second spelling. An Apply
     **stops at the first failure** and there is no transaction around it — the preview is what
     protects the reader, which is why it has to be exact.
-17. **A view, a routine and a trigger are edited as the statement that declares them, and that
-    statement is the engine's own words.** `driver.Schema.Source` is a *read* wherever the engine will
+17. **A declared object is edited as the statement that declares it, and that
+    statement is the engine's own words.** There are seven kinds — a view, a function, a procedure, a
+    trigger, a **materialized view**, a **sequence** and an **event** — and they are one machinery
+    because they differ in one word, the one that drops them (`SourceKind.Keyword`). The three at
+    the end exist on some engines and not others, and an engine without one answers
+    `domain.Unsupported` naming it, exactly as it does for a routine. `driver.Schema.Source` is a *read* wherever the engine will
     answer for itself — `SHOW CREATE`, `pg_get_functiondef`, `pg_get_triggerdef`, `sqlite_master`,
     `sys.sql_modules`, `all_source` — for the reason `CreateStatements` is one, and where an engine
     answers with the body alone the `CREATE` in front of it is the **adapter's** to spell. The buffer
@@ -196,6 +200,20 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     `processLabel`, never a comparison against an engine's name.
 
 
+23. **A column's description and a table's partitions are the two facts about a table's shape that no
+    statement of this app ever reads.** A **comment** on a column is documentation the catalogue keeps
+    beside it, and what differs between the engines is which of two shapes it takes — a *clause of the
+    column* (`ColumnCommentInline`) or a `COMMENT ON COLUMN` *statement of its own*
+    (`CommentsOnObject`) — never a second speller, and an engine with neither draws no box rather than
+    one whose contents a Save would throw away (`EngineInfo.hasColumnComments`). A **partition** is a
+    named piece of one table's rows, so it is drawn under that table beside its fields and its indexes
+    and never in a folder of the namespace; the three grammars for changing one are a flag
+    (`sqlkit.PartitionStyle`), the bounds are the reader's own words and travel verbatim the way a
+    column's type does, and each of the three changes sits beside its spelling on `driver.Schema` —
+    rule 13 again. What an engine has not got is `domain.Unsupported` naming it and
+    `EngineInfo.hasPartitions` saying so to the frontend.
+
+
 ## Where to read before changing something
 
 | Task | Read |
@@ -210,7 +228,8 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Find out what exists at all | [docs/features.md](docs/features.md) — the index, one file per feature under [docs/features/](docs/features/) |
 | Change how a connection is made or guarded | [docs/features/connections.md](docs/features/connections.md) |
 | Change the tree, the table list or a schema change | [docs/features/schema-tree.md](docs/features/schema-tree.md), [docs/features/schema-changes.md](docs/features/schema-changes.md) |
-| Change a view's, a routine's or a trigger's definition | [docs/features/definitions.md](docs/features/definitions.md) |
+| Change a view's, a routine's or a trigger's definition — or a materialized view, a sequence, an event | [docs/features/definitions.md](docs/features/definitions.md) |
+| Touch a partition of a table | [docs/features/partitions.md](docs/features/partitions.md) |
 | Change a query tab, a console or a file run | [docs/features/query-tab.md](docs/features/query-tab.md), [docs/features/script.md](docs/features/script.md), [docs/features/console.md](docs/features/console.md) |
 | Turn autocommit off, or touch Begin / Commit / Rollback | [docs/features/transaction.md](docs/features/transaction.md) |
 | Touch a user, a role or a privilege | [docs/architecture.md](docs/architecture.md#who-may-do-what), [docs/features/accounts.md](docs/features/accounts.md) |
@@ -237,7 +256,8 @@ A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `hasTriggers`, `documents`,
 `keys`, `isFile`, `createsTables`, `createsDatabases`, `hasViews`, `hasSource`, `hasBackups`, `hasTransactions`,
 `hasAccounts`, `accountLabel`, `hasRoles`, `hasMonitor`, `cancelsStatement`, `closesConnection`,
-`processLabel`,
+`processLabel`, `hasMaterializedViews`, `hasSequences`, `hasEvents`, `hasPartitions`,
+`hasColumnComments`,
 `dumpTool`, `restoreTool`, `needsUser`, `needsDatabase`, `databaseLabel` — and never a comparison
 against an engine's name in a component.
 The two exceptions are the lists that *are* per-engine data rather than a capability: the types a

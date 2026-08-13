@@ -4,6 +4,8 @@ import {app} from '../models';
 
 export function AddColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:app.ColumnInput):Promise<void>;
 
+export function AddPartition(arg1:string,arg2:app.Namespace,arg3:string,arg4:app.PartitionInput):Promise<void>;
+
 export function AlterColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:app.ColumnInput):Promise<void>;
 
 export function ApplyAccountChanges(arg1:string,arg2:Array<app.AccountChangeInput>):Promise<void>;
@@ -55,6 +57,8 @@ export function DropDatabase(arg1:string,arg2:string):Promise<void>;
 export function DropForeignKey(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
 
 export function DropIndex(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
+
+export function DropPartition(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
 
 export function DropSource(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<void>;
 
@@ -144,6 +148,8 @@ export function PreviewSource(arg1:string,arg2:app.Namespace,arg3:app.SourceSave
 
 export function PreviewTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<app.TableChangeInput>):Promise<Array<string>>;
 
+export function RefreshMaterializedView(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
+
 export function RenameBackup(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
 
 export function RenameColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:string,arg5:string):Promise<void>;
@@ -179,6 +185,8 @@ export function StopTableRows(arg1:string):Promise<void>;
 export function StopTool(arg1:string):Promise<void>;
 
 export function TestConnection(arg1:app.ProfileInput):Promise<app.TestResult>;
+
+export function TruncatePartition(arg1:string,arg2:app.Namespace,arg3:string,arg4:string):Promise<void>;
 
 export function TruncateTable(arg1:string,arg2:app.Namespace,arg3:string):Promise<void>;
 

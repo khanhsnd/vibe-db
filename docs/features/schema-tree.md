@@ -7,19 +7,29 @@
 The tree has as many levels, and as many folders, as the engine does:
 
 ```
-MySQL         connection → database →          Tables       → table      → Fields       → field
-PostgreSQL    connection → database → schema →  Views        → view              Indexes      → index
-                                                Functions    → function          Foreign Keys → foreign key
-                                                Triggers     → trigger
-                                                Backups      → backup
+MySQL         connection → database →          Tables             → table → Fields       → field
+PostgreSQL    connection → database → schema →  Views             → view           Indexes      → index
+                                                Materialized Views                 Foreign Keys → foreign key
+                                                Sequences                          Partitions   → partition
+                                                Events
+                                                Functions          → function
+                                                Triggers           → trigger
+                                                Backups            → backup
 
 MongoDB       connection → database →          Collections  → collection → Fields  → field
                                                 Views        → view              Indexes → index
 ```
 
+**Four of those folders are only on the engines that have the object.** `Materialized Views` is
+PostgreSQL's and Oracle's, `Sequences` is theirs and SQL Server's, `Events` is MySQL's alone, and
+`Partitions` — which is under a *table* rather than a namespace, being part of its shape — is drawn
+on the three engines that name a piece. `hasMaterializedViews`, `hasSequences`, `hasEvents` and
+`hasPartitions` are what say so. See [definitions.md](definitions.md#what-a-definition-is) and
+[partitions.md](partitions.md).
+
 **`Backups` is the one folder under a namespace that stands for nothing on the server**: what is in
 it is files on this machine. It asks the server nothing, it is **not filled by the read the other
-four share** — so it has a Refresh of its own — and a press on it both expands the branch and opens
+object folders share** — so it has a Refresh of its own — and a press on it both expands the branch and opens
 the list beside it. See [features/backup.md](backup.md#the-branch).
 
 **A folder for something the engine has not got is not drawn.** MongoDB has no stored routines —
@@ -38,8 +48,9 @@ document store cannot have one, which is also why MongoDB is offered `Empty` alo
 storage to reset, so truncating and emptying would be one command under two names.
 
 Each level loads on first expand and is cached until disconnect: a PostgreSQL database loads its
-schemas, whichever node owns the object folders loads **its tables, views, routines and triggers in
-one read**, and a table loads its shape — fields, indexes and foreign keys, also in one read. The
+schemas, whichever node owns the object folders loads **every one of those folders in
+one read**, and a table loads its shape — fields, indexes, foreign keys and partitions, also in one
+read. The
 reason is the same both times: expanding any one folder needs every folder's count, so one read
 answers all of them — which is why that read happens on **the namespace's own expand** and not on its
 folders': the folders arrive with their counts already on them, and there is no second click that
@@ -48,7 +59,7 @@ MongoDB database — marks it the active namespace for that connection, which is
 inherits, and the row is drawn in the success colour to say so.
 
 **A namespace's badge is how much is in it, and a Redis database's is how many keys.** On every other
-engine that number is what the read already listed — tables, views, routines and triggers added up —
+engine that number is what the read already listed — every object folder added up —
 but a key space lists one fixed table, so counting the list would say `1` of every database. The
 count is the server's own `DBSIZE`, arriving with that same read, so the reader can tell which of the
 sixteen databases has anything in it. See [architecture.md](../architecture.md#the-key-value-store).

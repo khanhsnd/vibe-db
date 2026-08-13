@@ -64,9 +64,13 @@ func TestAlterStatementsOnOracle(t *testing.T) {
 		},
 	}
 
+	// Oracle is the one engine that restates the column *and* writes its description separately,
+	// which is why an altered column here is two statements and a blank description is still spelled:
+	// leaving it out would leave whatever was written there before.
 	want := []string{
 		`DROP INDEX "HR"."BY_EMAIL"`,
 		`ALTER TABLE "HR"."USERS" MODIFY "NAME" VARCHAR2(100) NOT NULL DEFAULT 'x'`,
+		`COMMENT ON COLUMN "HR"."USERS"."NAME" IS ''`,
 		`CREATE INDEX "HR"."BY_EMAIL" ON "HR"."USERS" ("EMAIL")`,
 	}
 	assertStatements(t, "Oracle", DDL{Dialect: Oracle}.AlterStatements(ns, "USERS", changes), want)

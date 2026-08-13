@@ -5,6 +5,7 @@ import {
   Archive,
   ArrowDownAZ,
   Boxes,
+  CalendarClock,
   ChevronDown,
   ChevronRight,
   Columns3,
@@ -12,11 +13,14 @@ import {
   Eye,
   Folder,
   FolderOpen,
+  Hash,
   KeyRound,
+  Layers,
   Link,
   Loader2,
   Server,
   Sigma,
+  Split,
   Table2,
   Terminal,
   UserRound,
@@ -58,17 +62,27 @@ const ICONS: Record<NodeKind, typeof Table2> = {
   // What the server is doing, drawn as the pulse it is: the one row in the tree whose contents change
   // while nobody touches anything.
   monitor: Activity,
+  materializedViews: Folder,
+  sequences: Folder,
+  events: Folder,
   table: Table2,
   view: Eye,
   procedure: Terminal,
   function: Sigma,
   trigger: Zap,
+  // A materialized view is drawn as the layers it is: a view with the rows it read kept underneath.
+  materializedView: Layers,
+  // A sequence hands out numbers, and a clock is what an event runs on.
+  sequence: Hash,
+  event: CalendarClock,
   fields: Folder,
   field: Columns3,
   indexes: Folder,
   index: ArrowDownAZ,
   foreignKeys: Folder,
   foreignKey: Link,
+  partitions: Folder,
+  partition: Split,
 }
 
 /**
@@ -91,17 +105,28 @@ const COLOURS: Record<NodeKind, string> = {
   // A process is a statement in flight, so it wears the colour a *program* wears everywhere in this
   // app rather than taking an entry of its own — the same colour a query tab has in the strip.
   monitor: 'text-kind-routine',
+  materializedViews: 'text-kind-view',
+  sequences: 'text-kind-sequence',
+  // An event is a program the server runs, so it wears the colour every other program here wears.
+  events: 'text-kind-routine',
   table: 'text-kind-table',
   view: 'text-kind-view',
   procedure: 'text-kind-routine',
   function: 'text-kind-routine',
   trigger: 'text-kind-trigger',
+  // A materialized view *is* a view, so it reads as one; what makes it different is what can be
+  // done to it, which is the menu's business and not the colour's.
+  materializedView: 'text-kind-view',
+  sequence: 'text-kind-sequence',
+  event: 'text-kind-routine',
   fields: 'text-kind-field',
   field: 'text-kind-field',
   indexes: 'text-kind-index',
   index: 'text-kind-index',
   foreignKeys: 'text-kind-relation',
   foreignKey: 'text-kind-relation',
+  partitions: 'text-kind-partition',
+  partition: 'text-kind-partition',
 }
 
 const INDENT_PER_DEPTH = 12

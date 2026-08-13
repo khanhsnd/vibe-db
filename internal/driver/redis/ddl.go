@@ -129,6 +129,29 @@ func (*session) DropForeignKey(context.Context, driver.Namespace, string, string
 	return domain.Unsupported("a foreign key")
 }
 
+// A key space is one flat set of keys and is never cut into pieces, so all three partition changes
+// refuse — and so does a refresh, there being no view of any kind here to recompute.
+func (*session) AddPartition(
+	context.Context,
+	driver.Namespace,
+	string,
+	driver.PartitionSpec,
+) error {
+	return domain.Unsupported("a partition: a Redis database is one flat key space")
+}
+
+func (*session) DropPartition(context.Context, driver.Namespace, string, string) error {
+	return domain.Unsupported("a partition: a Redis database is one flat key space")
+}
+
+func (*session) TruncatePartition(context.Context, driver.Namespace, string, string) error {
+	return domain.Unsupported("a partition: a Redis database is one flat key space")
+}
+
+func (*session) RefreshMaterializedView(context.Context, driver.Namespace, string) error {
+	return domain.Unsupported("a materialized view")
+}
+
 // AlterStatements spells nothing, because none of the seven kinds of change exists here. A migration
 // that shows an empty script is a migration with nothing to run, which is the honest answer for two
 // key spaces: what differs between them is their rows, and that is `RowStatements`' half.

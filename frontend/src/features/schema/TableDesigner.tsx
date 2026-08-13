@@ -270,7 +270,7 @@ export function TableDesigner({ tabId, profileId, namespace, table }: TableDesig
               label: `Fields (${draft.fields.length})`,
               content: (
                 <ResultGrid
-                  result={fieldRows(draft.fields, dataTypes(engine))}
+                  result={fieldRows(draft.fields, dataTypes(engine), engineInfo(engine).hasColumnComments)}
                   selection={selection}
                   onSelectionChange={setSelection}
                   onEditCell={editCell}

@@ -59,7 +59,12 @@ answers [`UNSUPPORTED`](../errors.md) naming which — never a statement left fo
 | Add and drop an index | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
 | Add and drop a foreign key | ✓ | ✓ | | ✓ | ✓ | | |
 | Truncate as well as empty | ✓ | ✓ | | ✓ | ✓ | | |
+| A column's comment | ✓ | ✓ | | | ✓ | | |
+| Name, add, empty and drop a partition | ✓ | ✓ | | | ✓ | | |
 | Views | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| Materialized views | | ✓ | | | ✓ | | |
+| Sequences | | ✓ | | ✓ | ✓ | | |
+| Events | ✓ | | | | | | |
 | Stored routines | ✓ | ✓ | | ✓ | ✓ | | |
 | Triggers | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Read and write a definition | ✓ | ✓ | ✓ | ✓ | ✓ | | |
@@ -145,6 +150,10 @@ has to answer.
 | A row already there | `ON DUPLICATE KEY` | `ON CONFLICT` | `ON CONFLICT` | guarded insert | guarded insert |
 | Several rows to one INSERT | ✓ | ✓ | ✓ | ✓ | one per row |
 | An altered column | restated whole | one action per fact | — | restated, default apart | restated whole |
+| A column's comment | a clause of the column | `COMMENT ON COLUMN` | — | — | `COMMENT ON COLUMN` |
+| A partition is added | inside `ADD PARTITION (…)` | `CREATE TABLE … PARTITION OF` | — | — | after `ADD PARTITION` |
+| A partition is dropped | `DROP PARTITION` | `DROP TABLE` — it *is* a table | — | — | `DROP PARTITION` |
+| A materialized view is refreshed | — | `REFRESH MATERIALIZED VIEW` | — | — | `DBMS_MVIEW.REFRESH('…')` |
 | An index is dropped | through its table | by its own name | by its own name | by name **and** table |by its own name |
 | A table is copied | `LIKE` | `LIKE` in the column list | `AS SELECT` | `SELECT … INTO` | `AS SELECT` |
 

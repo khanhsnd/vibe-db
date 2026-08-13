@@ -113,7 +113,7 @@ func (s *session) CreateStatements(
 	}
 
 	spec := sqlkit.TableSpecOf(ns, table, structure.Columns)
-	statements := []string{dialect.CreateTable(spec)}
+	statements := dialect.CreateTableStatements(spec)
 	for _, index := range structure.Indexes {
 		if index.Primary || strings.Contains(index.Method, "FUNCTION-BASED") {
 			continue
@@ -164,6 +164,31 @@ func (s *session) Source(
 		return driver.Source{SourceRef: ref, Definition: definition}, nil
 	}
 
+	// A materialized view's query is kept exactly as a view's is, in the same kind of `LONG` column,
+	// so it is read the same way — and the `CREATE` in front of it says `MATERIALIZED` and does not
+	// say `OR REPLACE`: this engine has no such form for one, the rows being *stored*.
+	if ref.Kind == driver.SourceMaterializedView {
+		const query = `SELECT query FROM all_mviews WHERE owner = :1 AND mview_name = :2`
+
+		body, err := s.sourceText(ctx, query, ns.Database, ref.Name)
+		if err != nil {
+			return driver.Source{}, err
+		}
+
+		definition := "CREATE MATERIALIZED VIEW " + dialect.Table(ns, ref.Name) + " AS\n" +
+			strings.TrimSpace(body)
+		return driver.Source{SourceRef: ref, Definition: definition}, nil
+	}
+
+	if ref.Kind == driver.SourceSequence {
+		return s.sequenceSource(ctx, ns, ref)
+	}
+
+	if ref.Kind == driver.SourceEvent {
+		return driver.Source{}, domain.Unsupported(
+			"an event: an Oracle job is a call to DBMS_SCHEDULER rather than a declaration")
+	}
+
 	const query = `
 		SELECT text
 		FROM all_source
@@ -183,6 +208,54 @@ func (s *session) Source(
 		SourceRef:  ref,
 		Definition: "CREATE OR REPLACE " + qualified(ns, ref.Name, body),
 	}, nil
+}
+
+// sequenceSource spells a sequence's declaration from `all_sequences`, which is a *description* in
+// the sense CreateStatements is one: the dictionary keeps the numbers rather than the statement, so
+// it is put together here out of them and out of nothing else.
+//
+// `LAST_NUMBER` is where the sequence has got to, and it is what a replayed `START WITH` should
+// carry: a sequence made again from `1` would hand out numbers rows already hold. A save of one is
+// still the drop and the create the preview shows, and a drop takes the current value with it —
+// which is what having read it here is for.
+func (s *session) sequenceSource(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	const query = `
+		SELECT TO_CHAR(last_number), TO_CHAR(increment_by), TO_CHAR(min_value),
+		       TO_CHAR(max_value), TO_CHAR(cache_size), cycle_flag
+		FROM all_sequences
+		WHERE sequence_owner = :1 AND sequence_name = :2`
+
+	var start, increment, minimum, maximum, cache, cycles string
+	err := s.db.QueryRowContext(ctx, query, ns.Database, ref.Name).
+		Scan(&start, &increment, &minimum, &maximum, &cache, &cycles)
+	if errors.Is(err, sql.ErrNoRows) {
+		return driver.Source{}, domain.ErrUnknownDefinition
+	}
+	if err != nil {
+		return driver.Source{}, translateError(err)
+	}
+
+	caching := "CACHE " + cache
+	if cache == "0" {
+		caching = "NOCACHE"
+	}
+	cycling := "NOCYCLE"
+	if cycles == "Y" {
+		cycling = "CYCLE"
+	}
+
+	definition := "CREATE SEQUENCE " + dialect.Table(ns, ref.Name) + "\n" +
+		"START WITH " + start + "\n" +
+		"INCREMENT BY " + increment + "\n" +
+		"MINVALUE " + minimum + "\n" +
+		"MAXVALUE " + maximum + "\n" +
+		caching + "\n" +
+		cycling
+	return driver.Source{SourceRef: ref, Definition: definition}, nil
 }
 
 // qualified names the owner in a source the dictionary answered with, which names the object

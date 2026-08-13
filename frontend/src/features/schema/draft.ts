@@ -35,6 +35,7 @@ export function draftOf(structure: TableStructure | undefined): TableDraft {
       nullable: column.nullable,
       default: column.default,
       primaryKey: column.primaryKey,
+      comment: column.comment ?? '',
     })),
     indexes: indexDraftOf(structure),
     keys: keyDraftOf(structure),
@@ -304,6 +305,7 @@ function retyped(field: DraftField, held: DraftField): boolean {
   return (
     field.type !== held.type ||
     (field.nullable && !field.primaryKey) !== (held.nullable && !held.primaryKey) ||
-    (field.default ?? '') !== (held.default ?? '')
+    (field.default ?? '') !== (held.default ?? '') ||
+    field.comment !== held.comment
   )
 }

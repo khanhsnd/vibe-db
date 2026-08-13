@@ -718,6 +718,39 @@ function namespaceNode(
             ),
           ]
         : []),
+      // A view whose rows are *stored*. It is its own folder rather than a mark on a view, because
+      // what can be done to one differs: it is refreshed, and it cannot be replaced in place.
+      ...(info.hasMaterializedViews
+        ? [
+            folder(
+              'materializedViews',
+              'Materialized Views',
+              (held?.materializedViews ?? []).map((view) => objectNode('materializedView', view)),
+            ),
+          ]
+        : []),
+      // A number generator that belongs to the schema rather than to a column, which is why it is a
+      // folder here and no folder at all on the engine whose generator is a column's own fact.
+      ...(info.hasSequences
+        ? [
+            folder(
+              'sequences',
+              'Sequences',
+              (held?.sequences ?? []).map((sequence) => objectNode('sequence', sequence)),
+            ),
+          ]
+        : []),
+      // Statements the server runs on a schedule of its own. Only the engine that keeps one as a
+      // *declaration* has this folder — see `hasEvents`.
+      ...(info.hasEvents
+        ? [
+            folder(
+              'events',
+              'Events',
+              (held?.events ?? []).map((event) => objectNode('event', event)),
+            ),
+          ]
+        : []),
       // A trigger belongs to a *table* and is listed under the namespace all the same, because that
       // is the level every one of these catalogues answers at — and because a trigger is a program
       // rather than part of a table's shape, which is what the folders under a table draw.
@@ -764,7 +797,10 @@ function namespaceCount(info: EngineInfo, held: Objects): number {
     held.tables.length +
     held.views.length +
     (held.routines?.length ?? 0) +
-    (held.triggers?.length ?? 0)
+    (held.triggers?.length ?? 0) +
+    (held.materializedViews?.length ?? 0) +
+    (held.sequences?.length ?? 0) +
+    (held.events?.length ?? 0)
   )
 }
 
@@ -847,6 +883,34 @@ function tableNode(
                 namespace: ns,
                 table,
                 badge: `→ ${key.referencedTable}`,
+              })),
+            },
+          ]
+        : []),
+      // A table's own pieces, beside Fields and Indexes because that is what they are: part of its
+      // shape rather than objects of the namespace. The folder is drawn only where this engine
+      // names a partition at all — see `hasPartitions` — and is empty for a table that is not cut
+      // into any, exactly as Indexes is for a table with none.
+      ...(info.hasPartitions
+        ? [
+            {
+              id: at('partitions'),
+              kind: 'partitions' as NodeKind,
+              label: 'Partitions',
+              profileId,
+              namespace: ns,
+              table,
+              ...(structure ? { badge: String(structure.partitions?.length ?? 0) } : {}),
+              children: (structure?.partitions ?? []).map((piece) => ({
+                id: objectNodeId('partition', profileId, ns, table, piece.name),
+                kind: 'partition' as NodeKind,
+                label: piece.name,
+                profileId,
+                namespace: ns,
+                table,
+                // What this piece holds, which is the one fact about a partition its name does not
+                // carry — and the piece's own, where the method beside it is the whole table's.
+                ...(piece.bounds ? { badge: piece.bounds } : {}),
               })),
             },
           ]

@@ -311,6 +311,29 @@ export interface EngineInfo {
   // stream is something a *client* watches rather than a program the server keeps, and a key space
   // has nothing to fire on — so neither has a folder.
   hasTriggers: boolean
+  // Whether this engine has views whose rows are *stored* rather than recomputed. PostgreSQL and
+  // Oracle do, and both refresh one with a statement of its own; SQL Server's indexed view is a
+  // view with an index on it rather than an object of its own kind, and MongoDB's on-demand
+  // materialized view is a pipeline ending in `$merge` — an aggregation a reader runs, not an
+  // object with a definition.
+  hasMaterializedViews: boolean
+  // Whether a number generator here is an object of the schema. PostgreSQL, Oracle and SQL Server
+  // have one; MySQL's `AUTO_INCREMENT` is a column's own fact and so is not a folder.
+  hasSequences: boolean
+  // Whether the server runs statements on a schedule of its own, kept as a *declaration* this app
+  // can read back and put again. MySQL alone does. Every other scheduler here is a procedure called
+  // with arguments — Oracle's DBMS_SCHEDULER, SQL Server Agent's `sp_add_job` — which is not a
+  // definition an editor could save.
+  hasEvents: boolean
+  // Whether a table's rows can be stored in named pieces this app can address. MySQL, PostgreSQL
+  // and Oracle name one; SQL Server's are numbered pieces of a partition *scheme* rather than named
+  // objects, and SQLite has none. It is what decides whether a table draws a Partitions folder.
+  hasPartitions: boolean
+  // Whether a column can carry a description on the server. MySQL keeps one as a clause of the
+  // column and PostgreSQL and Oracle as a `COMMENT ON` statement; SQL Server's is an extended
+  // property written by a stored procedure rather than a comment, and SQLite has none — so the
+  // designer draws no Comment column there.
+  hasColumnComments: boolean
   // Whether emptying and truncating are two different things. They are on a table store, where one
   // deletes the rows and the other resets the storage; a collection has no storage to reset, so
   // offering both would be offering the same command twice under two names.
@@ -447,6 +470,11 @@ export const ENGINES = [
     hasForeignKeys: true,
     hasRoutines: true,
     hasTriggers: true,
+    hasMaterializedViews: false,
+    hasSequences: false,
+    hasEvents: true,
+    hasPartitions: true,
+    hasColumnComments: true,
     hasTruncate: true,
     hasBackups: true,
     hasTransactions: true,
@@ -484,6 +512,11 @@ export const ENGINES = [
     hasForeignKeys: true,
     hasRoutines: true,
     hasTriggers: true,
+    hasMaterializedViews: true,
+    hasSequences: true,
+    hasEvents: false,
+    hasPartitions: true,
+    hasColumnComments: true,
     hasTruncate: true,
     hasBackups: true,
     hasTransactions: true,
@@ -525,6 +558,11 @@ export const ENGINES = [
     hasForeignKeys: true,
     hasRoutines: false,
     hasTriggers: false,
+    hasMaterializedViews: false,
+    hasSequences: false,
+    hasEvents: false,
+    hasPartitions: false,
+    hasColumnComments: false,
     hasTruncate: false,
     hasBackups: true,
     hasTransactions: true,
@@ -566,6 +604,11 @@ export const ENGINES = [
     hasForeignKeys: true,
     hasRoutines: true,
     hasTriggers: true,
+    hasMaterializedViews: false,
+    hasSequences: true,
+    hasEvents: false,
+    hasPartitions: false,
+    hasColumnComments: false,
     hasTruncate: true,
     hasBackups: true,
     hasTransactions: true,
@@ -608,6 +651,11 @@ export const ENGINES = [
     hasForeignKeys: true,
     hasRoutines: true,
     hasTriggers: true,
+    hasMaterializedViews: true,
+    hasSequences: true,
+    hasEvents: false,
+    hasPartitions: true,
+    hasColumnComments: true,
     hasTruncate: true,
     hasBackups: true,
     hasTransactions: true,
@@ -651,6 +699,11 @@ export const ENGINES = [
     hasForeignKeys: false,
     hasRoutines: false,
     hasTriggers: false,
+    hasMaterializedViews: false,
+    hasSequences: false,
+    hasEvents: false,
+    hasPartitions: false,
+    hasColumnComments: false,
     hasTruncate: false,
     // A backup here is a file of statements, and a document store's are commands rather than a
     // declaration and a row — but its *vendor* ships a pair of programs that carry the BSON
@@ -694,6 +747,11 @@ export const ENGINES = [
     hasForeignKeys: false,
     hasRoutines: false,
     hasTriggers: false,
+    hasMaterializedViews: false,
+    hasSequences: false,
+    hasEvents: false,
+    hasPartitions: false,
+    hasColumnComments: false,
     hasTruncate: false,
     hasBackups: false,
     hasTransactions: false,

@@ -22,7 +22,8 @@ func (s *session) columns(
 	// app a `Column.Default` is an expression, because that is what goes back into a statement, so
 	// the literal is quoted here rather than left to reach one as a bare identifier.
 	const query = `
-		SELECT column_name, data_type, column_type, is_nullable, column_key, column_default, extra
+		SELECT column_name, data_type, column_type, is_nullable, column_key, column_default,
+		       extra, column_comment
 		FROM information_schema.columns
 		WHERE table_schema = ? AND table_name = ?
 		ORDER BY ordinal_position`
@@ -35,10 +36,12 @@ func (s *session) columns(
 
 	columns := []driver.Column{}
 	for rows.Next() {
-		var name, dataType, fullType, nullable, key, extra string
+		var name, dataType, fullType, nullable, key, extra, comment string
 		var defaultValue sql.NullString
 
-		err := rows.Scan(&name, &dataType, &fullType, &nullable, &key, &defaultValue, &extra)
+		err := rows.Scan(
+			&name, &dataType, &fullType, &nullable, &key, &defaultValue, &extra, &comment,
+		)
 		if err != nil {
 			return nil, translateError(err)
 		}
@@ -50,6 +53,7 @@ func (s *session) columns(
 			Nullable:   nullable == "YES",
 			PrimaryKey: key == "PRI",
 			Default:    defaultExpression(dataType, defaultValue, extra),
+			Comment:    comment,
 		})
 	}
 	if err := rows.Err(); err != nil {

@@ -437,13 +437,16 @@ export function useTreeMenu(
           return [...newTable, findInSchema, ...diagram, dumpItems(''), ...wizards(''), ...toolItems, refreshObjectList]
 
         // A folder offers what goes in it, which on `Routines` is both kinds — no engine has a
-        // folder for a function alone. Neither is offered where this engine's objects are not
+        // folder for a function alone. None is offered where this engine's objects are not
         // declared by a statement at all; see `hasSource`.
         case 'views':
-        case 'routines': {
+        case 'routines':
+        case 'materializedViews':
+        case 'sequences':
+        case 'events': {
+          const kinds = FOLDER_KINDS[node.kind]
           if (!info.hasSource) return [{ ...refreshObjectList, separatorBefore: false }]
 
-          const kinds = node.kind === 'views' ? VIEW_KIND : ROUTINE_KINDS
           const on = sourceActions(
             node.profileId,
             ns,
@@ -550,9 +553,54 @@ export function useTreeMenu(
           ]
         }
 
+        // A materialized view has rows like a table and a definition like a view, and one thing
+        // neither has: its rows are *stored*, so they go stale and are recomputed rather than
+        // re-read. Refresh Data is that statement, and it is the only item here that is not
+        // something an ordinary view is offered.
+        case 'materializedView': {
+          const on = sourceActions(
+            node.profileId,
+            ns,
+            { ...NEW_SOURCE, kind: 'materializedView', name: node.label },
+            { ask, changeSchema, openSource: onOpenSource },
+          )
+
+          return [
+            {
+              label: 'Open Materialized View',
+              icon: ICON.open,
+              onSelect: () =>
+                onOpenRows({ profileId: node.profileId, namespace: ns, table: node.label }),
+            },
+            ...sourceItems(info, 'materializedView', on),
+            {
+              label: 'Refresh Data',
+              icon: ICON.refresh,
+              separatorBefore: true,
+              // Nothing is confirmed: a refresh loses nothing and changes no shape. It can take as
+              // long as the query behind it takes, which is what the bar reports if it fails.
+              onSelect: change(
+                (sessionId) => schema.refreshMaterializedView(sessionId, ns, node.label),
+              ),
+            },
+            {
+              label: 'Delete Materialized View',
+              icon: ICON.delete,
+              danger: true,
+              separatorBefore: true,
+              onSelect: on.remove,
+            },
+            refreshObjectList,
+          ]
+        }
+
         // A routine is addressed by the whole of what the tree holds for it and never by its name:
         // on PostgreSQL two functions may share one and be told apart only by what they take. A
         // trigger is the same arrangement under a different second fact — the table it fires on.
+        // A sequence and an event are named by themselves and travel the same path, having the same
+        // three items: open the definition, declare another beside it, drop this one.
+        case 'sequence':
+        case 'event':
         case 'procedure':
         case 'function':
         case 'trigger': {
@@ -598,6 +646,10 @@ export function useTreeMenu(
         case 'foreignKeys':
         case 'foreignKey':
           return constraintItems(node, ns, { change, ask, refreshStructure })
+
+        case 'partitions':
+        case 'partition':
+          return partitionItems(node, ns, words, { change, ask, refreshStructure })
 
         default:
           return []
@@ -692,12 +744,37 @@ export function backupItems(
 const VIEW_KIND = ['view'] as const satisfies readonly SourceKind[]
 const ROUTINE_KINDS = ['function', 'procedure'] as const satisfies readonly SourceKind[]
 const TRIGGER_KIND = ['trigger'] as const satisfies readonly SourceKind[]
+const MATERIALIZED_KIND = ['materializedView'] as const satisfies readonly SourceKind[]
+const SEQUENCE_KIND = ['sequence'] as const satisfies readonly SourceKind[]
+const EVENT_KIND = ['event'] as const satisfies readonly SourceKind[]
 
-/** The kinds a `New …` beside this one offers, which is whatever its own folder holds. */
-function siblingKinds(kind: SourceKind): readonly SourceKind[] {
-  if (kind === 'view') return VIEW_KIND
-  if (kind === 'trigger') return TRIGGER_KIND
-  return ROUTINE_KINDS
+/**
+ * Which folder each kind lives in, which is what a `New …` beside one of them offers. Every folder
+ * but Routines holds exactly one kind: no engine has a folder for a function alone, and none has
+ * one holding two of anything else.
+ */
+const SIBLING_KINDS: Record<SourceKind, readonly SourceKind[]> = {
+  view: VIEW_KIND,
+  function: ROUTINE_KINDS,
+  procedure: ROUTINE_KINDS,
+  trigger: TRIGGER_KIND,
+  materializedView: MATERIALIZED_KIND,
+  sequence: SEQUENCE_KIND,
+  event: EVENT_KIND,
+}
+
+/**
+ * Which folder kind stands for which object, for the folders whose whole menu is a New and a
+ * Refresh. It is a map rather than a chain of comparisons for the reason `SIBLING_KINDS` is.
+ */
+type ObjectFolder = 'views' | 'routines' | 'materializedViews' | 'sequences' | 'events'
+
+const FOLDER_KINDS: Record<ObjectFolder, readonly [SourceKind, ...SourceKind[]]> = {
+  views: VIEW_KIND,
+  routines: ROUTINE_KINDS,
+  materializedViews: MATERIALIZED_KIND,
+  sequences: SEQUENCE_KIND,
+  events: EVENT_KIND,
 }
 
 /**
@@ -715,7 +792,7 @@ function sourceItems(
 
   return [
     { label: `Design ${SOURCE_NOUN[kind]}`, icon: ICON.design, onSelect: on.design },
-    ...newSourceItems(siblingKinds(kind), on.create),
+    ...newSourceItems(SIBLING_KINDS[kind], on.create),
   ]
 }
 
@@ -907,6 +984,107 @@ function fieldItems(node: TreeNode, stored: TableColumn | undefined, on: FieldAc
       danger: true,
       separatorBefore: true,
       onSelect: () => on.remove(stored),
+    },
+    refresh,
+  ]
+}
+
+/**
+ * What a table's pieces are offered. Adding one asks for two things rather than one — a name and
+ * the clause saying what it holds — because a partition that does not say what it holds is not a
+ * partition: the grammar of that clause is different on every engine and different again per
+ * partitioning method, so it is the reader's own text and the server is what checks it.
+ *
+ * Delete and Empty are the pair a *table* already has one level up, and they mean the same two
+ * things: one takes the rows with the piece, the other takes the rows and leaves it. Both are
+ * confirmed, and the Delete says out loud which of the two it is.
+ */
+function partitionItems(
+  node: TreeNode,
+  ns: Namespace,
+  words: EngineWords,
+  deps: ConstraintMenuDeps,
+): MenuItem[] {
+  const table = node.table ?? ''
+  const refresh: MenuItem = {
+    label: 'Refresh',
+    icon: ICON.refresh,
+    separatorBefore: true,
+    onSelect: () => void deps.refreshStructure(node.profileId, ns, table),
+  }
+
+  const add: MenuItem = {
+    label: 'Add Partition…',
+    icon: ICON.add,
+    onSelect: () =>
+      deps.ask({
+        kind: 'prompt',
+        title: 'Add Partition',
+        label: 'Name',
+        value: '',
+        submitLabel: 'Next',
+        // Two boxes rather than one dialog with two fields: the prompt is the one surface the tree
+        // already asks a name with, and what a partition holds is a second question anyway.
+        onSubmit: async (name) =>
+          deps.ask({
+            kind: 'prompt',
+            title: `Add Partition ${name}`,
+            label: 'What it holds',
+            // The engine's own clause, in the engine's own words. The example is the commonest one
+            // there is and is a starting point rather than a default: it is what the reader edits.
+            value: 'VALUES LESS THAN (0)',
+            submitLabel: 'Add',
+            onSubmit: (bounds) =>
+              deps.change(
+                (sessionId) => schema.addPartition(sessionId, ns, table, { name, bounds }),
+                table,
+              )(),
+
+          }),
+      }),
+  }
+
+  if (node.kind === 'partitions') return [add, refresh]
+
+  return [
+    add,
+    {
+      label: 'Empty Partition',
+      icon: ICON.empty,
+      separatorBefore: true,
+      onSelect: () =>
+        deps.ask({
+          kind: 'confirm',
+          title: 'Empty Partition',
+          message:
+            `Empty ${node.label}? Every ${words.row} in that piece goes; the piece itself stays, ` +
+            `and the rest of the table is untouched.`,
+          submitLabel: 'Empty',
+          danger: true,
+          onSubmit: deps.change(
+            (sessionId) => schema.truncatePartition(sessionId, ns, table, node.label),
+            table,
+          ),
+        }),
+    },
+    {
+      label: 'Delete Partition',
+      icon: ICON.delete,
+      danger: true,
+      onSelect: () =>
+        deps.ask({
+          kind: 'confirm',
+          title: 'Delete Partition',
+          message:
+            `Drop ${node.label}? Every ${words.row} in that piece goes with it, and rows that ` +
+            `would have landed there have nowhere to go.`,
+          submitLabel: 'Delete',
+          danger: true,
+          onSubmit: deps.change(
+            (sessionId) => schema.dropPartition(sessionId, ns, table, node.label),
+            table,
+          ),
+        }),
     },
     refresh,
   ]

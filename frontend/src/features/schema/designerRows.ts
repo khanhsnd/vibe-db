@@ -23,6 +23,9 @@ export const FIELD = {
   notNull: 4,
   key: 5,
   default: 6,
+  // Last because it is the one column that is documentation rather than declaration, and because
+  // it is the one column an engine may not draw at all — see `hasColumnComments`.
+  comment: 7,
 } as const
 
 const INDEX = { name: 0, columns: 1, unique: 2, method: 3 } as const
@@ -39,7 +42,15 @@ const KEY = {
 
 // Length and decimals read as 0 rather than blank when the type declares none, so a column of
 // numbers stays a column of numbers.
-export function fieldRows(draft: DraftField[], types: readonly string[]): GridData {
+//
+// `comments` is whether this engine can keep a description of a column at all. A column the engine
+// has nowhere to put is left out rather than drawn dead: what a reader typed there would be thrown
+// away by the Save, which is worse than not offering it.
+export function fieldRows(
+  draft: DraftField[],
+  types: readonly string[],
+  comments: boolean,
+): GridData {
   const keys = keyPositions(draft)
 
   return {
@@ -51,6 +62,7 @@ export function fieldRows(draft: DraftField[], types: readonly string[]): GridDa
       column('Not null', 'text', { kind: 'check' }),
       column('Key', 'text', { kind: 'key' }),
       column('Default'),
+      ...(comments ? [column('Comment')] : []),
     ],
     rows: draft.map((field, at): Cell[] => {
       const type = parseFieldType(field.type)
@@ -62,6 +74,7 @@ export function fieldRows(draft: DraftField[], types: readonly string[]): GridDa
         field.nullable && !field.primaryKey ? '' : CHECK_ON,
         keys[at] ?? '',
         field.default ?? '',
+        ...(comments ? [field.comment] : []),
       ]
     }),
   }
@@ -128,8 +141,10 @@ export function writeField(field: DraftField, at: number, text: string): DraftFi
       return { ...field, nullable: !truthy(text) }
     case FIELD.key:
       return { ...field, primaryKey: truthy(text) }
-    default:
+    case FIELD.default:
       return { ...field, default: text === '' ? null : text }
+    default:
+      return { ...field, comment: text }
   }
 }
 
@@ -186,6 +201,8 @@ export function fieldEdited(field: DraftField, held: DraftField, at: number): bo
       return field.nullable !== held.nullable
     case FIELD.key:
       return field.primaryKey !== held.primaryKey
+    case FIELD.comment:
+      return field.comment !== held.comment
     default:
       return false
   }

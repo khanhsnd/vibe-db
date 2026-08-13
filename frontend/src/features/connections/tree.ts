@@ -14,6 +14,11 @@ export type NodeKind =
   | 'views'
   | 'routines'
   | 'triggers'
+  // The three folders only some engines have. Each is drawn where the engine has that object and
+  // left out entirely where it has not — see `hasMaterializedViews`, `hasSequences`, `hasEvents`.
+  | 'materializedViews'
+  | 'sequences'
+  | 'events'
   // The one folder under a namespace that stands for nothing on the server, and the files in it:
   // a shelf on this machine. It is filled by a read of its own — see `isObjectFolder`.
   | 'backups'
@@ -31,12 +36,19 @@ export type NodeKind =
   | 'procedure'
   | 'function'
   | 'trigger'
+  | 'materializedView'
+  | 'sequence'
+  | 'event'
   | 'fields'
   | 'field'
   | 'indexes'
   | 'index'
   | 'foreignKeys'
   | 'foreignKey'
+  // A table's own pieces, which are part of its *shape* rather than objects of the namespace —
+  // which is why they sit under the table beside Fields and Indexes.
+  | 'partitions'
+  | 'partition'
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
@@ -111,10 +123,13 @@ const OBJECT_FOLDERS: ReadonlySet<NodeKind> = new Set([
   'views',
   'routines',
   'triggers',
+  'materializedViews',
+  'sequences',
+  'events',
 ])
 
 /**
- * Whether this node is one of a namespace's object folders. All four are filled by one read,
+ * Whether this node is one of a namespace's object folders. All of them are filled by one read,
  * so opening any of them asks for the same thing.
  *
  * `backups` is deliberately not one. Nothing about it comes off the catalogue, so opening it must
@@ -134,9 +149,13 @@ export function ownsObjects(node: TreeNode): boolean {
   return node.children?.some(isObjectFolder) ?? false
 }
 
-/** Whether this node's rows can be opened in a data tab: a table, or a view, which reads alike. */
+/**
+ * Whether this node's rows can be opened in a data tab: a table, or either kind of view, all three
+ * of which are read with the same statement. A materialized view is here for the plainest of
+ * reasons — its rows are *stored*, so there is even less doubt that a read of it is a read of rows.
+ */
 export function hasRows(node: TreeNode): boolean {
-  return node.kind === 'table' || node.kind === 'view'
+  return node.kind === 'table' || node.kind === 'view' || node.kind === 'materializedView'
 }
 
 /**
@@ -149,8 +168,15 @@ export function hasRows(node: TreeNode): boolean {
  * or trigger row the catalogue never filled in.
  */
 export function sourceRefOf(node: TreeNode): SourceRef | null {
-  if (node.kind === 'view') {
-    return { kind: 'view', name: node.label, arguments: '', table: '' }
+  // The four kinds a name alone identifies. A `NodeKind` and a `SourceKind` are the same word for
+  // all of them, which is why one entry does for four and never a map of one-line branches.
+  if (
+    node.kind === 'view' ||
+    node.kind === 'materializedView' ||
+    node.kind === 'sequence' ||
+    node.kind === 'event'
+  ) {
+    return { kind: node.kind, name: node.label, arguments: '', table: '' }
   }
 
   if (node.kind === 'trigger') {
@@ -178,11 +204,15 @@ const FOLDERS: ReadonlySet<NodeKind> = new Set([
   'views',
   'routines',
   'triggers',
+  'materializedViews',
+  'sequences',
+  'events',
   'backups',
   'accounts',
   'fields',
   'indexes',
   'foreignKeys',
+  'partitions',
 ])
 
 /**

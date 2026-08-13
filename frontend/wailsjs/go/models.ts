@@ -155,6 +155,7 @@ export namespace app {
 	    nullable: boolean;
 	    primaryKey: boolean;
 	    default?: string;
+	    comment: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TableColumn(source);
@@ -168,6 +169,7 @@ export namespace app {
 	        this.nullable = source["nullable"];
 	        this.primaryKey = source["primaryKey"];
 	        this.default = source["default"];
+	        this.comment = source["comment"];
 	    }
 	}
 	export class AccountList {
@@ -399,6 +401,7 @@ export namespace app {
 	    nullable: boolean;
 	    default?: string;
 	    primaryKey: boolean;
+	    comment: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ColumnInput(source);
@@ -411,6 +414,7 @@ export namespace app {
 	        this.nullable = source["nullable"];
 	        this.default = source["default"];
 	        this.primaryKey = source["primaryKey"];
+	        this.comment = source["comment"];
 	    }
 	}
 	export class ColumnValuesInput {
@@ -1269,6 +1273,9 @@ export namespace app {
 	    views: string[];
 	    routines: RoutineInfo[];
 	    triggers: TriggerInfo[];
+	    materializedViews: string[];
+	    sequences: string[];
+	    events: string[];
 	    keyCount: number;
 	
 	    static createFrom(source: any = {}) {
@@ -1281,6 +1288,9 @@ export namespace app {
 	        this.views = source["views"];
 	        this.routines = this.convertValues(source["routines"], RoutineInfo);
 	        this.triggers = this.convertValues(source["triggers"], TriggerInfo);
+	        this.materializedViews = source["materializedViews"];
+	        this.sequences = source["sequences"];
+	        this.events = source["events"];
 	        this.keyCount = source["keyCount"];
 	    }
 	
@@ -1301,6 +1311,40 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+	export class PartitionInfo {
+	    name: string;
+	    method: string;
+	    expression: string;
+	    bounds: string;
+	    rows?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PartitionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.method = source["method"];
+	        this.expression = source["expression"];
+	        this.bounds = source["bounds"];
+	        this.rows = source["rows"];
+	    }
+	}
+	export class PartitionInput {
+	    name: string;
+	    bounds: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PartitionInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.bounds = source["bounds"];
+	    }
 	}
 	
 	export class ProcessRef {
@@ -2271,6 +2315,7 @@ export namespace app {
 	    column: ColumnInput;
 	    index: IndexInput;
 	    key: ForeignKeyInput;
+	    partition: PartitionInput;
 	
 	    static createFrom(source: any = {}) {
 	        return new TableChangeInput(source);
@@ -2283,6 +2328,7 @@ export namespace app {
 	        this.column = this.convertValues(source["column"], ColumnInput);
 	        this.index = this.convertValues(source["index"], IndexInput);
 	        this.key = this.convertValues(source["key"], ForeignKeyInput);
+	        this.partition = this.convertValues(source["partition"], PartitionInput);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2531,6 +2577,7 @@ export namespace app {
 	    columns: TableColumn[];
 	    indexes: IndexInfo[];
 	    foreignKeys: ForeignKeyInfo[];
+	    partitions: PartitionInfo[];
 	
 	    static createFrom(source: any = {}) {
 	        return new TableStructure(source);
@@ -2541,6 +2588,7 @@ export namespace app {
 	        this.columns = this.convertValues(source["columns"], TableColumn);
 	        this.indexes = this.convertValues(source["indexes"], IndexInfo);
 	        this.foreignKeys = this.convertValues(source["foreignKeys"], ForeignKeyInfo);
+	        this.partitions = this.convertValues(source["partitions"], PartitionInfo);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

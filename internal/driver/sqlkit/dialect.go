@@ -163,6 +163,25 @@ type Dialect struct {
 	TriggerOnTable bool
 	// Starters is what a reader begins a *new* view, routine or trigger from — see SourceStarter.
 	Starters SourceStarter
+	// RefreshViewSQL recomputes the rows a materialized view stores, `%s` being the view. Empty is
+	// an engine with no such view, which answers `domain.Unsupported` rather than running nothing.
+	RefreshViewSQL string
+	// RefreshNamesString says the view goes in as a **string literal** rather than as an identifier,
+	// because on that engine a refresh is a procedure call rather than a statement — Oracle's
+	// `DBMS_MVIEW.REFRESH('SHOP.SALES')`. It is the same kind of exception AccountHasHost is: one
+	// name in this package that is not quoted as a name.
+	RefreshNamesString bool
+	// ColumnCommentInline says what somebody wrote about a column is a *clause of the column* —
+	// MySQL's `COMMENT 'x'` — so it travels in the same statement that declares it, and a restated
+	// column that leaves it out is a description dropped.
+	ColumnCommentInline bool
+	// CommentsOnObject says the description is a statement of its own, `COMMENT ON COLUMN t.c IS 'x'`
+	// — PostgreSQL and Oracle, whose grammar is the standard's word for word. An engine setting
+	// neither has nowhere to keep one: SQL Server's is an extended property written by a stored
+	// procedure rather than a comment, and SQLite has none at all.
+	CommentsOnObject bool
+	// Partitions is how one piece of a partitioned table is named and changed — see PartitionStyle.
+	Partitions PartitionStyle
 
 	// The account half. Everything below is one engine's grammar for "who may do what", and it is
 	// here for the reason everything above is: `sqlkit.Auth` spells every account statement there is,
@@ -264,7 +283,34 @@ type SourceStarter struct {
 	Function  string
 	Procedure string
 	Trigger   string
+	// The three an engine may not have at all, left blank where it has not — which is what the
+	// frontend reads as there being no New to offer.
+	MaterializedView string
+	Sequence         string
+	Event            string
 }
+
+// PartitionStyle is how an engine names one piece of a partitioned table and changes it. There are
+// three grammars for one intention, and telling them apart is a *flag* in the sense every other
+// difference in this file is — `sqlkit.DDL` spells all three and no adapter spells any of them.
+//
+//   - PartitionAsTable: a partition **is a table**, so it is dropped and truncated as one and added
+//     by declaring it — PostgreSQL. The only style where the piece has a name of its own in the
+//     catalogue that a `SELECT` could also use.
+//   - PartitionInList: an added partition sits inside a parenthesised list after `ADD PARTITION`,
+//     which is MySQL's grammar and nobody else's.
+//   - PartitionAsClause: the partition is named straight after the keyword — Oracle.
+//
+// An engine that leaves it empty has no partition this app can address: SQL Server's are numbered
+// pieces of a partition *scheme* rather than named objects, and SQLite has none.
+type PartitionStyle string
+
+const (
+	PartitionNone     PartitionStyle = ""
+	PartitionAsTable  PartitionStyle = "table"
+	PartitionInList   PartitionStyle = "list"
+	PartitionAsClause PartitionStyle = "clause"
+)
 
 // NewSource is the starter for this kind, addressed to the object it declares. An engine that has
 // no such object answers with nothing, which is what the frontend reads as "there is no starter" —
@@ -281,6 +327,12 @@ func (d Dialect) NewSource(ns driver.Namespace, ref driver.SourceRef) string {
 		starter = d.Starters.Procedure
 	case driver.SourceTrigger:
 		starter = d.Starters.Trigger
+	case driver.SourceMaterializedView:
+		starter = d.Starters.MaterializedView
+	case driver.SourceSequence:
+		starter = d.Starters.Sequence
+	case driver.SourceEvent:
+		starter = d.Starters.Event
 	}
 
 	if starter == "" {
@@ -331,12 +383,17 @@ var (
 			// rather than the `SELECT 1` a procedure starts from.
 			Trigger: "CREATE TRIGGER %s\nBEFORE INSERT ON %t\nFOR EACH ROW\n" +
 				"BEGIN\n  SET @unused = 1;\nEND",
+			// The one engine with an event. There is no materialized view and no sequence here: a
+			// number generator on MySQL is a column's `AUTO_INCREMENT` rather than an object.
+			Event: "CREATE EVENT %s\nON SCHEDULE EVERY 1 DAY\nDO\nBEGIN\n  SET @unused = 1;\nEND",
 		},
-		AccountHasHost:   true,
-		PasswordClause:   "IDENTIFIED BY %s",
-		GrantsByWildcard: true,
-		RoleAdminOption:  true,
-		RenameAccountSQL: "RENAME USER %s TO %t",
+		ColumnCommentInline: true,
+		Partitions:          PartitionInList,
+		AccountHasHost:      true,
+		PasswordClause:      "IDENTIFIED BY %s",
+		GrantsByWildcard:    true,
+		RoleAdminOption:     true,
+		RenameAccountSQL:    "RENAME USER %s TO %t",
 		AccountAttrs: []AccountAttr{
 			// A resource option comes before a lock in MySQL's grammar, which is why the order
 			// these are declared in is the order they are written in.
@@ -389,7 +446,16 @@ var (
 			// separately, which is why this skeleton names one rather than opening a BEGIN.
 			Trigger: "CREATE TRIGGER %s\nBEFORE INSERT ON %t\nFOR EACH ROW\n" +
 				"EXECUTE FUNCTION trigger_function()",
+			// There is no `OR REPLACE` for either of these, which is why they alone among this
+			// engine's starters do not say it: a save of one is the drop and the create the preview
+			// shows.
+			MaterializedView: "CREATE MATERIALIZED VIEW %s AS\nSELECT 1",
+			Sequence: "CREATE SEQUENCE %s\n" +
+				"AS bigint\nSTART WITH 1\nINCREMENT BY 1\nNO MINVALUE\nNO MAXVALUE\nCACHE 1",
 		},
+		RefreshViewSQL:   "REFRESH MATERIALIZED VIEW %s",
+		CommentsOnObject: true,
+		Partitions:       PartitionAsTable,
 		// A role and a user are one object here, telling apart only by whether it may log in — which
 		// is why `LOGIN` is an attribute rather than a second kind of thing to declare.
 		AccountKeyword:   "ROLE",
@@ -504,6 +570,11 @@ var (
 			// SQL Server has no FOR EACH ROW: a trigger there fires once for the statement and reads
 			// the rows out of `inserted` and `deleted`.
 			Trigger: "CREATE TRIGGER %s\nON %t\nAFTER INSERT\nAS\nBEGIN\n  SET NOCOUNT ON;\nEND",
+			// A sequence and nothing else: an indexed view here is a view with an index on it rather
+			// than an object of its own, and a scheduled job belongs to SQL Server Agent — a service
+			// beside the engine, whose jobs are made by calling `msdb.dbo.sp_add_job` rather than by
+			// a statement anything could read back and put again.
+			Sequence: "CREATE SEQUENCE %s\nAS bigint\nSTART WITH 1\nINCREMENT BY 1",
 		},
 		// The one engine where an account is two objects: a **login** the server knows and a **user**
 		// a database knows. A login with no user in a database can sign in and reach nothing inside
@@ -567,7 +638,15 @@ var (
 			Procedure: "CREATE OR REPLACE PROCEDURE %s\nIS\nBEGIN\n  NULL;\nEND;",
 			Trigger: "CREATE OR REPLACE TRIGGER %s\nBEFORE INSERT ON %t\nFOR EACH ROW\n" +
 				"BEGIN\n  NULL;\nEND;",
+			MaterializedView: "CREATE MATERIALIZED VIEW %s AS\nSELECT 1 FROM dual",
+			Sequence:         "CREATE SEQUENCE %s\nSTART WITH 1\nINCREMENT BY 1\nNOCACHE\nNOCYCLE",
 		},
+		// A refresh here is a procedure rather than a statement: the block around it is what makes
+		// the call one, and the view it names is an argument and so a string.
+		RefreshViewSQL:       "BEGIN DBMS_MVIEW.REFRESH(%s); END;",
+		RefreshNamesString:   true,
+		CommentsOnObject:     true,
+		Partitions:           PartitionAsClause,
 		PasswordClause:       "IDENTIFIED BY %s",
 		PasswordIsIdentifier: true,
 		// A privilege over the server is *administered* here rather than granted, which is the one

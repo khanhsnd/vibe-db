@@ -14,6 +14,12 @@ export interface TableColumn {
   nullable: boolean
   primaryKey: boolean
   default: Cell
+  /**
+   * What somebody wrote about this column *on the server*, and `''` both for a column nobody has
+   * described and on an engine with nowhere to keep one — see `hasColumnComments`, which is what
+   * tells the two apart.
+   */
+  comment: string
 }
 
 /** The column the read is ordered by; an empty name leaves the table's primary key in force. */

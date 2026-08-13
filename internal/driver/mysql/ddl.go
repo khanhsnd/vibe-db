@@ -35,7 +35,75 @@ func (s *session) TableStructure(
 		return driver.TableStructure{}, err
 	}
 
-	return driver.TableStructure{Columns: columns, Indexes: indexes, ForeignKeys: keys}, nil
+	pieces, err := s.partitions(ctx, ns, table)
+	if err != nil {
+		return driver.TableStructure{}, err
+	}
+
+	return driver.TableStructure{
+		Columns:     columns,
+		Indexes:     indexes,
+		ForeignKeys: keys,
+		Partitions:  pieces,
+	}, nil
+}
+
+// partitions reads the pieces a table's rows are stored in. A table that is not partitioned still
+// has a row here — one whose `partition_name` is NULL, which is how information_schema says "the
+// whole table" — so that row is left out and such a table answers with no partitions at all.
+//
+// `partition_description` is what the piece holds without the words in front of it: `2027` for a
+// range and `1, 3` for a list. The clause is put back together here, because what a reader is shown
+// and what an ALTER takes are the same text — see `driver.Partition.Bounds`.
+func (s *session) partitions(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) ([]driver.Partition, error) {
+	const query = `
+		SELECT partition_name,
+		       partition_method,
+		       partition_expression,
+		       partition_description,
+		       table_rows
+		FROM information_schema.partitions
+		WHERE table_schema = ? AND table_name = ? AND partition_name IS NOT NULL
+		ORDER BY partition_ordinal_position`
+
+	rows, err := s.db.QueryContext(ctx, query, ns.Database, table)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	found, err := sqlkit.ScanPartitions(rows)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	for at, piece := range found {
+		found[at].Bounds = partitionBounds(piece.Method, piece.Bounds)
+	}
+	return found, nil
+}
+
+// partitionBounds is the `VALUES` clause a piece was declared with, put back together from the
+// description information_schema keeps. `MAXVALUE` is a keyword rather than a value and so is
+// written bare; a hash or a key partition has no bounds at all, its piece being decided by
+// arithmetic on the expression rather than by anything written down.
+func partitionBounds(method, description string) string {
+	switch {
+	case description == "":
+		return ""
+	case strings.HasPrefix(method, "RANGE"):
+		if strings.EqualFold(description, "MAXVALUE") {
+			return "VALUES LESS THAN MAXVALUE"
+		}
+		return "VALUES LESS THAN (" + description + ")"
+	case strings.HasPrefix(method, "LIST"):
+		return "VALUES IN (" + description + ")"
+	default:
+		return ""
+	}
 }
 
 // CreateStatements asks MySQL for its own answer, because MySQL has one. `SHOW CREATE TABLE`
@@ -72,6 +140,13 @@ func (s *session) Source(
 	ns driver.Namespace,
 	ref driver.SourceRef,
 ) (driver.Source, error) {
+	// A kind this engine has not got is refused here rather than sent, because `SHOW CREATE` would
+	// otherwise be spelled with words no MySQL server knows and the reader would be shown a syntax
+	// error instead of an answer.
+	if ref.Kind == driver.SourceMaterializedView || ref.Kind == driver.SourceSequence {
+		return driver.Source{}, domain.Unsupported(string(ref.Kind))
+	}
+
 	query := "SHOW CREATE " + ref.Kind.Keyword() + " " + dialect.Table(ns, ref.Name)
 
 	rows, err := s.db.QueryContext(ctx, query)

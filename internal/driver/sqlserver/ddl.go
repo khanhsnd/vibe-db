@@ -140,7 +140,7 @@ func (s *session) CreateStatements(
 	}
 
 	spec := sqlkit.TableSpecOf(ns, table, structure.Columns)
-	statements := []string{dialect.CreateTable(spec)}
+	statements := dialect.CreateTableStatements(spec)
 	for _, index := range structure.Indexes {
 		if index.Primary {
 			continue
@@ -178,6 +178,19 @@ func (s *session) Source(
 ) (driver.Source, error) {
 	catalogue := dialect.QuoteIdent(ns.Database)
 
+	// A sequence is not a module: it has no body, only numbers, so it is described rather than read
+	// — see `sequenceSource`. The two kinds this engine has not got at all say so.
+	switch ref.Kind {
+	case driver.SourceSequence:
+		return s.sequenceSource(ctx, ns, ref)
+	case driver.SourceMaterializedView:
+		return driver.Source{}, domain.Unsupported(
+			"a materialized view: an indexed view here is a view with an index on it")
+	case driver.SourceEvent:
+		return driver.Source{}, domain.Unsupported(
+			"an event: a SQL Server Agent job is made by calling msdb.dbo.sp_add_job")
+	}
+
 	query := `
 		SELECT m.definition
 		FROM ` + catalogue + `.sys.sql_modules m
@@ -200,4 +213,70 @@ func (s *session) Source(
 	}
 
 	return driver.Source{SourceRef: ref, Definition: strings.TrimSpace(*definition)}, nil
+}
+
+// sequenceSource spells a sequence's declaration from `sys.sequences`, which is a *description* in
+// the sense CreateStatements is one: the catalogue keeps the numbers rather than the statement.
+//
+// `current_value` is where the sequence has got to, and it is what a replayed `START WITH` carries,
+// for the reason Oracle's `last_number` is: a sequence made again from its original start would hand
+// out numbers rows already hold. Every number is read as text, a sequence here being any integer
+// type the reader declared it as — including `decimal(38,0)`, which no Go integer holds.
+func (s *session) sequenceSource(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	catalogue := dialect.QuoteIdent(ns.Database)
+
+	query := `
+		SELECT TYPE_NAME(q.user_type_id),
+		       CONVERT(nvarchar(64), q.current_value),
+		       CONVERT(nvarchar(64), q.increment),
+		       CONVERT(nvarchar(64), q.minimum_value),
+		       CONVERT(nvarchar(64), q.maximum_value),
+		       CONVERT(nvarchar(64), q.cache_size),
+		       q.is_cycling
+		FROM ` + catalogue + `.sys.sequences q
+		JOIN ` + catalogue + `.sys.schemas s ON s.schema_id = q.schema_id
+		WHERE s.name = @p1 AND q.name = @p2`
+
+	var kind, start, increment, minimum, maximum string
+	var cache *string
+	var cycles bool
+
+	err := s.db.QueryRowContext(ctx, query, ns.Schema, ref.Name).
+		Scan(&kind, &start, &increment, &minimum, &maximum, &cache, &cycles)
+	if errors.Is(err, sql.ErrNoRows) {
+		return driver.Source{}, domain.ErrUnknownDefinition
+	}
+	if err != nil {
+		return driver.Source{}, translateError(err)
+	}
+
+	// A NULL cache size is `CACHE` with no number — the server sizing it — where a zero is the
+	// reader having asked for none at all. The two are different clauses and neither is the other.
+	caching := "CACHE"
+	switch {
+	case cache == nil:
+	case *cache == "0":
+		caching = "NO CACHE"
+	default:
+		caching = "CACHE " + *cache
+	}
+
+	cycling := "NO CYCLE"
+	if cycles {
+		cycling = "CYCLE"
+	}
+
+	definition := "CREATE SEQUENCE " + dialect.Table(ns, ref.Name) + "\n" +
+		"AS " + kind + "\n" +
+		"START WITH " + start + "\n" +
+		"INCREMENT BY " + increment + "\n" +
+		"MINVALUE " + minimum + "\n" +
+		"MAXVALUE " + maximum + "\n" +
+		caching + "\n" +
+		cycling
+	return driver.Source{SourceRef: ref, Definition: definition}, nil
 }

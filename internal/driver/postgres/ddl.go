@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
@@ -34,7 +35,60 @@ func (s *session) TableStructure(
 		return driver.TableStructure{}, err
 	}
 
-	return driver.TableStructure{Columns: columns, Indexes: indexes, ForeignKeys: keys}, nil
+	pieces, err := s.partitions(ctx, ns, table)
+	if err != nil {
+		return driver.TableStructure{}, err
+	}
+
+	return driver.TableStructure{
+		Columns:     columns,
+		Indexes:     indexes,
+		ForeignKeys: keys,
+		Partitions:  pieces,
+	}, nil
+}
+
+// partitions reads the pieces a table's rows are stored in, which on this engine are **tables** —
+// `pg_inherits` is what says which table is a piece of which, and `pg_get_expr` on `relpartbound`
+// writes the bound clause back out in the server's own words, which is what an `ALTER` would take.
+//
+// A table that is not partitioned has no rows here and answers with no partitions, exactly as it
+// does everywhere else: `relkind = 'p'` is a partitioned table, and an ordinary one inherits
+// nothing.
+func (s *session) partitions(
+	ctx context.Context,
+	ns driver.Namespace,
+	table string,
+) ([]driver.Partition, error) {
+	const query = `
+		SELECT part.relname,
+		       CASE p.partstrat WHEN 'r' THEN 'RANGE' WHEN 'l' THEN 'LIST' ELSE 'HASH' END,
+		       pg_catalog.pg_get_partkeydef(parent.oid),
+		       pg_catalog.pg_get_expr(part.relpartbound, part.oid),
+		       NULLIF(part.reltuples, -1)::bigint
+		FROM pg_catalog.pg_class parent
+		JOIN pg_catalog.pg_namespace n ON n.oid = parent.relnamespace
+		JOIN pg_catalog.pg_partitioned_table p ON p.partrelid = parent.oid
+		JOIN pg_catalog.pg_inherits i ON i.inhparent = parent.oid
+		JOIN pg_catalog.pg_class part ON part.oid = i.inhrelid
+		WHERE n.nspname = $1 AND parent.relname = $2
+		ORDER BY part.relname`
+
+	db, err := s.pool(ns.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(ctx, query, ns.Schema, table)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	found, err := sqlkit.ScanPartitions(rows)
+	if err != nil {
+		return nil, translateError(err)
+	}
+	return found, nil
 }
 
 // RenameTable leaves the new name unqualified, because PostgreSQL reads a qualified one as an
@@ -126,7 +180,7 @@ func (s *session) CreateStatements(
 	}
 
 	spec := sqlkit.TableSpecOf(ns, table, declared(structure.Columns))
-	statements := []string{dialect.CreateTable(spec)}
+	statements := dialect.CreateTableStatements(spec)
 	for _, index := range structure.Indexes {
 		if index.Primary {
 			continue
@@ -164,13 +218,69 @@ func (s *session) Source(
 	ref driver.SourceRef,
 ) (driver.Source, error) {
 	switch ref.Kind {
-	case driver.SourceView:
+	case driver.SourceView, driver.SourceMaterializedView:
 		return s.viewSource(ctx, ns, ref)
 	case driver.SourceTrigger:
 		return s.triggerSource(ctx, ns, ref)
+	case driver.SourceSequence:
+		return s.sequenceSource(ctx, ns, ref)
+	case driver.SourceEvent:
+		return driver.Source{}, domain.Unsupported("an event: PostgreSQL ships no scheduler")
 	default:
 		return s.routineSource(ctx, ns, ref)
 	}
+}
+
+// sequenceSource spells a sequence's declaration from `pg_sequences`, which is a *description* in
+// the sense CreateStatements is one: there is no catalogue function that writes the CREATE, so it is
+// put together here out of the numbers the server keeps — and out of them alone, so what is shown is
+// what is there.
+//
+// It is not spelled `OR REPLACE`: PostgreSQL has no such form for a sequence, so a save is the drop
+// and the create the preview shows. **A drop takes the current value with it**, which is exactly
+// what the preview is there to say out loud.
+func (s *session) sequenceSource(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) (driver.Source, error) {
+	const query = `
+		SELECT data_type::text, start_value, increment_by, min_value, max_value, cache_size, cycle
+		FROM pg_catalog.pg_sequences
+		WHERE schemaname = $1 AND sequencename = $2`
+
+	db, err := s.pool(ns.Database)
+	if err != nil {
+		return driver.Source{}, err
+	}
+
+	var kind string
+	var start, increment, minimum, maximum, cache int64
+	var cycles bool
+
+	err = db.QueryRowContext(ctx, query, ns.Schema, ref.Name).
+		Scan(&kind, &start, &increment, &minimum, &maximum, &cache, &cycles)
+	if errors.Is(err, sql.ErrNoRows) {
+		return driver.Source{}, domain.ErrUnknownDefinition
+	}
+	if err != nil {
+		return driver.Source{}, translateError(err)
+	}
+
+	cycling := "NO CYCLE"
+	if cycles {
+		cycling = "CYCLE"
+	}
+
+	definition := "CREATE SEQUENCE " + dialect.Table(ns, ref.Name) + "\n" +
+		"AS " + kind + "\n" +
+		"START WITH " + strconv.FormatInt(start, 10) + "\n" +
+		"INCREMENT BY " + strconv.FormatInt(increment, 10) + "\n" +
+		"MINVALUE " + strconv.FormatInt(minimum, 10) + "\n" +
+		"MAXVALUE " + strconv.FormatInt(maximum, 10) + "\n" +
+		"CACHE " + strconv.FormatInt(cache, 10) + "\n" +
+		cycling
+	return driver.Source{SourceRef: ref, Definition: definition}, nil
 }
 
 func (s *session) triggerSource(
@@ -208,8 +318,16 @@ func (s *session) viewSource(
 		return driver.Source{}, err
 	}
 
-	definition := "CREATE OR REPLACE VIEW " + dialect.Table(ns, ref.Name) + " AS\n" +
-		strings.TrimSpace(body)
+	// An ordinary view is spelled `OR REPLACE`, which makes a save of an unaltered one a statement
+	// that changes nothing. A materialized view has no such form — the rows are *stored*, so
+	// replacing one would mean throwing them away — and a save of that is therefore the drop and the
+	// create the preview shows.
+	head := "CREATE OR REPLACE VIEW "
+	if ref.Kind == driver.SourceMaterializedView {
+		head = "CREATE MATERIALIZED VIEW "
+	}
+
+	definition := head + dialect.Table(ns, ref.Name) + " AS\n" + strings.TrimSpace(body)
 	return driver.Source{SourceRef: ref, Definition: definition}, nil
 }
 
