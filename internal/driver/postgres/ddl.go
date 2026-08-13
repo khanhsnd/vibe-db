@@ -351,6 +351,51 @@ func (s *session) routineSource(
 	return driver.Source{SourceRef: ref, Definition: strings.TrimSpace(definition)}, nil
 }
 
+// RoutineParams reads what a routine takes, out of `pg_proc` rather than out of
+// `information_schema.parameters`: the identity arguments are what tell two functions of one name
+// apart, and the information schema names a routine by an internal id instead.
+//
+// `proallargtypes` is the whole list and is NULL for a routine that hands nothing back, which is
+// why `proargtypes` — the arguments it *takes* — stands in for it. The names and the modes are
+// arrays running beside that list and either may be missing altogether: a function whose arguments
+// were never named has no `proargnames`, and one that hands nothing back has no `proargmodes`.
+func (s *session) RoutineParams(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) ([]driver.RoutineParam, error) {
+	const query = `
+		SELECT names.name, modes.mode, pg_catalog.format_type(taken.type, NULL)
+		FROM pg_catalog.pg_proc p
+		JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+		CROSS JOIN LATERAL unnest(COALESCE(p.proallargtypes, p.proargtypes::oid[]))
+		     WITH ORDINALITY AS taken(type, at)
+		LEFT JOIN LATERAL unnest(p.proargnames)
+		     WITH ORDINALITY AS names(name, at) ON names.at = taken.at
+		LEFT JOIN LATERAL unnest(p.proargmodes)
+		     WITH ORDINALITY AS modes(mode, at) ON modes.at = taken.at
+		WHERE n.nspname = $1 AND p.proname = $2
+		  AND pg_catalog.pg_get_function_identity_arguments(p.oid) = $3
+		  AND p.prokind IN ('f', 'p')
+		ORDER BY taken.at`
+
+	db, err := s.pool(ns.Database)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(ctx, query, ns.Schema, ref.Name, ref.Arguments)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	params, err := sqlkit.ScanRoutineParams(rows)
+	if err != nil {
+		return nil, translateError(err)
+	}
+	return params, nil
+}
+
 // sourceText runs a read that answers with one definition, and reports an object that is not there
 // as one rather than as an empty definition — which is what a save would then wipe it out with.
 func (s *session) sourceText(

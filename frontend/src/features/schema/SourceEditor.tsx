@@ -3,7 +3,7 @@ import { RefreshCw, Save } from 'lucide-react'
 
 import type { Namespace } from '@/bridge/connections'
 import { AppError, toAppError } from '@/bridge/errors'
-import { NEW_SOURCE, schema, type SourceRef } from '@/bridge/schema'
+import { CALLABLE_KINDS, NEW_SOURCE, schema, type SourceRef } from '@/bridge/schema'
 import { NO_DIAGNOSTICS } from '@/features/editor/diagnostics'
 import { EditorPane } from '@/features/editor/EditorPane'
 import { useQuerySchema } from '@/features/editor/useQuerySchema'
@@ -17,6 +17,8 @@ import { snippetsFor, useSnippetsStore } from '@/stores/snippets'
 import { SOURCE_NOUN, useTabsStore } from '@/stores/tabs'
 
 import { changeRows } from './designerRows'
+import { RoutineRunner } from './RoutineRunner'
+import { useRoutineCall } from './useRoutineCall'
 
 interface SourceEditorProps {
   /** The tab this editor fills, which its own Save turns from a new object into that object. */
@@ -68,6 +70,13 @@ export function SourceEditor({
   const [statements, setStatements] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<AppError | null>(null)
+
+  // The Run pane's state is the *tab's* rather than that pane's, because only one pane is mounted
+  // at a time: a reader who looks at the definition and comes back would otherwise find the
+  // arguments they typed blank and the answer gone. A definition that is not called at all — a
+  // view, a trigger, an object that is not on the server yet — asks the catalogue nothing.
+  const callable = CALLABLE_KINDS.includes(source.kind) && !creating
+  const call = useRoutineCall(sessionId, namespace, source, callable)
 
   // The same tables the query editor completes against, reaching the same way into the namespaces
   // beside this one: a view's body is a query, and a query is what completion is for.
@@ -133,6 +142,10 @@ export function SourceEditor({
       // The object exists now, so the next Save replaces it rather than declaring it a second
       // time and being refused for a name that is taken.
       if (creating) declared(tabId)
+      // What it takes may have changed with what it does, so the Run pane is re-read — keeping the
+      // values whose parameter is still there, which is what makes testing an edited body a Save
+      // and a Run rather than a Save and a retype.
+      void call.reload()
     } catch (thrown) {
       setError(toAppError(thrown))
     } finally {
@@ -197,6 +210,19 @@ export function SourceEditor({
               label: `Changes (${statements.length})`,
               content: <ResultGrid result={changeRows(statements)} />,
             },
+            // A routine is the one kind of definition that is *called*, so it is the one kind with
+            // a third pane. It is not offered on an object that has not been declared yet: there is
+            // nothing on the server to call until the Save above has run, and the parameters are
+            // read from the catalogue rather than out of the buffer.
+            ...(callable
+              ? [
+                  {
+                    id: 'run',
+                    label: 'Run',
+                    content: <RoutineRunner kind={source.kind} call={call} />,
+                  },
+                ]
+              : []),
           ]}
         />
       </div>

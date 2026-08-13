@@ -15,7 +15,8 @@ the tree and in a designer tab**, **schema changes from the tree's context menu*
 empty / truncate / drop a table, add / edit / rename / drop a field, add or drop an index, a
 foreign key or a partition, drop a view, a routine or a trigger — **reading and writing the
 definition of a view, a materialized view, a sequence, an event, a
-function, a procedure or a trigger**, **refreshing what a materialized view stores**,
+function, a procedure or a trigger**, **running a routine with its arguments filled in, beside the
+definition that declares it**, **refreshing what a materialized view stores**,
 **a column's comment read and written wherever the engine keeps one**, **a namespace drawn as boxes and the foreign keys between them, arranged, annotated
 and exported — with a dragged line declaring a key**, table data browsing with pagination, cell editing plus row
 insert and delete on any grid whose rows can be traced to one table, **a manual transaction — autocommit
@@ -34,8 +35,10 @@ Manager, and the full layout shell with dark and light themes and a **data font 
 
 Not there yet: a server **variable cannot be changed** from the monitor — reading one is the same
 question on every engine and setting one is five different statements, two of which do not take effect
-until a restart, so it is done in a query tab where the server answers for itself. A routine is
-declared and edited but not **run** with its arguments filled in — that is a query tab's business.
+until a restart, so it is done in a query tab where the server answers for itself. An **Oracle
+routine that hands a value back** is not run from the definition tab: a PL/SQL block answers with
+nothing, so an `OUT` parameter reaches a client only through a bound variable — and a bound call
+would not be the statement the preview showed.
 A MongoDB view has no definition to open, being declared by a document rather than by a statement.
 A **partition is added, emptied and dropped but not reorganised**: splitting, merging and exchanging
 one are four more grammars again, and each of them moves rows. A **SQL Server Agent job** is not
@@ -62,6 +65,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | The tree's schema changes, `New Database`, and the designer | [features/schema-changes.md](features/schema-changes.md) |
 | A table cut into pieces: listing them, adding one, emptying one, dropping one | [features/partitions.md](features/partitions.md) |
 | A definition — a view, a materialized view, a sequence, an event, a routine, a trigger: reading it, declaring one, saving it back | [features/definitions.md](features/definitions.md) |
+| Running a function or a procedure with its arguments filled in | [features/routine-run.md](features/routine-run.md) |
 | The users a server knows, what they may do, and how a grant is made | [features/accounts.md](features/accounts.md) |
 | What a server is doing, its status and its variables, and ending a process | [features/monitor.md](features/monitor.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |

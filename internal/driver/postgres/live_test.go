@@ -225,3 +225,96 @@ func TestLiveMonitor(t *testing.T) {
 		}
 	})
 }
+
+// A routine round trip: declare one, read what it takes, and run it. PostgreSQL is the engine where
+// an OUT parameter needs no variable at all — `CALL` answers with a row holding what the procedure
+// made of it — so what this checks that the speller cannot is that the row really comes back.
+func TestLiveRoutineCall(t *testing.T) {
+	live := openLive(t)
+	ctx := context.Background()
+	ns := driver.Namespace{Database: "postgres", Schema: "public"}
+
+	procedure := driver.SourceRef{
+		Kind:      driver.SourceProcedure,
+		Name:      "vibe_db_live_total",
+		Arguments: "n integer, OUT doubled integer",
+	}
+	function := driver.SourceRef{
+		Kind:      driver.SourceFunction,
+		Name:      "vibe_db_live_twice",
+		Arguments: "n integer",
+	}
+
+	drop := func() {
+		_ = live.DropSource(context.Background(), ns, procedure)
+		_ = live.DropSource(context.Background(), ns, function)
+	}
+	drop()
+	t.Cleanup(drop)
+
+	declare := []driver.SourceSave{
+		{Definition: `CREATE PROCEDURE public.vibe_db_live_total(n integer, OUT doubled integer)
+LANGUAGE plpgsql AS $$ BEGIN doubled := n * 2; END $$`},
+		{Definition: `CREATE FUNCTION public.vibe_db_live_twice(n integer) RETURNS integer
+LANGUAGE plpgsql AS $$ BEGIN RETURN n * 2; END $$`},
+	}
+	for _, save := range declare {
+		if err := live.SaveSource(ctx, ns, save); err != nil {
+			t.Fatalf("SaveSource: %v", err)
+		}
+	}
+
+	t.Run("what it takes is read, modes and all", func(t *testing.T) {
+		params, err := live.RoutineParams(ctx, ns, procedure)
+		if err != nil {
+			t.Fatalf("RoutineParams: %v", err)
+		}
+		want := []driver.RoutineParam{
+			{Name: "n", Mode: driver.ParamIn},
+			{Name: "doubled", Mode: driver.ParamOut},
+		}
+		if len(params) != len(want) {
+			t.Fatalf("RoutineParams = %v, want %v", params, want)
+		}
+		for at, one := range want {
+			if params[at].Name != one.Name || params[at].Mode != one.Mode {
+				t.Errorf("parameter %d = %+v, want %+v", at, params[at], one)
+			}
+		}
+	})
+
+	t.Run("an OUT parameter comes back in the row CALL answers with", func(t *testing.T) {
+		call := driver.RoutineCall{SourceRef: procedure, Args: []driver.RoutineArg{
+			{RoutineParam: driver.RoutineParam{Name: "n", Mode: driver.ParamIn}, Value: text("21")},
+			{RoutineParam: driver.RoutineParam{Name: "doubled", Mode: driver.ParamOut}},
+		}}
+
+		if statements := live.CallStatements(ns, call); len(statements) != 1 {
+			t.Fatalf("CallStatements = %v, want one CALL", statements)
+		}
+
+		result, err := live.CallRoutine(ctx, ns, call)
+		if err != nil {
+			t.Fatalf("CallRoutine: %v", err)
+		}
+		if len(result.Rows) != 1 || result.Rows[0][0] == nil || *result.Rows[0][0] != "42" {
+			t.Fatalf("CallRoutine answered %v, want 42", result.Rows)
+		}
+	})
+
+	t.Run("a function is read in the FROM clause", func(t *testing.T) {
+		call := driver.RoutineCall{SourceRef: function, Args: []driver.RoutineArg{
+			{RoutineParam: driver.RoutineParam{Name: "n", Mode: driver.ParamIn}, Value: text("21")},
+		}}
+
+		result, err := live.CallRoutine(ctx, ns, call)
+		if err != nil {
+			t.Fatalf("CallRoutine: %v", err)
+		}
+		if len(result.Rows) != 1 || result.Rows[0][0] == nil || *result.Rows[0][0] != "42" {
+			t.Fatalf("CallRoutine answered %v, want 42", result.Rows)
+		}
+	})
+}
+
+func text(value string) *string { return &value }

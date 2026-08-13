@@ -30,6 +30,10 @@ export function BeginTransaction(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['BeginTransaction'](arg1, arg2);
 }
 
+export function CallRoutine(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['CallRoutine'](arg1, arg2, arg3);
+}
+
 export function ChooseToolFile(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['ChooseToolFile'](arg1, arg2, arg3);
 }
@@ -226,6 +230,10 @@ export function LoadObjects(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadObjects'](arg1, arg2);
 }
 
+export function LoadRoutineParams(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['LoadRoutineParams'](arg1, arg2, arg3);
+}
+
 export function LoadServerStatus(arg1) {
   return window['go']['app']['ConnectionAPI']['LoadServerStatus'](arg1);
 }
@@ -268,6 +276,10 @@ export function OpenBackupFolder(arg1, arg2) {
 
 export function PreviewAccountChanges(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['PreviewAccountChanges'](arg1, arg2);
+}
+
+export function PreviewCall(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['PreviewCall'](arg1, arg2, arg3);
 }
 
 export function PreviewCreateDatabase(arg1, arg2) {

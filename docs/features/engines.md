@@ -66,6 +66,8 @@ answers [`UNSUPPORTED`](../errors.md) naming which — never a statement left fo
 | Sequences | | ✓ | | ✓ | ✓ | | |
 | Events | ✓ | | | | | | |
 | Stored routines | ✓ | ✓ | | ✓ | ✓ | | |
+| Run a routine with its arguments | ✓ | ✓ | | ✓ | ✓ | | |
+| Hand an `OUT` parameter back | ✓ | ✓ | | ✓ | | | |
 | Triggers | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Read and write a definition | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | Explain a statement | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
@@ -154,6 +156,9 @@ has to answer.
 | A partition is added | inside `ADD PARTITION (…)` | `CREATE TABLE … PARTITION OF` | — | — | after `ADD PARTITION` |
 | A partition is dropped | `DROP PARTITION` | `DROP TABLE` — it *is* a table | — | — | `DROP PARTITION` |
 | A materialized view is refreshed | — | `REFRESH MATERIALIZED VIEW` | — | — | `DBMS_MVIEW.REFRESH('…')` |
+| A procedure is called | `CALL p(…)` | `CALL p(…)` | — | `EXEC p …` | `BEGIN p(…); END;` |
+| A function is read | `SELECT f(…)` | `SELECT * FROM f(…)` | — | `SELECT f(…)` | `SELECT f(…) FROM dual` |
+| An `OUT` value comes back | a user variable | the row `CALL` answers with | — | a variable of the batch | not at all |
 | An index is dropped | through its table | by its own name | by its own name | by name **and** table |by its own name |
 | A table is copied | `LIKE` | `LIKE` in the column list | `AS SELECT` | `SELECT … INTO` | `AS SELECT` |
 

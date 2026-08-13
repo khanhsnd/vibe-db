@@ -665,6 +665,30 @@ func (*session) NewSource(driver.Namespace, driver.SourceRef) string {
 	return ""
 }
 
+// The three about calling a routine, and there is none to call: server-side JavaScript was removed
+// from the server, so a deployment holds no stored function or procedure — which is why `Objects`
+// lists none either. It is `domain.Unsupported` naming which rather than an empty parameter list a
+// caller would read as "it takes nothing".
+func (*session) RoutineParams(
+	context.Context,
+	driver.Namespace,
+	driver.SourceRef,
+) ([]driver.RoutineParam, error) {
+	return nil, domain.Unsupported("a stored routine")
+}
+
+func (*session) CallStatements(driver.Namespace, driver.RoutineCall) []string {
+	return nil
+}
+
+func (*session) CallRoutine(
+	context.Context,
+	driver.Namespace,
+	driver.RoutineCall,
+) (driver.QueryResult, error) {
+	return driver.QueryResult{}, domain.Unsupported("a stored routine")
+}
+
 // A manual transaction is a thing this adapter has not got. MongoDB does have multi-document
 // transactions, but only on a replica set or a sharded cluster and only inside a *session* the
 // client carries through every command — so a standalone server, which is what most of these

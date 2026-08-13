@@ -311,3 +311,96 @@ func names(columns []driver.Column) []string {
 	}
 	return found
 }
+
+// A routine round trip: declare one, read what it takes, and run it with its arguments filled in.
+// It is here rather than beside the speller for the reason the account round trip is — `sqlkit`
+// holds every dialect to the statement it writes, and only a server can say whether that statement
+// does what this app thinks it does. The OUT half is the reason this cannot be checked any other
+// way: the value comes back through a **user variable**, and a variable is the connection's.
+func TestLiveRoutineCall(t *testing.T) {
+	live := openLive(t)
+	ctx := context.Background()
+	ns := driver.Namespace{Database: "mysql"}
+
+	// A schema of this test's own, so nothing it declares can be mistaken for something the reader
+	// put there. It is made in `mysql` because that database is on every server there is.
+	procedure := driver.SourceRef{Kind: driver.SourceProcedure, Name: "vibe_db_live_total"}
+	function := driver.SourceRef{Kind: driver.SourceFunction, Name: "vibe_db_live_twice"}
+
+	drop := func() {
+		_ = live.DropSource(context.Background(), ns, procedure)
+		_ = live.DropSource(context.Background(), ns, function)
+	}
+	drop()
+	t.Cleanup(drop)
+
+	declare := []driver.SourceSave{
+		{Definition: "CREATE PROCEDURE `mysql`.`vibe_db_live_total`" +
+			"(IN n INT, OUT doubled INT)\nBEGIN\n  SET doubled = n * 2;\nEND"},
+		{Definition: "CREATE FUNCTION `mysql`.`vibe_db_live_twice`(n INT)\n" +
+			"RETURNS INT\nDETERMINISTIC\nBEGIN\n  RETURN n * 2;\nEND"},
+	}
+	for _, save := range declare {
+		if err := live.SaveSource(ctx, ns, save); err != nil {
+			t.Fatalf("SaveSource: %v", err)
+		}
+	}
+
+	t.Run("what it takes is read from the catalogue", func(t *testing.T) {
+		params, err := live.RoutineParams(ctx, ns, procedure)
+		if err != nil {
+			t.Fatalf("RoutineParams: %v", err)
+		}
+		want := []driver.RoutineParam{
+			{Name: "n", Mode: driver.ParamIn, Type: "int"},
+			{Name: "doubled", Mode: driver.ParamOut, Type: "int"},
+		}
+		if len(params) != len(want) {
+			t.Fatalf("RoutineParams = %v, want %v", params, want)
+		}
+		for at, one := range want {
+			if params[at].Name != one.Name || params[at].Mode != one.Mode {
+				t.Errorf("parameter %d = %+v, want %+v", at, params[at], one)
+			}
+		}
+	})
+
+	t.Run("an OUT parameter comes back through its variable", func(t *testing.T) {
+		call := driver.RoutineCall{SourceRef: procedure, Args: []driver.RoutineArg{
+			{RoutineParam: driver.RoutineParam{Name: "n", Mode: driver.ParamIn}, Value: text("21")},
+			{RoutineParam: driver.RoutineParam{Name: "doubled", Mode: driver.ParamOut}},
+		}}
+
+		// The preview is what the reader was shown; the run has to be those very statements.
+		if statements := live.CallStatements(ns, call); len(statements) != 3 {
+			t.Fatalf("CallStatements = %v, want a set, a call and a read", statements)
+		}
+
+		result, err := live.CallRoutine(ctx, ns, call)
+		if err != nil {
+			t.Fatalf("CallRoutine: %v", err)
+		}
+		if len(result.Rows) != 1 || len(result.Rows[0]) != 1 || result.Rows[0][0] == nil {
+			t.Fatalf("CallRoutine answered %v, want one value", result.Rows)
+		}
+		if *result.Rows[0][0] != "42" {
+			t.Errorf("doubled = %s, want 42", *result.Rows[0][0])
+		}
+	})
+
+	t.Run("a function is read", func(t *testing.T) {
+		call := driver.RoutineCall{SourceRef: function, Args: []driver.RoutineArg{
+			{RoutineParam: driver.RoutineParam{Name: "n", Mode: driver.ParamIn}, Value: text("21")},
+		}}
+
+		result, err := live.CallRoutine(ctx, ns, call)
+		if err != nil {
+			t.Fatalf("CallRoutine: %v", err)
+		}
+		if len(result.Rows) != 1 || result.Rows[0][0] == nil || *result.Rows[0][0] != "42" {
+			t.Fatalf("CallRoutine answered %v, want 42", result.Rows)
+		}
+	})
+}
+
+func text(value string) *string { return &value }

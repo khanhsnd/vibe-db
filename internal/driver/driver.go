@@ -321,6 +321,56 @@ type SourceSave struct {
 	Definition string
 }
 
+// ParamMode is what a routine does with one of its parameters: takes it, hands it back, or both.
+// The list is closed and a mode this side does not know is refused rather than guessed at, exactly
+// as a filter's operator is — a mode decides whether a value is written into the call or read out
+// of it, and a word nothing vouched for would decide neither.
+type ParamMode string
+
+const (
+	ParamIn    ParamMode = "in"
+	ParamOut   ParamMode = "out"
+	ParamInOut ParamMode = "inout"
+)
+
+// RoutineParam is one parameter a routine declares, as the catalogue keeps it. Type is the engine's
+// own spelling — `int`, `varchar(50)`, `NUMBER` — and is what a reader is shown beside the box they
+// fill in; it is also what an engine that has to **declare** a variable to receive an OUT parameter
+// declares it as, and travels into that statement verbatim the way a column's type does.
+//
+// A function's *return* is not one of these. It is what the call answers with rather than something
+// the reader fills in, and no engine's catalogue calls it a parameter with a name.
+type RoutineParam struct {
+	Name string
+	Mode ParamMode
+	Type string
+}
+
+// RoutineArg is one parameter with the value the reader gave it. A nil Value is `NULL` — the
+// keyword and not the word — and is what every OUT parameter carries, there being nothing to give
+// one.
+//
+// The value is written into the statement as a **string literal**, for the reason a filter's value
+// is: every one of these engines reads one back into a parameter of any type, and one string is
+// then both what runs and what the reader was shown. Nothing is bound, because a call that bound
+// its arguments could not be previewed as the statement it is.
+type RoutineArg struct {
+	RoutineParam
+	Value *string
+}
+
+// RoutineCall is one routine and the values its parameters take. The reference is the whole of what
+// names one — PostgreSQL tells two functions apart by their arguments — exactly as a definition read
+// is addressed.
+type RoutineCall struct {
+	SourceRef
+	Args []RoutineArg
+	// MaxRows caps what the call answers with, the same convention Query.MaxRows has: zero or less
+	// reads every row. A routine is a program and may select a million of them, so the caller bounds
+	// it exactly as it bounds every other read.
+	MaxRows int
+}
+
 // Objects is everything a namespace holds that the tree draws a folder for. They are read
 // together for the reason a table's shape is: expanding any one folder needs every folder's
 // count, so one read answers all three.
@@ -846,6 +896,30 @@ type Schema interface {
 	// SaveSource runs exactly what SourceStatements showed, in that order, stopping at the first
 	// failure. There is no transaction around it, which is why the preview has to be exact.
 	SaveSource(ctx context.Context, ns Namespace, save SourceSave) error
+	// RoutineParams reads what a routine takes, in the order it takes it. It is a catalogue read
+	// like a table's shape — `information_schema.parameters`, `pg_proc`, `all_arguments` — and it is
+	// the driver's for the same reason: only the engine knows where it keeps them, and what a
+	// parameter's *mode* is called differs on every one of them.
+	//
+	// An engine with no stored routines answers `domain.Unsupported` naming it, rather than an empty
+	// list a caller would read as "it takes nothing".
+	RoutineParams(ctx context.Context, ns Namespace, ref SourceRef) ([]RoutineParam, error)
+	// CallStatements spells running a routine as the statements that would run it, and **runs none
+	// of them** — the arrangement AlterStatements, SourceStatements and AccountStatements have, and
+	// here it is the whole of what the reader is shown before a routine touches their rows.
+	//
+	// It is spelling and not running, so it needs no connection and answers no error: a call this
+	// engine has no grammar for spells **nothing**, and the run of that same call is where
+	// `domain.Unsupported` is raised.
+	CallStatements(ns Namespace, call RoutineCall) []string
+	// CallRoutine runs exactly what CallStatements showed, in that order and **on one connection**,
+	// answering with what the last of them gave back.
+	//
+	// One connection because on two of these engines the statements are not independent: a value an
+	// OUT parameter hands back lives in a variable, and a variable is the connection's. That is the
+	// same connection a definition is saved on (see `sqlkit.DDL.Pin`) and for a second reason as
+	// well — an unqualified name inside a routine body resolves wherever the connection is.
+	CallRoutine(ctx context.Context, ns Namespace, call RoutineCall) (QueryResult, error)
 	// NewSource is the declaration a reader **starts from** when they are making one of these
 	// rather than altering it: the shape of the statement with nothing in it yet. It is the
 	// driver's for the reason every other statement is — a routine's body is grammar, and MySQL's

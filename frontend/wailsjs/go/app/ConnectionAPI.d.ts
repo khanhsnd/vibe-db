@@ -16,6 +16,8 @@ export function ApplyTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg
 
 export function BeginTransaction(arg1:string,arg2:app.Namespace):Promise<boolean>;
 
+export function CallRoutine(arg1:string,arg2:app.Namespace,arg3:app.RoutineCallInput):Promise<app.QueryResult>;
+
 export function ChooseToolFile(arg1:string,arg2:boolean,arg3:string):Promise<string>;
 
 export function ChooseToolProgram(arg1:string,arg2:string):Promise<app.Toolkit>;
@@ -114,6 +116,8 @@ export function LoadDatabaseOptions(arg1:string):Promise<app.DatabaseOptions>;
 
 export function LoadObjects(arg1:string,arg2:app.Namespace):Promise<app.Objects>;
 
+export function LoadRoutineParams(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<Array<app.RoutineParam>>;
+
 export function LoadServerStatus(arg1:string):Promise<app.ServerFacts>;
 
 export function LoadServerVariables(arg1:string):Promise<app.ServerFacts>;
@@ -135,6 +139,8 @@ export function NewSource(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Pro
 export function OpenBackupFolder(arg1:string,arg2:app.Namespace):Promise<void>;
 
 export function PreviewAccountChanges(arg1:string,arg2:Array<app.AccountChangeInput>):Promise<app.AccountPreview>;
+
+export function PreviewCall(arg1:string,arg2:app.Namespace,arg3:app.RoutineCallInput):Promise<Array<string>>;
 
 export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Promise<Array<string>>;
 

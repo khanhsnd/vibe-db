@@ -251,6 +251,33 @@ type SourceSaveInput struct {
 	Definition string    `json:"definition"`
 }
 
+// RoutineParam is one parameter a routine declares, as the catalogue keeps it. `mode` is `in`,
+// `out` or `inout` and is checked against those three before anything spells a call with it — see
+// paramModes. `type` is the engine's own spelling, which is what the reader is shown beside the box
+// and what a variable receiving an OUT value is declared as.
+type RoutineParam struct {
+	Name string `json:"name"`
+	Mode string `json:"mode"`
+	Type string `json:"type"`
+}
+
+// RoutineArgInput is one parameter with the value the reader gave it. A `null` value is the keyword
+// rather than the word, and is what every OUT parameter carries — there being nothing to give one.
+type RoutineArgInput struct {
+	Name  string  `json:"name"`
+	Mode  string  `json:"mode"`
+	Type  string  `json:"type"`
+	Value *string `json:"value"`
+}
+
+// RoutineCallInput is one routine and the values its parameters take. The routine travels as a
+// whole `SourceRef` for the reason a definition read does: on PostgreSQL the name alone does not
+// name one.
+type RoutineCallInput struct {
+	Routine SourceRef         `json:"routine"`
+	Args    []RoutineArgInput `json:"args"`
+}
+
 // Objects is everything the tree draws a folder for under a namespace, read in one call
 // because opening any one folder needs every folder's count.
 type Objects struct {
@@ -1748,6 +1775,73 @@ func (in SourceSaveInput) toDriver() (driver.SourceSave, error) {
 		return driver.SourceSave{}, err
 	}
 	return driver.SourceSave{Replaces: replaces, Definition: in.Definition}, nil
+}
+
+// routineKinds is the whole of what a call may be about. A view has no arguments and a trigger is
+// fired by a write rather than called, so a kind outside these two is refused before anything reads
+// a parameter list or spells a `CALL` — the arrangement sourceKinds has, one question further on.
+var routineKinds = map[driver.SourceKind]bool{
+	driver.SourceFunction:  true,
+	driver.SourceProcedure: true,
+}
+
+// paramModes is what a mode off the wire is checked against. It decides whether a value is written
+// into the call or read back out of it, so a word nothing vouched for would decide neither.
+var paramModes = map[string]driver.ParamMode{
+	string(driver.ParamIn):    driver.ParamIn,
+	string(driver.ParamOut):   driver.ParamOut,
+	string(driver.ParamInOut): driver.ParamInOut,
+}
+
+// toRoutine reads a reference that has to name a routine rather than any declared object.
+func (in SourceRef) toRoutine() (driver.SourceRef, error) {
+	ref, err := in.toDriver()
+	if err != nil {
+		return driver.SourceRef{}, err
+	}
+	if !routineKinds[ref.Kind] {
+		return driver.SourceRef{}, domain.ValidationError{
+			Field:   "kind",
+			Message: "must be function or procedure",
+		}
+	}
+	return ref, nil
+}
+
+func (in RoutineCallInput) toDriver() (driver.RoutineCall, error) {
+	ref, err := in.Routine.toRoutine()
+	if err != nil {
+		return driver.RoutineCall{}, err
+	}
+
+	args := make([]driver.RoutineArg, 0, len(in.Args))
+	for _, arg := range in.Args {
+		mode, known := paramModes[arg.Mode]
+		if !known {
+			return driver.RoutineCall{}, domain.ValidationError{
+				Field:   "mode",
+				Message: "must be in, out or inout",
+			}
+		}
+		args = append(args, driver.RoutineArg{
+			RoutineParam: driver.RoutineParam{Name: arg.Name, Mode: mode, Type: arg.Type},
+			Value:        arg.Value,
+		})
+	}
+	// Bounded like every other read: a routine is a program and may select a million rows.
+	return driver.RoutineCall{SourceRef: ref, Args: args, MaxRows: DefaultQueryRows}, nil
+}
+
+func toRoutineParamDTOs(params []driver.RoutineParam) []RoutineParam {
+	out := make([]RoutineParam, 0, len(params))
+	for _, param := range params {
+		out = append(out, RoutineParam{
+			Name: param.Name,
+			Mode: string(param.Mode),
+			Type: param.Type,
+		})
+	}
+	return out
 }
 
 func toSourceDTO(source driver.Source) Source {

@@ -190,6 +190,37 @@ func (s *session) Source(
 	return driver.Source{}, domain.Unsupported("reading this definition: the server did not answer with one")
 }
 
+// RoutineParams reads what a routine takes. `ordinal_position` 0 is a *function's return value*
+// rather than a parameter — it is what the call answers with and there is no box for it — so it is
+// left out, which is also what makes `parameter_name` non-NULL for every row that survives.
+//
+// The routine type is part of the question because a function and a procedure of one name are two
+// objects here, and `dtd_identifier` is the type as this server spells it: `int`, `varchar(50)`,
+// `decimal(10,2)`.
+func (s *session) RoutineParams(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) ([]driver.RoutineParam, error) {
+	const query = `
+		SELECT parameter_name, parameter_mode, dtd_identifier
+		FROM information_schema.parameters
+		WHERE specific_schema = ? AND specific_name = ? AND routine_type = ?
+		  AND ordinal_position > 0
+		ORDER BY ordinal_position`
+
+	rows, err := s.db.QueryContext(ctx, query, ns.Database, ref.Name, ref.Kind.Keyword())
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	params, err := sqlkit.ScanRoutineParams(rows)
+	if err != nil {
+		return nil, translateError(err)
+	}
+	return params, nil
+}
+
 // declaration says which column of a SHOW CREATE answer holds the statement. Every one of them
 // calls it `Create <something>` except the trigger's, which calls it what it is — MySQL keeps a
 // trigger as the text that was submitted rather than as a declaration it rebuilds, so the rest of

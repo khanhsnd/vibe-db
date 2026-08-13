@@ -210,6 +210,37 @@ func (s *session) Source(
 	}, nil
 }
 
+// RoutineParams reads what a routine takes out of `all_arguments`. A row with no `argument_name` at
+// position 0 is a *function's return value* rather than a parameter, and `data_level` above zero is
+// a field of a record or an element of a collection — a part of an argument rather than one — so
+// neither is a box the reader fills in.
+//
+// `package_name IS NULL` keeps this to the routines the tree lists: one inside a package is
+// addressed by two names and is not an object of the schema on its own.
+func (s *session) RoutineParams(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) ([]driver.RoutineParam, error) {
+	const query = `
+		SELECT argument_name, in_out, data_type
+		FROM all_arguments
+		WHERE owner = :1 AND object_name = :2
+		  AND package_name IS NULL AND data_level = 0 AND argument_name IS NOT NULL
+		ORDER BY position`
+
+	rows, err := s.db.QueryContext(ctx, query, ns.Database, ref.Name)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	params, err := sqlkit.ScanRoutineParams(rows)
+	if err != nil {
+		return nil, translateError(err)
+	}
+	return params, nil
+}
+
 // sequenceSource spells a sequence's declaration from `all_sequences`, which is a *description* in
 // the sense CreateStatements is one: the dictionary keeps the numbers rather than the statement, so
 // it is put together here out of them and out of nothing else.

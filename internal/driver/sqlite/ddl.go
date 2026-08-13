@@ -139,6 +139,17 @@ func (s *session) DropSource(
 	return s.DDL.DropSource(ctx, ns, ref)
 }
 
+// RoutineParams has nothing to read for the reason DropSource has nothing to drop: a function here
+// is the opening program's and is gone with it, so there is no stored routine to be told what it
+// takes. The call itself spells nothing at all — see `sqlkit.CallNone`.
+func (s *session) RoutineParams(
+	context.Context,
+	driver.Namespace,
+	driver.SourceRef,
+) ([]driver.RoutineParam, error) {
+	return nil, domain.Unsupported("a stored routine")
+}
+
 // Source is the same read CreateStatements is, and is exact for the same reason: the file stores
 // the statement that made the view or the trigger, so what a reader is shown is the declaration
 // they wrote rather than a description of it.

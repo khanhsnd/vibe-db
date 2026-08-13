@@ -364,6 +364,100 @@ func (a *ConnectionAPI) SaveSource(sessionID string, ns Namespace, save SourceSa
 	})
 }
 
+// LoadRoutineParams reads what a routine takes, which is what the Run pane draws a box per. It is
+// a catalogue read like a table's shape, and an engine with no stored routines answers
+// `UNSUPPORTED` naming it rather than an empty list the pane would draw as "it takes nothing".
+func (a *ConnectionAPI) LoadRoutineParams(
+	sessionID string,
+	ns Namespace,
+	ref SourceRef,
+) ([]RoutineParam, error) {
+	schema, err := a.sessions.Schema(sessionID)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	wanted, err := ref.toRoutine()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	if err := domain.RequireName(string(wanted.Kind), wanted.Name); err != nil {
+		return nil, wrapError(err)
+	}
+
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	params, err := schema.RoutineParams(ctx, ns.toDriver(), wanted)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return toRoutineParamDTOs(params), nil
+}
+
+// PreviewCall is exactly what CallRoutine will run, so the pane shows the statements rather than a
+// guess at them — the arrangement PreviewSource has, and it matters here for a second reason: what
+// a procedure does to a reader's rows is the procedure's own business, and the call in front of
+// them is the last thing they see before it happens.
+//
+// A call this engine has no grammar for previews nothing rather than failing, which is what the
+// pane reads as there being nothing to run.
+func (a *ConnectionAPI) PreviewCall(
+	sessionID string,
+	ns Namespace,
+	call RoutineCallInput,
+) ([]string, error) {
+	schema, err := a.sessions.Schema(sessionID)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	planned, err := call.toDriver()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	statements := schema.CallStatements(ns.toDriver(), planned)
+	if statements == nil {
+		return []string{}, nil
+	}
+	return statements, nil
+}
+
+// CallRoutine runs what PreviewCall showed and answers with what the routine gave back: its rows,
+// or the values its OUT parameters hold, or the count of what it changed.
+//
+// It takes a statement's timeout rather than a schema change's, because that is what it is — a
+// routine is the reader's own program and takes as long as it takes.
+func (a *ConnectionAPI) CallRoutine(
+	sessionID string,
+	ns Namespace,
+	call RoutineCallInput,
+) (QueryResult, error) {
+	schema, err := a.sessions.Schema(sessionID)
+	if err != nil {
+		return QueryResult{}, wrapError(err)
+	}
+
+	planned, err := call.toDriver()
+	if err != nil {
+		return QueryResult{}, wrapError(err)
+	}
+	if err := domain.RequireName(string(planned.Kind), planned.Name); err != nil {
+		return QueryResult{}, wrapError(err)
+	}
+
+	ctx, cancel := a.withTimeout(statementTimeout)
+	defer cancel()
+
+	started := time.Now()
+	result, err := schema.CallRoutine(ctx, ns.toDriver(), planned)
+	if err != nil {
+		return QueryResult{}, wrapError(err)
+	}
+	return toQueryResultDTO(result, time.Since(started)), nil
+}
+
 func (a *ConnectionAPI) CreateIndex(
 	sessionID string,
 	ns Namespace,

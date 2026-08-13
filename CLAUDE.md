@@ -213,6 +213,21 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     rule 13 again. What an engine has not got is `domain.Unsupported` naming it and
     `EngineInfo.hasPartitions` saying so to the frontend.
 
+24. **A routine is the one declared object that is *called*, and one speller writes every call.**
+    What it takes is a catalogue read like a table's shape (`driver.Schema.RoutineParams`) and never
+    a reading of its body — a body is text, and a parameter list picked out of one would be a second
+    parser. What differs between five SQL engines is a **flag** (`sqlkit.CallStyle`): a `CALL`, an
+    `EXEC` or a PL/SQL block, a function read plainly or read in the `FROM` clause, and an `OUT`
+    value handed back in a **user variable**, in the row `CALL` answers with, in a variable declared
+    in the same batch, or not at all. Never a second speller. `CallStatements` previews exactly what
+    `CallRoutine` runs — rule 13 again, and here what runs is the reader's *own program* — and an
+    argument is written in as a **string literal**, for the reason a filter's value is: a call that
+    bound its arguments could not be shown as the statement it is. The statements run on **one
+    pinned connection** (`sqlkit.DDL.Pin`), because a user variable belongs to the connection and
+    because rule 17's reason applies unchanged; so a call inside an open transaction joins it. What
+    an engine has not got — a routine at all, or a value it will only hand to a bound variable — is
+    `domain.Unsupported` naming which.
+
 
 ## Where to read before changing something
 
@@ -230,6 +245,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Change the tree, the table list or a schema change | [docs/features/schema-tree.md](docs/features/schema-tree.md), [docs/features/schema-changes.md](docs/features/schema-changes.md) |
 | Change a view's, a routine's or a trigger's definition — or a materialized view, a sequence, an event | [docs/features/definitions.md](docs/features/definitions.md) |
 | Touch a partition of a table | [docs/features/partitions.md](docs/features/partitions.md) |
+| Run a routine, or touch what one takes | [docs/features/routine-run.md](docs/features/routine-run.md) |
 | Change a query tab, a console or a file run | [docs/features/query-tab.md](docs/features/query-tab.md), [docs/features/script.md](docs/features/script.md), [docs/features/console.md](docs/features/console.md) |
 | Turn autocommit off, or touch Begin / Commit / Rollback | [docs/features/transaction.md](docs/features/transaction.md) |
 | Touch a user, a role or a privilege | [docs/architecture.md](docs/architecture.md#who-may-do-what), [docs/features/accounts.md](docs/features/accounts.md) |

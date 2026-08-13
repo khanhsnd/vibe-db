@@ -3,7 +3,7 @@ import type { app } from '@wailsjs/go/models'
 
 import type { Namespace } from './connections'
 import { call } from './errors'
-import type { TableColumn } from './tables'
+import type { Cell, TableColumn } from './tables'
 
 export interface TableIndex {
   name: string
@@ -133,6 +133,49 @@ export interface Source extends SourceRef {
 
 /** A reference to nothing, which is what an object being declared replaces. */
 export const NEW_SOURCE: SourceRef = { kind: 'view', name: '', arguments: '', table: '' }
+
+/**
+ * What a routine does with one of its parameters. It is the same word the Go side checks against
+ * before anything spells a call with it, so nothing else may be sent — and it decides which way the
+ * value travels: `in` is written into the call and `out` is read back out of it.
+ */
+export type ParamMode = 'in' | 'out' | 'inout'
+
+/**
+ * One parameter a routine declares, as the catalogue keeps it. `type` is the engine's own spelling
+ * and is what the reader is shown beside the box — it is never parsed here.
+ */
+export interface RoutineParam {
+  name: string
+  mode: ParamMode
+  type: string
+}
+
+/**
+ * One parameter with the value the reader gave it. `null` is the keyword `NULL` rather than the
+ * word, and is what every `out` parameter carries: there is nothing to give one.
+ */
+export interface RoutineArg extends RoutineParam {
+  value: string | null
+}
+
+/** The two kinds that are called. A view has no arguments and a trigger is fired by a write. */
+export const CALLABLE_KINDS: readonly SourceKind[] = ['function', 'procedure']
+
+/**
+ * What a call answered with: the rows a function or a procedure returned, or the values its OUT
+ * parameters hold, or the count of what it changed where it returned neither.
+ *
+ * It is not a query's result and carries no `statements`: what ran is what the preview already
+ * showed, and a call is one thing the reader asked for however many statements the engine needs to
+ * spell it.
+ */
+export interface CallResult {
+  columns: TableColumn[]
+  rows: Cell[][]
+  rowsAffected: number
+  elapsedMs: number
+}
 
 export function emptyFieldSpec(): FieldSpec {
   return { name: '', type: '', nullable: true, default: null, primaryKey: false, comment: '' }
@@ -268,6 +311,37 @@ export const schema = {
     call(() =>
       api.SaveSource(sessionId, ns, { replaces, definition } as unknown as app.SourceSaveInput),
     ),
+
+  /**
+   * What a routine takes, in the order it takes it — a catalogue read, so an engine with no stored
+   * routines answers `UNSUPPORTED` naming it rather than an empty list.
+   */
+  routineParams: (sessionId: string, ns: Namespace, ref: SourceRef): Promise<RoutineParam[]> =>
+    call(() =>
+      api.LoadRoutineParams(sessionId, ns, ref as unknown as app.SourceRef),
+    ) as unknown as Promise<RoutineParam[]>,
+
+  /**
+   * Exactly what `callRoutine` will run. It is the last thing a reader sees before a routine
+   * touches their rows, which is why the pane draws it whether or not there is a parameter to fill
+   * in — and why an engine with no grammar for the call answers with nothing rather than failing.
+   */
+  previewCall: (sessionId: string, ns: Namespace, ref: SourceRef, args: RoutineArg[]) =>
+    call(() =>
+      api.PreviewCall(sessionId, ns, {
+        routine: ref,
+        args,
+      } as unknown as app.RoutineCallInput),
+    ) as unknown as Promise<string[]>,
+
+  /** Runs what `previewCall` showed, and answers with what the routine gave back. */
+  callRoutine: (sessionId: string, ns: Namespace, ref: SourceRef, args: RoutineArg[]) =>
+    call(() =>
+      api.CallRoutine(sessionId, ns, {
+        routine: ref,
+        args,
+      } as unknown as app.RoutineCallInput),
+    ) as unknown as Promise<CallResult>,
 }
 
 // A field with no default leaves the key out rather than sending null, so Go reads a nil

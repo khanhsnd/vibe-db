@@ -152,9 +152,10 @@ having never left this machine.
 
 ## What is not there
 
-**A routine is not run from here.** Executing one with its arguments filled in is a query tab's
-business — `CALL …` or `SELECT f(…)` — and this tab declares rather than calls. A trigger is not run
-from anywhere: what fires it is a write to its table.
+**A routine *is* run from here, in a pane of its own.** A function and a procedure are the two of
+these that are called, so their tab has a third pane beside Definition and Changes — see
+[routine-run.md](routine-run.md), which owns everything about what a routine takes and how the call
+is spelled. A trigger is not run from anywhere: what fires it is a write to its table.
 
 **`Refresh Data` is the one item a materialized view has that an ordinary one does not.** Its rows
 are *stored*, so they go stale rather than being re-read: `REFRESH MATERIALIZED VIEW` on PostgreSQL

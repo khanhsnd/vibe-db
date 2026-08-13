@@ -215,6 +215,54 @@ func (s *session) Source(
 	return driver.Source{SourceRef: ref, Definition: strings.TrimSpace(*definition)}, nil
 }
 
+// RoutineParams reads what a routine takes. `ordinal_position` 0 is a *function's return value*
+// rather than a parameter, so it is left out exactly as it is on MySQL.
+//
+// The type is put back together with its length or its precision, because an OUT parameter is
+// received into a variable this app **declares** and `nvarchar` without a length is not a
+// declaration. `-1` is what the catalogue writes for `max`.
+//
+// The name arrives with the `@` this engine writes on every parameter. It is taken off, because
+// what a reader is shown is a parameter's name and a call here is positional — see
+// `sqlkit.CallInBatch`, which spells the variables it declares itself.
+func (s *session) RoutineParams(
+	ctx context.Context,
+	ns driver.Namespace,
+	ref driver.SourceRef,
+) ([]driver.RoutineParam, error) {
+	catalogue := dialect.QuoteIdent(ns.Database)
+
+	query := `
+		SELECT p.parameter_name,
+		       p.parameter_mode,
+		       p.data_type +
+		         COALESCE('(' + CASE WHEN p.character_maximum_length = -1 THEN 'max'
+		                             ELSE CONVERT(varchar(20), p.character_maximum_length)
+		                        END + ')', '') +
+		         COALESCE(CASE WHEN p.data_type IN ('decimal', 'numeric')
+		                       THEN '(' + CONVERT(varchar(20), p.numeric_precision) + ',' +
+		                            CONVERT(varchar(20), p.numeric_scale) + ')'
+		                  END, '')
+		FROM ` + catalogue + `.information_schema.parameters p
+		WHERE p.specific_schema = @p1 AND p.specific_name = @p2 AND p.ordinal_position > 0
+		ORDER BY p.ordinal_position`
+
+	rows, err := s.db.QueryContext(ctx, query, ns.Schema, ref.Name)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	params, err := sqlkit.ScanRoutineParams(rows)
+	if err != nil {
+		return nil, translateError(err)
+	}
+
+	for at, param := range params {
+		params[at].Name = strings.TrimPrefix(param.Name, "@")
+	}
+	return params, nil
+}
+
 // sequenceSource spells a sequence's declaration from `sys.sequences`, which is a *description* in
 // the sense CreateStatements is one: the catalogue keeps the numbers rather than the statement.
 //

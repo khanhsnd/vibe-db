@@ -1346,6 +1346,42 @@ export namespace app {
 	        this.bounds = source["bounds"];
 	    }
 	}
+	export class PlanFact {
+	    label: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PlanFact(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label = source["label"];
+	        this.value = source["value"];
+	    }
+	}
+	export class PlanNode {
+	    type: string;
+	    detail: string;
+	    depth: number;
+	    rows: number;
+	    cost: number;
+	    selfCost: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PlanNode(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.detail = source["detail"];
+	        this.depth = source["depth"];
+	        this.rows = source["rows"];
+	        this.cost = source["cost"];
+	        this.selfCost = source["selfCost"];
+	    }
+	}
 	
 	export class ProcessRef {
 	    id: string;
@@ -1634,6 +1670,92 @@ export namespace app {
 	        this.explain = source["explain"];
 	    }
 	}
+	export class QueryPlan {
+	    columns: TableColumn[];
+	    rows: string[][];
+	    nodes: PlanNode[];
+	    summary: PlanFact[];
+	    json: string;
+	    costed: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new QueryPlan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = this.convertValues(source["columns"], TableColumn);
+	        this.rows = source["rows"];
+	        this.nodes = this.convertValues(source["nodes"], PlanNode);
+	        this.summary = this.convertValues(source["summary"], PlanFact);
+	        this.json = source["json"];
+	        this.costed = source["costed"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class QueryResult {
+	    database: string;
+	    schema: string;
+	    columns: TableColumn[];
+	    rows: string[][];
+	    rowsAffected: number;
+	    truncated: boolean;
+	    elapsedMs: number;
+	    table: string;
+	    plan?: QueryPlan;
+	
+	    static createFrom(source: any = {}) {
+	        return new QueryResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.database = source["database"];
+	        this.schema = source["schema"];
+	        this.columns = this.convertValues(source["columns"], TableColumn);
+	        this.rows = source["rows"];
+	        this.rowsAffected = source["rowsAffected"];
+	        this.truncated = source["truncated"];
+	        this.elapsedMs = source["elapsedMs"];
+	        this.table = source["table"];
+	        this.plan = this.convertValues(source["plan"], QueryPlan);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class RestoreInput {
 	    database: string;
 	    schema: string;
@@ -1654,7 +1776,91 @@ export namespace app {
 	        this.runId = source["runId"];
 	    }
 	}
+	export class RoutineArgInput {
+	    name: string;
+	    mode: string;
+	    type: string;
+	    value?: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new RoutineArgInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.mode = source["mode"];
+	        this.type = source["type"];
+	        this.value = source["value"];
+	    }
+	}
+	export class SourceRef {
+	    kind: string;
+	    name: string;
+	    arguments: string;
+	    table: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SourceRef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.arguments = source["arguments"];
+	        this.table = source["table"];
+	    }
+	}
+	export class RoutineCallInput {
+	    routine: SourceRef;
+	    args: RoutineArgInput[];
+	
+	    static createFrom(source: any = {}) {
+	        return new RoutineCallInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.routine = this.convertValues(source["routine"], SourceRef);
+	        this.args = this.convertValues(source["args"], RoutineArgInput);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	export class RoutineParam {
+	    name: string;
+	    mode: string;
+	    type: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RoutineParam(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.mode = source["mode"];
+	        this.type = source["type"];
+	    }
+	}
 	export class RowDeleteInput {
 	    database: string;
 	    schema: string;
@@ -1844,82 +2050,6 @@ export namespace app {
 	        this.message = source["message"];
 	    }
 	}
-	export class PlanFact {
-	    label: string;
-	    value: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new PlanFact(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.label = source["label"];
-	        this.value = source["value"];
-	    }
-	}
-	export class PlanNode {
-	    type: string;
-	    detail: string;
-	    depth: number;
-	    rows: number;
-	    cost: number;
-	    selfCost: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new PlanNode(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.type = source["type"];
-	        this.detail = source["detail"];
-	        this.depth = source["depth"];
-	        this.rows = source["rows"];
-	        this.cost = source["cost"];
-	        this.selfCost = source["selfCost"];
-	    }
-	}
-	export class QueryPlan {
-	    columns: TableColumn[];
-	    rows: string[][];
-	    nodes: PlanNode[];
-	    summary: PlanFact[];
-	    json: string;
-	    costed: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new QueryPlan(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.columns = this.convertValues(source["columns"], TableColumn);
-	        this.rows = source["rows"];
-	        this.nodes = this.convertValues(source["nodes"], PlanNode);
-	        this.summary = this.convertValues(source["summary"], PlanFact);
-	        this.json = source["json"];
-	        this.costed = source["costed"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class ScriptResult {
 	    database: string;
 	    schema: string;
@@ -1929,8 +2059,7 @@ export namespace app {
 	    truncated: boolean;
 	    elapsedMs: number;
 	    table: string;
-	    // Go type: QueryPlan
-	    plan?: any;
+	    plan?: QueryPlan;
 	    statements: StatementOutcome[];
 	
 	    static createFrom(source: any = {}) {
@@ -1947,7 +2076,7 @@ export namespace app {
 	        this.truncated = source["truncated"];
 	        this.elapsedMs = source["elapsedMs"];
 	        this.table = source["table"];
-	        this.plan = this.convertValues(source["plan"], null);
+	        this.plan = this.convertValues(source["plan"], QueryPlan);
 	        this.statements = this.convertValues(source["statements"], StatementOutcome);
 	    }
 	
@@ -2222,24 +2351,7 @@ export namespace app {
 	        this.definition = source["definition"];
 	    }
 	}
-	export class SourceRef {
-	    kind: string;
-	    name: string;
-	    arguments: string;
-	    table: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new SourceRef(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.kind = source["kind"];
-	        this.name = source["name"];
-	        this.arguments = source["arguments"];
-	        this.table = source["table"];
-	    }
-	}
 	export class SourceSaveInput {
 	    replaces: SourceRef;
 	    definition: string;

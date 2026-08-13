@@ -182,6 +182,8 @@ type Dialect struct {
 	CommentsOnObject bool
 	// Partitions is how one piece of a partitioned table is named and changed — see PartitionStyle.
 	Partitions PartitionStyle
+	// Calls is how a routine is run and how a value it hands back is received — see CallStyle.
+	Calls CallStyle
 
 	// The account half. Everything below is one engine's grammar for "who may do what", and it is
 	// here for the reason everything above is: `sqlkit.Auth` spells every account statement there is,
@@ -389,6 +391,7 @@ var (
 		},
 		ColumnCommentInline: true,
 		Partitions:          PartitionInList,
+		Calls:               CallWithVariables,
 		AccountHasHost:      true,
 		PasswordClause:      "IDENTIFIED BY %s",
 		GrantsByWildcard:    true,
@@ -456,6 +459,7 @@ var (
 		RefreshViewSQL:   "REFRESH MATERIALIZED VIEW %s",
 		CommentsOnObject: true,
 		Partitions:       PartitionAsTable,
+		Calls:            CallDirect,
 		// A role and a user are one object here, telling apart only by whether it may log in — which
 		// is why `LOGIN` is an attribute rather than a second kind of thing to declare.
 		AccountKeyword:   "ROLE",
@@ -576,6 +580,7 @@ var (
 			// a statement anything could read back and put again.
 			Sequence: "CREATE SEQUENCE %s\nAS bigint\nSTART WITH 1\nINCREMENT BY 1",
 		},
+		Calls: CallInBatch,
 		// The one engine where an account is two objects: a **login** the server knows and a **user**
 		// a database knows. A login with no user in a database can sign in and reach nothing inside
 		// it, which is why declaring one is two statements and dropping one is two the other way.
@@ -647,6 +652,7 @@ var (
 		RefreshNamesString:   true,
 		CommentsOnObject:     true,
 		Partitions:           PartitionAsClause,
+		Calls:                CallInBlock,
 		PasswordClause:       "IDENTIFIED BY %s",
 		PasswordIsIdentifier: true,
 		// A privilege over the server is *administered* here rather than granted, which is the one

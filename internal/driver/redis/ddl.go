@@ -191,6 +191,30 @@ func (*session) NewSource(driver.Namespace, driver.SourceRef) string {
 	return ""
 }
 
+// A key space stores no routine either. A Lua script is *sent* with the command that runs it rather
+// than declared and listed, so there is nothing here to be told what it takes and nothing to call by
+// name — the same answer, for the same reason, as everything else this file refuses.
+func (*session) RoutineParams(
+	context.Context,
+	driver.Namespace,
+	driver.SourceRef,
+) ([]driver.RoutineParam, error) {
+	return nil, domain.Unsupported("a stored routine: a Redis script is sent rather than declared")
+}
+
+func (*session) CallStatements(driver.Namespace, driver.RoutineCall) []string {
+	return nil
+}
+
+func (*session) CallRoutine(
+	context.Context,
+	driver.Namespace,
+	driver.RoutineCall,
+) (driver.QueryResult, error) {
+	return driver.QueryResult{},
+		domain.Unsupported("a stored routine: a Redis script is sent rather than declared")
+}
+
 // A manual transaction is a thing a key space has not got. Redis's MULTI queues the commands and
 // runs them at EXEC, which is not what Begin, Commit and Rollback mean: nothing between the two is
 // visible to the reader who typed it, and there is no rolling back once EXEC has run.
