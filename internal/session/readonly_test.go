@@ -48,6 +48,7 @@ var writes = map[string]bool{
 	"CallRoutine":             true,
 	"ApplyAccountChanges":     true,
 	"KillProcesses":           true,
+	"ApplyProfileChanges":     true,
 }
 
 // TestReadOnlyClassifiesEveryMethod is the answer to what embedding costs: a method the wrapper does

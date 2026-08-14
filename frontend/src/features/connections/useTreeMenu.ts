@@ -206,7 +206,7 @@ export function useTreeMenu(
             ? {
                 label: 'Server Monitor',
                 icon: ICON.monitor,
-                items: monitorItems(node.profileId, onMonitor),
+                items: monitorItems(node.profileId, info.hasProfiler, onMonitor),
               }
             : null,
           onConnect,
@@ -233,7 +233,7 @@ export function useTreeMenu(
       // reason the two account rows are: what a server is doing belongs to no namespace.
       if (node.kind === 'monitor') {
         if (!sessions[node.profileId]) return []
-        return monitorItems(node.profileId, onMonitor)
+        return monitorItems(node.profileId, info.hasProfiler, onMonitor)
       }
 
       // The two rows that name an account. They are answered **before** the guard below, because

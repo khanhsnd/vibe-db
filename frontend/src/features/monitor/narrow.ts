@@ -1,5 +1,3 @@
-import type { ProcessRef } from '@/bridge/monitor'
-
 /**
  * What the box over a monitor narrows a list to: the rows holding the text in **any** of their cells.
  *
@@ -10,22 +8,27 @@ import type { ProcessRef } from '@/bridge/monitor'
  *
  * The references travel with the rows, which is the whole point of this being one function: a row is
  * acted on by its reference, and a narrowed list whose references were still the unnarrowed ones would
- * kill the wrong process.
+ * kill the wrong process — or explain a statement the reader is not looking at.
+ *
+ * It is written over **whatever** a reference is, because the four panes hold three kinds: a process
+ * carries an id to kill, a slow statement carries the text to explain, and either half of the status
+ * carries none. What a reference *is* belongs to the pane that acts on it, and nothing here reads
+ * inside one.
  */
-export interface Narrowed {
+export interface Narrowed<Ref> {
   rows: (string | null)[][]
-  refs: ProcessRef[]
+  refs: Ref[]
 }
 
-export function narrow(
+export function narrow<Ref>(
   rows: (string | null)[][],
-  refs: ProcessRef[],
+  refs: Ref[],
   find: string,
-): Narrowed {
+): Narrowed<Ref> {
   const needle = find.trim().toLowerCase()
   if (needle === '') return { rows, refs }
 
-  const kept: Narrowed = { rows: [], refs: [] }
+  const kept: Narrowed<Ref> = { rows: [], refs: [] }
   rows.forEach((row, at) => {
     if (!row.some((cell) => cell !== null && cell.toLowerCase().includes(needle))) return
 

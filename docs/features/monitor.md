@@ -4,8 +4,13 @@
 
 ## What it is
 
-The `Server Monitor` row under a connection opens one tab with three panes: what the server is doing
-**right now**, what it has been counting since it started, and what it was started **with**.
+The `Server Monitor` row under a connection opens one tab with four panes: what the server is doing
+**right now**, what it has already run [**slowly**](profiler.md), what it has been counting since it
+started, and what it was started **with**.
+
+This document is the three that are about the server as a whole. The Slow Queries pane is its own —
+it reads a different catalogue on every engine, it can be turned on and off, and it hands a statement
+to a query tab — and it is [features/profiler.md](profiler.md).
 
 **It hangs off the connection and not off a database**, which is the only honest place for it: a
 process belongs to the server, and the tree's other levels are all namespaces. It is the second row
@@ -42,16 +47,40 @@ another name. There is no `Server Monitor` row under a SQLite connection and not
 
 Which pane is being read is the leftmost control on the toolbar, and it is the same
 [`Segmented`](../frontend.md) a comparison switches its two halves with: the pane you are on wears the
-accent, rather than being one of three buttons with a shade on it.
+accent, rather than being one of four buttons with a shade on it.
 
-The pane **re-reads itself on a clock** — off, or every 2, 5, 10 or 30 seconds, and five when it
+**Changing what is being asked reads it at once**, and the rows already drawn go while it does — a
+spinner, and then the answer. Switching pane is one such change, and so is switching the database on
+the [Slow Queries](profiler.md) pane, which is the one thing here that belongs to a database rather
+than to the server. Nothing has to be pressed afterwards.
+
+That is the *question* changing. A **re-read of the same question** is the opposite case and keeps its
+rows where they are, which is what makes a hiccuping server watchable — see the failed re-read below.
+`useServerReport` is handed the question rather than the read itself, because the read is a closure
+over the session and the pane and would otherwise be a new function on every render.
+
+The pane also **re-reads itself on a clock** — off, or every 2, 5, 10 or 30 seconds, and five when it
 opens. That interval belongs to the tab rather than to the view, so switching away and back does not
 silently stop a monitor the reader left running.
+
+**An answer that arrives late is dropped.** A reader moving through three databases faster than a busy
+server answers has three reads in flight, and the slowest would otherwise land last and win — leaving
+the pane showing a database nobody is looking at any more.
 
 > **The clock stops while a row is picked.** A list that moved under a pick would leave the reader's
 > selection pointing at somebody else's process, and the next press would end *that* one. It is the
 > one mistake a monitor must not make, so the toolbar says why it has gone still rather than being
 > clever about it.
+
+**Value** puts a read-only [`CellEditor`](../grid.md#how-it-behaves) under the grid, on whichever cell
+is focused. Every pane here holds cells far longer than a column is wide — a statement in flight, a
+`currentOp` document, a `pg_settings` description — and reading one otherwise meant copying it out of
+the app. It is read-only on all four panes: what a server reported is not something there is anywhere
+to write back to.
+
+**The toolbar scrolls sideways** rather than letting its controls run off the edge. This tab carries
+more of them than any other surface with one, and every control keeps its own width — nothing is
+squeezed to fit.
 
 The box on the right narrows the rows to the ones holding the text in **any** cell. It narrows what is
 already in memory rather than asking again, for the reason [the key space's prefix
@@ -150,6 +179,10 @@ given read is `database/sql`'s business rather than anything this app chooses. M
 anyway, because the mistake it prevents is the one nothing else could catch.
 
 ## What is not here
+
+**A statement that has already finished is not in any of these three.** A process list holds what is
+in flight, and a status holds a number counted since the server started; the statement that was slow
+ten minutes ago is in neither. That is [the Slow Queries pane](profiler.md), which is why it exists.
 
 **A variable cannot be changed from this pane.** Reading one is the same question on every engine and
 setting one is not: `SET GLOBAL` takes effect at once, `ALTER SYSTEM SET` needs a reload and rewrites

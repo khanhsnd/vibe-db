@@ -76,6 +76,10 @@ answers [`UNSUPPORTED`](../errors.md) naming which — never a statement left fo
 | Watch what the server is doing | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ |
 | Cancel one statement | ✓ | ✓ | | | | ✓ | |
 | End a connection | ✓ | ✓ | | ✓ | ✓ | | ✓ |
+| Read what already ran slowly | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ |
+| Turn that recording on and off | ✓ | ✓ | | | | ✓ | ✓ |
+| Set how slow is slow enough | ✓ | | | | | ✓ | ✓ |
+| Throw the recording away | ✓ | ✓ | | ✓ | | ✓ | ✓ |
 | Users and privileges | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ |
 | Grant a privilege rather than a role | ✓ | ✓ | | ✓ | ✓ | | ✓ |
 | Roles | ✓ | ✓ | | ✓ | ✓ | ✓ | |

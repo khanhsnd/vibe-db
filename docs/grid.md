@@ -27,6 +27,7 @@ the thing the reader opened the surface to read is the thing they cannot see. Th
 | Filter & Sort panel | Under the head strip and over the header, drawn only where the call site passed `filtering` and the reader asked for it — the **Filter & Sort** button, the cell menu's **Show/Hide Filter & Sort**, or a header menu's **Add Filter**. It is `FilterSortPanel`, and it is the whole of what the section below describes. It is **dragged rather than fixed**: a grid that can be narrowed puts the panel and the rows in a `Split` of its own, so a reader who opened the panel still says how much of the pane the rows keep, and the handle between them is the only divider — the panel carries no bottom border beside it. The conditions take the slack, which is what makes dragging the handle worth doing; the keys scroll rather than push **Apply** off a panel dragged short. The height is remembered per combination like every other panel, and a grid the call site passed no `filtering` has no splitter at all. The conditions hold whether it is showing or not: hiding the panel is not widening the grid, which is why the button carries a **count** of the conditions and sort keys in force. |
 | Header | Two lines, 40 px on `--surface-bar`, so the shade alone says where the data starts. The column **name** on top in the **UI font**, bold 14 px — the one place the grid is neither mono nor the reader's own font, a size above its cells and weights clear of their light, so a name reads as a label and not as the data beneath it — and its **type** below in muted mono 11 px with a type-kind icon beside it. The type shown is `fullType` (`varchar(255)`), falling back to `type`; the icon comes from `columnType.tsx` and is drawn in **that class's own colour** (`--type-*`), so a wide header is read as shapes and colours rather than by spelling out seven type names. Never uppercased — the server's own casing stands. A column that is part of the **primary key** carries the tree's own `--grid-key` lock ahead of its name, from `ResultColumn.primaryKey`, so a result the driver could not trace back to a table simply has none. **Nullability is not drawn here**, and must not be: a driver that cannot report it says `false`, which the grid cannot tell from a column the server really will not take NULL for — the designer reads the catalogue and can. On the right of every header sits the **`⋮` options button**, and beside the name of a sorted column an arrow saying which way — followed by **which key it is** where more than one is in force, so the header under the second key does not claim the order for itself. |
 | Row gutter | 52 px, sticky at the left, 1-based row number in muted mono, right-aligned. |
+| Row actions | A column of **buttons** pinned to the right edge, drawn only where the call site passed `rowActions` — see [The pinned action column](#the-pinned-action-column). It is outside `result.columns` entirely, takes each row's own background so a selected or struck-through row reads as one thing across its width, and never appears on a `strip`. |
 | Density | Two sets of numbers and no more. The **roomy** one every grid takes, and the **dense** one a grid drawn to be *scanned* asks for with `dense`: 22 px rows, a 24 px one-line header, a 34 px gutter (`density.ts`). Nothing is dropped to get it — the header keeps the name and the type-kind glyph, and its whole type moves into the header's tooltip. The comparison is the surface that asks: it holds two grids and a script in one pane, so every pixel a row does not take is another row on the screen. |
 | Rows | `ROW_HEIGHT` from `shared/theme/density.ts`, or the dense one where the call site asked. The **data font** — the `.data-font` class, which is the family, size and weight the reader picked in Settings, mono 13 px light by default. Numeric columns right-align, everything else left-aligns; alignment is decided by `typeKind`, never by the value. |
 | Long values | A cell draws at most `PREVIEW_LIMIT` characters and then an ellipsis — `cellPreview`. A cell is a couple of hundred pixels wide, so the rest was never readable, and the browser still shapes every character of it to find where the ellipsis goes: **two columns of JSON documents made a 200-row table lag on text layout alone.** Nothing that *acts* on a value is clipped — a copy, an export, a filter's own condition and **View Value** all carry the whole of it — and a fit measures the preview because `MAX_FIT_WIDTH` caps a column far below that many characters anyway. |
@@ -231,9 +232,44 @@ the thing the reader opened the surface to read is the thing they cannot see. Th
   format does with a `NULL`, and which rows a surface counts as "what the grid holds", are in
   [features/results.md](features/results.md#exporting-a-grid).
 - **`CellEditorButton` is that same arrangement for the cell-editor panel**: one button, in the head
-  strip through `cellPanel` or in the surface's own toolbar, and it opens the one `CellEditor` both
-  writable surfaces draw. The panel itself is not the grid's — it is the surface's, beside it — but
-  the *toggle* is, so a grid that has one never has to be asked twice where the button goes.
+  strip through `cellPanel` or in the surface's own toolbar, and it opens the one `CellEditor` its
+  surfaces draw. The panel itself is not the grid's — it is the surface's, beside it — but the
+  *toggle* is, so a grid that has one never has to be asked twice where the button goes. Its `label`
+  is the one thing a surface may change, and only where the panel **reads**: `CellEditor` already
+  drops its editing controls for rows that cannot be written back, so a button still calling itself
+  an editor there would be the only thing on that surface promising something the panel does not do.
+
+## The pinned action column
+
+**What a reader *does* with a row lives at the right edge, pinned there.** `rowActions` draws one
+column of buttons after the last data column, and it stays put while the columns scroll under it —
+the row gutter's arrangement, at the other end and for the mirrored reason. Left is where a row
+*starts*; right is where what to do with it belongs.
+
+It is pinned because these are the widest grids in the app. A slow list carries a whole statement in
+a cell, so an action that scrolled away sideways would be one nobody could reach without first
+scrolling past the very column they were reading.
+
+**It is not a `ResultColumn`, and that is the whole point.** A column is a fact the server reported,
+and everything this grid does with one — sort it, filter it, fit it, move it, copy it, export it —
+would be nonsense over a pair of buttons. Keeping it out of that list is what stops each of those
+having to learn about an exception. Four things follow:
+
+- **The header over it carries a label and nothing else** — no options button, no sort mark, no
+  resize handle.
+- **Its width joins the total**, so scrolling to the far right clears the last data column rather
+  than stopping with it half under the buttons.
+- **A press on it does not reach the grid.** Reaching for a button is not a click on a cell, and the
+  selection would otherwise move out from under the reader's hand.
+- **A `strip` never has one.** A strip follows another grid and has neither scrollbars nor a gutter
+  of its own, so there is no edge to pin against.
+
+**One column, not a column per action.** The buttons for a row are whatever `render` returns, which
+is where a call site decides how many there are and what each is called.
+
+Today one surface has one — the [Slow Queries pane](features/profiler.md), whose two buttons take a
+recorded statement away. Adding a second is passing the prop at that call site, not writing a second
+kind of grid.
 
 ## The Filter & Sort panel
 

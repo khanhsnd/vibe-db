@@ -345,6 +345,48 @@ func ProcessHazard(action ProcessAction, own bool) Hazard {
 	}
 }
 
+// ProfileAction is what a change to a server's profiling does to it: the server is told to start
+// recording the statements that run slowly, told to stop, or told to throw away what it has already
+// recorded. It is a domain type for the reason ProcessAction is — what an action is going to do
+// decides whether it has to be answered for before it runs, and the driver spells it rather than
+// deciding it.
+type ProfileAction string
+
+const (
+	// ProfileEnable starts the recording, and is also what carries a new threshold: an engine is
+	// told "record anything slower than this" in one breath, and a reader who moves the threshold
+	// while it is already on has not turned anything on or off.
+	ProfileEnable ProfileAction = "enable"
+	// ProfileDisable stops it. What was already recorded stays where it is.
+	ProfileDisable ProfileAction = "disable"
+	// ProfileReset throws away what has been recorded so far, which is how a reader gets a clean
+	// window to watch: a slow log holding a fortnight of statements answers a question nobody asked.
+	ProfileReset ProfileAction = "reset"
+)
+
+// ProfileHazard is StatementHazard for changing what a server records about its own slow statements
+// — the seventh grammar for one rule, beside the ones a statement, an import, a grant, a shell
+// command, a Redis command and a kill are read by.
+//
+// Two answers:
+//
+//   - **Turning the recording on or off is a write.** It sets a global on the server, so it outlives
+//     the connection that set it and every other client feels it — but nothing that was there is
+//     gone, and turning it back is the same statement with the other word in it.
+//   - **Throwing the recording away is destructive**, in exactly the sense a TRUNCATE is: what the
+//     server had counted is not somewhere else, no transaction puts it back, and on one engine the
+//     only reset there is takes the whole instance's plan cache with it. A reader who resets while
+//     hunting a slow statement has lost the very rows they were reading.
+//
+// Neither is ever unfiltered. That class is for a statement aimed at the wrong thing entirely, and
+// there is nothing here to aim: a profiler is one switch and one number on the server itself.
+func ProfileHazard(action ProfileAction) Hazard {
+	if action == ProfileReset {
+		return HazardDestructive
+	}
+	return HazardWrite
+}
+
 // RedisHazard is StatementHazard for a key-value store: the command is the verb, and a container
 // command's second word is part of it. It is the same rule read off a third grammar, and it lives
 // here beside the other two for the reason they do — what is dangerous to run is a domain rule, and

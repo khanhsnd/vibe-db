@@ -78,6 +78,12 @@ func (*Driver) Open(
 		Translate: translateError,
 		Tx:        &s.Txn,
 	}
+	s.Profile = sqlkit.Profile{
+		Dialect:   dialect,
+		Run:       s.run,
+		Translate: translateError,
+		Tx:        &s.Txn,
+	}
 
 	// The profile's own database is what the session is judged on: reaching it proves the
 	// host, the credentials and the TLS mode, and it is where the database list is read.
@@ -108,6 +114,9 @@ type session struct {
 	// Watch spells and runs every kill there is; what `monitor.go` adds beside it is the reads that
 	// say what the server is doing and what it was started with.
 	sqlkit.Watch
+	// Profile spells and runs every change to the slow query recording, which on this engine is the
+	// installing of an extension; what `profile.go` adds beside it is the reads.
+	sqlkit.Profile
 	// Txn is the manual transaction, and while one is open it is what `DDL`, `Data`, `Auth` and the
 	// query path all run on — see `sqlkit.Txn`.
 	sqlkit.Txn

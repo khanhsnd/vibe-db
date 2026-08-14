@@ -272,3 +272,24 @@ func TestEndingOurOwnConnectionIsConfirmedOnALaptopToo(t *testing.T) {
 		t.Error("cancelling a statement on development is confirmed")
 	}
 }
+
+func TestProfileHazard(t *testing.T) {
+	cases := []struct {
+		name   string
+		action ProfileAction
+		want   Hazard
+	}{
+		{"starting the recording", ProfileEnable, HazardWrite},
+		{"stopping it", ProfileDisable, HazardWrite},
+		{"throwing away what was recorded", ProfileReset, HazardDestructive},
+	}
+
+	for _, one := range cases {
+		t.Run(one.name, func(t *testing.T) {
+			got := ProfileHazard(one.action)
+			if got != one.want {
+				t.Errorf("ProfileHazard = %q, want %q", got, one.want)
+			}
+		})
+	}
+}

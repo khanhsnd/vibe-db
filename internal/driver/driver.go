@@ -1252,6 +1252,122 @@ type Monitor interface {
 	ServerVariables(ctx context.Context) (ServerFacts, error)
 }
 
+// SlowQueryRef is what one row of a slow list is *taken away* by, kept beside the row rather than
+// read back out of whichever column it landed in — ProcessRef's arrangement, and for the same
+// reason: nothing here is matched by position.
+type SlowQueryRef struct {
+	// Runnable is the recorded statement written out as something that would **run** somewhere else:
+	// in another client, in a script, in a colleague's terminal. It is not the cell's text — that is
+	// what the server wrote down, which on most of these engines is a fragment. What has to be added
+	// around it is the engine's own knowledge and therefore the adapter's: the database has to be
+	// entered before an unqualified name resolves, and the four SQL engines spell entering one four
+	// different ways. Nothing outside a driver has ever spelled a statement and nothing starts here.
+	//
+	// It is empty for a row whose statement the server did not record, and for an engine that has
+	// nothing to say — never a half-written line the reader would find out about from a server's
+	// refusal.
+	Runnable string
+	// Complete says the statement would run **as it stands**. Two of these engines keep only what
+	// they normalized — `WHERE id = $1`, `WHERE id = :1`, values already replaced, that being how
+	// they group one statement's thousand runs into one row — so what is copied from them is a
+	// statement the reader fills in first. It is the driver's own answer about the catalogue it
+	// read: a frontend hunting for a `?` would call a placeholder inside a string literal a
+	// normalized statement.
+	Complete bool
+}
+
+// SlowQueries is what a server recorded about the statements that ran slowly, in the columns this
+// engine's own catalogue keeps them in — ProcessList's arrangement, and for the reason it has one:
+// MySQL records a start time and a lock time, PostgreSQL a call count and a mean, Redis a duration
+// in microseconds and the arguments it was given, and a column none of them could fill would say
+// nothing.
+//
+// Refs runs parallel to Rows, and holds the one thing a reader does with a row that is not reading
+// it: take the statement somewhere it can be run.
+type SlowQueries struct {
+	Columns []Column
+	Rows    [][]*string
+	Refs    []SlowQueryRef
+}
+
+// ProfileFact is one thing an engine says about its own profiling that no other engine has got —
+// where MySQL is writing the log, how many entries Redis will keep, which level MongoDB is at. A
+// list of pairs rather than a struct of fields, for the reason PlanFact is one: a field for a fact
+// one engine has not got would only be filled with a zero that reads as an answer.
+type ProfileFact struct {
+	Label string
+	Value string
+}
+
+// ProfileConfig is how a server's recording of slow statements is currently set. Every field is
+// **read** from the server rather than remembered from the last change this app made: another client
+// may have moved it, and a switch drawn from what this app did last would be a switch that lies.
+type ProfileConfig struct {
+	// Enabled is whether the server is recording at all. On an engine that always records it is
+	// true and cannot be made false — see Configurable.
+	Enabled bool
+	// ThresholdMs is how slow a statement has to be before the server writes it down. Zero on an
+	// engine that has no such setting, and on one where the setting is not the reader's to move.
+	ThresholdMs int
+	// Configurable says this engine has a switch at all. SQL Server and Oracle keep these
+	// statistics whether or not anybody asked, so there is nothing to turn on: a dialog for them
+	// would be a dialog whose every control is dead.
+	Configurable bool
+	// Ready says a read would answer with something. It is false where the machinery exists but has
+	// not been set up — a PostgreSQL server without the extension installed — and Reason is the
+	// sentence the reader is shown instead of an empty pane. An empty list means "nothing has run
+	// slowly", which is a different and much happier answer, so the two are never conflated.
+	Ready  bool
+	Reason string
+	// Detail is what this engine says beyond the two settings above, and is drawn read-only.
+	Detail []ProfileFact
+}
+
+// ProfileChange is one change to that configuration. It is the shape both spelling the change and
+// running it take — ProcessKill's arrangement, and for the same reason: one list goes to the preview
+// and to the run, so what the reader was shown and what happens cannot drift apart.
+//
+// ThresholdMs travels on every change and is read only by ProfileEnable, an engine being told "record
+// anything slower than this" in one breath.
+type ProfileChange struct {
+	Action      domain.ProfileAction
+	ThresholdMs int
+}
+
+// Profiler is the fifth half of a session: the statements this server has already run **slowly**,
+// which is the half hour between what it is doing right now and what it has counted since it started.
+//
+// It is its own interface for the reason Monitor is, and it is arranged exactly like one: each read
+// is the engine's own catalogue in the engine's own columns, and `sqlkit.Profile` spells and runs
+// **every** change to the configuration there is. What differs between the five SQL engines is a
+// flag on `sqlkit.Dialect` — where the slow statements are kept, what turns the recording on, what
+// moves the threshold, what throws the recording away — never a second speller.
+//
+// An engine with no such recording answers `domain.Unsupported` naming it, and the frontend never
+// draws the pane — see `EngineInfo.hasProfiler`.
+type Profiler interface {
+	// SlowQueries lists them, slowest first, in the columns this engine's catalogue keeps.
+	//
+	// The namespace is carried because two of these engines keep the recording per **database**
+	// rather than per server: MongoDB's `system.profile` is a collection of one database, and a
+	// SQL Server plan cache is filtered to the one being read. On the engines where it is a server
+	// fact the namespace is ignored, exactly as a process list ignores it.
+	SlowQueries(ctx context.Context, ns Namespace, limit int) (SlowQueries, error)
+	// ProfileConfig is how the recording is currently set, read from the server.
+	ProfileConfig(ctx context.Context, ns Namespace) (ProfileConfig, error)
+	// ProfileStatements spells the changes as the statements that would make them, in the order they
+	// are given, and **runs none of them** — ProcessStatements' arrangement, and here it is again the
+	// whole of what a confirmation shows.
+	//
+	// It is spelling and not running, so it needs no connection and answers no error: a change this
+	// engine has no statement for contributes **nothing** rather than failing, and the run of that
+	// same change is where `domain.Unsupported` is raised.
+	ProfileStatements(changes []ProfileChange) []string
+	// ApplyProfileChanges runs exactly what ProfileStatements showed, in that order, **stopping at
+	// the first failure**.
+	ApplyProfileChanges(ctx context.Context, ns Namespace, changes []ProfileChange) error
+}
+
 // Transaction is the manual half of a session's writing: the reader decides when what they have
 // done becomes true, instead of every statement being true the moment it runs.
 //
@@ -1282,6 +1398,7 @@ type Session interface {
 	Schema
 	Security
 	Monitor
+	Profiler
 	Transaction
 
 	Ping(ctx context.Context) error

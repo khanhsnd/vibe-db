@@ -576,6 +576,57 @@ type ServerFacts struct {
 	Rows    [][]*string   `json:"rows"`
 }
 
+// SlowQueryRef is what one row of a slow list is taken away by. `runnable` is the recorded statement
+// written out as something that would run somewhere else — the engine's own doing, since entering a
+// database is spelled four ways across these engines — and `complete` says it would run as it stands,
+// which two of them cannot promise: they record only what they normalized.
+type SlowQueryRef struct {
+	Runnable string `json:"runnable"`
+	Complete bool   `json:"complete"`
+}
+
+// SlowQueries is one row per statement the server recorded as slow, in the columns this engine's
+// catalogue keeps. `refs` runs parallel to `rows`, so nothing on the frontend reads a statement back
+// out of whichever column it landed in.
+type SlowQueries struct {
+	Columns []TableColumn  `json:"columns"`
+	Rows    [][]*string    `json:"rows"`
+	Refs    []SlowQueryRef `json:"refs"`
+}
+
+// ProfileFact is one thing this engine says about its own recording that no other engine has got.
+type ProfileFact struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// ProfileConfig is how the recording is currently set, read from the server rather than remembered
+// from the last change this app made. `ready` false with a `reason` is machinery that exists but has
+// not been set up, which is a different answer from a list holding nothing.
+type ProfileConfig struct {
+	Enabled      bool          `json:"enabled"`
+	ThresholdMs  int           `json:"thresholdMs"`
+	Configurable bool          `json:"configurable"`
+	Ready        bool          `json:"ready"`
+	Reason       string        `json:"reason"`
+	Detail       []ProfileFact `json:"detail"`
+}
+
+// ProfileChangeInput is one change to that configuration. The action is a closed list checked here
+// rather than in a driver, exactly as a process kill's is.
+type ProfileChangeInput struct {
+	Action      string `json:"action"`
+	ThresholdMs int    `json:"thresholdMs"`
+}
+
+// ProfilePreview is exactly what the changes will run, and whether the reader has to answer for it
+// first — ProcessPreview's arrangement, and here too it is what the confirmation itself shows.
+type ProfilePreview struct {
+	Statements []string `json:"statements"`
+	Hazard     string   `json:"hazard"`
+	Confirm    bool     `json:"confirm"`
+}
+
 type QueryInput struct {
 	Namespace
 	RunID   string `json:"runId"`
@@ -1573,6 +1624,78 @@ func processHazard(kills []driver.ProcessKill) domain.Hazard {
 	worst := domain.HazardNone
 	for _, kill := range kills {
 		hazard := domain.ProcessHazard(kill.Action, kill.Process.Own)
+		if hazardRank[hazard] > hazardRank[worst] {
+			worst = hazard
+		}
+	}
+	return worst
+}
+
+func toSlowQueriesDTO(list driver.SlowQueries) SlowQueries {
+	refs := make([]SlowQueryRef, 0, len(list.Refs))
+	for _, ref := range list.Refs {
+		refs = append(refs, SlowQueryRef{Runnable: ref.Runnable, Complete: ref.Complete})
+	}
+	return SlowQueries{
+		Columns: toColumnDTOs(list.Columns),
+		Rows:    gridRows(list.Rows),
+		Refs:    refs,
+	}
+}
+
+func toProfileConfigDTO(config driver.ProfileConfig) ProfileConfig {
+	detail := make([]ProfileFact, 0, len(config.Detail))
+	for _, fact := range config.Detail {
+		detail = append(detail, ProfileFact{Label: fact.Label, Value: fact.Value})
+	}
+	return ProfileConfig{
+		Enabled:      config.Enabled,
+		ThresholdMs:  config.ThresholdMs,
+		Configurable: config.Configurable,
+		Ready:        config.Ready,
+		Reason:       config.Reason,
+		Detail:       detail,
+	}
+}
+
+// profileActions is every change a bound method will accept, and it is the same closed list a process
+// kill's action is checked against, for the same reason.
+var profileActions = map[string]domain.ProfileAction{
+	"enable":  domain.ProfileEnable,
+	"disable": domain.ProfileDisable,
+	"reset":   domain.ProfileReset,
+}
+
+func (in ProfileChangeInput) toDriver() (driver.ProfileChange, error) {
+	action, known := profileActions[in.Action]
+	if !known {
+		return driver.ProfileChange{}, domain.ValidationError{
+			Field:   "action",
+			Message: "is not something this app does to profiling",
+		}
+	}
+	return driver.ProfileChange{Action: action, ThresholdMs: in.ThresholdMs}, nil
+}
+
+func toDriverProfileChanges(in []ProfileChangeInput) ([]driver.ProfileChange, error) {
+	changes := make([]driver.ProfileChange, 0, len(in))
+	for _, one := range in {
+		change, err := one.toDriver()
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, change)
+	}
+	return changes, nil
+}
+
+// profileHazard is what the whole list of changes amounts to, which is the **worst** of them — the
+// arrangement processHazard has, and for the same reason: one press runs all of them, so a list
+// holding a reset is answered for even where the change beside it is only a threshold.
+func profileHazard(changes []driver.ProfileChange) domain.Hazard {
+	worst := domain.HazardNone
+	for _, change := range changes {
+		hazard := domain.ProfileHazard(change.Action)
 		if hazardRank[hazard] > hazardRank[worst] {
 			worst = hazard
 		}

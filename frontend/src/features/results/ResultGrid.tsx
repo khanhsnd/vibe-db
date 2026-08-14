@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type RefObject,
 } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -316,6 +317,32 @@ interface ResultGridProps {
    * eight flags; see `features/table/keyMenu.ts`.
    */
   cellMenu?: ((context: CellMenuContext) => MenuItem[]) | undefined
+  /**
+   * A column of **buttons**, pinned to the right edge and outside `result.columns` entirely: it holds
+   * what a reader *does* with a row rather than anything the server said about one.
+   *
+   * It is pinned for the reason the row gutter is pinned to the left. These are the widest grids in
+   * the app — a slow list carries a whole statement in a cell — and an action that scrolled away
+   * sideways would be an action nobody could reach without first scrolling past the very column they
+   * were reading. Left is where a row *starts*; right is where what to do with it belongs.
+   *
+   * It is **not** a `ResultColumn`, and that is the point: a column is a fact the server reported,
+   * and everything the grid does with one — sort it, filter it, copy it, export it, fit it, move it —
+   * would be nonsense here. Nothing about this column is any of those things, so it is not in that
+   * list to be asked.
+   *
+   * Today one surface has one: the [Slow Queries pane](../../../../docs/features/profiler.md). Adding
+   * it to a second is adding a prop to that call site, not a second kind of grid.
+   */
+  rowActions?:
+    | {
+        /** What the header over the column says. Kept short — the column is as wide as its buttons. */
+        label: string
+        width: number
+        /** The buttons for one row, in the grid's own row numbers like every other callback. */
+        render: (row: number) => ReactNode
+      }
+    | undefined
 }
 
 /** The head strip has nothing to say for a grid with none of the things it carries. */
@@ -355,6 +382,7 @@ export function ResultGrid({
   dense = false,
   strip = false,
   cellMenu = cellMenuItems,
+  rowActions,
 }: ResultGridProps) {
   const density = dense ? DENSE : ROOMY
   const size = strip ? { ...density, gutter: 0 } : density
@@ -458,7 +486,13 @@ export function ResultGrid({
     [filtering?.shown],
   )
 
-  const totalWidth = size.gutter + widths.reduce((sum, w) => sum + w, 0)
+  // The pinned column is never drawn on a strip: a strip follows another grid and has neither
+  // scrollbars nor a gutter of its own, so there is no edge for it to sit against.
+  const actions = strip ? undefined : rowActions
+  // Its width joins the total so that scrolling to the far right still clears the last data column
+  // rather than stopping with it half under the buttons.
+  const totalWidth =
+    size.gutter + widths.reduce((sum, w) => sum + w, 0) + (actions?.width ?? 0)
   const bounds = current?.ranges.map(boundsOf) ?? []
   const focus = focusOf(current)
 
@@ -862,6 +896,7 @@ export function ResultGrid({
           size={size}
           dense={dense}
           strip={strip}
+          actions={actions}
         />
 
         {/* What is being carried, and where it would land — both drawn down the whole grid
@@ -993,6 +1028,29 @@ export function ResultGrid({
                       />
                     )
                   })}
+
+                  {/* What to *do* with this row, pinned to the right edge. It takes the row's own
+                      background so a selected or a struck-through row reads as one thing across its
+                      whole width, and it swallows the press: reaching for a button is not a click on
+                      a cell, and the grid would otherwise move the selection out from under it. */}
+                  {actions ? (
+                    <div
+                      onPointerDown={(event) => event.stopPropagation()}
+                      className={cn(
+                        'sticky right-0 z-1 ml-auto flex shrink-0 items-center justify-center gap-0.5 border-l border-line',
+                        removed
+                          ? 'bg-grid-row-deleted'
+                          : banded
+                            ? 'bg-grid-row-selected'
+                            : mark
+                              ? DIFF_ROW[mark]
+                              : 'bg-panel',
+                      )}
+                      style={{ width: actions.width }}
+                    >
+                      {actions.render(item.index)}
+                    </div>
+                  ) : null}
                 </div>
               )
             })}
@@ -1190,6 +1248,8 @@ interface HeaderRowProps {
    * scrolled back into view, the strip having no bar to scroll it with.
    */
   strip: boolean
+  /** The pinned column of buttons, or nothing where the grid has none — see `rowActions`. */
+  actions: ResultGridProps['rowActions']
 }
 
 /** A header being carried, and the boundary between two columns it would be dropped on. */
@@ -1216,6 +1276,7 @@ function HeaderRow({
   size,
   dense,
   strip,
+  actions,
 }: HeaderRowProps) {
   const bar = useRef<HTMLDivElement>(null)
 
@@ -1351,6 +1412,19 @@ function HeaderRow({
           </ContextMenu>
         )
       })}
+
+      {/* The header over the pinned column. It carries no options button, no sort mark and no resize
+          handle, because none of them means anything over a column of buttons — see `rowActions`. */}
+      {actions ? (
+        <div
+          className="sticky right-0 z-1 ml-auto flex shrink-0 items-center justify-center border-l border-line bg-bar"
+          style={{ width: actions.width, height: size.header }}
+        >
+          <span className="truncate text-2xs font-bold tracking-wide text-muted">
+            {actions.label}
+          </span>
+        </div>
+      ) : null}
     </div>
   )
 }

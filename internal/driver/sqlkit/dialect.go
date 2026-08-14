@@ -262,6 +262,50 @@ type Dialect struct {
 	// a sid being reused the moment a session ends. It is the one name in this half that is not a
 	// bare number, exactly as AccountHasHost is the one account name that is not an identifier.
 	ProcessIsPair bool
+
+	// The profiling half. Four statements and one flag, and `sqlkit.Profile` spells every change to
+	// the recording out of them — the arrangement the two halves above have. What is *read* is not
+	// here: where an engine keeps its slow statements is a catalogue read and therefore the
+	// adapter's, exactly as a process list is.
+
+	// ProfileOnSQL starts the recording. Empty is an engine that has no switch, which is either one
+	// that always records (SQL Server, Oracle) or one that cannot at all (SQLite) — the two are told
+	// apart by ProfileConfig.Configurable rather than here.
+	//
+	// It is a **list** where every other statement here is one string, because on one engine turning
+	// the recording on is genuinely two settings: MySQL writes its slow log to a file until
+	// `log_output` says otherwise, and a switch that left it there would be a switch that appeared to
+	// work and filled no table. They are separate sends rather than one line joined by a semicolon —
+	// `MultiStatements` is off on this app's MySQL connections and stays off.
+	ProfileOnSQL []string
+	// ProfileOffSQL stops it. It is separate from ProfileOnSQL rather than one template with a word
+	// substituted, because the two are not one grammar on every engine: PostgreSQL is turned on by
+	// installing an extension and off by dropping it.
+	ProfileOffSQL string
+	// ProfileThresholdSQL moves how slow a statement has to be before it is written down, `%s` being
+	// the number. Empty is an engine whose threshold is not the reader's to move.
+	ProfileThresholdSQL string
+	// ProfileResetSQL throws away what has been recorded so far. Empty is an engine with nothing to
+	// throw away — Oracle's shared pool is not a log a reader empties.
+	ProfileResetSQL string
+	// EnterDatabaseSQL is how a script says "everything after this runs in that database", `%s` being
+	// the quoted name. It is what makes a recorded statement runnable somewhere else: a slow log
+	// holds the statement and the database apart, and an unqualified name in it resolves nowhere
+	// until one is entered.
+	//
+	// The four engines that have it spell it four ways, which is exactly why it is a flag: MySQL
+	// switches with a statement, SQL Server needs its batch separator after one, and Oracle has no
+	// databases below its service so what is entered is a **schema**. PostgreSQL leaves it empty and
+	// means it — a connection there is bound to its database for life, and `\c` is a client's word
+	// rather than a server's, so a script says which database it wants in a comment and the reader
+	// connects to it.
+	EnterDatabaseSQL string
+	// ProfileThresholdInSeconds says this engine's threshold is a number of **seconds** rather than
+	// of milliseconds, which MySQL's `long_query_time` is and nothing else here is. The reader is
+	// asked in milliseconds everywhere — a threshold is only interesting below a second — so the one
+	// engine that wants seconds is a flag, never a second speller. Milliseconds that do not divide
+	// into whole seconds are written as a decimal, which `long_query_time` takes.
+	ProfileThresholdInSeconds bool
 }
 
 // SourceStarter is the skeleton a reader starts a new view, routine or trigger from: the shape of
@@ -423,6 +467,21 @@ var (
 		// `CONNECTION` are spelled out is that `KILL 5` alone means the connection.
 		CancelStatementSQL: "KILL QUERY %s",
 		CloseConnectionSQL: "KILL CONNECTION %s",
+
+		// `log_output` comes first because the switch is useless without it: MySQL writes its slow
+		// log to a file by default, and a file on the server's own disk is not something this app
+		// can read. Turning it on and leaving it there would fill nothing and look like it worked.
+		ProfileOnSQL: []string{
+			"SET GLOBAL log_output = 'TABLE'",
+			"SET GLOBAL slow_query_log = 'ON'",
+		},
+		ProfileOffSQL:       "SET GLOBAL slow_query_log = 'OFF'",
+		ProfileThresholdSQL: "SET GLOBAL long_query_time = %s",
+		// The one place a slow log is a **table**, which is why it is emptied by the statement any
+		// other table is.
+		ProfileResetSQL:           "TRUNCATE TABLE mysql.slow_log",
+		ProfileThresholdInSeconds: true,
+		EnterDatabaseSQL:          "USE %s;",
 	}
 	Postgres = Dialect{
 		IdentQuote:             '"',
@@ -514,6 +573,20 @@ var (
 		// gone, which is the server's own answer and not a failure.
 		CancelStatementSQL: "SELECT pg_cancel_backend(%s)",
 		CloseConnectionSQL: "SELECT pg_terminate_backend(%s)",
+
+		// The one engine whose recording is an **extension** rather than a setting, so turning it on
+		// installs one and turning it off drops one. It installs into the database it is run in,
+		// which is why every change here carries a namespace.
+		//
+		// There is no threshold: `pg_stat_statements` records every statement and the reader picks
+		// their own slow out of what it counted. `log_min_duration_statement` is the setting that
+		// takes one, and what it writes goes to a file on the server's disk that this app cannot
+		// read — so offering the box would be offering a number that changes nothing on this pane.
+		ProfileOnSQL:    []string{"CREATE EXTENSION IF NOT EXISTS pg_stat_statements"},
+		ProfileOffSQL:   "DROP EXTENSION IF EXISTS pg_stat_statements",
+		ProfileResetSQL: "SELECT pg_stat_statements_reset()",
+		// Blank on purpose: a connection here is bound to its database for life. See the flag.
+		EnterDatabaseSQL: "",
 	}
 	// SQLite is one file and therefore one namespace: `main`, which every name is qualified by
 	// exactly as a MySQL name is qualified by its database. Its upsert is PostgreSQL's word for
@@ -615,6 +688,15 @@ var (
 		// statement — `KILL <spid> WITH STATUSONLY` — only reports how far a rollback has got. An
 		// engine that has not got it says so rather than ending a session the reader meant to keep.
 		CloseConnectionSQL: "KILL %s",
+
+		// There is no switch and no threshold: this engine keeps a statistic for every statement in
+		// its plan cache whether or not anybody asked, so there is nothing to turn on. What a reader
+		// *can* do is empty the cache — and that is the whole instance's, not one database's, which
+		// is why it is classified beside a DROP rather than beside a setting.
+		ProfileResetSQL: "DBCC FREEPROCCACHE",
+		// The batch separator is part of it: `USE` takes effect for the batches that follow, so a
+		// statement pasted straight after one without `GO` runs in the database the reader left.
+		EnterDatabaseSQL: "USE %s;\nGO",
 	}
 	// Oracle has no databases below its service, so the schema *is* what a Namespace's Database
 	// holds and a name is qualified by one level exactly as MySQL's is. Everything else here is
@@ -689,6 +771,17 @@ var (
 		// without waiting for the session to notice it has been ended.
 		CloseConnectionSQL: "ALTER SYSTEM KILL SESSION %s IMMEDIATE",
 		ProcessIsPair:      true,
+
+		// An Oracle connection has no database below its service, so what a script enters is the
+		// **schema** every unqualified name in the statement will be resolved against.
+		EnterDatabaseSQL: "ALTER SESSION SET CURRENT_SCHEMA = %s;",
+
+		// Every profiling flag is blank, and that is the answer rather than an omission. `v$sqlarea`
+		// holds a row per statement in the shared pool whether or not anybody asked, so there is
+		// nothing to turn on; and the only thing that would empty it — `ALTER SYSTEM FLUSH
+		// SHARED_POOL` — throws away every parsed statement on the instance, so that every session
+		// on it reparses from cold. That is a thing to do to a server deliberately, not from a
+		// button beside a list, so this engine says it has no reset rather than offering that one.
 	}
 	// Shell is the lexical half of a document store's own language, and is a Dialect for one
 	// reason: so `Lex` reads it rather than a second scanner being written. `//` opens a comment,

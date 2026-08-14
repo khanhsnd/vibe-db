@@ -333,6 +333,18 @@ func (m *Manager) Monitor(id string) (driver.Monitor, domain.Environment, error)
 	return s.driverSession, s.Profile.Environment, nil
 }
 
+// Profiler hands out the half of a session that reads what the server already ran slowly, and the
+// environment it would run in beside it — Monitor's arrangement exactly, and for the same reason:
+// turning the recording on or throwing it away carries a hazard, and whether the reader has to
+// answer for it is `domain.Environment.NeedsConfirmation`'s.
+func (m *Manager) Profiler(id string) (driver.Profiler, domain.Environment, error) {
+	s, err := m.Get(id)
+	if err != nil {
+		return nil, "", err
+	}
+	return s.driverSession, s.Profile.Environment, nil
+}
+
 func (m *Manager) TableRows(
 	ctx context.Context,
 	id string,

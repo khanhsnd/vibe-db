@@ -332,6 +332,42 @@ driver, read from a second scalar question beside the list (`CONNECTION_ID()`, `
 `@@SPID`, `CLIENT ID`, `whatsmyuri`), and it says *one of ours* rather than the only one: a session
 holds a pool. See [features/monitor.md](features/monitor.md).
 
+## What a server already ran slowly
+
+`driver.Profiler` is the fifth half of a session: the statements a server recorded as slow, how that
+recording is set, and the statements that change it. It is `Monitor`'s arrangement applied to the
+half hour between "in flight" and "counted since startup" — `internal/app` owns four bound methods
+and no rules.
+
+**One speller.** `sqlkit.Profile` spells and runs every change to the recording, and what differs
+between five SQL engines is a **flag** on `sqlkit.Dialect`: what turns it on, what turns it off, what
+moves the threshold, what throws it away, and whether the threshold is kept in seconds. Empty is a
+thing the engine has not got, answered by `domain.Unsupported` naming it — `Watch`'s arrangement
+exactly, down to `exec` asking the open transaction before it reaches for a pool. MongoDB and Redis
+touch none of it, each writing its own the way each already writes its own `Monitor`.
+
+**The reads are each engine's own, and they are six different catalogues.** `mysql.slow_log`,
+`pg_stat_statements`, `sys.dm_exec_query_stats`, `v$sqlarea`, `system.profile`, `SLOWLOG GET` — one
+row means a *run* on two of them and a *statement* on the rest, which is why the columns are the
+engine's own and why the pane never claims to compare two servers.
+
+**What a reader takes away is spelled by the driver.** A slow log records the statement and the
+database it ran in *apart*, so a row's `SlowQueryRef.Runnable` puts them back together as something
+that will run elsewhere — and entering a database is a `Dialect` flag (`EnterDatabaseSQL`) because
+MySQL switches with a statement, SQL Server needs its batch separator after one, Oracle enters a
+schema, and PostgreSQL has no such statement at all. `Complete` says it would run as it stands: two
+engines record only what they normalized, and their copy opens with comment lines saying which
+placeholders to fill in. That is also why MySQL is read from its slow log rather than from
+`performance_schema`'s digest — a digest is not a statement any server would take back.
+
+**A threshold is checked as a number before it is spelled**, for the reason a process id is: a
+`SET GLOBAL` binds no arguments.
+
+**What is dangerous is a `domain` rule.** `domain.ProfileHazard` is the seventh grammar for one rule:
+turning the recording on or off is a **write** — it sets a global that outlives the connection — and
+throwing away what was recorded is **destructive**, in the sense a `TRUNCATE` is. Neither is ever
+unfiltered: there is nothing here to aim. See [features/profiler.md](features/profiler.md).
+
 ## Carrying a table to a file
 
 `internal/transfer` is the file formats and nothing else. It knows no databases: a row here is

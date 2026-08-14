@@ -177,8 +177,11 @@ export interface AccountsTab extends TabBase {
   account: AccountRef | null
 }
 
-/** Which half of a server monitor is being read: what it is doing, or what it was started with. */
-export type MonitorPane = 'processes' | 'status' | 'variables'
+/**
+ * Which quarter of a server monitor is being read: what it is doing, what it has already run
+ * **slowly**, what it has counted, or what it was started with.
+ */
+export type MonitorPane = 'processes' | 'slow' | 'status' | 'variables'
 
 /**
  * What a **connection's server** is doing, and what it was started with — what the `Server Monitor`
@@ -192,11 +195,17 @@ export type MonitorPane = 'processes' | 'status' | 'variables'
  * `every` is how many seconds apart the pane re-reads itself, and `0` is off. It is on the tab rather
  * than in the view so that switching away and back does not silently stop a monitor the reader left
  * running.
+ *
+ * `database` is the one thing here that is *not* a server fact, and it belongs to the Slow Queries
+ * pane alone: two engines keep the recording per database rather than per server — a MongoDB profile
+ * is a collection of one, a PostgreSQL extension is installed into one — so that pane has to say
+ * which. Empty is the connection's own database, which is what every other engine ignores.
  */
 export interface MonitorTab extends TabBase {
   kind: 'monitor'
   pane: MonitorPane
   every: number
+  database: string
 }
 
 /**
@@ -293,7 +302,7 @@ export const COMPARE_ARROW = '⇄'
 export const MONITOR_EVERY = 5
 
 type QueryEdit = Partial<Pick<QueryTab, 'sql' | 'rowLimit'>>
-type MonitorEdit = Partial<Pick<MonitorTab, 'pane' | 'every'>>
+type MonitorEdit = Partial<Pick<MonitorTab, 'pane' | 'every' | 'database'>>
 type FindEdit = Partial<Pick<FindTab, 'text' | 'scope' | 'mode' | 'caseInsensitive'>>
 
 interface TabsState {
@@ -326,7 +335,10 @@ interface TabsState {
    * being part of what identifies the tab.
    */
   openMonitor: (profileId: string, pane?: MonitorPane) => string
-  /** Switches the pane, or how often it re-reads itself — the monitor's own toolbar. */
+  /**
+   * Switches the pane, how often it re-reads itself, or which database the Slow Queries pane is
+   * about — the monitor's own toolbar.
+   */
   editMonitor: (id: string, edit: MonitorEdit) => void
   /** A console on one connection. One per connection and namespace, like every other tab. */
   openConsole: (profileId: string, namespace: Namespace) => string
@@ -535,6 +547,7 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       namespace: NO_NAMESPACE,
       pane,
       every: MONITOR_EVERY,
+      database: '',
     })
     // A connection already open is revealed rather than opened again, so the pane the reader just
     // asked for is the one they land on — the arrangement openAccounts and openCompare have.

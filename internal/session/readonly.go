@@ -216,3 +216,16 @@ func (s readOnly) ApplyAccountChanges(context.Context, []driver.AccountChange) e
 func (s readOnly) KillProcesses(context.Context, []driver.ProcessKill) error {
 	return refuse("ending a server process")
 }
+
+// Changing what a server records about its own slow statements is a change to the **server**, which
+// is the one this guard is furthest from being about — nothing here touches a row. It is held back
+// anyway, and for the reason a kill is: read-only is a promise that this connection sends nothing
+// that changes what somebody else finds, and a `SET GLOBAL` outlives the connection that made it.
+//
+// The list is still read and the change is still **spelled**: a reader who cannot turn the recording
+// on can see which statement would.
+func (s readOnly) ApplyProfileChanges(
+	context.Context, driver.Namespace, []driver.ProfileChange,
+) error {
+	return refuse("changing what the server records about slow statements")
+}

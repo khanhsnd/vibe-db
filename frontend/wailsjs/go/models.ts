@@ -641,11 +641,11 @@ export namespace app {
 	    table: string;
 	    columns: string[];
 	    rows: string[][];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ExportInput(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.format = source["format"];
@@ -1610,6 +1610,75 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class ProfileChangeInput {
+	    action: string;
+	    thresholdMs: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProfileChangeInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.action = source["action"];
+	        this.thresholdMs = source["thresholdMs"];
+	    }
+	}
+	export class ProfileFact {
+	    label: string;
+	    value: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProfileFact(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.label = source["label"];
+	        this.value = source["value"];
+	    }
+	}
+	export class ProfileConfig {
+	    enabled: boolean;
+	    thresholdMs: number;
+	    configurable: boolean;
+	    ready: boolean;
+	    reason: string;
+	    detail: ProfileFact[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ProfileConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.thresholdMs = source["thresholdMs"];
+	        this.configurable = source["configurable"];
+	        this.ready = source["ready"];
+	        this.reason = source["reason"];
+	        this.detail = this.convertValues(source["detail"], ProfileFact);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ProfileInput {
 	    id: string;
 	    name: string;
@@ -1675,6 +1744,22 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+	export class ProfilePreview {
+	    statements: string[];
+	    hazard: string;
+	    confirm: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProfilePreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.statements = source["statements"];
+	        this.hazard = source["hazard"];
+	        this.confirm = source["confirm"];
+	    }
 	}
 	
 	export class QueryInput {
@@ -2324,6 +2409,55 @@ export namespace app {
 	        this.readOnly = source["readOnly"];
 	    }
 	}
+	export class SlowQueryRef {
+	    runnable: string;
+	    complete: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SlowQueryRef(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.runnable = source["runnable"];
+	        this.complete = source["complete"];
+	    }
+	}
+	export class SlowQueries {
+	    columns: TableColumn[];
+	    rows: string[][];
+	    refs: SlowQueryRef[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SlowQueries(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.columns = this.convertValues(source["columns"], TableColumn);
+	        this.rows = source["rows"];
+	        this.refs = this.convertValues(source["refs"], SlowQueryRef);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class Snippet {
 	    name: string;
 	    description: string;

@@ -10,6 +10,8 @@ export function AlterColumn(arg1:string,arg2:app.Namespace,arg3:string,arg4:stri
 
 export function ApplyAccountChanges(arg1:string,arg2:Array<app.AccountChangeInput>):Promise<void>;
 
+export function ApplyProfileChanges(arg1:string,arg2:app.Namespace,arg3:Array<app.ProfileChangeInput>):Promise<void>;
+
 export function ApplyRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<void>;
 
 export function ApplyTableChanges(arg1:string,arg2:app.Namespace,arg3:string,arg4:Array<app.TableChangeInput>):Promise<void>;
@@ -122,11 +124,15 @@ export function LoadDatabaseOptions(arg1:string):Promise<app.DatabaseOptions>;
 
 export function LoadObjects(arg1:string,arg2:app.Namespace):Promise<app.Objects>;
 
+export function LoadProfileConfig(arg1:string,arg2:app.Namespace):Promise<app.ProfileConfig>;
+
 export function LoadRoutineParams(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<Array<app.RoutineParam>>;
 
 export function LoadServerStatus(arg1:string):Promise<app.ServerFacts>;
 
 export function LoadServerVariables(arg1:string):Promise<app.ServerFacts>;
+
+export function LoadSlowQueries(arg1:string,arg2:app.Namespace,arg3:number):Promise<app.SlowQueries>;
 
 export function LoadSource(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<app.Source>;
 
@@ -153,6 +159,8 @@ export function PreviewCreateDatabase(arg1:string,arg2:app.DatabaseSpecInput):Pr
 export function PreviewImportFile(arg1:app.ImportSource):Promise<app.ImportPreview>;
 
 export function PreviewProcessKills(arg1:string,arg2:Array<app.ProcessKillInput>):Promise<app.ProcessPreview>;
+
+export function PreviewProfileChanges(arg1:string,arg2:Array<app.ProfileChangeInput>):Promise<app.ProfilePreview>;
 
 export function PreviewRowWrite(arg1:string,arg2:app.RowWriteInput):Promise<Array<string>>;
 

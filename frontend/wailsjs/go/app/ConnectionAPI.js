@@ -18,6 +18,10 @@ export function ApplyAccountChanges(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ApplyAccountChanges'](arg1, arg2);
 }
 
+export function ApplyProfileChanges(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['ApplyProfileChanges'](arg1, arg2, arg3);
+}
+
 export function ApplyRowWrite(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['ApplyRowWrite'](arg1, arg2);
 }
@@ -242,6 +246,10 @@ export function LoadObjects(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['LoadObjects'](arg1, arg2);
 }
 
+export function LoadProfileConfig(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['LoadProfileConfig'](arg1, arg2);
+}
+
 export function LoadRoutineParams(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['LoadRoutineParams'](arg1, arg2, arg3);
 }
@@ -252,6 +260,10 @@ export function LoadServerStatus(arg1) {
 
 export function LoadServerVariables(arg1) {
   return window['go']['app']['ConnectionAPI']['LoadServerVariables'](arg1);
+}
+
+export function LoadSlowQueries(arg1, arg2, arg3) {
+  return window['go']['app']['ConnectionAPI']['LoadSlowQueries'](arg1, arg2, arg3);
 }
 
 export function LoadSource(arg1, arg2, arg3) {
@@ -304,6 +316,10 @@ export function PreviewImportFile(arg1) {
 
 export function PreviewProcessKills(arg1, arg2) {
   return window['go']['app']['ConnectionAPI']['PreviewProcessKills'](arg1, arg2);
+}
+
+export function PreviewProfileChanges(arg1, arg2) {
+  return window['go']['app']['ConnectionAPI']['PreviewProfileChanges'](arg1, arg2);
 }
 
 export function PreviewRowWrite(arg1, arg2) {

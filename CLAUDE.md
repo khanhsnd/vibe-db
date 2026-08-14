@@ -267,6 +267,33 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     what it was asked. A job dials **its own** session and never borrows the reader's, a firing inside
     somebody's open transaction being exactly the accident rule 20 makes possible.
 
+28. **What a server already ran *slowly* is read from six different catalogues, and one speller turns
+    the recording on.** `driver.Profiler` is the fifth half of a session and rule 22's arrangement
+    applied to the half hour between what is in flight and what has been counted since startup:
+    `mysql.slow_log`, `pg_stat_statements`, `sys.dm_exec_query_stats`, `v$sqlarea`, `system.profile`
+    and `SLOWLOG GET` are each that engine's own read in that engine's own columns — one row is a
+    *run* on two of them and a *statement* on the rest — while `sqlkit.Profile` spells and runs
+    **every** change there is. What differs between five SQL engines is a flag on `Dialect`
+    (`ProfileOnSQL`, `ProfileOffSQL`, `ProfileThresholdSQL`, `ProfileResetSQL`, and the one threshold
+    kept in seconds), never a second speller; `ProfileStatements` previews exactly what
+    `ApplyProfileChanges` runs — rule 13 again — and a threshold is checked as a number first, for
+    the reason a process id is. **What a reader takes away is spelled by the driver too**: a slow log
+    records the statement and the database it ran in *apart*, so `SlowQueryRef.Runnable` puts them
+    back together as something that will run elsewhere — and entering a database is a flag
+    (`EnterDatabaseSQL`) because four engines spell it four ways and PostgreSQL has no statement for
+    it at all. `Complete` says it would run as it stands, which two engines cannot promise, recording
+    only what they normalized; that is a *driver's* fact and never a hunt for a `?` in the text, and
+    it is also why MySQL is read from its slow log rather than from a digest no server would take
+    back. There is deliberately no Explain button — Explain in this app runs the statement, and a row
+    of a slow log is as likely to be a `DELETE`, so a press there would be one press from running
+    something somebody only wanted to understand. What is dangerous is a `domain` rule
+    (`domain.ProfileHazard`, the seventh grammar): turning it on or off is a write, throwing the
+    recording away is destructive, and neither is ever unfiltered because there is nothing here to
+    aim. An engine that records nothing is `domain.Unsupported` naming it and
+    `EngineInfo.hasProfiler` says so to the frontend; whether it can be switched at all is
+    `profilerConfigurable`, and whether the recording belongs to a database rather than to the server
+    is `profilerPerDatabase`.
+
 ## Where to read before changing something
 
 | Task | Read |
@@ -289,6 +316,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Turn autocommit off, or touch Begin / Commit / Rollback | [docs/features/transaction.md](docs/features/transaction.md) |
 | Touch a user, a role or a privilege | [docs/architecture.md](docs/architecture.md#who-may-do-what), [docs/features/accounts.md](docs/features/accounts.md) |
 | Touch a process list, a kill, a server status or a variable | [docs/architecture.md](docs/architecture.md#what-a-server-is-doing), [docs/features/monitor.md](docs/features/monitor.md) |
+| Touch a slow query list, or what a server records about one | [docs/architecture.md](docs/architecture.md#what-a-server-already-ran-slowly), [docs/features/profiler.md](docs/features/profiler.md) |
 | Change what is kept about a statement that has run | [docs/features/log.md](docs/features/log.md), [docs/features/results.md](docs/features/results.md#the-history-pane) |
 | Touch a named snippet, the library file, or what completion offers by name | [docs/features/snippets.md](docs/features/snippets.md), [docs/editor.md](docs/editor.md#what-completion-offers) |
 | Change a table tab, its paging, filtering or values | [docs/features/table-tab.md](docs/features/table-tab.md), [docs/features/row-limit.md](docs/features/row-limit.md), [docs/features/filter-sort.md](docs/features/filter-sort.md), [docs/features/value-viewer.md](docs/features/value-viewer.md) |
@@ -312,7 +340,8 @@ A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `hasTriggers`, `documents`,
 `keys`, `isFile`, `createsTables`, `createsDatabases`, `hasViews`, `hasSource`, `hasBackups`, `hasTransactions`,
 `hasAccounts`, `accountLabel`, `hasRoles`, `hasMonitor`, `cancelsStatement`, `closesConnection`,
-`processLabel`, `hasMaterializedViews`, `hasSequences`, `hasEvents`, `hasPartitions`,
+`processLabel`, `hasProfiler`, `profilerConfigurable`, `profilerPerDatabase`,
+`hasMaterializedViews`, `hasSequences`, `hasEvents`, `hasPartitions`,
 `hasColumnComments`,
 `dumpTool`, `restoreTool`, `needsUser`, `needsDatabase`, `databaseLabel` — and never a comparison
 against an engine's name in a component. What a *connection* is rather than what its engine is goes

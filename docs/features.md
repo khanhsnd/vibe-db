@@ -74,6 +74,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | Running a function or a procedure with its arguments filled in | [features/routine-run.md](features/routine-run.md) |
 | The users a server knows, what they may do, and how a grant is made | [features/accounts.md](features/accounts.md) |
 | What a server is doing, its status and its variables, and ending a process | [features/monitor.md](features/monitor.md) |
+| What a server already ran **slowly**, and turning that recording on or off | [features/profiler.md](features/profiler.md) |
 | Dumping a table or a schema, and the Import and Export wizards | [features/transfer.md](features/transfer.md) |
 | Backing a namespace up, the list of backups, and restoring one | [features/backup.md](features/backup.md) |
 | Running a backup, an export, a dump or a comparison on a clock | [features/automation.md](features/automation.md) |

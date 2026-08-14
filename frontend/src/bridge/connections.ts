@@ -462,6 +462,21 @@ export interface EngineInfo {
   // field for the reason `accountLabel` is one — never a comparison against an engine's name in a
   // component — and `''` where there is nothing to name.
   processLabel: string
+  // Whether this engine records the statements that ran **slowly**. Every server here does in some
+  // form — a slow log, an extension, a plan cache, a shared pool, a profile collection, a ring in
+  // memory — and a SQLite database does not, being a file that keeps no record of what was asked of
+  // it. An engine without it is drawn no `Slow Queries` pane.
+  hasProfiler: boolean
+  // Whether that recording can be turned on, off or thrown away from this app. SQL Server and Oracle
+  // record whether or not anybody asked and have no switch, so the dialog is not offered rather than
+  // being offered with every control dead. It is a separate fact from `hasProfiler` because "always
+  // recording" and "not recording" are opposite answers that would otherwise share one field.
+  profilerConfigurable: boolean
+  // Whether that recording belongs to a **database** rather than to the server. A MongoDB profile is
+  // a collection of one database and a PostgreSQL extension is installed into one, so on those two
+  // the pane has to say which; MySQL's slow log, a plan cache, a shared pool and a Redis ring are all
+  // the server's, and a database selector over them would be a control that changed nothing.
+  profilerPerDatabase: boolean
 }
 
 /**
@@ -565,6 +580,11 @@ export const ENGINES = [
     cancelsStatement: true,
     closesConnection: true,
     processLabel: 'Process',
+    // The slow log is a **table** here once `log_output` says so, which is why this app can read
+    // it at all and why turning the recording on sets two things.
+    hasProfiler: true,
+    profilerConfigurable: true,
+    profilerPerDatabase: false,
   },
   {
     value: 'postgres',
@@ -608,6 +628,10 @@ export const ENGINES = [
     // A backend is an operating-system process of its own here, which is what the server calls one
     // everywhere it reports them — `pg_stat_activity`, `pg_terminate_backend`.
     processLabel: 'Backend',
+    // The recording is an **extension** rather than a setting, and it is installed per database.
+    hasProfiler: true,
+    profilerConfigurable: true,
+    profilerPerDatabase: true,
   },
   {
     // A SQLite database is a file, so there is no host, no port and nobody to be — the Database box
@@ -654,6 +678,11 @@ export const ENGINES = [
     cancelsStatement: false,
     closesConnection: false,
     processLabel: '',
+    // A file keeps no record of what was asked of it. What this engine has instead is
+    // `EXPLAIN QUERY PLAN` on a statement the reader types.
+    hasProfiler: false,
+    profilerConfigurable: false,
+    profilerPerDatabase: false,
   },
   {
     // SQL Server names a table by its database *and* its schema, so the tree has both levels the
@@ -700,6 +729,11 @@ export const ENGINES = [
     cancelsStatement: false,
     closesConnection: true,
     processLabel: 'Session',
+    // The plan cache holds a statistic per plan whether or not anybody asked, so there is
+    // nothing to turn on — only the whole cache to empty.
+    hasProfiler: true,
+    profilerConfigurable: false,
+    profilerPerDatabase: false,
   },
   {
     // Oracle has no level between a connection and a schema: the Database box holds the *service*
@@ -748,6 +782,11 @@ export const ENGINES = [
     cancelsStatement: false,
     closesConnection: true,
     processLabel: 'Session',
+    // `v$sqlarea` is there whether or not anybody asked, and the only thing that would empty it
+    // would reparse every statement on the instance — so this engine offers no change at all.
+    hasProfiler: true,
+    profilerConfigurable: false,
+    profilerPerDatabase: false,
   },
   {
     // A MongoDB server started without access control takes no credentials at all, which is why
@@ -797,6 +836,11 @@ export const ENGINES = [
     cancelsStatement: true,
     closesConnection: false,
     processLabel: 'Operation',
+    // The engine the word profiling comes from: `setProfilingLevel`, per database, written to a
+    // capped collection of that database.
+    hasProfiler: true,
+    profilerConfigurable: true,
+    profilerPerDatabase: true,
   },
   {
     // A Redis database is *numbered* rather than named — `0` to `15` on a default install — so the
@@ -845,6 +889,11 @@ export const ENGINES = [
     cancelsStatement: false,
     closesConnection: true,
     processLabel: 'Client',
+    // `SLOWLOG` is a ring in memory, bounded by the server, and both its settings are a
+    // `CONFIG SET` away.
+    hasProfiler: true,
+    profilerConfigurable: true,
+    profilerPerDatabase: false,
   },
 ] as const satisfies readonly EngineInfo[]
 
