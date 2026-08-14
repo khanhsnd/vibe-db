@@ -45,7 +45,15 @@ A Homebrew install is updated with:
 brew upgrade --cask vibe-db
 ```
 
-The app's Settings → Updates page checks the GitHub release API. A Windows update is downloaded and its
+The app's Settings → Updates page checks the GitHub release API, and **a release is an update when its
+version is not the one running — not when it is a higher one**. The release channel decides which version
+this app is meant to be on, so a version line corrected downwards is offered like any other release
+instead of stranding every copy built from the mistake; a version published *below* an existing install
+is therefore an ordinary update and the page says so. What GitHub calls the latest release is the one
+published most recently rather than the highest tag, which is the same rule read from the other end.
+Builds before `0.1.8` accepted a higher version only, so a copy installed from one of those has to be
+replaced by hand once — the rule below lives in the running build and cannot reach it from a release it
+refuses to see. A Windows update is downloaded and its
 checksum is checked against `checksums.txt` before the NSIS installer starts and the app exits. That
 installer's manifest requests administrator, which `CreateProcess` refuses outright, so it is started
 through the shell — Windows shows its elevation prompt, and declining it leaves the app running. macOS

@@ -13,8 +13,8 @@ import (
 const updateTimeout = 30 * time.Second
 
 // UpdateInfo is the one public release's relationship to this copy of the app. The browser does
-// not decide whether a tag is newer: it only draws the answer, so a future frontend has the same
-// update rule as this one.
+// not decide whether a tag is the one to be on: it only draws the answer, so a future frontend has
+// the same update rule as this one.
 type UpdateInfo struct {
 	CurrentVersion string `json:"currentVersion"`
 	LatestVersion  string `json:"latestVersion"`
@@ -41,8 +41,9 @@ func NewUpdateAPI(version string) *UpdateAPI {
 	return &UpdateAPI{apiContext: newAPIContext(), service: update.New(), version: version}
 }
 
-// Check answers the newest published release for this operating system. Development builds do not
-// query the network: a local tree must never offer to replace itself with a published build.
+// Check answers the published release for this operating system, which is an update whenever its
+// version is not the one running. Development builds do not query the network: a local tree must
+// never offer to replace itself with a published build.
 func (a *UpdateAPI) Check() (UpdateInfo, error) {
 	info := UpdateInfo{CurrentVersion: a.version, Platform: runtime.GOOS}
 	if a.version == "dev" {
@@ -56,14 +57,14 @@ func (a *UpdateAPI) Check() (UpdateInfo, error) {
 	if err != nil {
 		return UpdateInfo{}, updateFailure("check for updates", err)
 	}
-	newer, err := update.IsNewer(a.version, release.Version)
+	available, err := update.Differs(a.version, release.Version)
 	if err != nil {
 		return UpdateInfo{}, updateFailure("compare release versions", err)
 	}
 	info.LatestVersion = release.Version
-	info.Available = newer
+	info.Available = available
 	info.ReleaseURL = release.ReleaseURL
-	if runtime.GOOS == "darwin" && newer {
+	if runtime.GOOS == "darwin" && available {
 		info.Command = "brew upgrade --cask vibe-db"
 	}
 	return info, nil
@@ -86,12 +87,12 @@ func (a *UpdateAPI) InstallWindowsUpdate() error {
 	if err != nil {
 		return updateFailure("download update", err)
 	}
-	newer, err := update.IsNewer(a.version, release.Version)
+	available, err := update.Differs(a.version, release.Version)
 	if err != nil {
 		return updateFailure("compare release versions", err)
 	}
-	if !newer {
-		return updateFailure("install update", errors.New("this is already the latest version"))
+	if !available {
+		return updateFailure("install update", errors.New("this is already the published version"))
 	}
 
 	installer, err := a.service.DownloadWindowsInstaller(ctx, release)

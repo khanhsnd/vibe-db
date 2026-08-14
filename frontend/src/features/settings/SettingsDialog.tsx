@@ -132,7 +132,7 @@ function Updates() {
     <div className="flex flex-col gap-5">
       <Group title="Application update">
         <p className="text-sm text-muted">
-          {info ? `Installed version ${info.currentVersion}` : 'Check the public release channel for a newer version.'}
+          {info ? `Installed version ${info.currentVersion}` : 'Check the public release channel for the published version.'}
         </p>
         <div className="flex items-center gap-2">
           <Button onClick={check} disabled={checking || installing}>
@@ -148,7 +148,7 @@ function Updates() {
           <p className="text-xs text-muted">Development builds do not update themselves.</p>
         ) : null}
         {info && !info.development && !info.available ? (
-          <p className="text-xs text-muted">You are on the latest version.</p>
+          <p className="text-xs text-muted">You are on the published version.</p>
         ) : null}
         {info?.available && info.platform !== 'windows' ? (
           <div className="flex flex-col gap-2">

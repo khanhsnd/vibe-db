@@ -185,7 +185,12 @@ func installerName(version string, platform Platform) string {
 	}
 }
 
-func IsNewer(current, latest string) (bool, error) {
+// Differs answers whether the published release is a different version from the one running, which
+// is the whole of what makes it an update. It deliberately does not ask whether the published one is
+// *higher*: the release channel decides which version this app is meant to be on, so a version line
+// corrected downwards reaches its readers like any other release rather than stranding every copy
+// that was built from the mistake.
+func Differs(current, latest string) (bool, error) {
 	if current == "dev" {
 		return false, ErrDevelopmentBuild
 	}
@@ -197,12 +202,7 @@ func IsNewer(current, latest string) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("invalid latest version %q", latest)
 	}
-	for index := range currentParts {
-		if latestParts[index] != currentParts[index] {
-			return latestParts[index] > currentParts[index], nil
-		}
-	}
-	return false, nil
+	return currentParts != latestParts, nil
 }
 
 func validVersion(version string) bool {
