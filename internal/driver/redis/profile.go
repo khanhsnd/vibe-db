@@ -65,10 +65,14 @@ func (s *session) SlowQueries(
 	}
 
 	list := driver.SlowQueries{
+		// The two numbers say so. A key space has no catalogue to read a type from, so these are
+		// this adapter's own words — and they have to be right: the grid sorts a numeric column as
+		// numbers and everything else as text, so an id or a duration declared as text would put
+		// `10` before `9`.
 		Columns: []driver.Column{
-			{Name: "ID", Type: "string", FullType: "string"},
+			{Name: "ID", Type: "integer", FullType: "integer"},
 			{Name: "When", Type: "string", FullType: "string"},
-			{Name: "Duration ms", Type: "string", FullType: "string"},
+			{Name: "Duration ms", Type: "decimal", FullType: "decimal"},
 			{Name: "Client", Type: "string", FullType: "string"},
 			{Name: "Name", Type: "string", FullType: "string"},
 			{Name: "Command", Type: "string", FullType: "string"},

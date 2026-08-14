@@ -27,15 +27,19 @@ import { loadSlowQueries, type SlowQueryRef } from '@/bridge/profiler'
 import type { TableColumn } from '@/bridge/tables'
 import { CellEditor, EDITOR_HEIGHT, EDITOR_MIN_HEIGHT } from '@/features/results/CellEditor'
 import { CellEditorButton } from '@/features/results/CellEditorButton'
+import { FilterSortButton } from '@/features/results/FilterSortButton'
 import { GridFooter } from '@/features/results/GridFooter'
 import { ResultGrid } from '@/features/results/ResultGrid'
+import { countConditions, NO_FILTER, type Group } from '@/features/results/filter'
 import {
   focusOf,
+  NO_SORT,
   oneRange,
   selectedRows,
   type CellRef,
   type GridData,
   type Selection,
+  type SortKey,
 } from '@/features/results/resultSet'
 import { Button } from '@/shared/ui/Button'
 import { CopyButton } from '@/shared/ui/CopyButton'
@@ -51,7 +55,7 @@ import { useConnectionsStore } from '@/stores/connections'
 import { useSchemaStore } from '@/stores/schema'
 import { useTabsStore, type MonitorPane, type MonitorTab } from '@/stores/tabs'
 
-import { narrow } from './narrow'
+import { arrange } from './arrange'
 import { ProfileDialog } from './ProfileDialog'
 import { useServerReport } from './useServerReport'
 
@@ -91,6 +95,12 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
   const [find, setFind] = useState('')
   const [configuring, setConfiguring] = useState(false)
   const [valueShown, setValueShown] = useState(false)
+  // How the pane is narrowed and ordered. It is this view's own state rather than the tab's, which is
+  // where `find` already lives and for the same reason: it is about the *columns being read*, and
+  // every one of them changes the moment the reader switches pane.
+  const [criteria, setCriteria] = useState<Group>(NO_FILTER)
+  const [filterShown, setFilterShown] = useState(false)
+  const [sort, setSort] = useState<readonly SortKey[]>(NO_SORT)
 
   const editMonitor = useTabsStore((s) => s.editMonitor)
   const ask = useSchemaStore((s) => s.ask)
@@ -136,9 +146,14 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
   )
 
   const shown = useMemo(
-    () => narrow(data?.rows ?? [], data?.refs ?? [], find),
-    [data, find],
+    () =>
+      arrange(data?.rows ?? [], data?.refs ?? [], data?.columns ?? [], find, criteria, sort),
+    [data, find, criteria, sort],
   )
+
+  // Whether the reader has narrowed the pane themselves, by the box or by a condition. It decides
+  // what an empty pane says, which is the one place the difference matters.
+  const narrowed = find.trim() !== '' || countConditions(criteria) > 0
 
   const grid: GridData | null = data
     ? {
@@ -268,7 +283,14 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
           value={tab.pane}
           onChange={(pane) => {
             editMonitor(tab.id, { pane })
+            // The pane's columns are all different ones, so everything said *about* columns starts
+            // over: a condition on `Duration` means nothing over a variable list, and a sort key
+            // naming a column that is not there would be a sort button with nothing behind it.
             setSelection(null)
+            setFind('')
+            setCriteria(NO_FILTER)
+            setSort(NO_SORT)
+            setFilterShown(false)
           }}
         />
 
@@ -337,9 +359,16 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
           Refresh
         </Button>
 
-        {/* The value panel's toggle. It is here rather than in the head strip the grid draws for
+        {/* The two panel toggles. They are here rather than in the head strip the grid draws for
             itself, because this surface has a toolbar of its own and one table must never carry two
-            strips — see docs/grid.md. */}
+            strips — see docs/grid.md. The count on the first is what says the grid is still narrowed
+            after the panel is closed. */}
+        <FilterSortButton
+          shown={filterShown}
+          onToggle={() => setFilterShown(!filterShown)}
+          count={countConditions(criteria) + sort.length}
+        />
+
         <CellEditorButton
           shown={valueShown}
           onToggle={() => setValueShown(!valueShown)}
@@ -405,8 +434,8 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
             )
           ) : grid.rows.length === 0 ? (
             <Empty
-              title={emptyTitle(tab.pane, find !== '', info.processLabel)}
-              hint={find === '' ? undefined : 'Clear the box to see the whole list.'}
+              title={emptyTitle(tab.pane, narrowed, info.processLabel)}
+              hint={narrowed ? 'Widen the box or the conditions to see the whole list.' : undefined}
             />
           ) : (
             <ResultGrid
@@ -417,6 +446,23 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
               headStrip={false}
               cellPanel={{ shown: valueShown, onToggle: () => setValueShown(!valueShown) }}
               onEditInPanel={showInPanel}
+              // Both narrow **what is already in memory** — see `arrange`. There is no `suggest`,
+              // because offering the values a column holds would mean asking the server a second
+              // question about a list it has already answered with in full.
+              sort={sort}
+              onSortChange={(next) => {
+                setSort(next)
+                setSelection(null)
+              }}
+              filtering={{
+                criteria,
+                shown: filterShown,
+                onShownChange: setFilterShown,
+                onChange: (next) => {
+                  setCriteria(next)
+                  setSelection(null)
+                },
+              }}
               // What a reader *does* with a recorded statement, pinned to the right edge where it
               // stays reachable however wide the statement column runs. Only the slow list has one:
               // the other three panes are watched rather than taken away from.
@@ -603,6 +649,11 @@ function count(many: number, noun: string): string {
   return many === 1 ? `1 ${noun}` : `${many} ${noun}s`
 }
 
+/**
+ * What an empty pane says. **Whether the reader narrowed it is the first question**: a list emptied
+ * by a condition and a server with nothing to report are opposite answers, and telling a reader that
+ * nothing has run slowly when their own filter hid it would send them looking at the wrong thing.
+ */
 function emptyTitle(pane: MonitorPane, narrowed: boolean, label: string): string {
   if (narrowed) return 'Nothing matches'
   if (pane === 'processes') return `No ${label.toLowerCase()}s to show`

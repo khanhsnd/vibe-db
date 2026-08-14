@@ -2,9 +2,18 @@
 
 [← Features and UI behaviour](../features.md)
 
-**Filtering is the table tab's**, since it is the one surface whose rows come from a statement this
-side writes and can therefore narrow. A query result and the history log hold their rows already and
-are only ever *sorted* — by a header's `⋮` menu, in memory. What follows is the table tab.
+**Filtering a table tab is the server's**, since it is the one surface whose rows come from a
+statement this side writes: the conditions are spelled into a `WHERE` and the server decides. A query
+result and the history log hold their rows already and are only ever *sorted* — by a header's `⋮`
+menu, in memory.
+
+**A [server monitor's panes](monitor.md#narrowing-and-ordering) build the same conditions and apply
+them themselves.** Their rows are one catalogue answer, all of it already in memory, and one of the
+engines behind them takes no condition at all — so the panel, the operators and the sort are the ones
+below, and only who decides differs. Two small differences follow from having no one server to agree
+with, and they are named there.
+
+What follows is the table tab.
 
 There are **three ways in**, and they hold the same conditions:
 

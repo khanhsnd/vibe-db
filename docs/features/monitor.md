@@ -82,15 +82,43 @@ to write back to.
 more of them than any other surface with one, and every control keeps its own width — nothing is
 squeezed to fit.
 
-The box on the right narrows the rows to the ones holding the text in **any** cell. It narrows what is
-already in memory rather than asking again, for the reason [the key space's prefix
-tree](key-space.md) does: `pg_settings` has four hundred rows and
-`dm_os_performance_counters` some thousands, neither is a paged read, and a monitor that asked the
-server again per keystroke would be asking a busy server the very question the reader is watching it
-answer. **The references travel with the rows**, so a narrowed list is acted on by the right ones.
-
 A re-read that fails leaves the rows already drawn where they are and puts the reason beside them: a
 monitor that blanked itself the moment a server hiccoughed would be one nobody could watch.
+
+## Narrowing and ordering
+
+Three controls narrow or reorder a pane, and **none of them asks the server anything**:
+
+- **The box** on the right, which keeps the rows holding its text in *any* cell — what a reader typing
+  into an unlabelled box means, since they are looking for a word rather than for a column.
+- **Filter & Sort**, the same [`FilterSortPanel`](../grid.md#the-filter--sort-panel) a table view
+  builds a `WHERE` in, and the same conditions.
+- **A header's sort**, from its own menu.
+
+They apply where the rows already are, for the reason [the key space's prefix tree](key-space.md)
+does: `pg_settings` has four hundred rows and `dm_os_performance_counters` some thousands, neither is
+a paged read, and a monitor that asked the server again per keystroke would be asking a busy server
+the very question the reader is watching it answer. One of the engines settles it outright —
+`SLOWLOG GET` takes no condition at all — so doing it here is what keeps six engines' panes answering
+alike.
+
+`arrange` is the one function that does all three, and it is one function because of the
+**references**: a row is acted on by the reference beside it, so a list narrowed without its
+references carried along would end the wrong process. The order is find, then filter, then sort — the
+two narrowings commute, and sorting rows about to be thrown away is work nobody sees.
+
+**A condition and a sort are the *view's* state, not the tab's**, and switching pane clears both along
+with the box. Every column is a different one over there: a condition on `Duration` means nothing over
+a variable list, and a sort key naming a column that is not there would be a button with nothing
+behind it.
+
+**Two things differ from the `WHERE` a table view sends**, because these panes hold six engines'
+catalogues and there is no one server to agree with: the text comparisons ignore case, and a column
+compares as numbers only where its own type says it is one. See `filterRows`.
+
+**An empty pane says which kind of empty it is.** A list emptied by the reader's own condition and a
+server with nothing to report are opposite answers, and saying nothing has run slowly when a filter
+hid it would send the reader looking at the wrong thing.
 
 ## Ending one
 

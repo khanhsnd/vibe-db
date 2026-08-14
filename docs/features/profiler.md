@@ -54,9 +54,15 @@ server's own disk is not something this app can open.
 
 ## Reading it
 
-The toolbar is [the monitor's](monitor.md#reading-it) — the same `Segmented`, the same clock, the
-same box that narrows the rows already in memory. **Profiling…** is this pane's own, and is drawn
-only where the engine has a switch.
+The toolbar is [the monitor's](monitor.md#reading-it) — the same `Segmented`, the same clock, and the
+same box, conditions and sort, all three of which
+[narrow what is already in memory](monitor.md#narrowing-and-ordering) rather than asking the server
+again. **Profiling…** is this pane's own, and is drawn only where the engine has a switch.
+
+Ordering is worth a sentence here, because this is the pane a reader sorts most. What the driver reads
+is already ordered by what matters most on that engine — total time on four of them, and *newest
+first* on the two that record one row per run — so a sort here is the reader asking a second question
+of an answer that already had a sensible one.
 
 There is deliberately no Explain button here, and the reason is worth writing down because it will be
 suggested again. In this app **Explain runs the statement** and asks about it as well — [see what
