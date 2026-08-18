@@ -2,17 +2,21 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { cn } from '@/lib/cn'
 
-import { DocumentView, type Notation } from './DocumentView'
+import { DocumentView } from './DocumentView'
+import { documentMarkup } from './documentPage'
 import { GeoShape } from './GeoShape'
 import { HtmlView } from './HtmlView'
+import { type Notation } from './notation'
 import {
+  dataURI,
   decodeBinary,
   detect,
   hexDump,
-  imageType,
+  holdsMarkup,
   parseArray,
   prettyJSON,
   type GeoJSON,
+  type ValueKind,
 } from './value'
 
 /** How much of a blob is dumped. Beyond this a reader is not reading bytes, they are scrolling. */
@@ -61,11 +65,17 @@ export function ValueViewer({
   const { arrived, reread, write } = useArrived(value, onChange)
 
   const found = useMemo(() => detect(arrived, columnType), [arrived, columnType])
+  // Whether a document has a page in it, which is the one thing the views need that the *kind* of a
+  // value does not say — a document is a document whether some field of it holds markup or not.
+  const markup = useMemo(() => arrived !== null && holdsMarkup(arrived), [arrived])
   // The *presence* of a formatter decides the views, never its identity: an unstable one would
   // otherwise rebuild the list every render and knock the reader back to the first tab.
   const laidOut = formatValue !== undefined
   const editable = onChange !== undefined
-  const views = useMemo(() => viewsFor(found.kind, laidOut, editable), [found.kind, laidOut, editable])
+  const views = useMemo(
+    () => viewsFor(found.kind, laidOut, editable, markup),
+    [found.kind, laidOut, editable, markup],
+  )
 
   const [view, setView] = useState(views[0] ?? 'raw')
   // A different cell is a different value, and the view it was last read in may not exist here.
@@ -106,6 +116,7 @@ export function ValueViewer({
 
       <View
         view={view}
+        kind={found.kind}
         value={value}
         opened={arrived}
         onChange={write}
@@ -162,19 +173,26 @@ const VIEW_LABEL: Record<ViewKind, string> = {
  *
  * A **document** is the one view a value can be denied: laying it out is the driver's, so a surface
  * with no session to ask has nothing to lay it out with and offers what cannot be wrong instead.
+ * `Page` is never denied for that reason — the structure it draws is the library's grammar and asks
+ * nothing of a session — and where a document holds markup it sits **between the document and its
+ * text**, which is where a reader looking for that markup looks: past the reading of the document,
+ * before the raw of it.
  */
 function viewsFor(
-  kind: ReturnType<typeof detect>['kind'],
+  kind: ValueKind,
   laidOut: boolean,
   editable: boolean,
+  markup: boolean,
 ): ViewKind[] {
   switch (kind) {
     case 'geojson':
       return ['map', 'json', 'raw']
     case 'json':
-      return ['json', 'raw']
-    case 'document':
-      return laidOut ? ['document', 'raw'] : ['raw']
+      return markup ? ['json', 'html', 'raw'] : ['json', 'raw']
+    case 'document': {
+      const laid: ViewKind[] = laidOut ? ['document'] : []
+      return markup ? [...laid, 'html', 'raw'] : [...laid, 'raw']
+    }
     case 'array':
       // `Items` is a reading view. An editable cell editor must open on its text input, not make
       // the reader select Raw before they can change a PostgreSQL array literal.
@@ -192,6 +210,7 @@ function viewsFor(
 
 function View({
   view,
+  kind,
   value,
   opened,
   onChange,
@@ -202,6 +221,8 @@ function View({
   /** That same value as this view opened on it — every laid-out view reads this one. */
   opened: string | null
   view: ViewKind
+  /** What the value is, which is what tells `Page` whether it draws markup or a whole document. */
+  kind: ValueKind
   onChange?: ((next: string) => void) | undefined
   formatValue?: ((value: string) => Promise<string>) | undefined
 }) {
@@ -229,7 +250,7 @@ function View({
       return <Picture value={opened} />
 
     case 'html':
-      return <HtmlView markup={opened} />
+      return <Page text={opened} notation={NOTATIONS[kind]} />
 
     default:
       return (
@@ -242,6 +263,27 @@ function View({
         />
       )
   }
+}
+
+/**
+ * Which notation a document is written in, where the value is one at all. A cell that is markup and
+ * nothing else has none: its text *is* the page, and there is no structure to draw around it.
+ */
+const NOTATIONS: Partial<Record<ValueKind, Notation>> = { json: 'json', document: 'shell' }
+
+/**
+ * The value drawn as a page. Markup is drawn as the page it is; a **document** is drawn as the page
+ * its fields make — see `documentPage`, which is where a field holding markup is drawn as that
+ * markup and a field holding nothing drawable is drawn as an empty square.
+ *
+ * The markup is built once per value, because building it parses the document.
+ */
+function Page({ text, notation }: { text: string; notation?: Notation | undefined }) {
+  const markup = useMemo(
+    () => (notation === undefined ? text : documentMarkup(text, notation)),
+    [text, notation],
+  )
+  return <HtmlView markup={markup} />
 }
 
 /**
@@ -337,11 +379,7 @@ function Binary({ value }: { value: string }) {
  * the data URI reaches nothing: nothing in a reader's database is ever sent anywhere to be drawn.
  */
 function Picture({ value }: { value: string }) {
-  const source = useMemo(() => {
-    const bytes = decodeBinary(value)
-    const media = imageType(bytes)
-    return media === null ? null : `data:${media};base64,${base64(bytes)}`
-  }, [value])
+  const source = useMemo(() => dataURI(decodeBinary(value)), [value])
 
   if (source === null) {
     return <Note>These bytes do not begin like an image. The Hex view is beside this one.</Note>
@@ -356,11 +394,4 @@ function Picture({ value }: { value: string }) {
 
 function Note({ children }: { children: React.ReactNode }) {
   return <p className="min-h-0 flex-1 px-3 py-2 text-xs text-muted">{children}</p>
-}
-
-/** `btoa` takes a string of code points below 256, which is exactly one byte each. */
-function base64(bytes: Uint8Array): string {
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
 }

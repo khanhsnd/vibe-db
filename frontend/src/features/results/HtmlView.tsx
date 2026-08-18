@@ -15,6 +15,25 @@ import { useTheme } from '@/shared/theme/useTheme'
 const POLICY = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:"
 
 /**
+ * The app's own tokens, copied into the frame — a frame inherits no custom property, so a page drawn
+ * in one has none unless it is given them. They are declared rather than pasted into rules so that
+ * markup built by this app can be styled in the app's own colours: `documentPage` writes a
+ * stylesheet over these names, and rule 4 holds — the values are still only ever `tokens.css`'s.
+ */
+const TOKENS = [
+  '--surface-canvas',
+  '--fg',
+  '--fg-muted',
+  '--fg-faint',
+  '--line',
+  '--line-strong',
+  '--accent',
+  '--syn-func',
+  '--font-ui',
+  '--font-data',
+]
+
+/**
  * The page a cell holds, drawn. It is a rendering and so is **read-only whatever the surface is** —
  * `Raw` is beside it for typing into, as it is beside a hex dump and a shape.
  */
@@ -36,27 +55,27 @@ export function HtmlView({ markup }: { markup: string }) {
 }
 
 /**
- * The markup as a whole document: the policy first, then what the app's own colours are, then the
- * value verbatim. A value that is already a whole document is wrapped all the same — the parser
- * drops the second `<html>` and keeps what is inside it — because the policy has to be in the head
- * of the document that is parsed, and that is this one.
+ * The markup as a whole document: the policy first, then the app's own tokens, then the value
+ * verbatim. A value that is already a whole document is wrapped all the same — the parser drops the
+ * second `<html>` and keeps what is inside it — because the policy has to be in the head of the
+ * document that is parsed, and that is this one.
  *
- * The colours are read from the element that has them, since a frame inherits none: they are the
- * *ground* the page is drawn on rather than the page's own look, and every one of them is a rule
- * the value's own stylesheet overrides.
+ * The tokens are read off the element that has them, since a frame inherits none: they are the
+ * *ground* the page is drawn on rather than the page's own look, and each rule below is one the
+ * value's own stylesheet overrides.
  */
 function page(markup: string): string {
   const style = getComputedStyle(document.documentElement)
-  const token = (name: string) => style.getPropertyValue(name).trim()
+  const copied = TOKENS.map((name) => `${name}:${style.getPropertyValue(name).trim()}`)
 
   return [
     '<!doctype html><html><head><meta charset="utf-8">',
     `<meta http-equiv="Content-Security-Policy" content="${POLICY}">`,
     '<style>',
-    `html{color-scheme:${token('color-scheme')}}`,
-    `body{margin:12px;font-family:${token('--font-ui')};font-size:13px;`,
-    `background:${token('--surface-canvas')};color:${token('--fg')}}`,
-    `a{color:${token('--accent')}}`,
+    `:root{color-scheme:${style.getPropertyValue('color-scheme').trim()};${copied.join(';')}}`,
+    'body{margin:12px;font-family:var(--font-ui);font-size:13px;',
+    'background:var(--surface-canvas);color:var(--fg)}',
+    'a{color:var(--accent)}',
     '</style></head><body>',
     markup,
     '</body></html>',

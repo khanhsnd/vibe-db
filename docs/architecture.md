@@ -167,6 +167,13 @@ alone**: where a command ends, what a string is and what a comment is are the sa
 document store's shell, so they are answered by the same code rather than by a second scanner. Nothing
 else in `sqlkit` is meant for it — see [the document store](#the-document-store).
 
+`BackslashEscapes` is on there, and it is the one flag on `Shell` that is not merely a fact about the
+shell's grammar: it is also a fact about **this app's own renderer**. `mongo.quote` spells an embedded
+double quote `\"` — JavaScript's escape, and JSON's, which is why what it writes can be pasted into
+either — so a lexer reading that quote as the *end* of the string would cut every value holding markup
+in half and read the rest of it as code. What reaches the reader would then be a `Format` that changed
+the value rather than the whitespace, which is the one thing `Format` promises never to do.
+
 **`driver.Text` is the half of an engine that needs no connection**: `Split`, `Format`, `Review`.
 It hangs off the `Driver` rather than off a `Session`, because a reader lays out and is warned about
 a script whether or not anything is dialled — `sqlkit.Dialect` is the whole implementation, and both
@@ -660,7 +667,7 @@ grammar for the same answer.
 | catalogue reads | the documents themselves, plus `listCollections` and `$collStats`. `TableList` is one read per collection, there being no catalogue table to join against; a `system.` name is the server's own bookkeeping and is not listed |
 | a row total | the collection's metadata where the page is **unfiltered**, and a count through the filter where it is not. Walking ten million documents to say how many there are is the read a large collection is given up on, and a page number is not read to the document — see `count` |
 | placeholders | none; everything is a value in a document |
-| the lexer's dialect | `sqlkit.Shell`: `//` comments, both quotes open a string, no identifier quote to take one of them |
+| the lexer's dialect | `sqlkit.Shell`: `//` comments, both quotes open a string, no identifier quote to take one of them, and a backslash escapes — the notation is JavaScript and `quote` writes JavaScript's escapes |
 | levels above a collection | one pool for the server; a single connection reads every database on it |
 | `ddl.go` | a field is not a column, so a change to one is a change to the documents that carry it: `$set` to add, `$rename`, `$unset`, and a pipeline `$convert` to alter. `CreateTable` creates the collection and *only* the collection — see [decisions.md](decisions.md) for why a `$jsonSchema` validator built from the declared fields is a trap |
 | `database.go` | there is no `CREATE DATABASE`. A database exists exactly as long as it holds a collection, so making one is making its first — which is why `DatabaseSpec.FirstCollection` exists and why the dialog asks |

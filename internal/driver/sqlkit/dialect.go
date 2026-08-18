@@ -787,7 +787,12 @@ var (
 	// reason: so `Lex` reads it rather than a second scanner being written. `//` opens a comment,
 	// both quotes open a string — there is no identifier quote to take one of them — and nothing
 	// else in this package is meant for it.
-	Shell = Dialect{SlashComments: true}
+	//
+	// A backslash is an escape because this notation is JavaScript, where it is one, and because it
+	// is what this app's own renderer writes: `mongo.quote` spells an embedded quote `\"`, so a
+	// lexer that read that quote as the end of the string would cut every document holding markup in
+	// half and lay the rest of it out as code.
+	Shell = Dialect{SlashComments: true, BackslashEscapes: true}
 )
 
 // CloseQuote is the character that ends a quoted name, which is the one that opened it on every

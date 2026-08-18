@@ -1,5 +1,3 @@
-import { javascriptLanguage } from '@codemirror/lang-javascript'
-import { json } from '@codemirror/lang-json'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { foldGutter, HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorState, type Extension } from '@codemirror/state'
@@ -9,23 +7,7 @@ import { useEffect, useRef } from 'react'
 
 import { editorTheme } from '@/features/editor/editorTheme'
 
-/** Which notation a laid-out value is in, which is the engine's and not the column's. */
-export type Notation = 'json' | 'shell'
-
-/**
- * The grammar each notation is read by. Both are the library's — **nothing here scans anything**,
- * which is the rule.
- *
- * `shell` is a document store's own notation, and it is read as a **single expression** rather than
- * as a script: read as a script a bare `{ … }` is a *block*, its first field a label and every one
- * after it a syntax error, which is why a document's keys come out uncoloured and half its lines
- * squiggled. `SingleExpression` is the parser's own top rule for exactly this, and under it the
- * document is the object it plainly is.
- */
-const GRAMMARS: Record<Notation, Extension> = {
-  json: json(),
-  shell: javascriptLanguage.configure({ top: 'SingleExpression' }).extension,
-}
+import { LANGUAGES, type Notation } from './notation'
 
 /**
  * The one token the shared syntax style leaves out on purpose. In the shell *editor* a document's
@@ -37,7 +19,7 @@ const keyStyle = HighlightStyle.define([{ tag: tags.propertyName, color: 'var(--
 const extensions = (notation: Notation, editable: boolean): Extension => [
   lineNumbers(),
   foldGutter(),
-  GRAMMARS[notation],
+  LANGUAGES[notation].extension,
   editorTheme,
   syntaxHighlighting(keyStyle),
   editable

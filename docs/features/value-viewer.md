@@ -15,12 +15,12 @@ cell is read, and it reads nothing else.
 
 | The value | Views, in the order they open |
 |---|---|
-| JSON — an object or an array that parses | **JSON** laid out, then **Raw**. Only a leading `{` or `[` is tried, or every number in the grid would be handed to `JSON.parse`, which happily accepts `42` and calls it a document |
-| A **document store's document or array** — a field the engine types `object` or `array` | **Document**, then **Raw**. This is checked *before* JSON, so an array of scalars that happens to parse still reads in the notation the grid drew it in and the parser reads back |
+| JSON — an object or an array that parses | **JSON** laid out, then **Raw** — and **Page** between the two where some field of it holds markup. Only a leading `{` or `[` is tried, or every number in the grid would be handed to `JSON.parse`, which happily accepts `42` and calls it a document |
+| A **document store's document or array** — a field the engine types `object` or `array` | **Document**, then **Raw**, and **Page** between them on the same terms as JSON. This is checked *before* JSON, so an array of scalars that happens to parse still reads in the notation the grid drew it in and the parser reads back |
 | **The laid-out view itself** | `DocumentView` — numbered lines, a **fold arrow beside every object and array**, and the editor's own syntax colours with the keys apart from the values they name. It is CodeMirror, the SQL editor's own engine, for two reasons: a document worth opening whole is often far larger than a screen and CodeMirror lays out only the lines in view, where a `<pre>` of a megabyte freezes the window; and the grammar is the library's, so nothing here is a second scanner. JSON is read by `@codemirror/lang-json`; a document store's notation by the JavaScript parser under its **`SingleExpression`** top rule, because read as a *script* a bare `{ … }` is a block, its first field a label and every field after it a syntax error. It is **editable wherever the surface can write**, with the editor's own history under it, and read-only where it cannot |
 | **GeoJSON** — a `type` from the GeoJSON set *and* the member that type is defined by | **Shape**, then **JSON**, then **Raw**. A `{"type": "Point"}` with no coordinates is malformed, and drawing nothing says more than drawing the origin |
 | A **PostgreSQL array** — `{a,"b,c",NULL}` | **Items**, then **Raw**. Read as an array only where the column says it is one, since `{a,b}` is also perfectly good text. An unquoted `NULL` inside one is the absence of a value and is drawn in the grid's own NULL colour; a nested `{…}` is kept whole, because a two-dimensional array is a list of lists |
-| **HTML** — a value whose **first tag names an HTML element** | **Page**, then **Raw**. A leading `<` is not enough and never was: an XML document begins with one, so does a `<?xml` declaration, and so does a `<foo>` of somebody's own — so what decides is the tag, which is the same bargain JSON's leading `{` strikes. A fragment opening with prose — `Hello <b>world</b>` — reads as text, exactly as a `42` that happens to parse reads as a number |
+| **HTML** — a value whose **first tag names an HTML element** | **Page**, then **Raw**. This is the *whole cell* being markup, which a document holding some is not — see the two rows above. A leading `<` is not enough and never was: an XML document begins with one, so does a `<?xml` declaration, and so does a `<foo>` of somebody's own — so what decides is the tag, which is the same bargain JSON's leading `{` strikes. A fragment opening with prose — `Hello <b>world</b>` — reads as text, exactly as a `42` that happens to parse reads as a number |
 | **Bytes** — a `\x…` value | **Image**, then **Hex**, then **Raw**. A reader who opened a blob wants to know whether it is a picture before they want its bytes |
 | Anything else | **Raw** alone |
 
@@ -51,7 +51,7 @@ cell is read, and it reads nothing else.
   engine's editor and its `Review` read, because how text is laid out is lexical and therefore the
   engine's. It reaches the viewer as `ValueViewer.formatValue`, which `ResultGrid` and the Cell
   Editor panel forward from a surface that has a session. **A surface with no session offers `Raw`
-  alone** rather than a layout it cannot vouch for, and the value goes up unformatted first so the
+  alone** — and `Page`, which needs no layout — rather than a layout it cannot vouch for, and the value goes up unformatted first so the
   pane is never blank and a format that cannot run leaves the document readable.
 - A document therefore breaks by **the engine's own rule** — `mongo.breakItems`, the same rule the
   editor's formatter uses, so a brace a line comfortably carries stays on it. Formatting the value
@@ -74,10 +74,35 @@ cell is read, and it reads nothing else.
   anywhere to be drawn, which is the same rule a shape is drawn without a tile server under and an
   image is drawn from the bytes already in hand. A second policy cannot loosen the first, so markup
   carrying a `<meta>` of its own is no way round it.
+- **A document that holds markup offers `Page` between the reading of it and the raw of it, and
+  what that page draws is the whole document.** Laid out, a field holding a page is one enormous
+  escaped line among the fields either side of it; drawn as a page, that one field is the document
+  and the rest of it is gone. So every field is a line of the page: its name beside what it holds, an
+  object or an array **under** its name and indented — a column of names beside a column of names
+  beside a column of names leaves no room for the values by the third one — markup drawn as the
+  markup it is, bytes drawn as the image they are, and a value nothing can draw as an **empty
+  square**. It is also the one view a missing formatter cannot deny, unlike `Document`: the structure
+  it draws asks no session anything.
+- **Inside that page a field is drawn as markup wherever it holds a tag**, not only where it opens
+  with one, off the same list of element names. The stricter rule stays what decides whether a *cell*
+  is a page, because there the whole value has to be markup or none of it is; here the reader asked
+  for the page and the field's name is beside what was drawn either way. A field whose markup leaves
+  a tag open nests the fields below it inside that tag — the browser's parser closes it at the end of
+  the document, so nothing is lost, only indented.
+- **The structure is the library's grammar and never a parser of this app's.** `documentPage` walks
+  the same tree `DocumentView` lays a document out with — JSON by `@codemirror/lang-json`, a document
+  store's own notation by the JavaScript parser under its `SingleExpression` top rule — held in one
+  file (`notation.ts`) so a document cannot be laid out under one reading and drawn under another. A
+  bare key, an `ObjectId(…)` and where a string ends are therefore the parser's answers; a value that
+  is neither an object nor an array is drawn as **the engine's own words**, off the text verbatim,
+  and a document that would not parse is drawn as the words it is rather than as a blank page.
 - **The page is drawn on the app's own ground, not on a colour of its own.** A frame inherits no
   custom property, so the tokens the app is themed with are copied into it — the canvas, the
   foreground, the UI font, a link's accent — and each is a rule the value's own stylesheet overrides.
-  They are copied again when the reader switches theme under an open preview.
+  They are copied again when the reader switches theme under an open preview. They are **declared**
+  in the frame rather than pasted into its rules, which is what lets a page this app built — a
+  document's — be styled in the app's own colours without a colour ever being written outside
+  `tokens.css`.
 - The hex dump is offset, hex and printable characters, sixteen bytes to a line, capped at 4 096
   bytes — beyond that a reader is not reading bytes, they are scrolling — and the cap says how much
   of how many it showed.

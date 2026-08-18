@@ -10,6 +10,16 @@
 /** The bytes marker the driver writes for a value that is not text — `sqlkit.BinaryPrefix`. */
 const BINARY = /^\\x([0-9a-f]{2})*$/i
 
+/** Whether a value is that marker, asked wherever bytes are read — see `documentPage`. */
+export function isBinary(value: string): boolean {
+  return BINARY.test(value)
+}
+
+/** How many bytes, said once so a dump, a label and a page cannot disagree about the wording. */
+export function bytesLabel(count: number): string {
+  return `${count.toLocaleString()} bytes`
+}
+
 export type ValueKind =
   | 'null'
   | 'empty'
@@ -117,8 +127,8 @@ export function detect(value: string | null, columnType = ''): DetectedValue {
   if (value === null) return { kind: 'null', label: 'NULL' }
   if (value === '') return { kind: 'empty', label: 'Empty' }
 
-  if (BINARY.test(value)) {
-    return { kind: 'binary', label: `${(value.length - 2) / 2} bytes` }
+  if (isBinary(value)) {
+    return { kind: 'binary', label: bytesLabel((value.length - 2) / 2) }
   }
 
   // Before JSON, so a document store's array of scalars — `[1, "two"]`, which happens to parse —
@@ -160,6 +170,20 @@ export function detect(value: string | null, columnType = ''): DetectedValue {
 function firstTag(value: string): string | null {
   const match = /^\s*<([a-z!][a-z0-9]*)(?=[\s/>]|$)/i.exec(value)
   return match === null ? null : match[1]!.toLowerCase()
+}
+
+/**
+ * Whether a value holds markup **anywhere** in it, off the same list of element names above. This is
+ * the looser of the two questions and it has its own reader: a **document** offers the `Page` view
+ * where some field of it holds a tag, and inside that page a field is drawn as markup on the same
+ * terms — see `documentPage`. Whether a *cell as a whole* is a page stays the stricter question, a
+ * leading tag, because there the value has to be markup or nothing of it is.
+ */
+export function holdsMarkup(value: string): boolean {
+  for (const [, tag] of value.matchAll(/<([a-z!][a-z0-9]*)(?=[\s/>])/gi)) {
+    if (HTML_TAGS.has(tag!.toLowerCase())) return true
+  }
+  return false
 }
 
 function parseJSON(value: string): unknown {
@@ -272,11 +296,31 @@ const SIGNATURES: ReadonlyArray<{ media: string; magic: number[] }> = [
   { media: 'image/webp', magic: [0x52, 0x49, 0x46, 0x46] },
 ]
 
-export function imageType(bytes: Uint8Array): string | null {
+function imageType(bytes: Uint8Array): string | null {
   for (const { media, magic } of SIGNATURES) {
     if (magic.every((byte, i) => bytes[i] === byte)) return media
   }
   return null
+}
+
+/**
+ * The bytes as something a browser will draw, or `null` where they begin like no image there is. The
+ * bytes are already in hand, so the URI reaches nothing: **nothing in a reader's database is ever
+ * sent anywhere to be drawn** — the same rule a shape is drawn without a tile server under.
+ *
+ * It is the one spelling of it, so the `Image` view and a field drawn inside a document's `Page` are
+ * the same picture.
+ */
+export function dataURI(bytes: Uint8Array): string | null {
+  const media = imageType(bytes)
+  return media === null ? null : `data:${media};base64,${base64(bytes)}`
+}
+
+/** `btoa` takes a string of code points below 256, which is exactly one byte each. */
+function base64(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
 }
 
 /** Sixteen bytes to a line, offset, hex, then the printable characters — a hex dump reads so. */

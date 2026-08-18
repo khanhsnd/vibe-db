@@ -319,3 +319,26 @@ func TestFormatLaysOutABareValue(t *testing.T) {
 		})
 	}
 }
+
+// A field holding markup is a string holding escaped quotes, and this notation is JavaScript, where a
+// backslash escapes one. A lexer that read that quote as the end of the string would cut the value in
+// half and lay the rest of it out as code, so the fields after it lose their lines and the value the
+// reader is shown is not the value the cell holds. See `sqlkit.Shell`.
+func TestFormatKeepsAStringHoldingEscapedQuotes(t *testing.T) {
+	const content = `"<div class=\"post\" style=\"margin: 0px\"><p>%user_name%</p></div>"`
+	value := `{ id: 53, subject: "Interview for %user_name%", content: ` + content +
+		`, attachments: [], order: 2 }`
+
+	got := (text{}).Format(value)
+
+	if !strings.Contains(got, content) {
+		t.Errorf("Format() lost the markup:\n%s\n\nthe string should still hold\n%s", got, content)
+	}
+	// One field to a line, which is the whole point of laying a document out: a token stream broken
+	// inside a string mismatches every brace after it and crams the fields onto one line.
+	for _, want := range []string{"\tid: 53,", "\tattachments: [],", "\torder: 2"} {
+		if !strings.Contains(got, want+"\n") && !strings.HasSuffix(got, want) {
+			t.Errorf("Format() =\n%s\n\nwant a line %q", got, want)
+		}
+	}
+}
