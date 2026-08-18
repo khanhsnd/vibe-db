@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
+
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 )
@@ -75,6 +77,54 @@ func TestLiveAgainstARealServer(t *testing.T) {
 		}
 		if len(fields) != 1 || fields[0].Name != idField || !fields[0].PrimaryKey {
 			t.Errorf("fields() = %v, want _id alone and keyed", fields)
+		}
+	})
+
+	// The sample asks the server for `$type` and takes its answer as the column's type, so the two
+	// lists have to be one list. Only a server can say they are.
+	t.Run("fields are typed in the server's own names", func(t *testing.T) {
+		ctx := context.Background()
+
+		document := bson.D{
+			{Key: "s", Value: "text"},
+			{Key: "n", Value: int32(1)},
+			{Key: "big", Value: int64(9000000000)},
+			{Key: "f", Value: 1.5},
+			{Key: "b", Value: true},
+			{Key: "when", Value: time.Now()},
+			{Key: "nested", Value: bson.D{{Key: "a", Value: 1}}},
+			{Key: "list", Value: bson.A{1, 2}},
+			{Key: "nothing", Value: nil},
+			{Key: "bin", Value: bson.Binary{Data: []byte{1, 2}}},
+			{Key: "dec", Value: bson.NewDecimal128(0, 42)},
+		}
+		if _, err := live.collection(ns, "kinds").InsertOne(ctx, document); err != nil {
+			t.Fatalf("InsertOne() error = %v", err)
+		}
+		// It goes again, because a later run reads the whole collection list.
+		t.Cleanup(func() {
+			if err := live.collection(ns, "kinds").Drop(ctx); err != nil {
+				t.Errorf("Drop() error = %v", err)
+			}
+		})
+
+		fields, err := live.fields(ctx, ns, "kinds")
+		if err != nil {
+			t.Fatalf("fields() error = %v", err)
+		}
+
+		want := map[string]string{
+			idField: "objectId", "s": "string", "n": "int", "big": "long", "f": "double",
+			"b": "bool", "when": "date", "nested": "object", "list": "array",
+			"nothing": "null", "bin": "binData", "dec": "decimal",
+		}
+		if len(fields) != len(want) {
+			t.Errorf("fields() = %d columns, want %d", len(fields), len(want))
+		}
+		for _, one := range fields {
+			if one.Type != want[one.Name] {
+				t.Errorf("field %q type = %q, want %q", one.Name, one.Type, want[one.Name])
+			}
 		}
 	})
 

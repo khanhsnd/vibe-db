@@ -49,9 +49,17 @@ func clientOptions(
 		return nil, domain.ValidationError{Field: "tlsMode", Message: "is not a known TLS mode"}
 	}
 
+	// The connection is held to the one server the profile names, always. A profile carries one host
+	// and one port, so topology discovery has nothing to add and one thing to take away: it replaces
+	// the address the reader typed with the addresses the *server* names, and a server reached through
+	// a forwarded port, a published container port or a bastion answers with its own side's names,
+	// which resolve nowhere on this machine. That is a replica set that connects and then cannot be
+	// read — a spinner until server selection gives up — and it is worth more than the failover
+	// discovery would have bought a client that is one reader looking at one server.
 	opts := options.Client().
 		SetAppName(appName).
 		SetHosts([]string{profile.Address()}).
+		SetDirect(true).
 		SetConnectTimeout(connectTimeout).
 		SetServerSelectionTimeout(selectTimeout).
 		SetMaxPoolSize(maxPoolSize).
@@ -68,12 +76,8 @@ func clientOptions(
 		})
 	}
 
-	// A tunnelled connection is held to the one server the profile names. Topology discovery would
-	// otherwise hand back the *other* members' own addresses, which are resolvable on the far side
-	// of the bastion and nowhere on this machine — a replica set that connected and then could not
-	// be read.
 	if tunnel != nil {
-		opts.SetDialer(dialer(tunnel)).SetDirect(true)
+		opts.SetDialer(dialer(tunnel))
 	}
 
 	config, err := sqlkit.TLSConfig(profile.TLS, profile.Host)

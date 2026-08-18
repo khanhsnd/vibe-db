@@ -33,7 +33,10 @@ func newFieldSet() *fieldSet {
 // add notes a field. The **first** type seen wins, and a later null never overwrites it: a field
 // that is a date in most documents and missing in one is a date, and calling it null because the
 // last document read had none would be the wrong answer about the column.
-func (f *fieldSet) add(name string, kind bson.Type) {
+//
+// The type is its *name* rather than a `bson.Type`, because the server answers in names too: a
+// sample is read with `$type`, whose aliases are the list `typeNames` spells. One name, one place.
+func (f *fieldSet) add(name, kind string) {
 	held, seen := f.byName[name]
 	if !seen {
 		f.order = append(f.order, name)
@@ -58,7 +61,7 @@ func (f *fieldSet) addDocument(raw bson.Raw) {
 		if err != nil {
 			continue
 		}
-		f.add(name, element.Value().Type)
+		f.add(name, typeName(element.Value().Type))
 	}
 }
 
@@ -90,11 +93,11 @@ func (f *fieldSet) list() []driver.Column {
 // column is one field as the rest of the app reads a column. Everything but `_id` is nullable,
 // because in a document store a field is absent as easily as it is null and the two are the same
 // question to a filter.
-func column(name string, kind bson.Type) driver.Column {
+func column(name, kind string) driver.Column {
 	return driver.Column{
 		Name:       name,
-		Type:       typeName(kind),
-		FullType:   typeName(kind),
+		Type:       kind,
+		FullType:   kind,
 		Nullable:   name != idField,
 		PrimaryKey: name == idField,
 	}

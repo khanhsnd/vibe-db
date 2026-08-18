@@ -611,7 +611,11 @@ are genuinely different, and everything else is the same adapter every other eng
 **A collection declares no fields.** What a catalogue read answers for a table, `fields` infers from
 the documents themselves: the first `sampleDocs` of the collection, unioned, `_id` always among them
 because every document has one. It is a *sample* and says so — a field appearing in none of them is
-not drawn until a read that returns it is. A **bounded** read then merges the documents it actually
+not drawn until a read that returns it is. It reads the **keys** and never the documents: an
+aggregation asks the server for each document's field names and their `$type`, whose aliases are the
+same list `typeNames` spells, so a collection of megabyte documents answers a question about column
+names in a few kilobytes. That matters most where it is least visible — opening a database samples
+every collection in it for the editor. A **bounded** read then merges the documents it actually
 returned into that list, so nothing a page holds goes unshown; a **streamed** read cannot, its header
 having crossed the bridge before its first batch. See `documents.go` and [grid.md](grid.md).
 
@@ -651,9 +655,10 @@ grammar for the same answer.
 | Part | MongoDB |
 |---|---|
 | a DSN | none: `options.go` builds the driver's own options, so nothing is written as text only to be parsed back |
-| a dialler and a TLS configuration | values on those options, so there is no global registration and nothing to release with the session. A tunnelled connection is pinned `Direct`, or topology discovery would hand back addresses that resolve only on the far side of the bastion |
+| a dialler and a TLS configuration | values on those options, so there is no global registration and nothing to release with the session. Every connection is pinned `Direct`: a profile names one host, and topology discovery could only replace it with the addresses the *server* names — which, through a bastion, a forwarded port or a published container port, resolve on that side and nowhere here |
 | `errors.go` | server code → sentinel, the shape MySQL's is in. Plus a text read for a handshake failure, which carries no code — see [errors.md](errors.md) |
 | catalogue reads | the documents themselves, plus `listCollections` and `$collStats`. `TableList` is one read per collection, there being no catalogue table to join against; a `system.` name is the server's own bookkeeping and is not listed |
+| a row total | the collection's metadata where the page is **unfiltered**, and a count through the filter where it is not. Walking ten million documents to say how many there are is the read a large collection is given up on, and a page number is not read to the document — see `count` |
 | placeholders | none; everything is a value in a document |
 | the lexer's dialect | `sqlkit.Shell`: `//` comments, both quotes open a string, no identifier quote to take one of them |
 | levels above a collection | one pool for the server; a single connection reads every database on it |

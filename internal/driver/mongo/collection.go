@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	mgo "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
@@ -43,9 +44,7 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 
 	collection := s.collection(page.Namespace, page.Table)
 
-	// The total is counted through the same filter the documents are read through, or the pager
-	// would walk pages of a collection the reader has narrowed away.
-	total, err := collection.CountDocuments(ctx, filter)
+	total, err := count(ctx, collection, filter)
 	if err != nil {
 		return driver.TableRows{}, translateError(err)
 	}
@@ -73,6 +72,22 @@ func (s *session) TableRows(ctx context.Context, page driver.TablePage) (driver.
 		Total:     total,
 		Statement: findText(page, filter, sort),
 	}, nil
+}
+
+// count is how many documents a filter holds. It is counted through the same filter the documents
+// are read through, or the pager would walk pages of a collection the reader has narrowed away.
+//
+// **An unfiltered total is read rather than counted.** The collection's metadata already holds how
+// many documents are in it, and walking ten million of them to say so is the read that takes long
+// enough on a large collection to be given up on — while what the number is *for* is a page count.
+// An estimate is exact on an idle collection and a document or two out on a busy one, which is well
+// inside the accuracy a page number is read at. A filtered total has to be counted, there being
+// nothing but the documents to answer it.
+func count(ctx context.Context, collection *mgo.Collection, filter bson.D) (int64, error) {
+	if len(filter) == 0 {
+		return collection.EstimatedDocumentCount(ctx)
+	}
+	return collection.CountDocuments(ctx, filter)
 }
 
 // findText spells the read that produced the page, exactly as it ran, so the status line under the
@@ -328,6 +343,15 @@ func (s *session) fields(
 
 // sample reads what a collection's documents turned out to carry.
 //
+// It reads the **names**, never the documents. What this is after is a field list, and a document
+// that runs to a megabyte answers that question with the same handful of keys a small one does — so
+// the keys and their types are what the server sends, and the documents stay where they are. That is
+// worth most where it is least visible: opening a database samples *every* collection in it for the
+// editor, and a sample that carried the collection across the wire is what a slow link gives up on.
+//
+// `$type` answers in the same names `typeNames` spells, MongoDB's own list being where both come
+// from, and `$limit` in front is the same first-N-in-natural-order a find with a limit is.
+//
 // `_id` is always among them whatever the sample found, because every document has one: that is what
 // lets an empty collection still be inserted into, what makes a page of one addressable, and what
 // gives completion something to offer before anything has been written.
@@ -337,8 +361,7 @@ func (s *session) sample(
 	collection string,
 	limit int64,
 ) (*fieldSet, error) {
-	cursor, err := s.collection(ns, collection).
-		Find(ctx, bson.D{}, options.Find().SetLimit(limit))
+	cursor, err := s.collection(ns, collection).Aggregate(ctx, keysPipeline(limit))
 	if err != nil {
 		return nil, translateError(err)
 	}
@@ -346,12 +369,41 @@ func (s *session) sample(
 
 	found := newFieldSet()
 	for cursor.Next(ctx) {
-		found.addDocument(bson.Raw(cursor.Current))
+		var sampled struct {
+			Fields []struct {
+				Name string `bson:"k"`
+				Type string `bson:"t"`
+			} `bson:"fields"`
+		}
+		if err := cursor.Decode(&sampled); err != nil {
+			return nil, translateError(err)
+		}
+		for _, one := range sampled.Fields {
+			found.add(one.Name, one.Type)
+		}
 	}
 	if err := cursor.Err(); err != nil {
 		return nil, translateError(err)
 	}
 
-	found.add(idField, bson.TypeObjectID)
+	found.add(idField, typeName(bson.TypeObjectID))
 	return found, nil
+}
+
+// keysPipeline turns each of the first `limit` documents into its own top-level keys and their
+// types, and sends nothing else back — see sample.
+func keysPipeline(limit int64) mgo.Pipeline {
+	return mgo.Pipeline{
+		{{Key: "$limit", Value: limit}},
+		{{Key: "$project", Value: bson.D{
+			{Key: idField, Value: 0},
+			{Key: "fields", Value: bson.D{{Key: "$map", Value: bson.D{
+				{Key: "input", Value: bson.D{{Key: "$objectToArray", Value: "$$ROOT"}}},
+				{Key: "in", Value: bson.D{
+					{Key: "k", Value: "$$this.k"},
+					{Key: "t", Value: bson.D{{Key: "$type", Value: "$$this.v"}}},
+				}},
+			}}}},
+		}}},
+	}
 }

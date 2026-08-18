@@ -460,7 +460,9 @@ the one place the app shows a *sample* rather than an answer.
 
 - **The field list is inferred** from the first `sampleDocs` documents of the collection, `_id` always
   among them because every document has one. That list is what the tree draws under **Fields**, what a
-  filter's field names are checked against, and what a value the reader typed is read into.
+  filter's field names are checked against, and what a value the reader typed is read into. What the
+  server sends back is the **field names and their types**, not the documents, so a collection whose
+  documents run to megabytes still costs kilobytes to sample.
 - **A bounded read shows everything it read.** The page's own documents are merged into that list, so
   a field the sample missed still gets a column the moment a page returns it.
 - **A streamed read cannot**, and this is the one visible limit. `All` pushes its rows as batches and
