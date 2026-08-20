@@ -1,4 +1,4 @@
-package sqlkit
+package tlscert
 
 import (
 	"crypto/ecdsa"
@@ -17,7 +17,7 @@ import (
 )
 
 // writePair puts a self-signed certificate and its key on disk and answers with both paths. It is
-// the only way to test the file-reading half of TLSConfig honestly: a path that does not exist
+// the only way to test the file-reading half of Config honestly: a path that does not exist
 // proves nothing about a certificate that does.
 func writePair(t *testing.T) (certPath, keyPath string) {
 	t.Helper()
@@ -64,12 +64,12 @@ func writePair(t *testing.T) (certPath, keyPath string) {
 
 func TestTLSConfigIsNothingForAModeThatDoesNotEncrypt(t *testing.T) {
 	for _, mode := range []domain.TLSMode{domain.TLSDisabled, domain.TLSPreferred} {
-		config, err := TLSConfig(domain.TLSOptions{Mode: mode}, "db.example.com")
+		config, err := Config(domain.TLSOptions{Mode: mode}, "db.example.com")
 		if err != nil {
-			t.Fatalf("TLSConfig(%q) error = %v", mode, err)
+			t.Fatalf("Config(%q) error = %v", mode, err)
 		}
 		if config != nil {
-			t.Errorf("TLSConfig(%q) = %+v, want nil", mode, config)
+			t.Errorf("Config(%q) = %+v, want nil", mode, config)
 		}
 	}
 }
@@ -89,9 +89,9 @@ func TestTLSConfigVerifiesByMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.mode), func(t *testing.T) {
-			config, err := TLSConfig(domain.TLSOptions{Mode: tt.mode}, "db.example.com")
+			config, err := Config(domain.TLSOptions{Mode: tt.mode}, "db.example.com")
 			if err != nil {
-				t.Fatalf("TLSConfig() error = %v", err)
+				t.Fatalf("Config() error = %v", err)
 			}
 			if config.InsecureSkipVerify != tt.skipVerify {
 				t.Errorf("InsecureSkipVerify = %v, want %v", config.InsecureSkipVerify, tt.skipVerify)
@@ -107,12 +107,12 @@ func TestTLSConfigVerifiesByMode(t *testing.T) {
 }
 
 func TestTLSConfigTakesTheServerNameOverride(t *testing.T) {
-	config, err := TLSConfig(domain.TLSOptions{
+	config, err := Config(domain.TLSOptions{
 		Mode:       domain.TLSVerifyFull,
 		ServerName: "shop.internal",
 	}, "127.0.0.1")
 	if err != nil {
-		t.Fatalf("TLSConfig() error = %v", err)
+		t.Fatalf("Config() error = %v", err)
 	}
 	if config.ServerName != "shop.internal" {
 		t.Errorf("ServerName = %q, want the override", config.ServerName)
@@ -122,14 +122,14 @@ func TestTLSConfigTakesTheServerNameOverride(t *testing.T) {
 func TestTLSConfigReadsTheFiles(t *testing.T) {
 	certPath, keyPath := writePair(t)
 
-	config, err := TLSConfig(domain.TLSOptions{
+	config, err := Config(domain.TLSOptions{
 		Mode:       domain.TLSVerifyFull,
 		RootCert:   certPath,
 		ClientCert: certPath,
 		ClientKey:  keyPath,
 	}, "db.example.com")
 	if err != nil {
-		t.Fatalf("TLSConfig() error = %v", err)
+		t.Fatalf("Config() error = %v", err)
 	}
 	if config.RootCAs == nil {
 		t.Error("RootCAs = nil, want the certificate that was named")
@@ -142,11 +142,11 @@ func TestTLSConfigReadsTheFiles(t *testing.T) {
 func TestTLSConfigSaysWhichFileItCouldNotRead(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "absent.pem")
 
-	if _, err := TLSConfig(domain.TLSOptions{
+	if _, err := Config(domain.TLSOptions{
 		Mode:     domain.TLSVerifyFull,
 		RootCert: missing,
 	}, "db.example.com"); err == nil {
-		t.Error("TLSConfig() = nil error, want a failure naming the root certificate")
+		t.Error("Config() = nil error, want a failure naming the root certificate")
 	}
 
 	// A file that is there and holds no certificate is the other half of the same mistake.
@@ -154,10 +154,10 @@ func TestTLSConfigSaysWhichFileItCouldNotRead(t *testing.T) {
 	if err := os.WriteFile(empty, []byte("not a certificate"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
-	if _, err := TLSConfig(domain.TLSOptions{
+	if _, err := Config(domain.TLSOptions{
 		Mode:     domain.TLSVerifyFull,
 		RootCert: empty,
 	}, "db.example.com"); err == nil {
-		t.Error("TLSConfig() = nil error, want a failure on a file holding no certificate")
+		t.Error("Config() = nil error, want a failure on a file holding no certificate")
 	}
 }

@@ -294,6 +294,40 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     `profilerConfigurable`, and whether the recording belongs to a database rather than to the server
     is `profilerPerDatabase`.
 
+29. **An object store is a second port beside `internal/driver`, and its bytes never cross the
+    bridge.** A bucket has no catalogue, no namespace, no statement and nothing that is a row, so
+    `internal/objectstore` sits *beside* the driver rather than inside it — and what the two share is
+    only what is not about a database: `domain`, `tlscert`, `neterr`, `sshtunnel`, `netproxy`. The
+    port is the **protocol alone** — sign a request, list a page, read a range, write a part — and
+    walking a prefix, searching it, downloading a folder in parallel and resuming what was interrupted
+    are each written **once above it**, which is `sqlkit.DDL`'s arrangement applied to a service.
+    There is **one adapter** and one is the honest number: seven services speak the same protocol, so
+    what differs is a **preset** (`domain.StoreProvider`) deciding an endpoint, whether the bucket is
+    named in the host or the path, and what a region means to a service that has none. **No SDK is
+    taken** — the signature is `internal/sigv4` and the answers are six XML documents — for the reason
+    `internal/transfer` takes none for a spreadsheet.
+    **An object's bytes go from the socket to the file and back, a fixed buffer at a time**, so what
+    crosses the bridge is a *number*: a preview is therefore a **byte range** and never the object, a
+    folder download is a **walk streamed into the queue** and never a listing held whole, and a copy
+    is one request naming both keys and so not a transfer at all. What a bucket makes expensive is
+    reading it, so **the service does every narrowing it can**: browsing is a folder at a time with a
+    delimiter, a search hands its literal front over (`PruneTo`), and **there is no index** — one would
+    be a copy of somebody's data that answers confidently about an object that has gone. A prefix is
+    consequently **not a node of the tree** but a row of the grid, for the reason a key space's colons
+    are. What is dangerous is a `domain` rule (`domain.ObjectHazard`, the eighth grammar) and the three
+    actions that name **nothing** — a folder delete, an empty, a bucket drop — are `unfiltered`; the
+    whole matrix is answered once per session and the frontend never re-derives it. A read-only store
+    is one wrapper (`session.readOnlyStore`) and needs no reviewer, an object store having no statement
+    to read. No secret is in `object-stores.json`.
+    **What a service keeps about one object is seven panes and each is read only when it is opened** —
+    clicking a row must cost one request and not four. Two of the seven are not what they look like and
+    the app says so rather than pretending: there is **no request that sets a header**, so changing one
+    is a copy of the object onto itself with `REPLACE` — six headers are settable, the rest are the
+    service's and are drawn locked, the set is replaced entire so it is staged and applied in one
+    press, and the object is *rewritten* (a new tag, a new version). And a `Log` pane is **this app's
+    own record**, not the service's access log: that is a bucket setting writing objects elsewhere, and
+    a client showing one would be showing somebody else's gigabytes.
+
 ## Where to read before changing something
 
 | Task | Read |
@@ -304,6 +338,10 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Touch a SQL adapter, or a `Dialect` flag | [docs/architecture.md](docs/architecture.md#the-five-sql-engines) |
 | Touch anything MongoDB | [docs/architecture.md](docs/architecture.md#the-document-store) |
 | Touch anything Redis | [docs/architecture.md](docs/architecture.md#the-key-value-store), [docs/features/key-space.md](docs/features/key-space.md) |
+| Touch an object store — a bucket, a prefix, the S3 adapter, a signature | [docs/architecture.md](docs/architecture.md#buckets-full-of-objects), [docs/features/object-storage.md](docs/features/object-storage.md) |
+| Change what is shown about one object — a pane, a header, an ACL, a version | [docs/features/object-panel.md](docs/features/object-panel.md) |
+| Change how an object is found in a bucket | [docs/features/object-search.md](docs/features/object-search.md) |
+| Change a download, an upload or the transfer queue | [docs/features/object-download.md](docs/features/object-download.md) |
 | Add or change a failure mode | [docs/errors.md](docs/errors.md) |
 | Find out what exists at all | [docs/features.md](docs/features.md) — the index, one file per feature under [docs/features/](docs/features/) |
 | Change how a connection is made or guarded — a proxy, a bastion, TLS | [docs/features/connections.md](docs/features/connections.md) |
@@ -335,6 +373,14 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 
 A new failure mode needs all four of: a `domain` sentinel, a mapping in `errmap.go`, an entry in the
 `ErrorCode` union, and a row in the table in [docs/errors.md](docs/errors.md).
+
+**An object store has no `EngineInfo`, and that is the point**: what its connection may do arrives on
+the *session* as `ObjectRules` — one entry per action, each saying what it is called, how dangerous it
+is, whether it is confirmed and whether it is refused — because those are facts about the **profile**
+and not about the provider. What a *provider* decides is three fields of a form
+(`bridge/objects.ts`'s `PROVIDERS`), which is per-provider data in the sense
+`features/schema/dataTypes.ts` is per-engine data, and never a comparison against a provider's name
+in a component.
 
 A new engine capability the UI has to know about is a field on `EngineInfo` in
 `frontend/src/bridge/connections.ts` — `hasForeignKeys`, `hasRoutines`, `hasTriggers`, `documents`,

@@ -7,7 +7,7 @@ import (
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
-	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/tlscert"
 	"github.com/microsoft/go-mssqldb/msdsn"
 )
 
@@ -54,7 +54,7 @@ func buildConfig(
 		config.Encryption = msdsn.EncryptionRequired
 	}
 
-	tlsConfig, err := sqlkit.TLSConfig(profile.TLS, profile.Host)
+	tlsConfig, err := tlscert.Config(profile.TLS, profile.Host)
 	if err != nil {
 		return msdsn.Config{}, domain.FileError{Err: err}
 	}

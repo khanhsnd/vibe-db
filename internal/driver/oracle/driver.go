@@ -13,6 +13,7 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/tlscert"
 	go_ora "github.com/sijms/go-ora/v2"
 )
 
@@ -62,7 +63,7 @@ func (*Driver) Open(
 		connector.Dialer(tunnelDialer{dial: tunnel})
 	}
 
-	tlsConfig, err := sqlkit.TLSConfig(profile.TLS, profile.Host)
+	tlsConfig, err := tlscert.Config(profile.TLS, profile.Host)
 	if err != nil {
 		return nil, domain.FileError{Err: err}
 	}

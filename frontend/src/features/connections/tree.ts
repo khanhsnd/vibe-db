@@ -8,6 +8,14 @@ import type { SourceRef } from '@/bridge/schema'
  */
 export type NodeKind =
   | 'connection'
+  // A connection to an **object store** and the buckets under it. They are two kinds in this list
+  // rather than a tree of their own because there is one sidebar: a bucket beside a database is what
+  // a reader actually has, and the tree, the filter, the colour wash and the context menu are all
+  // already written. What is *not* here is a prefix — a folder inside a bucket is drawn in the grid,
+  // for the reason a key space's colons are: it is a reading of a page and asks the service nothing.
+  // See features/storage/tree.ts.
+  | 'store'
+  | 'bucket'
   | 'database'
   | 'schema'
   | 'tables'
@@ -64,6 +72,14 @@ export interface TreeNode {
   children?: TreeNode[]
   /** The engine this connection speaks, which is drawn as its chip. Only a connection has one. */
   engine?: Engine
+  /**
+   * The object-storage service this connection speaks, drawn as its own chip. Only a `store` row has
+   * one, and it is a *second* field rather than a value of `engine` because the two are different
+   * lists: an engine is a driver and a provider is a preset — see `providerInfo`.
+   */
+  provider?: string
+  /** The bucket a `bucket` row stands for, which is what a tab is opened on. */
+  bucket?: string
   /**
    * What this connection is *for*, drawn as the stripe down its row. Only a connection has one:
    * everything under it belongs to that connection and inherits the warning by being under it.

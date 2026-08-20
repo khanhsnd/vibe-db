@@ -37,6 +37,20 @@ which server they are on has not noticed where the next statement goes.
 - **It reports the tab in front**, not whichever session happens to be first — and where no tab is
   open, the row selected in the tree. Reporting an arbitrary session would name one server while the
   grid under it drew another's rows.
+- **An [object store](object-storage.md) is reported too**, being the second kind of connection: the
+  bucket tab in front, or a store row picked in the tree. It carries no engine chip and no namespace,
+  because a store has neither — what it says instead is the bucket. It is answered *before* the
+  database branch, or a connection that is open would be drawn as closed: its profile lives in a
+  different store.
+- **`New Connection` on the bar is a menu of the two kinds**, and so is the sidebar's `+` — see
+  [where a store is asked for](object-storage.md#where-it-is-asked-for). Both build from one list, so
+  a fourth surface offering them is a call and not a fourth spelling.
+- **`New Query` becomes `New Bucket` while the reader is looking at an object store**, in the same
+  slot rather than beside it. They are the same sentence about two kinds of connection — *make me a
+  new place to work* — and a bucket has no statements, so a New Query button over one would open a tab
+  that could never run anything. Drawing both would mean one dead control at all times. **Backup goes
+  dead there too**, a store having no namespace to back up: the alternative is a live button that
+  quietly backs up whichever database happened to be open.
 - **The pill is drawn whether or not anything is connected.** A place that empties is a place a
   reader stops looking at, so an idle window says `No connection` in it, and a window whose last
   attempt failed says why, in the danger colour, where the machine's name would be.
@@ -122,6 +136,13 @@ therefore a deliberate list, kept in a store under the tab's id and dropped when
   does: it is one log for the whole window rather than one per tab, and re-reading it on the way
   back would lose the place the reader had scrolled to. See
   [features/log.md](log.md#how-it-is-kept).
+- A **bucket tab** keeps where the reader is standing (`stores/bucketViews.ts`): the folder, whether
+  it is flattened, the page — as the **stack of continuation tokens** already used, a listing being
+  forward only — what was searched for and what came back, and which rows are ticked. It keeps the
+  page's rows there too, and for a milder version of a query tab's reason: a listing is cheap but it
+  is also *forward only*, so re-reading on the way back would put the reader on page one of a folder
+  they had walked six pages into. A [transfer](object-download.md) it started is **not** here: that
+  belongs to the window, and closing the tab does not stop it.
 - A **Backups tab** keeps nothing at all. The list is the tree's own — one folder, drawn twice —
   and it is read again on the way back for a stronger reason than a table's rows are: another
   window of this app, or the reader with a file manager, changes the folder without this one

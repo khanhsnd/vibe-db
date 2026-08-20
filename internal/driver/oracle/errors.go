@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
-	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/neterr"
 	"github.com/sijms/go-ora/v2/network"
 )
 
@@ -53,7 +53,7 @@ func translateError(err error) error {
 		}
 	}
 
-	if mapped := sqlkit.TransportError(err); mapped != nil {
+	if mapped := neterr.Map(err); mapped != nil {
 		return mapped
 	}
 

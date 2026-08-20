@@ -14,22 +14,40 @@ import {
 import { SettingsDialog } from '@/features/settings/SettingsDialog'
 import { IconButton } from '@/shared/ui/IconButton'
 import { Button } from '@/shared/ui/Button'
+import { MenuButton } from '@/shared/ui/MenuButton'
+import { ICON } from '@/shared/ui/menuIcons'
 import { useTheme } from '@/shared/theme/useTheme'
 import { useConnectionsStore } from '@/stores/connections'
 import { useTabsStore } from '@/stores/tabs'
 import { useUIStore } from '@/stores/ui'
 
 import { ConnectionBanner } from './ConnectionBanner'
+import { newConnectionItems } from './newMenu'
 import type { StatusInfo } from './status'
 
 interface CommandBarProps {
   onNewConnection: () => void
+  /**
+   * A connection to an **object store**, which is the second kind of thing this app can be pointed
+   * at. It is a menu beside the first and not a second button — see `newConnectionItems`.
+   */
+  onNewStore: () => void
   onNewQuery: () => void
   /**
+   * Makes a bucket on the object store the reader is looking at, and `null` everywhere else — which
+   * is what **replaces** New Query rather than sitting beside it.
+   *
+   * They are one slot because they are the same sentence about two kinds of connection: *make me a
+   * new place to work*. A bucket has no statements, so a New Query button over one is a button that
+   * opens a tab which can never run anything; and a database has no buckets. Drawing both would be
+   * drawing one dead control at all times.
+   */
+  onNewBucket: (() => void) | null
+  /**
    * Takes a backup of wherever the reader is. It is `null` — and the button dead — where there is
-   * nothing to back up: no live connection, or one whose engine has no such thing. The bar does not
-   * work that out for itself, because which namespace it would be *of* is the shell's answer and
-   * not this strip's.
+   * nothing to back up: no live connection, one whose engine has no such thing, or an object store,
+   * which has no namespace to back up at all. The bar does not work that out for itself, because
+   * which namespace it would be *of* is the shell's answer and not this strip's.
    */
   onBackup: (() => void) | null
   /**
@@ -39,7 +57,14 @@ interface CommandBarProps {
   status: StatusInfo
 }
 
-export function CommandBar({ onNewConnection, onNewQuery, onBackup, status }: CommandBarProps) {
+export function CommandBar({
+  onNewConnection,
+  onNewStore,
+  onNewQuery,
+  onNewBucket,
+  onBackup,
+  status,
+}: CommandBarProps) {
   const { theme, toggleTheme } = useTheme()
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
   // The one action here that is nobody's target: a job names the connection it dials, so this asks
@@ -72,13 +97,25 @@ export function CommandBar({ onNewConnection, onNewQuery, onBackup, status }: Co
 
         <span className="mx-1 h-4 w-px bg-line" />
 
-        <Button variant="subtle" icon={<Plus size={14} />} onClick={onNewConnection}>
-          New Connection
-        </Button>
+        {/* The button a reader actually reaches for, so it is where **both** kinds are offered: a
+            store reachable only from the sidebar's 24-pixel `+` is a store nobody finds. */}
+        <MenuButton items={newConnectionItems(onNewConnection, onNewStore)}>
+          <Button variant="subtle" icon={<Plus size={14} />}>
+            New Connection
+          </Button>
+        </MenuButton>
 
-        <Button variant="subtle" icon={<Terminal size={14} />} onClick={onNewQuery}>
-          New Query
-        </Button>
+        {/* One slot, two sentences — see `onNewBucket`. What the reader is looking at decides which,
+            so neither is ever drawn dead. */}
+        {onNewBucket !== null ? (
+          <Button variant="subtle" icon={ICON.bucket} onClick={onNewBucket}>
+            New Bucket
+          </Button>
+        ) : (
+          <Button variant="subtle" icon={<Terminal size={14} />} onClick={onNewQuery}>
+            New Query
+          </Button>
+        )}
 
         <Button
           variant="subtle"

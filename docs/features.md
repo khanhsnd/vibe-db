@@ -28,6 +28,10 @@ one**, **running the engine's own mongodump, mysqldump or pg_dump — and puttin
 back**, **any of those jobs on a clock — a nightly backup, an hourly export, a comparison that
 watches two tables for drift**, query tabs with completion that **run a whole script**, **a console that runs one statement
 at a time and keeps the transcript**, **running a file of statements against a connection**,
+**an S3-compatible object store beside the databases — its buckets in the same tree, a folder at a
+time in a grid, an object's headers, permissions, tags, versions and preview in seven panes under it,
+searched by name across a bucket, and objects brought down in parallel ranges that survive being
+interrupted**,
 **marking a connection with a colour that washes down the sidebar**, **a history of every statement
 run, kept on disk and put back in the editor by a double-click**, **a library of the statements the
 reader named, kept in a file and offered by that name in every editor**, **a log of everything the window
@@ -65,6 +69,10 @@ to reach the one they came for. How the docs are laid out is written down in
 | What each of the seven engines has, and what it has not | [features/engines.md](features/engines.md) |
 | The tree, what a level loads, filtering it, and the table list | [features/schema-tree.md](features/schema-tree.md) |
 | A Redis key space: the grid of keys, the prefix tree, the search bar, the key panel | [features/key-space.md](features/key-space.md) |
+| An object store: the connection, its buckets, browsing a folder at a time, an object's own panel | [features/object-storage.md](features/object-storage.md) |
+| What a service keeps about one object: the seven panes under the grid | [features/object-panel.md](features/object-panel.md) |
+| Finding an object in a bucket of forty million | [features/object-search.md](features/object-search.md) |
+| Bringing objects down and putting them up: the queue, the ranges, the resume | [features/object-download.md](features/object-download.md) |
 | Finding text across a schema | [features/search.md](features/search.md) |
 | Comparing two tables, and making them agree | [features/compare.md](features/compare.md) |
 | Drawing a namespace as boxes and the lines between them | [features/diagram.md](features/diagram.md) |

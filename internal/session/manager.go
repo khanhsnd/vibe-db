@@ -73,12 +73,12 @@ func (m *Manager) Open(
 
 	// The proxy is the outer hop: it is how this machine reaches the network, so the bastion is
 	// dialled *through* it and the database through the bastion. See domain.ProxyOptions.
-	proxied, err := openProxy(profile, secrets)
+	proxied, err := openProxy(profile.Proxy, secrets)
 	if err != nil {
 		return nil, err
 	}
 
-	tunnel, err := openTunnel(ctx, profile, secrets, proxied)
+	tunnel, err := openTunnel(ctx, profile.SSH, secrets, proxied)
 	if err != nil {
 		return nil, err
 	}
@@ -136,13 +136,16 @@ func (m *Manager) Open(
 	return s, nil
 }
 
+// openTunnel takes the bastion's own options rather than a whole profile, because a connection to an
+// **object store** is carried over one on exactly the same terms — see stores.go. The two hops are
+// the one part of opening a connection that does not care what is at the far end of it.
 func openTunnel(
 	ctx context.Context,
-	profile domain.ConnectionProfile,
+	bastion domain.SSHTunnel,
 	secrets Secrets,
 	under driver.Dialer,
 ) (*sshtunnel.Tunnel, error) {
-	if !profile.SSH.Enabled {
+	if !bastion.Enabled {
 		return nil, nil
 	}
 
@@ -150,18 +153,18 @@ func openTunnel(
 	if under != nil {
 		carried = sshtunnel.Dial(under)
 	}
-	return sshtunnel.Open(ctx, profile.SSH, sshtunnel.Secrets{Secret: secrets.SSH}, carried)
+	return sshtunnel.Open(ctx, bastion, sshtunnel.Secrets{Secret: secrets.SSH}, carried)
 }
 
 // openProxy is the proxy as the rest of this file sees it: a function, and nil where there is none.
 // It reaches nothing — a proxy is spoken to per connection — so a profile naming one that is not
 // there fails on the first dial rather than here.
-func openProxy(profile domain.ConnectionProfile, secrets Secrets) (driver.Dialer, error) {
-	if !profile.Proxy.Enabled {
+func openProxy(options domain.ProxyOptions, secrets Secrets) (driver.Dialer, error) {
+	if !options.Enabled {
 		return nil, nil
 	}
 
-	opened, err := netproxy.Open(profile.Proxy, netproxy.Secrets{Secret: secrets.Proxy})
+	opened, err := netproxy.Open(options, netproxy.Secrets{Secret: secrets.Proxy})
 	if err != nil {
 		return nil, err
 	}

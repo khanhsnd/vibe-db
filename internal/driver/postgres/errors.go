@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/khanhsnd/vibe-db/internal/domain"
-	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/neterr"
 )
 
 // PostgreSQL identifies a failure by its SQLSTATE rather than a number of its own.
@@ -50,7 +50,7 @@ func translateError(err error) error {
 		return domain.ErrTLSUnsupported
 	}
 
-	if mapped := sqlkit.TransportError(err); mapped != nil {
+	if mapped := neterr.Map(err); mapped != nil {
 		return mapped
 	}
 

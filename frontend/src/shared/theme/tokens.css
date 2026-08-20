@@ -71,6 +71,17 @@
   --engine-mongo: #1aa85f;
   --engine-redis: #e8564a;
 
+  /** One per object-storage service, drawn as its chip. They are presets of one protocol rather
+      than seven adapters, so a colour is the only thing that tells two of them apart down a
+      sidebar where every row otherwise says the same word. */
+  --store-aws: #e8912d;
+  --store-minio: #c72c48;
+  --store-r2: #f6821f;
+  --store-spaces: #0080ff;
+  --store-wasabi: #00c176;
+  --store-gcs: #4285f4;
+  --store-other: #7d8590;
+
   /** One per environment, so a connection says what it is *for* before anything is run on it.
       They are a traffic light deliberately: what those three colours already mean to everybody is
       the whole of why the label is worth drawing. A connection that names no environment wears
@@ -121,6 +132,14 @@
   /** An account is not an object of a catalogue either — it is who the *server* knows — so it
       takes its own entry beside the backup's rather than borrowing a table's or a schema's. */
   --kind-account: #d29922;
+
+  /** A bucket and what is in it are not the catalogue's either — they are somebody's *files* — so
+      they take their own three entries beside the backup's. A folder in a bucket is a **prefix**
+      and wears the object's colour cooled a step, which is the arrangement a partition has with
+      its table: near enough to read as "part of that", far enough to tell apart. */
+  --kind-bucket: #c9a227;
+  --kind-object: #8ab4f8;
+  --kind-prefix: #6f8fbf;
 
   /** One per class of column type, so a grid header says what a column *holds* before its name is
       read. They are the same seven `columnType.tsx` sorts a type into, and nothing else may take
@@ -208,6 +227,14 @@
   --engine-mongo: #13aa52;
   --engine-redis: #d82c20;
 
+  --store-aws: #c26a12;
+  --store-minio: #b02138;
+  --store-r2: #d96c0a;
+  --store-spaces: #0069d9;
+  --store-wasabi: #009e5f;
+  --store-gcs: #1a73e8;
+  --store-other: #57606a;
+
   --env-development: #1a7f37;
   --env-staging: #9a6700;
   --env-production: #cf222e;
@@ -238,6 +265,9 @@
   --kind-partition: #1b7c83;
   --kind-backup: #57606a;
   --kind-account: #9a6700;
+  --kind-bucket: #8a6d00;
+  --kind-object: #0b5cad;
+  --kind-prefix: #3f6a99;
 
   --type-text: #1a7f37;
   --type-numeric: #0550ae;
@@ -306,6 +336,14 @@
   --color-engine-mongo: var(--engine-mongo);
   --color-engine-redis: var(--engine-redis);
 
+  --color-store-aws: var(--store-aws);
+  --color-store-minio: var(--store-minio);
+  --color-store-r2: var(--store-r2);
+  --color-store-spaces: var(--store-spaces);
+  --color-store-wasabi: var(--store-wasabi);
+  --color-store-gcs: var(--store-gcs);
+  --color-store-other: var(--store-other);
+
   --color-env-development: var(--env-development);
   --color-env-staging: var(--env-staging);
   --color-env-production: var(--env-production);
@@ -324,6 +362,9 @@
   --color-kind-partition: var(--kind-partition);
   --color-kind-backup: var(--kind-backup);
   --color-kind-account: var(--kind-account);
+  --color-kind-bucket: var(--kind-bucket);
+  --color-kind-object: var(--kind-object);
+  --color-kind-prefix: var(--kind-prefix);
 
   --color-type-text: var(--type-text);
   --color-type-numeric: var(--type-numeric);

@@ -6,15 +6,14 @@ package cloudauth
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/khanhsnd/vibe-db/internal/sigv4"
 )
 
 const (
@@ -29,14 +28,11 @@ const (
 	awsTokenLife = 15 * time.Minute
 )
 
-// AWSCredentials is an access key as the machine holds it. A session token is present for
-// temporary credentials — an assumed role, an SSO login, an instance profile — and empty for a
-// long-lived key.
-type AWSCredentials struct {
-	AccessKeyID     string
-	SecretAccessKey string
-	SessionToken    string
-}
+// AWSCredentials is an access key as the machine holds it — an alias, because the *signer* is where
+// this shape belongs and an object store reads exactly the same three variables. A session token is
+// present for temporary credentials — an assumed role, an SSO login, an instance profile — and empty
+// for a long-lived key.
+type AWSCredentials = sigv4.Credentials
 
 // AWSEnvironment reads the credentials the AWS tools all agree on. It is the environment alone:
 // resolving a named profile, an SSO cache or an instance metadata endpoint is the SDK's job, and
@@ -85,9 +81,8 @@ func AWSToken(
 	user string,
 	now time.Time,
 ) string {
-	stamp := now.UTC().Format("20060102T150405Z")
-	day := stamp[:8]
-	scope := strings.Join([]string{day, region, awsService, "aws4_request"}, "/")
+	stamp, day := sigv4.Stamp(now)
+	scope := sigv4.Scope(day, region, awsService)
 
 	endpoint := host + ":" + strconv.Itoa(port)
 
@@ -95,7 +90,7 @@ func AWSToken(
 	query := url.Values{
 		"Action":              {awsAction},
 		"DBUser":              {user},
-		"X-Amz-Algorithm":     {"AWS4-HMAC-SHA256"},
+		"X-Amz-Algorithm":     {sigv4.Algorithm},
 		"X-Amz-Credential":    {creds.AccessKeyID + "/" + scope},
 		"X-Amz-Date":          {stamp},
 		"X-Amz-Expires":       {strconv.Itoa(int(awsTokenLife.Seconds()))},
@@ -111,42 +106,14 @@ func AWSToken(
 		query.Encode(),
 		"host:" + endpoint + "\n",
 		"host",
-		sha256Hex(""),
+		sigv4.EmptyPayload,
 	}, "\n")
 
-	toSign := strings.Join([]string{
-		"AWS4-HMAC-SHA256",
-		stamp,
-		scope,
-		sha256Hex(canonical),
-	}, "\n")
-
-	key := signingKey(creds.SecretAccessKey, day, region, awsService)
-	query.Set("X-Amz-Signature", hex.EncodeToString(hmacSHA256(key, toSign)))
+	query.Set("X-Amz-Signature", sigv4.Signature(
+		creds.SecretAccessKey, day, region, awsService, stamp, canonical,
+	))
 
 	return endpoint + "/?" + query.Encode()
-}
-
-// signingKey is SigV4's chain of four HMACs: the secret is never used to sign the request
-// directly, only to derive a key that is good for one day, one region and one service. The
-// service is a parameter rather than the constant above so the chain can be checked against
-// AWS's own published example, which signs for a different one.
-func signingKey(secret, day, region, service string) []byte {
-	key := hmacSHA256([]byte("AWS4"+secret), day)
-	key = hmacSHA256(key, region)
-	key = hmacSHA256(key, service)
-	return hmacSHA256(key, "aws4_request")
-}
-
-func hmacSHA256(key []byte, message string) []byte {
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(message))
-	return mac.Sum(nil)
-}
-
-func sha256Hex(text string) string {
-	sum := sha256.Sum256([]byte(text))
-	return hex.EncodeToString(sum[:])
 }
 
 // AWS answers with the token for this profile, or says why it cannot. The context is unused and

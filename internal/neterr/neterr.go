@@ -1,4 +1,14 @@
-package sqlkit
+// Package neterr says what a failure that happened before any protocol was spoken means: a
+// cancelled read, a deadline, a host that is not there, a certificate this machine will not trust.
+//
+// It sits beside `internal/tlscert` for the same reason that package exists: **none of those four
+// is about a database.** They read identically to an object store, so `internal/driver` does not own
+// them and `internal/objectstore` does not copy them.
+//
+// It lived in `sqlkit` as `TransportError` until an object store needed it. What it does *not* map is
+// still the caller's: only an adapter can read its own wire errors, which is why this answers nil
+// for anything it does not recognise rather than guessing.
+package neterr
 
 import (
 	"context"
@@ -10,11 +20,11 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/domain"
 )
 
-// TransportError maps the failures that read the same whatever the engine — a cancelled
+// Map maps the failures that read the same whatever is at the other end — a cancelled
 // context, a deadline, an unreachable host, a certificate that does not verify — onto
 // domain sentinels. It returns nil for anything else, which is the adapter's own to
-// translate because only it can read the engine's wire errors.
-func TransportError(err error) error {
+// translate because only it can read its own wire errors.
+func Map(err error) error {
 	switch {
 	case err == nil:
 		return nil

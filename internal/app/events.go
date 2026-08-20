@@ -52,3 +52,12 @@ type TaskEvent struct {
 	Running bool    `json:"running"`
 	Run     TaskRun `json:"run"`
 }
+
+// EventTransfers is the transfer queue as the panel draws it, pushed while anything is moving.
+//
+// It is pushed rather than polled for the reason a scheduled job's firing is: a reader watching a
+// forty-gigabyte download deserves a number that moves, and a panel that only changed when it was
+// re-read would be a panel that lied between reads. It carries the whole report rather than a delta
+// because the report is already bounded — a handful of jobs and the files in flight — and a delta
+// would be a second shape to keep in step with the first.
+const EventTransfers = "transfers:report"

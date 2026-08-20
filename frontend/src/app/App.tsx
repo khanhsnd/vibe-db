@@ -10,6 +10,11 @@ import {
   type Profile,
   type ProfileInput,
 } from '@/bridge/connections'
+import {
+  objects as storeObjects,
+  toStoreInput,
+  type StoreInput,
+} from '@/bridge/objects'
 import { NewBackupDialog } from '@/features/backup/NewBackupDialog'
 import { DumpDialog, type DumpTarget } from '@/features/backup/DumpDialog'
 import { RestoreBackupDialog } from '@/features/backup/RestoreBackupDialog'
@@ -30,11 +35,18 @@ import {
 import { useTreeMenu } from '@/features/connections/useTreeMenu'
 import { TaskDialog } from '@/features/schedule/TaskDialog'
 import { SchemaDialogs } from '@/features/schema/SchemaDialogs'
+import { DownloadDialog } from '@/features/storage/DownloadDialog'
+import { StoreDialog } from '@/features/storage/StoreDialog'
+import { storeMenuItems } from '@/features/storage/storeMenu'
+import { TransferPanel } from '@/features/storage/TransferPanel'
+import { buildStoreTree, isStoreNode } from '@/features/storage/tree'
 import { ExportWizard, type ExportTarget } from '@/features/transfer/ExportWizard'
 import { ImportWizard, type ImportTarget } from '@/features/transfer/ImportWizard'
 import { Split, SplitHandle, SplitPanel, usePanelRef } from '@/shared/ui/Split'
 import { useBackupsStore } from '@/stores/backups'
 import { buildTree, useConnectionsStore } from '@/stores/connections'
+import { useObjectStoresStore } from '@/stores/objectStores'
+import { useSchemaStore } from '@/stores/schema'
 import { useSettingsStore } from '@/stores/settings'
 import { useSnippetsStore } from '@/stores/snippets'
 import { useTabsStore } from '@/stores/tabs'
@@ -95,9 +107,28 @@ export function App() {
   const toggleNode = useConnectionsStore((s) => s.toggleNode)
   const askBackup = useBackupsStore((s) => s.ask)
 
+  const storeProfiles = useObjectStoresStore((s) => s.profiles)
+  const storeStatuses = useObjectStoresStore((s) => s.statuses)
+  const storeSessions = useObjectStoresStore((s) => s.sessions)
+  const storeBuckets = useObjectStoresStore((s) => s.buckets)
+  const loadStores = useObjectStoresStore((s) => s.load)
+  const connectStore = useObjectStoresStore((s) => s.connect)
+  const disconnectStore = useObjectStoresStore((s) => s.disconnect)
+  const loadBuckets = useObjectStoresStore((s) => s.loadBuckets)
+  const openBucket = useTabsStore((s) => s.openBucket)
+  const ask = useSchemaStore((s) => s.ask)
+
+  /**
+   * The two halves of the sidebar, concatenated. There is **one tree** — one component, one filter,
+   * one colour wash, one selection — and two builders behind it, because a database connection and an
+   * object store share nothing but the shape of a row. See `features/storage/tree.ts`.
+   *
+   * The stores go **after** the databases: this is a database client, and a reader with one bucket
+   * and nine servers should not have to scroll past the bucket.
+   */
   const roots = useMemo(
-    () =>
-      buildTree({
+    () => [
+      ...buildTree({
         profiles,
         statuses,
         databases,
@@ -109,6 +140,13 @@ export function App() {
         activeNamespace,
         databaseFilters,
       }),
+      ...buildStoreTree({
+        profiles: storeProfiles,
+        statuses: storeStatuses,
+        sessions: storeSessions,
+        buckets: storeBuckets,
+      }),
+    ],
     [
       profiles,
       statuses,
@@ -120,6 +158,10 @@ export function App() {
       structures,
       activeNamespace,
       databaseFilters,
+      storeProfiles,
+      storeStatuses,
+      storeSessions,
+      storeBuckets,
     ],
   )
 
@@ -176,6 +218,9 @@ export function App() {
 
   const [dialogProfile, setDialogProfile] = useState<ProfileInput | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  /** The object-store connection being edited, and non-null exactly while that dialog is up. */
+  const [storeDraft, setStoreDraft] = useState<StoreInput | null>(null)
+  const [storeDialogOpen, setStoreDialogOpen] = useState(false)
   const [promptFor, setPromptFor] = useState<Profile | null>(null)
   /** The connection a file is being run against, and non-null exactly while that dialog is up. */
   const [fileFor, setFileFor] = useState<Profile | null>(null)
@@ -189,8 +234,9 @@ export function App() {
   // pane has ever been opened.
   useEffect(() => {
     void loadProfiles()
+    void loadStores()
     void loadSnippets()
-  }, [loadProfiles, loadSnippets])
+  }, [loadProfiles, loadStores, loadSnippets])
 
   useEffect(() => {
     const panel = sidebarRef.current
@@ -208,6 +254,113 @@ export function App() {
     setDialogProfile(toProfileInput(profile))
     setDialogOpen(true)
   }, [])
+
+  const openNewStore = useCallback(() => {
+    setStoreDraft(null)
+    setStoreDialogOpen(true)
+  }, [])
+
+  /**
+   * Everything a right-click on an object store's row can ask for. They are gathered here rather
+   * than in the menu builder for the reason the database ones are: a menu decides *what* is offered
+   * and the shell is what has the stores, the tabs and the dialogs to do it with.
+   */
+  const storeMenu = useMemo(
+    () => ({
+      onConnect: (profileId: string) => {
+        void connectStore(profileId, '').catch(() => {})
+      },
+      onDisconnect: (profileId: string) => {
+        void disconnectStore(profileId)
+      },
+      onEdit: (profileId: string) => {
+        const held = storeProfiles.find((one) => one.id === profileId)
+        if (!held) return
+        setStoreDraft(toStoreInput(held))
+        setStoreDialogOpen(true)
+      },
+      onRefresh: (profileId: string) => {
+        void loadBuckets(profileId)
+      },
+      onColour: (profileId: string, colour: string) => {
+        void useObjectStoresStore.getState().setColour(profileId, colour)
+      },
+      onRename: (profileId: string) => {
+        const held = storeProfiles.find((one) => one.id === profileId)
+        if (!held) return
+        ask({
+          kind: 'prompt',
+          title: 'Rename Connection',
+          label: 'Name',
+          value: held.name,
+          submitLabel: 'Rename',
+          onSubmit: (name) => useObjectStoresStore.getState().rename(profileId, name),
+        })
+      },
+      onDelete: (profileId: string) => {
+        const held = storeProfiles.find((one) => one.id === profileId)
+        if (!held) return
+        ask({
+          kind: 'confirm',
+          title: 'Delete Connection',
+          message: `${held.name} will be forgotten, along with the secret kept for it. Nothing in the bucket is touched.`,
+          submitLabel: 'Delete',
+          danger: true,
+          onSubmit: () => useObjectStoresStore.getState().remove(profileId),
+        })
+      },
+      onOpenBucket: (profileId: string, bucket: string) => {
+        openBucket(profileId, bucket)
+      },
+      onNewBucket: (profileId: string) => {
+        const session = storeSessions[profileId]
+        if (!session) return
+        ask({
+          kind: 'prompt',
+          title: 'New Bucket',
+          label: 'Bucket name',
+          value: '',
+          submitLabel: 'Create',
+          onSubmit: async (name) => {
+            await storeObjects.makeBucket(session.sessionId, name.trim())
+            await loadBuckets(profileId)
+          },
+        })
+      },
+      onEmptyBucket: (profileId: string, bucket: string) => {
+        const session = storeSessions[profileId]
+        if (!session) return
+        // It names *nothing* — everything in the bucket goes, however much that turns out to be —
+        // which is why `domain.ObjectHazard` calls it unfiltered and why the wording says so.
+        ask({
+          kind: 'confirm',
+          title: session.rules.emptyBucket.verb,
+          message: `Every object in ${bucket} will be deleted, however many there turn out to be. A bucket does not say how many until they have been read, and none of it can be undone.`,
+          submitLabel: session.rules.emptyBucket.verb,
+          danger: true,
+          onSubmit: async () => {
+            await storeObjects.removeFolder(session.sessionId, bucket, '', `empty-${bucket}`)
+          },
+        })
+      },
+      onDeleteBucket: (profileId: string, bucket: string) => {
+        const session = storeSessions[profileId]
+        if (!session) return
+        ask({
+          kind: 'confirm',
+          title: session.rules.deleteBucket.verb,
+          message: `${bucket} will be deleted. Most services refuse a bucket that still holds anything, so empty it first.`,
+          submitLabel: session.rules.deleteBucket.verb,
+          danger: true,
+          onSubmit: async () => {
+            await storeObjects.removeBucket(session.sessionId, bucket)
+            await loadBuckets(profileId)
+          },
+        })
+      },
+    }),
+    [storeProfiles, storeSessions, connectStore, disconnectStore, loadBuckets, openBucket, ask],
+  )
 
   const startConnect = useCallback(
     (profile: Profile) => {
@@ -261,10 +414,29 @@ export function App() {
         return
       }
 
+      // A store's own caret does the same thing for the same reason: a shut one has listed nothing,
+      // so opening it means dialling it — and the buckets arrive with the session.
+      if (node.kind === 'store' && !storeSessions[node.profileId]) {
+        if (storeStatuses[node.profileId] !== 'connecting') {
+          void connectStore(node.profileId, '').catch(() => {})
+        }
+        return
+      }
+
       toggleNode(node.id)
       revealNode(node)
     },
-    [sessions, profiles, statuses, startConnect, toggleNode, revealNode],
+    [
+      sessions,
+      profiles,
+      statuses,
+      startConnect,
+      toggleNode,
+      revealNode,
+      storeSessions,
+      storeStatuses,
+      connectStore,
+    ],
   )
 
   // A view's rows are read exactly as a table's are, so they open the same tab — and land in it
@@ -286,7 +458,7 @@ export function App() {
     [openConsole, activeNamespace],
   )
 
-  const menuItemsFor = useTreeMenu(
+  const databaseMenuFor = useTreeMenu(
     {
       onConnect: startConnect,
       onEditConnection: openEditConnection,
@@ -307,6 +479,16 @@ export function App() {
     },
     pickedTables,
     pickedNamespaces,
+  )
+
+  // One tree, two menus, and which one a row gets is the row's own kind. `ObjectTree` is handed one
+  // function and never learns there were two.
+  const menuItemsFor = useCallback(
+    (node: TreeNode) =>
+      isStoreNode(node)
+        ? storeMenuItems(node, storeSessions[node.profileId] ?? null, storeMenu)
+        : databaseMenuFor(node),
+    [databaseMenuFor, storeMenu, storeSessions],
   )
 
   // Selecting reads nothing and dials nothing, and expanding stays the caret's job. The one
@@ -395,6 +577,12 @@ export function App() {
         openMonitor(node.profileId)
         return
       }
+      // A bucket has no folders in the tree — its prefixes are drawn in the grid — so a double-click
+      // is the open, which is the promise a table's makes under the word this surface has for it.
+      if (node.kind === 'bucket') {
+        openBucket(node.profileId, node.bucket ?? node.label)
+        return
+      }
 
       const ref = sourceRefOf(node)
       if (hasRows(node)) openNodeRows(node)
@@ -402,7 +590,7 @@ export function App() {
         openSource({ profileId: node.profileId, namespace: node.namespace, ref })
       } else if (isExpandable(node)) toggleTreeNode(node)
     },
-    [toggleTreeNode, openNodeRows, openSource, openAccounts, openMonitor],
+    [toggleTreeNode, openNodeRows, openSource, openAccounts, openMonitor, openBucket],
   )
 
   // A new editor inherits the selected connection and namespace, falling back to
@@ -430,7 +618,36 @@ export function App() {
    * connection, or one whose engine has no such thing — see `hasBackups`. A button that opened a
    * dialog only to have the Go side refuse it would be asking the reader to find that out twice.
    */
+  /**
+   * Which object store the reader is looking at, which is what the bar draws `New Bucket` from —
+   * and `null` everywhere else, which is what leaves `New Query` in that slot. A bucket has no
+   * statements, so the two are one slot rather than one live button and one dead one.
+   *
+   * The tab in front decides, falling back to the row picked in the tree, exactly as the status bar
+   * does — and it is `null` on a connection that refuses a write, since a button that opened a
+   * dialog only to be refused would be asking the reader to find that out twice.
+   */
+  const storeInFront = useMemo(() => {
+    const id =
+      activeTab?.kind === 'bucket'
+        ? activeTab.profileId
+        : selected && isStoreNode(selected)
+          ? selected.profileId
+          : ''
+    const held = id === '' ? undefined : storeSessions[id]
+    return held && !held.rules.createBucket.refused ? held : null
+  }, [activeTab, selected, storeSessions])
+
+  const newBucket = useMemo(() => {
+    if (storeInFront === null) return null
+    return () => storeMenu.onNewBucket(storeInFront.profileId)
+  }, [storeInFront, storeMenu])
+
   const newBackup = useMemo(() => {
+    // A store has no namespace to back up, so the button is dead while the reader is looking at one
+    // rather than quietly backing up whichever database happened to be open.
+    if (activeTab?.kind === 'bucket' || (selected && isStoreNode(selected))) return null
+
     const profileId = selected?.profileId ?? Object.keys(sessions)[0] ?? ''
     if (profileId === '' || !sessions[profileId]) return null
 
@@ -441,12 +658,39 @@ export function App() {
     if (namespace.database === '') return null
 
     return () => askBackup({ profileId, namespace })
-  }, [selected, sessions, profiles, activeNamespace, askBackup])
+  }, [activeTab, selected, sessions, profiles, activeNamespace, askBackup])
 
   // The bar reports the connection the reader is *looking at* — the tab in front, or the row they
   // have selected where no tab is open. Reporting whichever session happened to be first would
   // name one server while the grid under it drew another's rows.
   const status = useMemo<StatusInfo>(() => {
+    // An object store is the second kind of connection, so the bar reports one of those too — and
+    // it is answered first, because its profile is in a different store and would otherwise fall
+    // through to the idle branch below and report a connection that is open as closed.
+    const storeTab = activeTab?.kind === 'bucket' ? activeTab : null
+    const storeId = storeTab?.profileId ?? (selected && isStoreNode(selected) ? selected.profileId : '')
+    if (storeId !== '') {
+      const store = storeProfiles.find((one) => one.id === storeId)
+      const held = storeSessions[storeId]
+      return {
+        status: held ? 'connected' : (storeStatuses[storeId] ?? 'idle'),
+        name: store?.name ?? null,
+        target: store?.target ?? null,
+        // A store has no engine chip: what it speaks is a provider, and the banner draws that from
+        // the name rather than pretending one of the seven engines is at the far end.
+        engine: null,
+        environment: store?.environment ?? '',
+        serverVersion: null,
+        readOnly: held?.readOnly ?? false,
+        // It has no namespaces at all, so there is none to name.
+        namespace: storeTab?.bucket ?? '',
+        connections: Object.keys(sessions).length + Object.keys(storeSessions).length,
+        rowCount: null,
+        elapsedMs: null,
+        error: null,
+      }
+    }
+
     const profileId = activeTab?.profileId ?? selected?.profileId ?? Object.keys(sessions)[0] ?? ''
     const session = sessions[profileId]
     const profile = profiles.find((p) => p.id === profileId)
@@ -490,7 +734,17 @@ export function App() {
       // a dump, could fail with nowhere to say so.
       error: error?.message ?? null,
     }
-  }, [activeTab, selected, sessions, profiles, activeNamespace, error])
+  }, [
+    activeTab,
+    selected,
+    sessions,
+    profiles,
+    activeNamespace,
+    error,
+    storeProfiles,
+    storeSessions,
+    storeStatuses,
+  ])
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -498,7 +752,9 @@ export function App() {
 
       <CommandBar
         onNewConnection={openNewConnection}
+        onNewStore={openNewStore}
         onNewQuery={newQuery}
+        onNewBucket={newBucket}
         onBackup={newBackup}
         status={status}
       />
@@ -534,6 +790,7 @@ export function App() {
             onActivate={activateNode}
             onDatabaseFilter={setDatabaseFilter}
             onNewConnection={openNewConnection}
+            onNewStore={openNewStore}
             menuItemsFor={menuItemsFor}
           />
         </SplitPanel>
@@ -545,9 +802,22 @@ export function App() {
         </SplitPanel>
       </Split>
 
+      {/* The transfers, above the status bar and below everything else. It belongs to the **window**
+          and not to a tab: a download outlives the tab it was started from, which is the first thing
+          a reader finds out by closing one. */}
+      <TransferPanel />
+
       <StatusBar {...status} />
 
       <ConnectionDialog open={dialogOpen} initial={dialogProfile} onOpenChange={setDialogOpen} />
+
+      <StoreDialog
+        open={storeDialogOpen}
+        initial={storeDraft}
+        onOpenChange={setStoreDialogOpen}
+      />
+
+      <DownloadDialog />
 
       <ExecuteFileDialog
         profile={fileFor}

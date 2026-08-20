@@ -26,6 +26,9 @@ frontend depends on.
 | `INVALID_PROFILE` on `tlsMode` | A certificate file named under a mode that never opens one. A file the app quietly ignores is a reader believing they have configured something, so it is refused instead | as MySQL | as MySQL | as MySQL |
 | `SQL_ERROR` | Any other server rejection; `message` is its own wording, `detail` the errno | the same, `detail` the SQLSTATE | the same, `detail` the server's own *name* for the failure — `NamespaceExists` — or its number where it sent none. It is also what a command **this side** could not read answers with, under the code `SHELL`: nothing was sent anywhere, but the wording is still the only useful thing to show | the same, `detail` the **first word** of the server's line — `WRONGTYPE`, `BUSYKEY`, `NOSCRIPT` — that being where Redis puts a class. It is also what this side answers with when nothing was sent at all: `SHELL` for a command it could not read, `VALUE` for JSON it could not read back into a value, `SAMPLE` for a value the grid could only sample, and `SCANLIMIT` for a key space too large to order |
 
+**An object store's four codes are further down**, with the ones that do not vary by engine, because
+a store is not an engine: `UNKNOWN_BUCKET`, `UNKNOWN_OBJECT`, `FORBIDDEN` and `SERVICE_REFUSED`.
+
 `domain.StatementError.Code` is a string for exactly that last row: MySQL numbers its errors,
 PostgreSQL gives a SQLSTATE like `42P01`, MongoDB gives a name like `NamespaceExists`, and Redis
 puts a word at the front of the line — `WRONGTYPE Operation against a key holding the wrong kind of
@@ -54,7 +57,9 @@ been folded to lower case unless it was quoted. `errors.Is` still reaches the se
 wrapping, so the `code` the UI switches on is unchanged.
 
 The rest do not vary by engine. Everything below `TLS_NOT_VERIFIED` is raised above the driver
-layer, and the three transport rows are mapped once in `sqlkit.TransportError`.
+layer, and the three transport rows are mapped once in `neterr.Map` — which is above the driver layer
+too, and is why an **object store** answers those three identically without sharing a line of code
+with an adapter.
 
 | Code | Cause |
 |---|---|
@@ -81,6 +86,10 @@ layer, and the three transport rows are mapped once in `sqlkit.TransportError`.
 | `TOOL_FAILED` | One of those programs ran and ended badly. `message` is **its own last line**, because mongorestore knows why it refused a document and this app does not; `detail` is the program and the status it exited with. The whole of what it printed is in the dialog's Message Log rather than in the error |
 | `TASK_NOT_FOUND` | A scheduled job that is no longer in the file — deleted in another window, or since the list was drawn. Nothing fired, and the reader answers it with `Refresh` — see [features/automation.md](features/automation.md) |
 | `TASK_RUNNING` | `Run Now` on a job that is already going. It is a wait rather than a mistake: the two runs would write the same file, so the second is refused instead of started. **A job that fails while it runs is not one of these** — that is an outcome, kept in the job's own history rather than thrown |
+| `UNKNOWN_BUCKET` | An **object store** does not hold that bucket, or these credentials cannot see it — the two being indistinguishable from here, and the service saying `NoSuchBucket` either way. The reader answers it in the connection's Bucket box or in the tree — see [features/object-storage.md](features/object-storage.md) |
+| `UNKNOWN_OBJECT` | That object is no longer there: somebody removed it since the listing was drawn. It is what every 404 that is not a missing bucket reads as, because a service that answers 404 with an empty body is still saying the key is not there |
+| `FORBIDDEN` | The key is **accepted** and the request is not allowed. It is deliberately not `BAD_CREDENTIALS`: telling a reader to check their password when their password is fine sends them to the wrong box, and a key that may read one bucket and not list them is the ordinary arrangement in an organisation |
+| `SERVICE_REFUSED` | An object store read the request and said no. It is `SQL_ERROR`'s counterpart for something that is not a statement: `message` is the service's own sentence and `detail` its own code — `EntityTooLarge`, `NoSuchUpload`, `RequestTimeTooSkewed` (which is nearly always this machine's clock). A service that is briefly unwell or asks to be slowed down is **not** this: it is retried, five times with a doubling wait, and only reaches a reader if it is still refusing — see [features/object-download.md](features/object-download.md) |
 | `INTERNAL` | Anything unmapped; `detail` carries the original message |
 
 **The three tunnel codes and the two proxy codes are raised before the database is reached at all.**

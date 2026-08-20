@@ -40,6 +40,9 @@ const MIDDLE_BUTTON = 1
 export const KINDS: Record<TabKind, { label: string; icon: LucideIcon; tint: string }> = {
   query: { label: 'Query', icon: Terminal, tint: 'text-kind-routine' },
   table: { label: 'Table', icon: Table2, tint: 'text-kind-table' },
+  // A bucket wears the tree's own bucket colour, for the reason every other row here wears the
+  // tree's: what was opened from the sidebar reads as the thing that was opened.
+  bucket: { label: 'Bucket', icon: Archive, tint: 'text-kind-bucket' },
   design: { label: 'Design', icon: Columns3, tint: 'text-kind-field' },
   // A definition wears the view's colour whichever of the three it is: what the tab holds is a
   // *declaration*, and the title beside it already says which kind.

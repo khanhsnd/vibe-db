@@ -7,7 +7,7 @@ import (
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
-	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/tlscert"
 )
 
 const (
@@ -42,7 +42,7 @@ func clientOptions(
 		return nil, domain.ValidationError{Field: "tlsMode", Message: "is not a known TLS mode"}
 	}
 
-	config, err := sqlkit.TLSConfig(profile.TLS, profile.Host)
+	config, err := tlscert.Config(profile.TLS, profile.Host)
 	if err != nil {
 		return nil, err
 	}

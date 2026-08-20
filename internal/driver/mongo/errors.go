@@ -9,7 +9,7 @@ import (
 	mgo "go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
-	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/neterr"
 )
 
 // The server's own numbers for the failures a reader answers differently from a rejected command.
@@ -49,7 +49,7 @@ func translateError(err error) error {
 	// A cancelled read is cancelled whatever else the driver says about it, and a deadline is a
 	// deadline. Both are answered before any server code is read, because the driver reports both
 	// as failures of its own that may also carry one.
-	if mapped := sqlkit.TransportError(err); mapped != nil {
+	if mapped := neterr.Map(err); mapped != nil {
 		return mapped
 	}
 	if mgo.IsTimeout(err) {

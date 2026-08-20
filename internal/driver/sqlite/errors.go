@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
-	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/neterr"
 	"modernc.org/sqlite"
 )
 
@@ -59,7 +59,7 @@ func translateError(err error) error {
 
 	// A cancelled read still comes through the context, which is the one thing about a file that
 	// reads exactly as it does about a server.
-	if mapped := sqlkit.TransportError(err); mapped != nil {
+	if mapped := neterr.Map(err); mapped != nil {
 		return mapped
 	}
 

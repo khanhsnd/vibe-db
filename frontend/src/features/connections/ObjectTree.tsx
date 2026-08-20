@@ -8,6 +8,7 @@ import {
   CalendarClock,
   ChevronDown,
   ChevronRight,
+  Cloud,
   Columns3,
   Database,
   Eye,
@@ -31,6 +32,8 @@ import { cn } from '@/lib/cn'
 import { TREE_ROW_HEIGHT } from '@/shared/theme/density'
 import { ContextMenu, type MenuItem } from '@/shared/ui/ContextMenu'
 
+import { StoreIcon } from '@/features/storage/StoreIcon'
+
 import { colourTint } from './ConnectionColour'
 import { DatabaseFilterButton } from './DatabaseFilterPanel'
 import { EngineIcon } from './EngineIcon'
@@ -45,6 +48,12 @@ import { flatten, isFolder, type NodeKind, type PickHow, type TreeNode } from '.
  */
 const ICONS: Record<NodeKind, typeof Table2> = {
   connection: Server,
+  // A store connection wears its provider's chip rather than this, exactly as a database connection
+  // wears its engine's — the glyph is what a row falls back to while nothing is known about it.
+  store: Cloud,
+  // A bucket is drawn as the pail it is, and never as a folder: a folder in this tree is a heading
+  // the app made up, and a bucket is a thing the service holds.
+  bucket: Archive,
   database: Database,
   schema: Boxes,
   tables: Folder,
@@ -92,6 +101,8 @@ const ICONS: Record<NodeKind, typeof Table2> = {
  */
 const COLOURS: Record<NodeKind, string> = {
   connection: 'text-muted',
+  store: 'text-muted',
+  bucket: 'text-kind-bucket',
   database: 'text-kind-database',
   schema: 'text-kind-schema',
   tables: 'text-kind-table',
@@ -294,7 +305,18 @@ export function ObjectTree({
                   <span className="w-3.5 shrink-0" />
                 )}
 
-                {node.engine ? (
+                {node.provider !== undefined ? (
+                  // A store connection is dialled too — a bastion in front of a private MinIO takes
+                  // exactly as long as one in front of a database — so it gets the same spinner in
+                  // the same place rather than a dot on the far right nobody watches.
+                  node.status === 'connecting' ? (
+                    <span className="grid h-4 w-4 shrink-0 place-items-center" title="Connecting…">
+                      <Loader2 size={13} className="animate-spin text-accent" />
+                    </span>
+                  ) : (
+                    <StoreIcon provider={node.provider} />
+                  )
+                ) : node.engine ? (
                   // A connection being dialled wears a spinner where its chip goes — the one place
                   // in the tree an icon says what is *happening* rather than what a row is. A dot
                   // on the far right is easy to miss on the row the reader has just pressed, and

@@ -1,4 +1,14 @@
-package sqlkit
+// Package tlscert builds a `*tls.Config` from the certificate files a profile names.
+//
+// It sits beside `internal/sshtunnel`, `internal/netproxy` and `internal/neterr`, and is there for
+// the same reason those are: **it is not about a database.** A root certificate, a client
+// certificate and a server name mean exactly the same thing to an object store, so
+// `internal/driver` does not own them and `internal/objectstore` does not copy them — both are
+// handed the answer.
+//
+// It lived in `sqlkit` until an object store needed it, which is the moment "what does not vary by
+// engine" turned out to have a wider answer than "what does not vary by SQL engine".
+package tlscert
 
 import (
 	"crypto/tls"
@@ -10,7 +20,7 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/domain"
 )
 
-// TLSConfig builds the configuration a profile's TLS options describe, or nil where the mode asks
+// Config builds the configuration a profile's TLS options describe, or nil where the mode asks
 // for none. It is here rather than in an adapter because a root certificate and a client
 // certificate are files on this machine and mean the same thing to every engine; what differs is
 // only how an engine is *told* about them, which is each adapter's own business — PostgreSQL takes
@@ -19,7 +29,7 @@ import (
 // `host` is the server the certificate is checked against, and the profile's own ServerName
 // overrides it. That override is what makes a tunnel workable: the connection goes to a local
 // port and the certificate is still the database server's.
-func TLSConfig(options domain.TLSOptions, host string) (*tls.Config, error) {
+func Config(options domain.TLSOptions, host string) (*tls.Config, error) {
 	if !options.Mode.Encrypts() {
 		return nil, nil
 	}

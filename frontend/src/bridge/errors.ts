@@ -37,6 +37,15 @@ export type ErrorCode =
   // refused. Neither is a server saying anything — see `features/tools.md`.
   | 'TOOL_NOT_FOUND'
   | 'TOOL_FAILED'
+  // The four ways an **object store** refuses. They are their own codes because the reader answers
+  // each of them somewhere else — a bucket name, a listing to refresh, a *policy* that has nothing
+  // to do with the key being right, and the service's own words. `FORBIDDEN` is deliberately not
+  // `BAD_CREDENTIALS`: the key is accepted, and sending a reader to the password box would be
+  // sending them to the wrong one. See `features/object-storage.md`.
+  | 'UNKNOWN_BUCKET'
+  | 'UNKNOWN_OBJECT'
+  | 'FORBIDDEN'
+  | 'SERVICE_REFUSED'
   | 'UPDATE_FAILED'
   | 'INTERNAL'
 

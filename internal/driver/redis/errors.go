@@ -8,7 +8,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
-	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/neterr"
 )
 
 // prefixes are the words Redis begins an error with, against the sentinel each of them means. It is
@@ -54,7 +54,7 @@ func translateError(err error) error {
 	if errors.Is(err, goredis.Nil) {
 		return err
 	}
-	if mapped := sqlkit.TransportError(err); mapped != nil {
+	if mapped := neterr.Map(err); mapped != nil {
 		return mapped
 	}
 

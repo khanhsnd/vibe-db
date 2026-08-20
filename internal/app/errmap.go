@@ -79,6 +79,15 @@ const (
 	CodeTaskNotFound ErrorCode = "TASK_NOT_FOUND"
 	CodeTaskRunning  ErrorCode = "TASK_RUNNING"
 
+	// The four ways an **object store** answers that it will not do something. They are their own
+	// codes because the reader answers each of them somewhere else: a bucket name to correct, a
+	// listing to refresh, a *policy* that has nothing to do with the key being right, and the
+	// service's own refusal in its own words — see docs/features/object-storage.md.
+	CodeUnknownBucket  ErrorCode = "UNKNOWN_BUCKET"
+	CodeUnknownObject  ErrorCode = "UNKNOWN_OBJECT"
+	CodeForbidden      ErrorCode = "FORBIDDEN"
+	CodeServiceRefused ErrorCode = "SERVICE_REFUSED"
+
 	CodeInternal ErrorCode = "INTERNAL"
 )
 
@@ -129,6 +138,9 @@ var sentinelToWire = []struct {
 	{domain.ErrTokenUnavailable, CodeTokenUnavailable, "No cloud credentials on this machine to sign in with. The detail says what to set."},
 	{domain.ErrProxyFailed, CodeProxyFailed, "Could not reach the far side through the proxy. Check the proxy's type, host and port."},
 	{domain.ErrProxyCredentials, CodeProxyCredentials, "The proxy rejected the credentials. Check its user and password."},
+	{domain.ErrUnknownBucket, CodeUnknownBucket, "That bucket does not exist on this service, or these credentials cannot see it."},
+	{domain.ErrUnknownObject, CodeUnknownObject, "That object is no longer there. Refresh the folder."},
+	{domain.ErrForbidden, CodeForbidden, "These credentials may not do that. The key is accepted; it is the permission that is missing."},
 	{domain.ErrTaskNotFound, CodeTaskNotFound, "That scheduled job no longer exists. Refresh the list."},
 	{domain.ErrTaskRunning, CodeTaskRunning, "That job is already running. Wait for it to finish."},
 }
@@ -215,6 +227,17 @@ func wrapError(err error) error {
 			Message: message,
 			Field:   failedTool.Tool,
 			Detail:  failedTool.Tool + " exited " + strconv.Itoa(failedTool.Status),
+		}
+	}
+
+	// A service's own wording is the only useful message for a request it refused, exactly as an
+	// engine's is about a statement it rejected: the service knows why and this app does not.
+	var serviceErr domain.ServiceError
+	if errors.As(err, &serviceErr) {
+		return wireError{
+			Code:    CodeServiceRefused,
+			Message: serviceErr.Message,
+			Detail:  serviceErr.Code,
 		}
 	}
 

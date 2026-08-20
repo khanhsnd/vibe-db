@@ -1,9 +1,14 @@
 import type { Cell } from '@/bridge/tables'
 
 /**
- * The one separator a key space is read as a tree by. It is Redis's own convention rather than a
+ * The separator a **key space** is read as a tree by. It is Redis's own convention rather than a
  * setting: `user:1:name` is how every server, library and client there is spells a namespace inside
  * a flat key space, and a key space is the only thing that has none of its own.
+ *
+ * It is the *default* rather than the only one, because there is a second flat namespace in this app
+ * whose names are paths — a **bucket**, whose separator is `/` and whose folders group exactly the
+ * same way. `keyRows` therefore takes one, so a bucket's Flatten and a key space's tree are one
+ * mechanism and not two: see `features/storage/objectRows.ts`.
  */
 export const KEY_SEPARATOR = ':'
 
@@ -48,7 +53,11 @@ export interface KeyRow {
  * A row whose key is not there yet is a **draft** the reader has just added, and it goes at the end
  * as a leaf of its own: it groups under nothing until it has been given a name.
  */
-export function keyRows(keys: readonly Cell[], shut: ReadonlySet<string>): KeyRow[] {
+export function keyRows(
+  keys: readonly Cell[],
+  shut: ReadonlySet<string>,
+  separator: string = KEY_SEPARATOR,
+): KeyRow[] {
   const root = emptyNode('', '')
   const drafts: KeyRow[] = []
 
@@ -57,7 +66,7 @@ export function keyRows(keys: readonly Cell[], shut: ReadonlySet<string>): KeyRo
       drafts.push({ depth: 0, label: '', source, branch: undefined, open: undefined, count: 0 })
       return
     }
-    insert(root, key.split(KEY_SEPARATOR), source)
+    insert(root, key.split(separator), source, separator)
   })
 
   const rows: KeyRow[] = []
@@ -88,11 +97,11 @@ function emptyNode(label: string, path: string): Node {
   return { label, path, children: new Map(), source: -1, count: 0 }
 }
 
-function insert(root: Node, segments: string[], source: number) {
+function insert(root: Node, segments: string[], source: number, separator: string) {
   let node = root
 
   segments.forEach((segment, level) => {
-    const path = node.path === '' ? segment : `${node.path}${KEY_SEPARATOR}${segment}`
+    const path = node.path === '' ? segment : `${node.path}${separator}${segment}`
 
     let child = node.children.get(segment)
     if (child === undefined) {

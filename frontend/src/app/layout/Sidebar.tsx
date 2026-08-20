@@ -6,6 +6,10 @@ import { Button } from '@/shared/ui/Button'
 import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { Empty } from '@/shared/ui/Empty'
 import { IconButton } from '@/shared/ui/IconButton'
+import { MenuButton } from '@/shared/ui/MenuButton'
+import { ICON } from '@/shared/ui/menuIcons'
+
+import { newConnectionItems } from './newMenu'
 
 interface SidebarProps {
   roots: TreeNode[]
@@ -22,6 +26,13 @@ interface SidebarProps {
   onActivate: (node: TreeNode) => void
   onDatabaseFilter: (profileId: string, pattern: string) => void
   onNewConnection: () => void
+  /**
+   * A connection to an **object store**, which is the second kind of thing this tree holds. The plus
+   * offers the two as a menu (`newConnectionItems`) and the **empty state offers them as two
+   * buttons**, which is the one place they are not a menu: a reader with nothing on the screen is
+   * choosing what kind of thing they have, and a menu would hide half the answer behind a press.
+   */
+  onNewStore: () => void
   menuItemsFor: (node: TreeNode) => MenuItem[]
 }
 
@@ -38,6 +49,7 @@ export function Sidebar({
   onActivate,
   onDatabaseFilter,
   onNewConnection,
+  onNewStore,
   menuItemsFor,
 }: SidebarProps) {
   return (
@@ -69,7 +81,9 @@ export function Sidebar({
           ) : null}
         </div>
 
-        <IconButton label="New connection" icon={<Plus size={14} />} onClick={onNewConnection} />
+        <MenuButton align="end" items={newConnectionItems(onNewConnection, onNewStore)}>
+          <IconButton label="New connection or object store" icon={<Plus size={14} />} />
+        </MenuButton>
       </div>
 
       <div className="min-h-0 flex-1">
@@ -95,12 +109,20 @@ export function Sidebar({
         ) : (
           <Empty
             icon={<Server size={22} strokeWidth={1.5} />}
-            title="No connections yet"
-            hint="Point one at a server and everything it holds appears here."
+            title="Nothing connected yet"
+            hint="Point this at a database server or at an S3-compatible object store, and everything it holds appears here."
             action={
-              <Button variant="primary" icon={<Plus size={14} />} onClick={onNewConnection}>
-                New Connection
-              </Button>
+              // The one place the two are **buttons** rather than a menu, because this is a first
+              // run: a reader with nothing on the screen is choosing what kind of thing they have,
+              // and a menu would hide half the answer behind a press.
+              <span className="flex flex-wrap items-center justify-center gap-2">
+                <Button variant="primary" icon={<Plus size={14} />} onClick={onNewConnection}>
+                  New Connection
+                </Button>
+                <Button icon={ICON.bucket} onClick={onNewStore}>
+                  New Object Store
+                </Button>
+              </span>
             }
           />
         )}

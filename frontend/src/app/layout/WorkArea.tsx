@@ -10,6 +10,7 @@ import { LogView } from '@/features/log/LogView'
 import { MonitorView } from '@/features/monitor/MonitorView'
 import { ObjectListView } from '@/features/objects/ObjectListView'
 import { AutomationView } from '@/features/schedule/AutomationView'
+import { BucketView } from '@/features/storage/BucketView'
 import { SourceEditor } from '@/features/schema/SourceEditor'
 import { TableDesigner } from '@/features/schema/TableDesigner'
 import { FindInSchemaView } from '@/features/search/FindInSchemaView'
@@ -69,6 +70,11 @@ export function WorkArea({ onNewQuery }: { onNewQuery: () => void }) {
               table={activeTab.table}
             />
           )
+        ) : activeTab.kind === 'bucket' ? (
+          // The one kind of tab whose connection is not in `useConnectionsStore` at all: an object
+          // store is a second kind of connection, so the view reads its own session — which is why
+          // this branch comes before every one that uses `sessionId`.
+          <BucketView key={activeTab.id} tab={activeTab} />
         ) : activeTab.kind === 'objects' ? (
           sessionId === null ? (
             <Empty title="Not connected" hint="Reconnect this connection to list its tables." />

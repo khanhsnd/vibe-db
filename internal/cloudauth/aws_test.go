@@ -8,21 +8,6 @@ import (
 	"time"
 )
 
-// The published example from AWS's own Signature Version 4 documentation. It signs for a
-// different service than an RDS token does, which is the whole reason `signingKey` takes one:
-// the derivation is what this checks, and the derivation is what everything else rests on.
-func TestSigningKeyMatchesTheDocumentedExample(t *testing.T) {
-	const (
-		secret = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"
-		want   = "c4afb1cc5771d871763a393e44b703571b55cc28424d1a5e86da6ed3c154a4b9"
-	)
-
-	got := hex.EncodeToString(signingKey(secret, "20150830", "us-east-1", "iam"))
-	if got != want {
-		t.Errorf("signingKey() = %s, want %s", got, want)
-	}
-}
-
 func testCredentials() AWSCredentials {
 	return AWSCredentials{
 		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",

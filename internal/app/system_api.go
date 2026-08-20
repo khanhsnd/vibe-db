@@ -51,6 +51,34 @@ func (s *SystemAPI) ChooseFile(title, pattern string) (string, error) {
 	return path, nil
 }
 
+// ChooseFolder raises the host's own folder picker and answers with the path it was given, or an
+// empty one for a dialog the reader dismissed — the rule ChooseFile follows.
+//
+// It is here rather than beside the transfers that use it for the reason ChooseFile is here: this is
+// the API that answers about the *machine*, and where a download goes is a fact about this machine.
+// **Nothing is written by it.** What goes into that folder is written by the transfer queue, a fixed
+// buffer at a time, and never by anything on this side of the bridge.
+func (s *SystemAPI) ChooseFolder(title string) (string, error) {
+	path, err := wailsruntime.OpenDirectoryDialog(s.ctx, wailsruntime.OpenDialogOptions{Title: title})
+	if err != nil {
+		return "", wrapError(err)
+	}
+	return path, nil
+}
+
+// ChooseFiles is ChooseFile for several at once — what an upload asks. An empty list is a dismissed
+// dialog, which is what an empty path is for the single one.
+func (s *SystemAPI) ChooseFiles(title string) ([]string, error) {
+	paths, err := wailsruntime.OpenMultipleFilesDialog(s.ctx, wailsruntime.OpenDialogOptions{
+		Title:   title,
+		Filters: []wailsruntime.FileFilter{{DisplayName: "All files", Pattern: "*.*"}},
+	})
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return paths, nil
+}
+
 // SaveTextFile raises the host's own save dialog and writes text to the path it was given, answering
 // with that path — or with an empty one for a dialog the reader dismissed, exactly as ChooseFile
 // reads a dismissal.

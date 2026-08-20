@@ -3,8 +3,16 @@
 Ports and adapters, with a strictly one-way dependency rule:
 
 ```
-internal/app  ->  session / profile / secret / history / snippet / transfer / compare / backup  ->  internal/driver  ->  internal/domain
+internal/app  ->  session / profile / secret / history / snippet / transfer / compare / backup  ->  internal/driver | internal/objectstore  ->  internal/domain
 ```
+
+**Two ports sit at that third level, not one.** `internal/driver` is a database and
+`internal/objectstore` is a bucket, and neither has heard of the other: a store has no catalogue, no
+statement and nothing that is a row, so there was nothing to add to the first that would not have
+been empty on every engine. What they share is what is *below* them and what carries them —
+`internal/domain`, `internal/tlscert`, `internal/neterr`, `internal/sshtunnel`, `internal/netproxy` —
+which is exactly the set of things that are not about a database. See [buckets full of
+objects](#buckets-full-of-objects).
 
 - **`internal/domain`** — `ConnectionProfile`, `Validate()`, sentinel errors. Pure; imports nothing
   of ours. Business rules live here, not in the API layer.
@@ -53,6 +61,19 @@ internal/app  ->  session / profile / secret / history / snippet / transfer / co
   credentials. Nothing here is ever stored — a credential good for a quarter of an hour is not a
   secret worth keeping — and no SDK is pulled in for either: one is a documented signing algorithm
   and the other is a documented token exchange.
+- **`internal/tlscert`** and **`internal/neterr`** — the certificate files a profile names, and what a
+  failure that happened before any protocol was spoken means. Both lived in `sqlkit` until an object
+  store needed them, which is the moment "what does not vary by engine" turned out to have a wider
+  answer than "what does not vary by SQL engine": a root certificate and a timeout read identically to
+  a bucket. Neither knows what is at the far end.
+- **`internal/sigv4`** — AWS Signature Version 4 and nothing else. **No SDK is taken for it**, for the
+  reason `internal/cloudauth` takes none for a token exchange: it is a documented algorithm over a
+  canonical request. Two callers sign different things with it — `cloudauth` signs a *URL* whose query
+  carries the signature, because an RDS token is a presigned request handed over as a password, and
+  `objectstore/s3` signs a *request*. One key chain, so a signature that works in one place cannot be
+  spelled differently in the other.
+- **`internal/objectstore`** — a bucket full of objects, and `internal/driver`'s sibling rather than one
+  of its adapters. See [buckets full of objects](#buckets-full-of-objects).
 - **`internal/transfer`** — the file formats a table travels as, and nothing about either end of the
   journey. See [carrying a table to a file](#carrying-a-table-to-a-file).
 - **`internal/compare`** — the difference between two tables, and nothing about how either was read.
@@ -104,9 +125,15 @@ in the frontend's `ENGINES`, and **no new failure code and no new bound method**
 Reach for `internal/driver/sqlkit` before writing anything: row scanning, result-column
 reflection, statement classification, **the lexer** and everything written over it — script
 splitting, **laying a script out**, **reviewing it** — source parsing, identifier and string
-quoting, **building a `*tls.Config` from a profile's certificate files**, the transport errors,
-**the reads and writes of rows** (`sqlkit.Data`), **the DDL statements the engines spell the same
-way** (`sqlkit.DDL`) and **holding a manual transaction open** (`sqlkit.Txn`) are all there already.
+quoting, **the reads and writes of rows** (`sqlkit.Data`), **the DDL statements the engines spell the
+same way** (`sqlkit.DDL`) and **holding a manual transaction open** (`sqlkit.Txn`) are all there
+already.
+
+Two things that used to be in it are now **above** the driver layer, and the move is worth knowing
+about: `tlscert.Config` builds a `*tls.Config` from a profile's certificate files and `neterr.Map`
+says what a pre-protocol failure means. Neither is about a database — a root certificate and a
+timeout read identically to an object store — so both are packages of their own that `internal/driver`
+and `internal/objectstore` are each handed the answer from.
 
 **`sqlkit.Lex` is the one place a script is read character by character.** Splitting, formatting and
 reviewing are all written over its tokens, so what counts as a string, a comment or a `$tag$` body
@@ -374,6 +401,102 @@ placeholders to fill in. That is also why MySQL is read from its slow log rather
 turning the recording on or off is a **write** — it sets a global that outlives the connection — and
 throwing away what was recorded is **destructive**, in the sense a `TRUNCATE` is. Neither is ever
 unfiltered: there is nothing here to aim. See [features/profiler.md](features/profiler.md).
+
+## Buckets full of objects
+
+`internal/objectstore` is the second port at the driver's level, and it is there because the first one
+would have had to be bent to hold it: a bucket has no catalogue, no namespace, no statement and
+nothing that is a row, so a `driver.Session` for one would have been forty methods answering
+`domain.Unsupported`.
+
+**The port is deliberately small and low.** A `Store` is the **protocol and nothing else** — sign a
+request, list a page, read a range, write a part — and everything a reader actually asks for is
+written **once above it**:
+
+| Above the port | What it is |
+|---|---|
+| `walk.go` | every object under a prefix, handed over one at a time as the pages arrive |
+| `search.go` | that walk with a predicate, and the prefix the *service* can be narrowed by |
+| `download.go` | one object in parallel ranges, resumed from what a previous attempt got through |
+| `upload.go` | one file in parts, aborted at the service if it fails |
+| `folder.go` | a prefix deleted or copied in the batches the protocol takes |
+| `queue.go` | every transfer the app has been asked for, bounded and reported |
+| `paths.go` | a key made safe to be a path on this machine |
+
+That is `sqlkit.DDL`'s arrangement applied to a service instead of to five SQL engines, and it is what
+keeps a second provider from becoming a second downloader.
+
+**There is one adapter, and one is the honest number.** AWS S3, MinIO, Cloudflare R2, DigitalOcean
+Spaces, Wasabi, Ceph and Google's interoperability endpoint all speak the same protocol, so what looks
+like seven services is **one speller and a preset**: `domain.StoreProvider` decides an endpoint,
+whether the bucket is named in the host or in the path, and what a region means to a service that has
+none. A second adapter here would mean somebody had shipped a genuinely different protocol, not a
+different company.
+
+**No SDK is taken.** The REST API is documented, the signature is documented (`internal/sigv4`), and
+the answers are six XML documents written out by hand in `s3/wire.go`. That is
+`internal/transfer`'s decision about a spreadsheet and `internal/cloudauth`'s about a token, applied
+where it saves the most: an S3 SDK is a large fraction of a binary and a dependency tree to keep.
+
+### The rule everything else follows from
+
+**An object's bytes never pass through a bound method.** They go from the socket to the file and back,
+a fixed buffer at a time, so a forty-gigabyte download costs what a hundred-megabyte one does. What
+crosses the bridge is a *number* — how far it has got — which is the same constraint that made a
+streamed read of a table push its rows as events, taken one step further: here not even the events
+carry data.
+
+It has three consequences worth stating, because each is a thing this app deliberately does not do:
+
+- **A preview is a byte range**, never the object. Half a megabyte of a four-gigabyte log, and the
+  panel says so out loud.
+- **A folder download is a walk**, streamed into the queue, so a million objects cost a page of names
+  and start moving before the listing has finished.
+- **A copy is one request naming both keys**, so moving a hundred gigabytes between two buckets costs
+  none of the reader's bandwidth and is not a transfer at all.
+
+### What a bucket makes expensive, and the one thing a service will answer
+
+A listing can be narrowed exactly one way — *the key begins with these characters* — which is the same
+bargain [the key-value store](#the-key-value-store) strikes with its glob. Everything about how this
+feature performs follows from making the service do that wherever it can:
+
+- **Browsing is a folder at a time.** A listing asked for with a delimiter answers with the prefixes
+  it found and the objects directly inside, so a folder is one request whether the bucket holds forty
+  objects or forty million. That is why a prefix is **not a node of the tree**: a tree of them would
+  be a listing per branch, and a bucket has no bottom.
+- **A search hands its literal front to the service** (`PruneTo`) and streams the rest past without
+  keeping it. A match that ignores case gives that up rather than returning a listing that is missing
+  rows, keys being case sensitive at every service there is.
+- **There is no index and there will not be one.** An index of somebody's bucket is a copy of their
+  data, stale from the moment it is written and wrong in the one way that matters — it would answer
+  confidently about an object that is no longer there.
+
+### The same three arrangements as everywhere else
+
+**What is dangerous is a `domain` rule.** `domain.ObjectHazard` is the eighth grammar for one rule, and
+the three actions that name **nothing** — delete a folder, empty a bucket, drop a bucket — are
+`unfiltered` rather than merely destructive, so they are answered for on a laptop as well as on
+production. `internal/app` computes the whole matrix once per session (eight actions, one hazard each,
+one environment) and the frontend never re-derives it.
+
+**A read-only connection is wrapped once.** `session.readOnlyStore` is `readOnly`'s counterpart and is
+much simpler, because an object store has **no statement to review**: a `Put` writes and a `List` does
+not, so the classification is the method itself.
+
+**No secret is in the profile.** A secret access key is in the credential store under the profile's
+id, a bastion's pass phrase under `<id>:ssh`, a proxy's password under `<id>:proxy` — and a profile
+signing in with the machine's own AWS identity reads the environment at the moment of connecting and
+stores nothing at all.
+
+**The hops are the same two, stood up in the same order.** A proxy is how this machine reaches the
+network, so the bastion is dialled through it and the service through the bastion. Nothing in
+`internal/objectstore` has heard of either: what it is given is one `objectstore.Dialer`, which is
+`driver.Dialer`'s *shape* and not its type.
+
+See [features/object-storage.md](features/object-storage.md),
+[features/object-search.md](features/object-search.md) and
+[features/object-download.md](features/object-download.md).
 
 ## Carrying a table to a file
 

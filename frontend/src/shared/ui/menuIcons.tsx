@@ -20,6 +20,8 @@ import {
   FilterX,
   Fingerprint,
   FolderOpen,
+  FolderPlus,
+  Link2,
   GitCompareArrows,
   GitMerge,
   Network,
@@ -122,4 +124,13 @@ export const ICON = {
   filter: <Filter size={SIZE} />,
   filterNone: <FilterX size={SIZE} />,
   filterPanel: <SlidersHorizontal size={SIZE} />,
+
+  // An object store's own five. `download` and `upload` are the wizards' glyphs and mean the same
+  // thing here - what moves, and which way - so they are the same two. A folder in a bucket is a
+  // prefix rather than a place, and a signed link is the one action here that sends nothing at all.
+  download: <Download size={SIZE} />,
+  upload: <Upload size={SIZE} />,
+  newFolder: <FolderPlus size={SIZE} />,
+  bucket: <Archive size={SIZE} />,
+  link: <Link2 size={SIZE} />,
 } as const

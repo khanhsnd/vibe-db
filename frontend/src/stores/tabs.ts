@@ -6,6 +6,7 @@ import type { AccountRef } from '@/bridge/accounts'
 import type { SearchMode, SearchScope } from '@/bridge/search'
 import type { SourceKind, SourceRef } from '@/bridge/schema'
 
+import { useBucketViewsStore } from './bucketViews'
 import { useConsoleStore } from './console'
 import { useDiagramsStore } from './diagrams'
 import { useGridEditsStore } from './gridEdits'
@@ -18,6 +19,7 @@ import { useTableViewsStore } from './tableViews'
 export type TabKind =
   | 'query'
   | 'table'
+  | 'bucket'
   | 'design'
   | 'source'
   | 'objects'
@@ -52,6 +54,20 @@ export interface QueryTab extends TabBase {
 export interface TableTab extends TabBase {
   kind: 'table'
   table: string
+}
+
+/**
+ * One bucket's objects — what a bucket in the sidebar opens. It is the **third** tab that names a
+ * connection and no namespace, and here the reason is not that the thing belongs to the server: an
+ * object store has no namespaces at all, so its `namespace` is empty and the strip draws none.
+ *
+ * Where the reader is *inside* the bucket is not on the tab. A prefix, a page, a search and what is
+ * ticked all live in `stores/bucketViews.ts` — the arrangement a table tab's view has, and for the
+ * same reason: they are what the reader did to this tab, not what identifies it.
+ */
+export interface BucketTab extends TabBase {
+  kind: 'bucket'
+  bucket: string
 }
 
 /**
@@ -222,6 +238,7 @@ export interface AutomationTab extends TabBase {
 }
 
 export type Tab =
+  | BucketTab
   | QueryTab
   | TableTab
   | DesignTab
@@ -237,6 +254,7 @@ export type Tab =
   | MonitorTab
   | AutomationTab
 export type NewTab =
+  | Omit<BucketTab, 'id'>
   | Omit<QueryTab, 'id'>
   | Omit<TableTab, 'id'>
   | Omit<DesignTab, 'id'>
@@ -319,6 +337,8 @@ interface TabsState {
   openTables: (profileId: string, namespace: Namespace) => string
   /** Every backup kept for a namespace. */
   openBackups: (profileId: string, namespace: Namespace) => string
+  /** One bucket's objects. A store has no namespaces, so a bucket is the whole of what names one. */
+  openBucket: (profileId: string, bucket: string) => string
   /** A namespace's tables as boxes, with the foreign keys between them drawn as lines. */
   openDiagram: (profileId: string, namespace: Namespace) => string
   /**
@@ -397,6 +417,7 @@ const subjectOf = (tab: Tab | NewTab) => {
   if (tab.kind === 'source') {
     return `${tab.ref.kind}:${tab.ref.name}(${tab.ref.arguments})@${tab.ref.table}`
   }
+  if (tab.kind === 'bucket') return tab.bucket
   return 'table' in tab ? tab.table : ''
 }
 
@@ -444,6 +465,7 @@ function closeTabs(set: StoreApi<TabsState>['setState'], ids: string[]): void {
     useConsoleStore.getState().discard(id)
     useSearchesStore.getState().discard(id)
     useDiagramsStore.getState().discard(id)
+    useBucketViewsStore.getState().drop(id)
   }
 
   set((state) => {
@@ -511,6 +533,9 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   openBackups: (profileId, namespace) =>
     get().open({ kind: 'backups', title: 'Backups', profileId, namespace }),
+
+  openBucket: (profileId, bucket) =>
+    get().open({ kind: 'bucket', title: bucket, profileId, namespace: NO_NAMESPACE, bucket }),
 
   openConsole: (profileId, namespace) =>
     get().open({ kind: 'console', title: 'Console', profileId, namespace }),

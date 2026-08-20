@@ -36,7 +36,7 @@
   `disable` / `prefer` / `require` / `verify-ca` / `verify-full`, and `Verify CA` therefore checks
   the chain and *not* the host name — the only reading that works against a server addressed by an
   address. Go verifies the chain and the name together or not at all, so the verifying modes are a
-  `*tls.Config` this side builds (`sqlkit.TLSConfig`), with `verify-ca` doing its own chain-only
+  `*tls.Config` this side builds (`tlscert.Config`), with `verify-ca` doing its own chain-only
   check in `VerifyPeerCertificate`. `Required` is encryption and no verification everywhere, and the
   label says so rather than implying a weaker check. Two engines have **no `prefer`** — Oracle's
   listener endpoint is TCP or TCPS and MongoDB's driver has no opportunistic mode — so `Preferred`

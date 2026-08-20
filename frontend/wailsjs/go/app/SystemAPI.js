@@ -6,6 +6,14 @@ export function ChooseFile(arg1, arg2) {
   return window['go']['app']['SystemAPI']['ChooseFile'](arg1, arg2);
 }
 
+export function ChooseFiles(arg1) {
+  return window['go']['app']['SystemAPI']['ChooseFiles'](arg1);
+}
+
+export function ChooseFolder(arg1) {
+  return window['go']['app']['SystemAPI']['ChooseFolder'](arg1);
+}
+
 export function ListFonts() {
   return window['go']['app']['SystemAPI']['ListFonts']();
 }

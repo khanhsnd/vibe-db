@@ -26,6 +26,7 @@ wails doctor
 | PostgreSQL against a real server | `VIBE_POSTGRES_DSN=postgres:postgres@127.0.0.1:5432/postgres go test ./internal/driver/postgres -run TestLive -v` |
 | MongoDB against a real server | `VIBE_MONGO_DSN=root:mongodb@127.0.0.1:27017 go test ./internal/driver/mongo -run TestLive -v` |
 | Redis against a real server | `VIBE_REDIS_DSN=127.0.0.1:6379 go test ./internal/driver/redis -run TestLive -v` |
+| An object store against a real service | `VIBE_S3_ENDPOINT=http://127.0.0.1:9000 VIBE_S3_KEY=minioadmin VIBE_S3_SECRET=minioadmin go test ./internal/objectstore/s3 -run TestLive -v` |
 | Go vet + format | `go vet ./...` and `gofmt -l internal main.go` |
 | Frontend typecheck | `pnpm typecheck` (in `frontend/`) |
 | Frontend build | `pnpm build` (in `frontend/`) — runs `tsc -b` then `vite build` |
@@ -67,6 +68,22 @@ command per type, which only a server holds. It works in database 15 and empties
 **skips** unless `VIBE_REDIS_DSN` names a server — `127.0.0.1:6379` alone is a server with no
 password, and `user:password@host:port` is one with an ACL.
 
+**An object store's live run is the one that cannot be faked at all**, and the reason is the
+signature: a canonical request either matches what the service works out or it does not, and a fake
+server that accepts anything would never say so. `TestLive` in `internal/objectstore/s3` therefore
+walks the whole adapter against a real service in a bucket it makes and removes — a key holding a
+space, a plus and a hash (the three characters an escaper gets wrong), a folder listing with a
+delimiter, a ranged read, a **sixteen-megabyte object written in parts and read back in parallel
+ranges**, a server-side copy, a pruned search, a presigned link, both kinds of missing, and a batched
+folder delete. It **skips** unless the three variables above name a service. A MinIO in a container is
+the cheapest one to point it at:
+
+```
+docker run -d --name vibe-minio -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+  quay.io/minio/minio server /data --console-address ":9001"
+```
+
 Then, by hand in the app:
 
 | What | Why it needs a server |
@@ -99,6 +116,20 @@ And for Redis:
 | A key with **a colon-heavy name** and one holding a space | An argument is a run of adjacent tokens, and only a real key proves the run was rebuilt whole |
 | `CONFIG GET`, `XRANGE`, `HGETALL`, `INFO` in a query tab | The four reply shapes: a map, a list of lists, a list, and one long string |
 | A **database other than 0** | Every database has its own client, and a read of database 3 that answered from 0 would look like data |
+
+And for an object store, where what needs a real service is the *scale* rather than the protocol —
+`TestLive` already covers that:
+
+| What | Why it needs a service |
+|---|---|
+| A bucket holding **hundreds of thousands of objects** | Browsing is a folder at a time, so it should feel the same as a bucket of forty. If it does not, something is listing without a delimiter |
+| A folder holding **more than a thousand** objects | A page is forward only: Next, Next, Back, Back has to land where it started, off a stack of tokens |
+| **Download a folder** of a few thousand small objects | The listing streams into the queue, so bytes should start moving while the count is still climbing — and the bar should stay a *count* until it stops |
+| **Download one very large object, then pull the network out** | The partial file and its plan stay; asking again should read the ranges that are left and no others |
+| **Upload a folder**, then download it back into an empty one | The shape has to survive both ways round, and the content types have to be this app's own list |
+| A key with **a space, a plus, a hash and a non-ASCII character** | A signature is over the exact characters, and a listing asks for them encoded |
+| A **read-only** store profile | Upload, Delete and New Folder are not drawn at all, rather than drawn and refused |
+| A store **through a bastion** | The service is dialled through the tunnel exactly as a database is, and nothing in the adapter knows |
 
 `wails dev` serves the frontend *with* the Wails runtime and bindings on `http://localhost:34115`,
 so `window.go.app.ConnectionAPI` is callable from an ordinary browser. This is the most effective

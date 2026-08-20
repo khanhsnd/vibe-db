@@ -562,8 +562,8 @@ surrounds the grid:
   range to the whole row** there too (`wholeRows`), which is what the grid already does for a press in
   the row gutter, said for a surface whose unit is the row wherever it is pressed: a key space's row is
   one key and its five facts, so a band across the row is the truth and a fill on one cell of it is
-  not. It passes `outline` — with its `badge`, the count — on the key column (the second site to, after
-  a comparison), `cellMenu`, and no `filtering` at all.
+  not. It passes `outline` — with its `badge`, the count — on the key column (the second of the three
+  sites to, after a comparison and before a bucket), `cellMenu`, and no `filtering` at all.
   What an
   **export** writes stays the *flat* page: a tree draws a key by its tail, the prefix being on the row
   above, and a file of tails would be a file of keys no server has. A `Ctrl`+`C` still copies what is
@@ -572,7 +572,8 @@ surrounds the grid:
 - The **comparison** is `ComparePanes` twice over — two grids that map nothing, built from **one**
   list so row *n* of one is row *n* of the other by construction. Its *shape* half draws that list
   as a **tree**: the table is the root, the three sections fold under it, and each pane carries the
-  name and the declaration **its own side** holds. It is the one site that passes `outline`, and
+  name and the declaration **its own side** holds. It is the first of the three sites that pass
+  `outline`, and
   `structureTree.ts` is what flattens the tree into the list both panes read; a caret belongs to the
   row and not to a pane, so folding either folds the pair. Its *data* half draws the same list as
   rows. Both are `dense` and both pass `markRow` and `markCell`.
@@ -584,6 +585,28 @@ surrounds the grid:
   each pane's first column. `ComparePanes` is also the one site that takes a `viewportRef` — its
   panes are useless apart, and **sideways is carried only between scrollers that have somewhere to
   go sideways**, or the strip's own nought would drag both panes back to the first column.
+
+- A **bucket** is `BucketView`, and it is the plainest of the read-only sites: six columns that are
+  not read from anywhere — they are the six facts an S3 listing carries for every key, on every
+  service there is, which is what a bucket has instead of a catalogue — and one page of rows, because
+  a listing is **forward only** and there is no `All` here for the same reason. A **folder is a row**
+  and carries nothing but its name: a prefix has no size, no clock and no tag, and a zero for any of
+  them would be claiming something the service never said. A double-click on one walks into it, which
+  is what `onActivateRow` means on a surface whose rows are places.
+  It is the **third** site to pass `outline`, and the only one that passes it **always**: the
+  hierarchy is only there in Flatten, but the `icon` is there on every row — a folder drawn as a
+  folder and an object as what its name says it is, which is what `GridOutline.icon` exists for. A
+  flat page is a tree of one level, and `depth` answering nought is what says so. In Flatten the rows
+  are whole keys and group on the slash through `keyRows`, the same flattener a key space's colons go
+  through, because a bucket and a key space are both one flat namespace whose names are paths.
+
+  It is the **second** site to pass `cellMenu`, after a key space, and for a stronger version of that
+  reason: the built-in menu is written for a table's rows and there is no NULL to set on an object, no
+  UUID worth minting into one, no condition to add and no sort worth offering over a page cut from a
+  service's own order. It passes no `onEditCell` at all — an object is replaced by uploading over it,
+  and a bucket has no cell to type in — and its `onSelectionChange` does one thing no other grid's
+  does: it **opens the panel below on the row that was picked**, a bucket's rows being things rather
+  than values. See [features/object-storage.md](features/object-storage.md#the-grid).
 
 - The three **plan** surfaces — `Summary`, and `Grid` and `Statistics` inside `ExplainPane` — are the
   plainest sites there are: a `GridData` built by `features/results/plan.ts` from `QueryResult.plan`,

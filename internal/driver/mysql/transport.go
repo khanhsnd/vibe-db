@@ -9,7 +9,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
-	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/tlscert"
 )
 
 // builtInTLS are the names go-sql-driver already answers to, and they cover every mode that needs
@@ -64,7 +64,7 @@ func dial(profile domain.ConnectionProfile, tunnel driver.Dialer) (transport, er
 	if name, ok := builtInTLS[profile.TLS.Mode]; ok {
 		t.tls = name
 	} else {
-		config, err := sqlkit.TLSConfig(profile.TLS, profile.Host)
+		config, err := tlscert.Config(profile.TLS, profile.Host)
 		if err != nil {
 			return fail(err)
 		}

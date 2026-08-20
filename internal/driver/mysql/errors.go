@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/khanhsnd/vibe-db/internal/domain"
-	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
+	"github.com/khanhsnd/vibe-db/internal/neterr"
 )
 
 const (
@@ -47,7 +47,7 @@ func translateError(err error) error {
 		return domain.ErrTLSUnsupported
 	}
 
-	if mapped := sqlkit.TransportError(err); mapped != nil {
+	if mapped := neterr.Map(err); mapped != nil {
 		return mapped
 	}
 

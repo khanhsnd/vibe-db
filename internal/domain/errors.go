@@ -93,6 +93,20 @@ var (
 	// second is the program having run and refused, which is answered in whatever it printed.
 	ErrToolNotFound = errors.New("that program is not on this machine")
 	ErrToolFailed   = errors.New("the program refused")
+
+	// The three ways an object store refuses a read — see StoreProfile. They are separate sentinels
+	// because a reader answers each of them somewhere else: a bucket that is not there is a name to
+	// correct, an object that is not there is a listing to refresh, and a request the credentials
+	// may not make is a *policy* — the key is good and this is not its bucket, which is a different
+	// sentence from "check the user name and password" and belongs in a different place.
+	ErrUnknownBucket = errors.New("bucket does not exist")
+	ErrUnknownObject = errors.New("object does not exist")
+	ErrForbidden     = errors.New("these credentials may not do that")
+
+	// ErrServiceRefused is a service having read the request and said no, and it is StatementError's
+	// counterpart for something that is not a statement: the service's own code and its own words
+	// are the only useful ones, exactly as an engine's are about a `SELECT` it rejected.
+	ErrServiceRefused = errors.New("the service refused the request")
 )
 
 // ToolNotFoundError names the program that could not be found, so the reader is told which of the
@@ -129,6 +143,26 @@ func (e ToolFailedError) Error() string {
 
 func (e ToolFailedError) Unwrap() error {
 	return ErrToolFailed
+}
+
+// ServiceError carries an object store's own rejection of a request, and it is StatementError's
+// counterpart: the same arrangement for something that is not a statement. `Code` is the service's
+// own word for the failure — `NoSuchUpload`, `EntityTooLarge`, `SlowDown` — and `Message` is the
+// sentence it wrote, which reaches the reader verbatim because the service knows why it refused.
+type ServiceError struct {
+	Code    string
+	Message string
+}
+
+func (e ServiceError) Error() string {
+	if e.Message == "" {
+		return e.Code
+	}
+	return e.Message
+}
+
+func (e ServiceError) Unwrap() error {
+	return ErrServiceRefused
 }
 
 // StatementError carries an engine's own rejection of a statement. Its message is

@@ -28,6 +28,19 @@
   the caret's select-then-toggle collapsed what it had just opened. Expansion lives in `toggleNode`
   and nowhere else, and every expand goes through `toggleTreeNode` so the level's children are
   loaded with it.
+- **One tree, two builders, two menus.** The sidebar holds two kinds of connection now — a database
+  and an [object store](features/object-storage.md) — and they share the *row* and nothing else:
+  `buildTree` and `buildStoreTree` each answer with `TreeNode`s and `App` concatenates them, so
+  `ObjectTree`, the filter, the colour wash and the selection are written once and never learn there
+  were two. The same split runs through the menu (`useTreeMenu` beside `storeMenuItems`) and it is the
+  right shape for the same reason: not one of that file's twenty node kinds is a kind here, and every
+  item in it names a namespace or a table. A store's rows stop at a **bucket** — a prefix inside one is
+  drawn in the grid, because the folders come off the page the reader is already looking at.
+- **What a store connection may do arrives on the session, not in an `EngineInfo`.** `ObjectRules` is
+  one entry per action — what it is called, how dangerous it is, whether it is confirmed, whether it is
+  refused — computed once by the Go side from `domain.ObjectHazard` and `domain.Access`. A component
+  reads the entry; nothing re-derives it, and an action a read-only store refuses is **left out** of
+  the toolbar rather than greyed, which is the rule `withoutWrites` already sets for the tree.
 - **An engine's differences are `EngineInfo` fields, never its name.** A component that asked
   `engine === 'mongo'` would be a component that had to be found again for the next engine, so what
   the UI needs to know is declared once in `bridge/connections.ts` — `needsDatabase`, `hasSchemas`,
