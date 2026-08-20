@@ -70,16 +70,14 @@
   tables, how many fields — is a pill; a fact about the row itself — a field's type, an index's
   columns, the server a connection points at — is faint mono text. `isCount` tells them apart by the
   badge being all digits, which every count the tree draws is and nothing else it draws can be.
-- **The status bar reports the tab in front**, not whichever session happens to be first: it names
-  the connection, its server, the namespace that tab is pointed at and the server's version, and
-  against the right how many connections are open at all. Reporting an arbitrary session would name
-  one server while the grid under it drew another's rows.
-- **It is also where a failure nothing was waiting on is said.** A rejection a *dialog* asked for is
-  answered in that dialog and never here; the bar is for the ones asked for from a menu, which has
-  nowhere to put one — a refresh that could not read, a dump that could not be written. While nothing
-  is connected the wording stands where the server would be, and while something is it takes a fact of
-  its own in the danger colour. There is one slot, so it holds the last outcome: an action that
-  succeeds takes the previous failure down with it.
+- **Which connection the reader is on is worked out once**, in `App`, and drawn by two surfaces: the
+  banner across the middle of the command bar and the bar along the bottom. One shape — `StatusInfo`
+  in `app/layout/status.ts` — so the two can never disagree about the connection they describe, the
+  banner carrying *which* it is and the bar what the last read of it cost. What each of them says is
+  [features/shell.md](features/shell.md#which-connection-you-are-on).
+- **Both report the tab in front**, not whichever session happens to be first: reporting an arbitrary
+  session would name one server while the grid under it drew another's rows. Where no tab is open it
+  is the row selected in the tree.
 - **Colour and type live only in `shared/theme/tokens.css`.** Raw values sit on `:root`, are
   overridden under `:root[data-theme='light']`, and are mapped into Tailwind utilities via
   `@theme inline` — the `var()` indirection is what makes runtime theme switching work without a

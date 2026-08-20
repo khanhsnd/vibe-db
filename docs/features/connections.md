@@ -31,9 +31,9 @@ for five of them, the shell for MongoDB, and commands for Redis; see [editor.md]
 **Every connection wears its engine's chip** — the dolphin on teal for MySQL, the elephant on blue
 for PostgreSQL, the turned page for SQLite, the window pane for SQL Server, the ring for Oracle, the
 leaf on green for MongoDB, the stack of discs on red for Redis — in the tree, in the dialog's header
-and in the status bar. It replaces the engine badge the tree used to carry on the right of a
-connection row, which is where the **connection status dot** now sits: what the connection *is* on
-the left, how it is *doing* on the right.
+and in the [connection banner](shell.md#which-connection-you-are-on). It replaces the engine badge
+the tree used to carry on the right of a connection row, which is where the **connection status
+dot** now sits: what the connection *is* on the left, how it is *doing* on the right.
 
 **A connection being dialled wears a spinner where its chip goes**, and takes the chip back the
 moment the session lands or the attempt fails. It says nothing the dot on the right does not already
@@ -179,7 +179,8 @@ profile that changes how the app *behaves* rather than how it connects.
   nothing else draws an environment — `features/connections/EnvironmentDot.tsx` has all three
   shapes, so adding an environment is a row in `ENVIRONMENTS` and nothing else.
 - **A stripe** down the leading edge of the connection's row in the tree and of every tab on that
-  connection; **a badge** in the status bar and in the dialog that asks about a dangerous statement.
+  connection; **a badge** in the [connection banner](shell.md#which-connection-you-are-on) and in
+  the dialog that asks about a dangerous statement.
   A connection naming no environment draws no stripe and no badge, and the picker still shows the
   muted dot — a gap where the other rows have a mark reads as a fault rather than as an absence.
 - **Only the connection row is striped**, not everything under it: a database, a table and a field

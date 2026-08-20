@@ -90,7 +90,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | Turning autocommit off: Begin, Commit and Rollback by hand | [features/transaction.md](features/transaction.md) |
 | Filtering and sorting a table tab | [features/filter-sort.md](features/filter-sort.md) |
 | Reading a value whole, and why bytes arrive as `\x…` | [features/value-viewer.md](features/value-viewer.md) |
-| The menu bar, the dividers, the tab strip, Options and the font list | [features/shell.md](features/shell.md) |
+| The menu bar, the connection banner, the status bar, the dividers, the tab strip, Options and the font list | [features/shell.md](features/shell.md) |
 
 ## Grid behaviour
 

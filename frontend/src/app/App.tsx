@@ -43,7 +43,8 @@ import { useUIStore } from '@/stores/ui'
 import { CommandBar } from './layout/CommandBar'
 import { MenuBar } from './layout/MenuBar'
 import { Sidebar } from './layout/Sidebar'
-import { StatusBar, type StatusInfo } from './layout/StatusBar'
+import { StatusBar } from './layout/StatusBar'
+import type { StatusInfo } from './layout/status'
 import { WorkArea } from './layout/WorkArea'
 
 const SIDEBAR_DEFAULT_WIDTH = 240
@@ -499,6 +500,7 @@ export function App() {
         onNewConnection={openNewConnection}
         onNewQuery={newQuery}
         onBackup={newBackup}
+        status={status}
       />
 
       <Split

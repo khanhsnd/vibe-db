@@ -63,9 +63,10 @@ so what a read-only connection refuses is what the editor was already underlinin
 
 ## What the reader sees
 
-- **The status bar says `Read-only`**, beside the server it is about rather than out at the
-  right-hand end with what the app is holding. A reader who cannot see the mode finds out by being
-  refused, which is the wrong moment to learn it.
+- **The [connection banner](shell.md#which-connection-you-are-on) says `Read-only`**,
+  beside the connection it is about and across the top of the window rather than in the small bar
+  along the bottom. A reader who cannot see the mode finds out by being refused, which is the wrong
+  moment to learn it.
 - **The tree offers no item it would refuse.** Every menu item that changes something on a server is
   **left out** — not greyed — for the reason a shut connection's items are: a column of dead items
   says only that. A submenu left holding nothing goes with them. What decides it is one flag,

@@ -24,6 +24,41 @@ ways stays one object, and a menu given no items draws its name alone.
   its glyph, which is the one fact the strip stops telling the reader once it has scrolled. With
   nothing open the menu says `No open tabs` rather than opening empty.
 
+## Which connection you are on
+
+**The command bar carries the connection in the middle of the window**, where the eye lands before
+it lands on anything else: the status dot, the [engine's chip](connections.md#picking-an-engine), the
+name the reader gave the connection, the machine that answered, the namespace the tab in front is
+pointed at, `Read-only` where the session refuses to write, and the
+[environment's badge](connections.md#which-environment-a-connection-is-for). It is the fact the bar
+along the bottom used to carry alone, and it is drawn up here because a reader who has not noticed
+which server they are on has not noticed where the next statement goes.
+
+- **It reports the tab in front**, not whichever session happens to be first — and where no tab is
+  open, the row selected in the tree. Reporting an arbitrary session would name one server while the
+  grid under it drew another's rows.
+- **The pill is drawn whether or not anything is connected.** A place that empties is a place a
+  reader stops looking at, so an idle window says `No connection` in it, and a window whose last
+  attempt failed says why, in the danger colour, where the machine's name would be.
+- **It stays in the middle** as the actions on either side come and go, the bar being three columns
+  with the pill as the middle one. A narrow window shortens the *pill* rather than the labels on the
+  buttons: the name and the host truncate, and the dot, the chip and the badge — read at a glance
+  rather than word by word — do not.
+
+## The bar along the bottom
+
+What the connection in front has **cost**, never which one it is: the version of the server that
+answered, how many rows the last read came to, how long it took, and at the right-hand end how many
+connections are open at all — what the app is *holding* rather than what this tab is, so the two are
+never told apart by position alone.
+
+**It is also where a failure nothing was waiting on is said.** A rejection a *dialog* asked for is
+answered in that dialog and never here; the bar is for the ones asked for from a menu, which has
+nowhere to put one — a refresh that could not read, a dump that could not be written. There is one
+slot, so it holds the last outcome: an action that succeeds takes the previous failure down with it.
+While nothing is connected there is no bar to put one on, and the wording stands in the pill above
+instead.
+
 ## Every divider in the window is dragged
 
 There are five, and they behave alike: **the sidebar against the work area**, **the editor against
