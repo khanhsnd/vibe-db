@@ -174,7 +174,11 @@ the server rejects.
   ends on — is dropped rather than sent. MongoDB reads the same semicolons through the same lexer,
   with `//` opening a comment and both quotes opening a string.
 - **The grid shows the last result set the script produced**, so a script ending in a `SELECT` shows
-  it and one ending in an `UPDATE` keeps the last set it did return.
+  it and one ending in an `UPDATE` keeps the last set it did return. A script where *no* statement
+  returned one — every statement a `SET`, an `UPDATE` or an `INSERT` — still answers with an
+  **empty** result rather than a missing one: `columns` and `rows` are lists on the wire and never
+  null, so `Messages` is the whole of what there is to read and `Result` is empty rather than the
+  frontend having nothing to draw.
 - **A `Messages` pane appears beside `Result` for a script**, listing every statement with its row
   count, its affected count, its time and either `OK` or the server's own wording. It is a
   `ResultGrid`, because it is rows and columns.

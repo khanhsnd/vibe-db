@@ -1134,10 +1134,15 @@ func toTableRowsDTO(rows driver.TableRows, page driver.TablePage) TableRows {
 }
 
 func toQueryResultDTO(result driver.QueryResult, elapsed time.Duration) QueryResult {
+	rows := result.Rows
+	if rows == nil {
+		rows = [][]*string{}
+	}
+
 	return QueryResult{
 		Namespace:    toNamespaceDTO(result.Namespace),
 		Columns:      toColumnDTOs(result.Columns),
-		Rows:         result.Rows,
+		Rows:         rows,
 		RowsAffected: result.RowsAffected,
 		Truncated:    result.Truncated,
 		ElapsedMs:    elapsed.Milliseconds(),

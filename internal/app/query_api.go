@@ -78,7 +78,7 @@ func (a *QueryAPI) runScript(
 	input QueryInput,
 	statements []string,
 ) (ScriptResult, error) {
-	script := ScriptResult{Statements: make([]StatementOutcome, 0, len(statements))}
+	script := newScriptResult(len(statements))
 	noting := newStatementLog(a.log, a.sessions, sessionID, input.Namespace)
 
 	for _, statement := range statements {
@@ -108,6 +108,13 @@ func (a *QueryAPI) runScript(
 	}
 
 	return script, nil
+}
+
+func newScriptResult(statements int) ScriptResult {
+	return ScriptResult{
+		QueryResult: toQueryResultDTO(driver.QueryResult{}, 0),
+		Statements:  make([]StatementOutcome, 0, statements),
+	}
 }
 
 func ranStatement(sql string, elapsed time.Duration, result driver.QueryResult) StatementOutcome {

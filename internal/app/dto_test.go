@@ -1,6 +1,8 @@
 package app
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/khanhsnd/vibe-db/internal/domain"
@@ -167,5 +169,31 @@ func TestTablePageInputKeepsEverySortKeyInOrder(t *testing.T) {
 	want := []driver.TableSort{{Column: "name", Descending: true}, {Column: "id"}}
 	if len(got.Sort) != len(want) || got.Sort[0] != want[0] || got.Sort[1] != want[1] {
 		t.Errorf("Sort = %+v, want %+v", got.Sort, want)
+	}
+}
+
+func TestQueryResultDTOSendsListsAndNeverNull(t *testing.T) {
+	blob, err := json.Marshal(toQueryResultDTO(driver.QueryResult{}, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(blob), `"rows":null`) || strings.Contains(string(blob), `"columns":null`) {
+		t.Fatalf("columns and rows must cross the wire as lists, got %s", blob)
+	}
+}
+
+func TestScriptResultOfStatementsThatReturnedNothing(t *testing.T) {
+	script := newScriptResult(2)
+	script.Statements = append(script.Statements,
+		StatementOutcome{SQL: "SET @id = 1"},
+		StatementOutcome{SQL: "UPDATE t SET a = 1 WHERE b = 2"},
+	)
+
+	blob, err := json.Marshal(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(blob), `"rows":null`) || strings.Contains(string(blob), `"columns":null`) {
+		t.Fatalf("a script whose statements returned no rows still answers with an empty result, got %s", blob)
 	}
 }
