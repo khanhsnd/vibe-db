@@ -31,9 +31,16 @@ func main() {
 		MinHeight:        560,
 		AssetServer:      &assetserver.Options{Assets: assets},
 		BackgroundColour: &options.RGBA{R: 0x0F, G: 0x11, B: 0x15, A: 1},
-		OnStartup:        application.Startup,
-		OnShutdown:       application.Shutdown,
-		Bind:             application.Bindings(),
+		// A file dropped on a bucket is uploaded, so the window has to hand over the **paths** of what
+		// was let go rather than a `File` the webview would have to read: that is the whole reason a
+		// drop can be an upload at all, an object's bytes never crossing the bridge. Registering the
+		// listeners is also what stops the webview doing what a browser does with a dropped file —
+		// navigate to it, taking the app off the screen — which is why `bridge/filedrop.ts` registers
+		// at startup and not when a bucket is opened.
+		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
+		OnStartup:   application.Startup,
+		OnShutdown:  application.Shutdown,
+		Bind:        application.Bindings(),
 	})
 	if err != nil {
 		log.Fatalf("vibe-db: %v", err)

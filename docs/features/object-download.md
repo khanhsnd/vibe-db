@@ -119,6 +119,45 @@ whoever happened to upload it.
 A folder among the paths is walked on **this** machine, streamed into the queue exactly as the remote
 half is, and keeps its own name at the far end: `D:\logs` becomes `<prefix>logs/…`.
 
+**A folder holding a new object is read again, once.** The grid is a page of a listing and an upload
+happens in the queue, so nothing about the one tells the other — the folder is re-read when the report
+says the job is **over**, and not while it is running. A listing per tick would be a poll, which this
+feature deliberately has none of, and a grid redrawing under somebody's cursor twice a second is worse
+than one that is a minute old. The consequence is worth stating plainly: a long folder upload shows
+nothing new until it finishes, and Refresh is what a reader who will not wait presses.
+
+The moment a transfer ends is the **report's** to notice — `whenFinished` in `stores/transfers.ts`,
+fired once per job and by its id, so a download finishing re-reads nothing and a report naming the
+same finished job twice cannot re-read twice.
+
+### Files dropped on a bucket
+
+**A drop is the Upload button with the dialog skipped.** Letting files go anywhere over a bucket view
+uploads them into the folder it is standing in, through the same one function the button and the
+right-click item call — so what a drop *costs*, what it *overwrites* and what it is *answered for*
+cannot differ from what a picked file does.
+
+The host hands over the **paths** of what was dropped and never a `File` the webview would have to
+read, which is the whole reason a drop can be an upload here at all: an object's bytes never cross the
+bridge, so a dropped forty-gigabyte archive costs what a picked one costs, and a dropped **folder** is
+walked on this machine exactly as a picked one is.
+
+Three things about it are worth stating rather than leaving to be found out:
+
+- **The zone is the CSS.** Wails tests the element under the cursor for one custom property, so the
+  view says it takes files by carrying the `.drop-zone` class and nothing in React listens for a drag.
+  The runtime puts the highlight on and takes it off again, which is why a drag that leaves the window
+  cannot leave an overlay behind.
+- **A read-only store is not a drop target at all.** The rule that leaves the Upload button out
+  (`ObjectRules.upload`) leaves the zone out, so there is nothing to let go of rather than a refusal
+  to explain afterwards. On a **guarded** connection the drop is confirmed, naming where the objects
+  are going — a drop is one gesture, and the folder under it is wherever the reader happened to be
+  standing.
+- **The listeners are the window's, and are registered at startup.** They are also what stops the
+  webview doing what a browser does with a dropped file — navigate to it, taking the app off the
+  screen — so they are not the bucket view's to switch on. There is one handler and the tab in front
+  holds it, only that tab being mounted.
+
 ## The queue
 
 Four files move at once across the whole app, each large one using four ranges — sixteen sockets at
@@ -173,3 +212,7 @@ cannot notice.
 | retrying what is worth retrying | `internal/objectstore/retry.go` |
 | the bound methods and the pushed report | `internal/app/store_api.go`, `EventTransfers` |
 | the dialog and the dock | `frontend/src/features/storage/DownloadDialog.tsx`, `TransferPanel.tsx` |
+| the one place an upload starts, however it was asked for | `frontend/src/features/storage/useObjectActions.ts` |
+| what a finished transfer tells the grid | `whenFinished` in `frontend/src/stores/transfers.ts` |
+| a dropped file's path, and the window's one handler | `frontend/src/bridge/filedrop.ts`, `main.go` |
+| the zone and its overlay | `.drop-zone` in `frontend/src/index.css` |

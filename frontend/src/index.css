@@ -50,6 +50,35 @@
     line-height: 1.5;
   }
 
+  /** Where a file dragged onto the window may be let go. The property is the host's own test for a
+      drop target, so **the zone is the CSS** — nothing in React listens for a drag, and the runtime
+      adds `wails-drop-target-active` while one is over it and takes it off again. The property
+      inherits, which is what makes the whole subtree a target rather than the one edge of it. */
+  .drop-zone {
+    --wails-drop-target: drop;
+    position: relative;
+  }
+
+  /** The overlay is a pseudo-element and its words are an attribute, for the same reason: a drop that
+      told a component about itself would need state that a drag leaving the window could leave
+      switched on. `attr()` is what lets the sentence name the bucket it would write into. */
+  .drop-zone.wails-drop-target-active::after {
+    content: attr(data-drop-label);
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    text-align: center;
+    pointer-events: none;
+    border: 2px dashed var(--accent);
+    background-color: var(--accent-subtle);
+    color: var(--accent);
+    font-size: var(--text-sm);
+  }
+
   .scroll-thin {
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;

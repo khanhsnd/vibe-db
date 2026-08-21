@@ -3,6 +3,7 @@ import { Archive, ChevronLeft, ChevronRight, CornerLeftUp, SearchX } from 'lucid
 
 import type { ObjectRow } from '@/bridge/objects'
 import { toAppError, type AppError } from '@/bridge/errors'
+import { onFileDrop } from '@/bridge/filedrop'
 import { GridFooter } from '@/features/results/GridFooter'
 import { ResultGrid } from '@/features/results/ResultGrid'
 import { focusOf, selectedRows, type GridOutline, type Selection } from '@/features/results/resultSet'
@@ -13,6 +14,7 @@ import { ErrorStrip } from '@/shared/ui/ErrorStrip'
 import { IconButton } from '@/shared/ui/IconButton'
 import { Loading } from '@/shared/ui/Loading'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
+import { cn } from '@/lib/cn'
 import { rowsOf, useBucketViewsStore, type BucketView } from '@/stores/bucketViews'
 import { useObjectStoresStore } from '@/stores/objectStores'
 import type { BucketTab } from '@/stores/tabs'
@@ -159,6 +161,17 @@ export function BucketView({ tab }: { tab: BucketTab }) {
   )
 
   /**
+   * **Files let go over this view are uploaded into the folder it is standing in**, which is what the
+   * Upload button does with the ones a dialog picked — one action, three ways of asking for it. What
+   * arrives is a list of *paths*, so a dropped folder is walked on this machine exactly as a picked
+   * one is and nothing here reads a byte.
+   *
+   * The slot is the window's rather than the tab's, because Wails registers its listeners once; only
+   * the tab in front is mounted, so there is never a second view holding it.
+   */
+  useEffect(() => onFileDrop(on.uploadPaths), [on.uploadPaths])
+
+  /**
    * **One click shows the object below.** A bucket's rows are things rather than values, so what a
    * press means here is "tell me about this one" — which is the arrangement a [key
    * space](../../../../docs/features/key-space.md) has, and the reason the panel is not waiting for a
@@ -193,8 +206,16 @@ export function BucketView({ tab }: { tab: BucketTab }) {
     ? `${view.result?.scanned.toLocaleString() ?? 0} keys read${view.result?.whole ? '' : ', and more to come'}`
     : ''
 
+  // A store that refuses an upload is not a drop target at all: the rule that leaves the button out
+  // leaves the zone out, so there is nothing to let go of and no refusal to explain afterwards.
+  const takesFiles = !session.rules.upload.refused
+  const into = view.prefix === '' ? view.bucket : `${view.bucket}/${view.prefix}`
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-canvas">
+    <div
+      className={cn('flex h-full min-h-0 flex-col bg-canvas', takesFiles && 'drop-zone')}
+      data-drop-label={takesFiles ? `Drop files to upload into ${into}` : undefined}
+    >
       <BucketToolbar
         view={view}
         rules={session.rules}
@@ -268,7 +289,11 @@ export function BucketView({ tab }: { tab: BucketTab }) {
                 <Empty
                   icon={<Archive size={24} strokeWidth={1.5} />}
                   title={view.prefix === '' ? 'This bucket is empty' : 'This folder is empty'}
-                  hint="Upload writes into wherever you are standing."
+                  hint={
+                    takesFiles
+                      ? 'Drop files here, or press Upload — either writes into wherever you are standing.'
+                      : 'This store is read-only, so nothing can be written into it.'
+                  }
                 />
               )
             ) : (

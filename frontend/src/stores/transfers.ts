@@ -20,6 +20,12 @@ interface TransfersState {
 
   /** Starts listening, and is idempotent: every surface that shows a transfer calls it. */
   watch: () => void
+  /**
+   * What to do when one transfer ends, run **once**. It is here rather than in whoever asked for the
+   * transfer because the end of one is something only the report knows — and a bucket whose upload has
+   * landed is holding an object the grid has not read.
+   */
+  whenFinished: (jobId: string, then: () => void) => void
   refresh: () => Promise<void>
   show: (shown: boolean) => void
   cancel: (jobId: string) => Promise<void>
@@ -28,6 +34,10 @@ interface TransfersState {
 }
 
 const NOTHING: TransferReport = { jobs: [], files: [], active: 0 }
+
+/** The waiting `whenFinished` callbacks, by job. It is module state rather than a field of the store
+ *  because nothing draws it, and a closure in a store is a closure nothing can render. */
+const waiting = new Map<string, () => void>()
 
 export const useTransfersStore = create<TransfersState>((set, get) => ({
   report: NOTHING,
@@ -47,13 +57,26 @@ export const useTransfersStore = create<TransfersState>((set, get) => ({
         (job) =>
           finished(job.state) &&
           !before.some((was) => was.id === job.id && finished(was.state)),
-      ).length
+      )
 
       set((s) => ({
         report,
-        unseen: s.shown ? 0 : s.unseen + settled,
+        unseen: s.shown ? 0 : s.unseen + settled.length,
       }))
+
+      // The same moment, told to whoever asked to hear it. A job is dropped from the list as it is
+      // fired, so a report that names a finished job twice cannot run it twice.
+      for (const job of settled) {
+        const then = waiting.get(job.id)
+        if (then === undefined) continue
+        waiting.delete(job.id)
+        then()
+      }
     })
+  },
+
+  whenFinished: (jobId, then) => {
+    waiting.set(jobId, then)
   },
 
   refresh: async () => {

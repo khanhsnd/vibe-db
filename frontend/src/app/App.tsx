@@ -10,6 +10,7 @@ import {
   type Profile,
   type ProfileInput,
 } from '@/bridge/connections'
+import { startFileDrop } from '@/bridge/filedrop'
 import {
   objects as storeObjects,
   toStoreInput,
@@ -232,10 +233,16 @@ export function App() {
   // The two things the window needs before the reader touches anything: the connections the sidebar
   // draws, and the snippet library, which every editor's completion offers whether or not the Snippets
   // pane has ever been opened.
+  //
+  // The drag-and-drop listeners are here for a different reason: they are what stop the webview doing
+  // what a browser does with a dropped file — navigate to it, taking the app off the screen — so they
+  // are registered whether or not anything is waiting for a drop. What a bucket does with one is
+  // `BucketView`'s.
   useEffect(() => {
     void loadProfiles()
     void loadStores()
     void loadSnippets()
+    startFileDrop()
   }, [loadProfiles, loadStores, loadSnippets])
 
   useEffect(() => {
