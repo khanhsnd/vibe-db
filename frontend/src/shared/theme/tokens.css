@@ -13,7 +13,7 @@
   --surface-active: #2a303a;
   --surface-selected: #1e2b45;
   --selection: #2d4f7a;
-  --line-highlight: #ffffff0d;
+  --line-highlight: #ffffff14;
 
   /** What a Find paints on the text: every match washed, and the one the caret is on stronger.
       Translucent on purpose — a match is drawn over the selection and the active line, and an
@@ -21,8 +21,8 @@
   --search-match: #e3b34140;
   --search-match-active: #e3b34199;
 
-  --line: #282e37;
-  --line-strong: #3a424e;
+  --line: #39414f;
+  --line-strong: #525c6b;
 
   --grid-row-selected: #1a2740;
   --grid-cell-selected: #274468;
@@ -49,8 +49,8 @@
   --diff-changed: #d29922;
 
   --fg: #e8ebf0;
-  --fg-muted: #9ba5b4;
-  --fg-faint: #767f8f;
+  --fg-muted: #a9b3c1;
+  --fg-faint: #8a94a4;
   --fg-on-accent: #ffffff;
 
   --accent: #4c8dff;
@@ -89,7 +89,7 @@
   --env-development: #3fb950;
   --env-staging: #d29922;
   --env-production: #f85149;
-  --env-none: #767f8f;
+  --env-none: #8a94a4;
 
   /** One per colour a connection may be marked with. They say nothing — that is the point: an
       environment means something everywhere, and this means only "this one, not that one", which
@@ -151,12 +151,13 @@
   --kind-account: #d29922;
 
   /** A bucket and what is in it are not the catalogue's either — they are somebody's *files* — so
-      they take their own three entries beside the backup's. A folder in a bucket is a **prefix**
-      and wears the object's colour cooled a step, which is the arrangement a partition has with
-      its table: near enough to read as "part of that", far enough to tell apart. */
+      they take their own three entries beside the backup's. A folder in a bucket is a **prefix**,
+      and it is the one place a container is *not* drawn as its contents cooled a step: a folder is
+      what a reader walking a path is aiming at, so it is a hue away from every object glyph rather
+      than a shade of one, and it is the louder of the two. */
   --kind-bucket: #c9a227;
-  --kind-object: #8ab4f8;
-  --kind-prefix: #6f8fbf;
+  --kind-object: #9cc4ff;
+  --kind-prefix: #e3b341;
 
   /** One per class of column type, so a grid header says what a column *holds* before its name is
       read. They are the same seven `columnType.tsx` sorts a type into, and nothing else may take
@@ -174,7 +175,7 @@
   --syn-number: #79c0ff;
   --syn-func: #d2a8ff;
   --syn-comment: #6e7681;
-  --syn-null: #7d8590;
+  --syn-null: #8b949e;
 
   --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.7);
 
@@ -199,13 +200,13 @@
   --surface-active: #e4e7ec;
   --surface-selected: #dce8fd;
   --selection: #b3d4fc;
-  --line-highlight: #0000000a;
+  --line-highlight: #00000012;
 
   --search-match: #e3b34166;
   --search-match-active: #e3b341cc;
 
-  --line: #dfe3e8;
-  --line-strong: #c3cad3;
+  --line: #cbd3db;
+  --line-strong: #9aa4b2;
 
   --grid-row-selected: #dbe9fc;
   --grid-cell-selected: #bfd8f8;
@@ -223,8 +224,8 @@
   --diff-changed: #9a6700;
 
   --fg: #16191f;
-  --fg-muted: #545c67;
-  --fg-faint: #79818d;
+  --fg-muted: #4b535e;
+  --fg-faint: #6b7480;
   --fg-on-accent: #ffffff;
 
   --accent: #2563eb;
@@ -255,7 +256,7 @@
   --env-development: #1a7f37;
   --env-staging: #9a6700;
   --env-production: #cf222e;
-  --env-none: #79818d;
+  --env-none: #6b7480;
 
   --conn-red: #cf222e;
   --conn-orange: #bc4c00;
@@ -292,8 +293,8 @@
   --kind-backup: #57606a;
   --kind-account: #9a6700;
   --kind-bucket: #8a6d00;
-  --kind-object: #0b5cad;
-  --kind-prefix: #3f6a99;
+  --kind-object: #0a4fa0;
+  --kind-prefix: #9a6700;
 
   --type-text: #1a7f37;
   --type-numeric: #0550ae;
@@ -308,7 +309,7 @@
   --syn-number: #0550ae;
   --syn-func: #8250df;
   --syn-comment: #6e7781;
-  --syn-null: #8c949f;
+  --syn-null: #767e8a;
 
   --shadow-overlay: 0 16px 48px -12px rgb(0 0 0 / 0.18);
 }

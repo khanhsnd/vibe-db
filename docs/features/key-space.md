@@ -62,7 +62,10 @@ the tab's and survives being looked away from, like everything else it was set u
 The grouping is a *reading* of the page and asks the server nothing: it is the key column drawn as an
 [outlined column](../grid.md), which is the same mechanism a comparison's shape half uses. Because a page
 is cut from a **sorted** scan, every prefix is contiguous and the tree of a page is a coherent slice
-of the tree of the whole. What a **branch** row is not is a key — nothing can be written to one, and
+of the tree of the whole. **Branches stand above leaves** at every level — the folder-first order a
+[bucket's own page](object-storage.md#the-grid) is listed in, this being the same flattener — and it
+is a partition of a level rather than a sort, so each half is still in the order the scan answered
+in. What a **branch** row is not is a key — nothing can be written to one, and
 an export writes the flat page rather than the tails the tree drew.
 
 ## A key space is searched, not filtered

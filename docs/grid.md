@@ -221,6 +221,15 @@ the thing the reader opened the surface to read is the thing they cannot see. Th
   mirrors whom is the call site's; `ComparePanes` is the only one, and what stops the echo there is
   that a scroller already at the position it is being sent to does nothing, never a flag on a timer.
   Pass a stable ref: it is attached with the element and would otherwise detach on every render.
+- **A grid whose rows arrive a page at a time asks for the next one itself** (`onReachEnd`), which
+  is what stands where a pager would. It fires when the reader is within eight rows of the last one,
+  and **again on every change to the row count** — a page that did not fill the viewport left them at
+  the bottom already, so a folder of forty rows in a bucket of forty thousand would otherwise stop
+  dead. The measuring is the grid's because the scroller is: a call site watching through
+  `viewportRef` would have to measure an element it does not own. Not asking twice while one read is
+  in flight is the **call site's**, that being the only place that knows a read is. One surface
+  passes it — see [features/object-storage.md](features/object-storage.md#the-grid) for why a bucket
+  has no pager to draw.
 - **Export belongs over the grid, never in the footer**, because it acts on the whole grid rather
   than on a row: `ExportMenu` opens CSV, JSON and SQL, each writing what the grid holds to a file
   picked in the system's own save dialog. It is one component in two places — the head strip the
@@ -588,8 +597,11 @@ surrounds the grid:
 
 - A **bucket** is `BucketView`, and it is the plainest of the read-only sites: six columns that are
   not read from anywhere — they are the six facts an S3 listing carries for every key, on every
-  service there is, which is what a bucket has instead of a catalogue — and one page of rows, because
-  a listing is **forward only** and there is no `All` here for the same reason. A **folder is a row**
+  service there is, which is what a bucket has instead of a catalogue. A listing is **forward only**,
+  so it is the one site that passes `onReachEnd`: the pages are appended rather than turned to, and
+  there is no `All` here because a bucket has no size anybody can ask for. The view reads the first
+  fifty thousand rows without being asked — a service will not list folders on their own — and
+  `onReachEnd` is what carries it on past that. A **folder is a row**
   and carries nothing but its name: a prefix has no size, no clock and no tag, and a zero for any of
   them would be claiming something the service never said. A double-click on one walks into it, which
   is what `onActivateRow` means on a surface whose rows are places.
@@ -602,8 +614,8 @@ surrounds the grid:
 
   It is the **second** site to pass `cellMenu`, after a key space, and for a stronger version of that
   reason: the built-in menu is written for a table's rows and there is no NULL to set on an object, no
-  UUID worth minting into one, no condition to add and no sort worth offering over a page cut from a
-  service's own order. It passes no `onEditCell` at all — an object is replaced by uploading over it,
+  UUID worth minting into one and no condition to add. An **order** it does have, on the header where
+  every other grid's is — what it orders is what has been read, a listing being forward only. It passes no `onEditCell` at all — an object is replaced by uploading over it,
   and a bucket has no cell to type in — and its `onSelectionChange` does one thing no other grid's
   does: it **opens the panel below on the row that was picked**, a bucket's rows being things rather
   than values. See [features/object-storage.md](features/object-storage.md#the-grid).

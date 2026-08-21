@@ -71,6 +71,9 @@
   the indexes under it read as one thing — and it is drawn as a folder, open or shut, never as the
   thing it holds: a `Tables` folder wearing a table would be the same row as the tables beneath it.
   A new kind is a token and a row in the `COLOURS` map beside `ICONS`, never a colour in a component.
+  The one **exception** is a folder in a bucket, which is not the catalogue's and is drawn a hue away
+  from its contents rather than a shade of them — the reason is
+  [the bucket grid's](features/object-storage.md#the-grid).
 - **A connection's colour is inherited, not repeated.** `buildTree` puts it on the connection node
   alone and `flatten` carries it down every branch, so a `FlatNode` knows which connection's colour
   its row is under without every node builder having to be told. The wash itself is mixed in

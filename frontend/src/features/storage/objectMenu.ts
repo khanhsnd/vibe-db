@@ -22,7 +22,7 @@ export interface ObjectActions {
  * that are a table's, and nearly none of it means anything here.
  *
  * There is no NULL to set on an object, no UUID worth minting into one, no condition to add — the
- * bar above the grid is where a bucket is searched — and no sort worth offering over a page cut from
+ * bar above the grid is where a bucket is searched, and an order is the *header's* — over a page cut from
  * a service's own order. What is left is what a reader actually does to an object: bring it down,
  * put one up, look at it, copy a link to it, move it, delete it.
  *

@@ -98,6 +98,12 @@ const DENSE: Density = {
   header: DENSE_HEADER_HEIGHT,
   gutter: DENSE_GUTTER_WIDTH,
 }
+/**
+ * How near the last row counts as reaching it, in rows. Eight is a flick of the wheel — near enough
+ * that the page after this one is usually there before the reader arrives, far enough that a grid
+ * standing still does not ask for one.
+ */
+const REACH_END = 8
 const DEFAULT_COLUMN_WIDTH = 160
 const MIN_COLUMN_WIDTH = 60
 const MAX_FIT_WIDTH = 520
@@ -291,6 +297,20 @@ interface ResultGridProps {
    */
   viewportRef?: RefObject<HTMLDivElement | null> | undefined
   /**
+   * Called when the reader has scrolled within a few rows of the last one, and again whenever the
+   * row count changes while they are still there. It is what a surface whose rows arrive **a page at
+   * a time** listens to instead of drawing a pager: a bucket has no size anybody can know, so a page
+   * number would be a fraction with no denominator — see
+   * [features/object-storage.md](../../../../docs/features/object-storage.md#the-grid).
+   *
+   * It is the grid's because the scroller is: a call site watching through `viewportRef` would have
+   * to measure an element it does not own. It fires on the **row count** as well as on the scroll so
+   * that a page too short to scroll still asks for the one after it — a folder of forty rows would
+   * otherwise stop dead in a bucket of forty thousand. Guarding against a second call while one read
+   * is in flight is the call site's, which is the only place that knows a read is.
+   */
+  onReachEnd?: (() => void) | undefined
+  /**
    * Draws the grid to be *scanned* rather than worked in: shorter rows, a one-line header, a
    * narrower gutter. It is a surface that has to fit several grids in one pane that asks for it —
    * a comparison is two of them and a script — and nothing is left out to get it.
@@ -379,6 +399,7 @@ export function ResultGrid({
   filtering,
   formatValue,
   viewportRef,
+  onReachEnd,
   dense = false,
   strip = false,
   cellMenu = cellMenuItems,
@@ -449,6 +470,27 @@ export function ResultGrid({
     estimateSize: () => size.row,
     overscan: 16,
   })
+
+  /**
+   * Asks a surface whose rows arrive a page at a time for the next one. The handler is held in a ref
+   * so this stays one function for the life of the grid: a call site passes an arrow, and a listener
+   * rebuilt on every render would detach the scroll from under a reader mid-flick.
+   */
+  const reachEnd = useRef(onReachEnd)
+  reachEnd.current = onReachEnd
+
+  const askForMore = useCallback(() => {
+    const scroller = scrollRef.current
+    if (!scroller || !reachEnd.current) return
+    if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > REACH_END * size.row) {
+      return
+    }
+    reachEnd.current()
+  }, [size.row])
+
+  // On the row count as well as on the scroll: a page that did not fill the viewport left the reader
+  // at the bottom already, and one that arrives while they are still there is one more to ask after.
+  useEffect(askForMore, [askForMore, result.rows.length])
 
   useEffect(() => () => cancelAnimationFrame(frame.current), [])
 
@@ -872,6 +914,7 @@ export function ResultGrid({
       ref={attachViewport}
       tabIndex={0}
       onKeyDown={onKeyDown}
+      onScroll={askForMore}
       className={cn(
         'overflow-auto bg-canvas',
         strip ? 'scroll-none' : 'scroll-thin',

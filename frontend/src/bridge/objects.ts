@@ -245,8 +245,9 @@ export interface ObjectPage {
 export interface ListObjectsInput {
   bucket: string
   prefix: string
-  /** The service's own continuation token, opaque here. A page is forward only, so going back is
-   *  the tab's own stack of these rather than a re-read of the bucket. */
+  /** The service's own continuation token, opaque here. A page is forward only, so this only ever
+   *  reads *onward*: the tab appends what comes back as the grid is scrolled, and there is nothing
+   *  to go back to. */
   token: string
   limit: number
   /** Everything under the prefix rather than the folder alone — what Flatten asks for. */

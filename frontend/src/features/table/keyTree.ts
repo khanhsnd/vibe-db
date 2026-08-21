@@ -121,9 +121,20 @@ function insert(root: Node, segments: string[], source: number, separator: strin
 /**
  * The tree as the list the grid reads, depth first. A `Map` keeps the order things were put into it,
  * and the keys went in sorted, so this comes out sorted at every level without a second sort.
+ *
+ * **Branches come before leaves at every level**, which is the rule a folder-first listing already
+ * follows for a bucket's own page and what a reader walking a path is looking for. It is a partition
+ * of one level and not a sort: each half keeps the order the keys arrived in, so a prefix is still
+ * contiguous and the tree of a page is still a coherent slice of the tree of the whole.
  */
 function emit(node: Node, depth: number, shut: ReadonlySet<string>, out: KeyRow[]) {
-  for (const child of node.children.values()) {
+  const children = [...node.children.values()]
+  const ordered = [
+    ...children.filter((child) => child.children.size > 0),
+    ...children.filter((child) => child.children.size === 0),
+  ]
+
+  for (const child of ordered) {
     const branches = child.children.size > 0
     const open = branches ? !shut.has(child.path) : undefined
 

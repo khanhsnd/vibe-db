@@ -14,8 +14,10 @@ import {
  * the tab in front and no other, so a component's own state goes down with it.
  *
  * The rows live here beside the view rather than in a store of their own, which is where this differs
- * from a table tab: a page of a bucket is **one page** and always will be — there is no `All` here,
- * because a bucket has no size and a listing is forward only.
+ * from a table tab. A listing is still **forward only** — that is what a continuation token is — but
+ * the reader never sees a page: `more` appends the next one as the grid is scrolled, so what is held
+ * is every page read so far, merged. There is still no `All`, because a bucket has no size anybody
+ * can ask for — what stops the reading is the reader stopping scrolling.
  */
 export interface BucketSearch {
   text: string
@@ -46,11 +48,9 @@ export interface BucketView {
   /** Everything under the prefix rather than the folder alone. */
   flat: boolean
   /**
-   * The continuation tokens of the pages already read, newest last. A listing is **forward only** —
-   * that is what a continuation token is — so going back is this stack and never a re-read of the
-   * bucket.
+   * Every page read so far as one, and `null` before the first. Its `next` is what the page after it
+   * is asked for with, and empty once the folder has been read to the end — see `merge`.
    */
-  tokens: string[]
   page: ObjectPage | null
   loading: boolean
 
@@ -73,7 +73,6 @@ function emptyView(bucket: string, prefix: string): BucketView {
     bucket,
     prefix,
     flat: false,
-    tokens: [],
     page: null,
     loading: false,
     search: NO_SEARCH,
@@ -96,8 +95,7 @@ interface BucketViewsState {
   read: (tabId: string, sessionId: string) => Promise<void>
   goTo: (tabId: string, sessionId: string, prefix: string) => Promise<void>
   up: (tabId: string, sessionId: string) => Promise<void>
-  next: (tabId: string, sessionId: string) => Promise<void>
-  back: (tabId: string, sessionId: string) => Promise<void>
+  more: (tabId: string, sessionId: string) => Promise<void>
   setFlat: (tabId: string, sessionId: string, flat: boolean) => Promise<void>
 
   setSearch: (tabId: string, search: Partial<BucketSearch>) => void
@@ -124,29 +122,24 @@ export const useBucketViewsStore = create<BucketViewsState>((set, get) => ({
       return { views }
     }),
 
+  /** The folder from its first page, replacing whatever had been read of it before. */
   read: async (tabId, sessionId) => {
     const view = get().views[tabId]
     if (!view) return
 
     change(set, tabId, { loading: true, error: null })
     try {
-      const page = await objects.listObjects(sessionId, {
-        bucket: view.bucket,
-        prefix: view.prefix,
-        token: view.tokens.at(-1) ?? '',
-        limit: 0,
-        flat: view.flat,
-      })
+      const page = await objects.listObjects(sessionId, request(view, ''))
       change(set, tabId, { page, loading: false, result: null })
     } catch (thrown) {
       change(set, tabId, { loading: false, error: toAppError(thrown) })
     }
   },
 
-  // Walking into a folder starts its paging over and lets go of what was ticked: a key the reader
-  // picked in one folder is not a key in this one.
+  // Walking into a folder reads it from its first page and lets go of what was ticked: a key the
+  // reader picked in one folder is not a key in this one.
   goTo: async (tabId, sessionId, prefix) => {
-    change(set, tabId, { prefix, tokens: [], picked: [], focused: null, result: null })
+    change(set, tabId, { prefix, picked: [], focused: null, result: null })
     await get().read(tabId, sessionId)
   },
 
@@ -159,24 +152,34 @@ export const useBucketViewsStore = create<BucketViewsState>((set, get) => ({
     await get().goTo(tabId, sessionId, at < 0 ? '' : trimmed.slice(0, at + 1))
   },
 
-  next: async (tabId, sessionId) => {
+  /**
+   * The page after the one on screen, **appended**. It is what the grid asks for as it is scrolled
+   * near the bottom, so a reader walking a folder of forty thousand objects presses nothing — and it
+   * is the whole of why there is no pager: a page number needs a count of the pages, and a bucket
+   * has none to give.
+   *
+   * It reads the tab **again** after the await and drops the answer if the reader has walked
+   * somewhere else meanwhile. A page of the folder they left appended to the folder they are in
+   * would be two places in one grid, and nothing afterwards could tell which row was which.
+   */
+  more: async (tabId, sessionId) => {
     const view = get().views[tabId]
-    if (!view?.page?.next) return
+    if (!view?.page?.next || view.loading) return
 
-    change(set, tabId, { tokens: [...view.tokens, view.page.next] })
-    await get().read(tabId, sessionId)
-  },
+    change(set, tabId, { loading: true, error: null })
+    try {
+      const page = await objects.listObjects(sessionId, request(view, view.page.next))
+      const held = get().views[tabId]
+      if (!held || held.prefix !== view.prefix || held.flat !== view.flat) return
 
-  back: async (tabId, sessionId) => {
-    const view = get().views[tabId]
-    if (!view || view.tokens.length === 0) return
-
-    change(set, tabId, { tokens: view.tokens.slice(0, -1) })
-    await get().read(tabId, sessionId)
+      change(set, tabId, { page: merge(held.page, page), loading: false })
+    } catch (thrown) {
+      change(set, tabId, { loading: false, error: toAppError(thrown) })
+    }
   },
 
   setFlat: async (tabId, sessionId, flat) => {
-    change(set, tabId, { flat, tokens: [], picked: [], result: null })
+    change(set, tabId, { flat, picked: [], result: null })
     await get().read(tabId, sessionId)
   },
 
@@ -246,6 +249,33 @@ function change(
     if (!view) return s
     return { views: { ...s.views, [tabId]: { ...view, ...edit } } }
   })
+}
+
+/** One folder asked for from a given point, which `read` and `more` differ only in. */
+function request(view: BucketView, token: string) {
+  return { bucket: view.bucket, prefix: view.prefix, token, limit: 0, flat: view.flat }
+}
+
+/**
+ * Two pages of one folder as one. The rows are **partitioned and not concatenated**: a service
+ * answers a listing in its own single order, so the folders of the second page would otherwise land
+ * under the objects of the first — and folders come first here for the reason every file manager
+ * puts them there. Each half keeps the order the service answered in, `filter` being stable.
+ *
+ * The three totals add up, so the footer counts everything read rather than the last page alone.
+ * `next` is the newer page's, that being the only one that continues anything.
+ */
+function merge(held: ObjectPage | null, page: ObjectPage): ObjectPage {
+  if (held === null) return page
+
+  const rows = [...held.rows, ...page.rows]
+  return {
+    ...page,
+    rows: [...rows.filter((row) => row.folder), ...rows.filter((row) => !row.folder)],
+    folders: held.folders + page.folders,
+    objects: held.objects + page.objects,
+    bytes: held.bytes + page.bytes,
+  }
 }
 
 /** The rows the grid is drawing: a search's answer where there is one, and the page otherwise. */

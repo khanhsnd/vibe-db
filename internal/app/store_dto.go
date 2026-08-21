@@ -148,8 +148,8 @@ type BucketRow struct {
 }
 
 // ListObjectsInput is one page of one folder. `Token` is the service's own continuation token and is
-// opaque on both sides of the bridge: a page is forward only, so **going back is the tab's own stack
-// of these** rather than a re-read of the bucket.
+// opaque on both sides of the bridge: a page is forward only, so it only ever reads **onward** — the
+// tab appends what comes back as its grid is scrolled, and there is nothing to go back to.
 type ListObjectsInput struct {
 	Bucket string `json:"bucket"`
 	Prefix string `json:"prefix"`

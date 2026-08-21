@@ -240,8 +240,8 @@ type Listing struct {
 	Folders []string
 	Objects []Object
 	// Next is what to hand back to read the page after this one, and empty when the listing is
-	// complete. A page is *forward only* — that is what a continuation token is — so going back is
-	// the caller's own stack of them and never a re-read of the whole bucket.
+	// complete. A page is *forward only* — that is what a continuation token is — so a caller reads
+	// onward and appends, and going back would be a re-read of the whole bucket.
 	Next string
 }
 

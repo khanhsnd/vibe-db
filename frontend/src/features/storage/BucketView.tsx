@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Archive, ChevronLeft, ChevronRight, CornerLeftUp, SearchX } from 'lucide-react'
+import { Archive, CornerLeftUp, SearchX } from 'lucide-react'
 
 import type { ObjectRow } from '@/bridge/objects'
 import { toAppError, type AppError } from '@/bridge/errors'
 import { onFileDrop } from '@/bridge/filedrop'
 import { GridFooter } from '@/features/results/GridFooter'
 import { ResultGrid } from '@/features/results/ResultGrid'
-import { focusOf, selectedRows, type GridOutline, type Selection } from '@/features/results/resultSet'
+import {
+  focusOf,
+  selectedRows,
+  type GridOutline,
+  type Selection,
+  type SortKey,
+} from '@/features/results/resultSet'
 import { keyBadge } from '@/features/table/keyTree'
 import { Button } from '@/shared/ui/Button'
 import { Empty } from '@/shared/ui/Empty'
@@ -25,7 +31,7 @@ import { objectIcon } from './objectIcon'
 import { objectMenuItems } from './objectMenu'
 import { ObjectPanel } from './ObjectPanel'
 import { ObjectSearchBar } from './ObjectSearchBar'
-import { objectGrid, objectTree, sizeText, treeGrid } from './objectRows'
+import { objectGrid, objectTree, sizeText, sortRows, treeGrid } from './objectRows'
 import { useObjectActions } from './useObjectActions'
 
 /**
@@ -39,8 +45,17 @@ import { useObjectActions } from './useObjectActions'
  *      answers with the folders inside and the objects inside and nothing else. Browsing a bucket of
  *      forty million objects therefore costs what browsing one of forty costs — which is the reason
  *      there is no index anywhere in this feature.
- *   2. **A page is forward only.** A continuation token is what a service gives instead of an
- *      offset, so Back is a stack of the tokens already used and never a re-read.
+ *   2. **A page is forward only, and the reader never sees one.** A continuation token is what a
+ *      service gives instead of an offset, so there is nothing to go back to and no page to number.
+ *      The rows are **appended**, which is the arrangement that fits a thing with no size: a pager
+ *      would have had to draw a fraction whose denominator is a read of the whole bucket.
+ *   3. **The pages read themselves onward.** A folder's *folders* are not a thing the service will
+ *      answer separately — `CommonPrefixes` and the objects come back interleaved in one key order,
+ *      counting against one thousand-key page — so a root holding a few thousand loose objects can
+ *      spend a whole page before reaching the prefixes that sort after them. Waiting for a scroll
+ *      there would hide a folder behind four thousand rows of `.xlsx`, so the view keeps reading
+ *      until the listing is complete or `AUTO_ROWS` rows are in hand, and `onReachEnd` carries it on
+ *      from there.
  */
 export function BucketView({ tab }: { tab: BucketTab }) {
   const session = useObjectStoresStore((s) => s.sessions[tab.profileId] ?? null)
@@ -51,8 +66,7 @@ export function BucketView({ tab }: { tab: BucketTab }) {
   const read = useBucketViewsStore((s) => s.read)
   const goTo = useBucketViewsStore((s) => s.goTo)
   const up = useBucketViewsStore((s) => s.up)
-  const next = useBucketViewsStore((s) => s.next)
-  const back = useBucketViewsStore((s) => s.back)
+  const more = useBucketViewsStore((s) => s.more)
   const setFlat = useBucketViewsStore((s) => s.setFlat)
   const setSearch = useBucketViewsStore((s) => s.setSearch)
   const runSearch = useBucketViewsStore((s) => s.runSearch)
@@ -64,6 +78,12 @@ export function BucketView({ tab }: { tab: BucketTab }) {
   const [failure, setFailure] = useState<AppError | null>(null)
   /** Which prefixes of a flattened page are folded. It is the tab's, like everything else here. */
   const [shut, setShut] = useState<ReadonlySet<string>>(new Set())
+  /**
+   * What a header was asked to order by. It sorts **what has been read** and nothing else — a
+   * listing is forward only, so there is no order to ask the service for — and rows that arrive
+   * afterwards are sorted in as they land.
+   */
+  const [sort, setSort] = useState<SortKey[]>([])
 
   useEffect(() => {
     open(tab.id, tab.bucket, '')
@@ -77,7 +97,35 @@ export function BucketView({ tab }: { tab: BucketTab }) {
     }
   }, [view, read, tab.id, sessionId])
 
-  const rows = useMemo(() => (view ? rowsOf(view) : []), [view])
+  const rows = useMemo(() => sortRows(view ? rowsOf(view) : [], sort), [view, sort])
+
+  /**
+   * **A page that arrives with folders in it lets go of what was ticked.** Folders come first, so
+   * such a page slides every object row down — and a tick that stayed where it was would go on being
+   * a tick at an index that now names a different object. An index is not an identity, and a delete
+   * aimed by one is the accident this feature confirms against everywhere else.
+   */
+  const folders = view?.page?.folders ?? 0
+  useEffect(() => setSelection(null), [folders, sort])
+
+  /**
+   * **The listing reads itself onward.** One page is a thousand *keys* and a folder counts as one of
+   * them, so which prefixes a reader can see is decided by what sorts before them: a root holding
+   * four thousand loose objects answers its first page without ever reaching the folders below them
+   * in key order. That is a fact about S3 and not about this app — a service will not list prefixes
+   * on their own — so the only honest answer is to keep reading.
+   *
+   * It stops at `AUTO_ROWS`, and past that the scroll carries it on. The bound is what keeps a root
+   * of forty million objects from being read because somebody opened it: a listing this app went on
+   * fetching unattended is the unbounded read [decisions.md](../../../../docs/decisions.md) refuses
+   * everywhere else.
+   */
+  useEffect(() => {
+    if (!view || view.result !== null || view.loading) return
+    if ((view.page?.next ?? '') === '' || rows.length >= AUTO_ROWS) return
+
+    void more(tab.id, sessionId)
+  }, [view, rows.length, more, tab.id, sessionId])
 
   /**
    * The page grouped into the tree its keys spell, and `null` where the rows are one folder's. It is
@@ -201,6 +249,9 @@ export function BucketView({ tab }: { tab: BucketTab }) {
   }
   if (view === null) return <Loading label="Opening the bucket…" />
 
+  // A read that nobody pressed a button for still has to be able to report a failure: `more` runs
+  // off a scroll, so the store's own error is shown beside the ones an action threw.
+  const shown = failure ?? view.error
   const searched = view.result !== null
   const scanned = searched
     ? `${view.result?.scanned.toLocaleString() ?? 0} keys read${view.result?.whole ? '' : ', and more to come'}`
@@ -301,6 +352,14 @@ export function BucketView({ tab }: { tab: BucketTab }) {
                 result={grid}
                 selection={selection}
                 onSelectionChange={showSelected}
+                // A header orders what has been read — see `sortRows` for why it is the rows and not
+                // the cells that are put in order.
+                sort={sort}
+                onSortChange={setSort}
+                // Reaching the bottom is what asks for the page after this one. A **search's** answer
+                // is not paged at all — it is a bounded read of the bucket and says so in the footer
+                // — so nothing is asked for while one is on screen.
+                onReachEnd={searched ? undefined : () => act(() => more(tab.id, sessionId))}
                 onActivateRow={(row) => {
                   const held = rowAt(row)
                   if (held) on.open(held)
@@ -341,7 +400,7 @@ export function BucketView({ tab }: { tab: BucketTab }) {
         </Split>
       </div>
 
-      {failure !== null ? <ErrorStrip error={failure} /> : null}
+      {shown !== null ? <ErrorStrip error={shown} /> : null}
 
       <GridFooter
         editable={false}
@@ -349,32 +408,20 @@ export function BucketView({ tab }: { tab: BucketTab }) {
         onRefresh={() => act(() => read(tab.id, sessionId))}
       >
         <span className="flex items-center gap-3">
+          {/* What has been read so far, and never a page number: "page 3 of 40" would mean knowing
+              how many objects there are, which is a read of the whole bucket. Where more is coming
+              the count says so, so a total that climbs as the reader scrolls is expected rather than
+              a number that keeps being wrong. */}
           <span>
-            {summary(view.page?.folders ?? 0, rows.length, view.page?.bytes ?? 0, searched)}
+            {summary(
+              view.page?.folders ?? 0,
+              rows.length,
+              view.page?.bytes ?? 0,
+              searched,
+              (view.page?.next ?? '') !== '',
+              rows.length >= AUTO_ROWS,
+            )}
           </span>
-
-          {/* A page is forward only, so these are a stack and a token — never a page number. Saying
-              "page 3 of 40" would mean knowing how many objects there are, which is a read of the
-              whole bucket. */}
-          {!searched ? (
-            <span className="flex items-center gap-0.5">
-              <IconButton
-                label="Previous page"
-                icon={<ChevronLeft size={13} />}
-                disabled={view.tokens.length === 0}
-                onClick={() => act(() => back(tab.id, sessionId))}
-              />
-              <span className="min-w-8 text-center font-mono text-2xs text-faint tabular-nums">
-                {view.tokens.length + 1}
-              </span>
-              <IconButton
-                label="Next page"
-                icon={<ChevronRight size={13} />}
-                disabled={(view.page?.next ?? '') === ''}
-                onClick={() => act(() => next(tab.id, sessionId))}
-              />
-            </span>
-          ) : null}
 
           {searched && view.result?.more === true ? (
             <Button variant="subtle" onClick={() => act(() => runSearch(tab.id, sessionId))}>
@@ -436,7 +483,6 @@ const EMPTY_VIEW = {
   bucket: '',
   prefix: '',
   flat: false,
-  tokens: [],
   page: null,
   loading: false,
   search: { text: '', mode: 'prefix', caseInsensitive: false, minSize: 0, maxSize: 0, since: '', until: '' },
@@ -462,11 +508,26 @@ const NO_RULES = {
 }
 
 /**
- * What the footer counts. A folder's own total is deliberately **this page's** and says so: a bucket
- * has no size a listing knows, and a number that changed every time the reader turned a page would
- * be worse than none.
+ * How far the listing reads on its own before it waits to be scrolled. Fifty pages is a few seconds
+ * against a service and about ten megabytes of XML — far more than any real folder needs to have
+ * shown every prefix it holds, and short of the read nobody asked for.
  */
-function summary(folders: number, rows: number, bytes: number, searched: boolean): string {
+const AUTO_ROWS = 50_000
+
+/**
+ * What the footer counts: **what has been read**, which with a listing that appends is a number that
+ * climbs. A bucket has no size a listing knows, so the tail is the honest half — without it a total
+ * that keeps growing would read as a total that keeps being wrong. It says which of the two is
+ * happening, because they are different sentences: one is working, the other is waiting.
+ */
+function summary(
+  folders: number,
+  rows: number,
+  bytes: number,
+  searched: boolean,
+  more: boolean,
+  waiting: boolean,
+): string {
   if (searched) return `${rows.toLocaleString()} matches`
 
   const objects = rows - folders
@@ -474,5 +535,7 @@ function summary(folders: number, rows: number, bytes: number, searched: boolean
   if (folders > 0) parts.push(`${folders} ${folders === 1 ? 'folder' : 'folders'}`)
   parts.push(`${objects.toLocaleString()} ${objects === 1 ? 'object' : 'objects'}`)
   if (bytes > 0) parts.push(sizeText(bytes))
-  return parts.join(' · ')
+
+  const tail = !more ? '' : waiting ? ' · more as you scroll' : ' · still reading'
+  return parts.join(' · ') + tail
 }

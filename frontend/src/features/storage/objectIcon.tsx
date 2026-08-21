@@ -28,6 +28,10 @@ import { cn } from '@/lib/cn'
  * folder's and an object's — because `--kind-*` is one token per kind of thing the app holds, and
  * inventing a token per file extension would be inventing a fifteenth kind of thing.
  *
+ * The two are a **hue apart** rather than two shades of one: a folder is gold and every object glyph
+ * is blue, so which rows are places and which are things is answered by the colour alone, at the
+ * distance a page is skimmed from and before a single name is read.
+ *
  * A **folder** is the one row here that is not an object at all: it stands for everything under it,
  * so it is drawn as the folder it is and never as the first file inside it.
  */

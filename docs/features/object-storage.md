@@ -100,8 +100,16 @@ on every service there is — which is what a bucket has instead of a catalogue.
 | `ETag` | the service's tag for the bytes, which is [not always a checksum](object-panel.md#the-etag-is-not-always-a-checksum) |
 
 **Folders come first**, which is what every file manager does and what a reader walking a path is
-looking for. The path above the grid is a row of buttons, so walking back out of six folders is one
-press.
+looking for. It holds in **Flatten** too, where a folder is a prefix the keys spell rather than one
+the service named: branches come before leaves at every level of the tree.
+
+**Any column orders the page**, from the header menu every other grid's sort is on — biggest object
+first, newest first, all the `.zip`s together. Two things about it are worth stating rather than
+discovering. Folders stay **first** whichever key is running: an order is something a reader wants of
+the objects, and a listing that put a folder between two spreadsheets because its name sorts there
+would have stopped being a place to walk through. And what is ordered is **what has been read** —
+a listing is forward only, so sorting the whole of a folder would mean reading the whole of it, and
+rows arriving afterwards are sorted in as they land.
 
 **Every row carries a glyph, and it is drawn by shape rather than by colour.** A folder is a folder;
 an object is what its name says it is — a picture, a spreadsheet, a page of prose, something packed,
@@ -114,6 +122,20 @@ kind of thing the app holds, so a token per file extension would be inventing a 
 thing — and a listing knows the *name* and nothing else about what is inside, so anything
 unrecognised is a plain sheet rather than a guess.
 
+The two are a **hue apart** rather than two shades of one — a folder is gold, every object glyph is
+blue — so which rows are places and which are things is answered by the colour alone, at the distance
+a page is skimmed from. It is the one place in the app a container is not drawn as its contents
+cooled a step: the folder is what a reader walking a path is aiming at, so it is the louder of the
+two.
+
+**The path is typed as well as pressed.** It is a row of buttons, so walking back out of six folders
+is one press — and the toggle at its end turns it into a box that takes a whole path, `templateFiles/
+user/112`, which is what a reader who already knows theirs would otherwise have to walk down to a
+folder and a listing at a time. **Enter** is the only thing that moves; Escape and the toggle put the
+crumbs back. Typing one is not a search: a prefix is where a listing *starts*, so the reader lands
+there whether or not anything is under it — an empty folder and a folder that was never there are
+the same answer from a service.
+
 **One click tells you about the row; a double-click acts on it.** A press puts the object in
 [the panel below](object-panel.md) — a bucket's rows are things rather than values, so
 "tell me about this one" is what a press means here, which is the arrangement a [key
@@ -124,20 +146,48 @@ describe.
 **A right-click offers what the toolbar does**, built from the same action set — so a button and a
 menu item cannot come to mean different things, which matters most for the one that deletes. It is a
 short menu on purpose: the built-in one is written for a table's rows, and there is no NULL to set on
-an object, no UUID worth minting into one, no condition to add and no sort worth offering over a
-page cut from a service's own order. What is left is what a reader does — open it, bring it down, put
+an object, no UUID worth minting into one and no condition to add. What is left is what a reader does — open it, bring it down, put
 one up, copy a link, rename it, delete it — and a delete of a **folder** says so in the item itself,
 because a folder stands for everything under it.
 
-**A page is forward only.** A continuation token is what a service gives instead of an offset, so the
-footer has a Back and a Next and a number that is only how many pages have been read — never "page 3
-of 40", which would mean knowing how many objects there are, which is a read of the whole bucket.
-The footer's totals are **this page's** and say so, for the same reason.
+**A page is forward only, and the reader never sees one.** A continuation token is what a service
+gives instead of an offset — there is nothing to go back to and nothing to number — so the rows are
+**appended** and nothing is pressed. There is no pager: "page 3 of 40" would mean knowing how many
+objects there are, which is a read of the whole bucket.
+
+**The pages read themselves onward**, rather than waiting for a scroll, and the reason is a fact
+about S3 rather than a preference. A service will not list a folder's *prefixes* on their own:
+`CommonPrefixes` and the objects come back interleaved in one key order and count against one
+thousand-key page. So a bucket root holding a few thousand loose objects can spend its whole first
+page before reaching the folders that sort after them — a folder that is plainly there in another
+client is simply on page five. Waiting for a scroll would hide it behind four thousand rows of
+spreadsheet.
+
+It stops at **fifty thousand rows** and the scroll carries it on from there, which is where the `All`
+that is not here would have been: fifty pages is a few seconds and about ten megabytes of listing,
+far more than any real folder needs to have shown every prefix it holds, and short of reading forty
+million objects because somebody opened a bucket.
+
+Two consequences the footer states rather than hides. Its totals are **what has been read so far**,
+which is a number that climbs, and while the service has more to give it says which of the two
+things is happening — `still reading` under its own steam, or `more as you scroll` once the bound is
+reached. They are different sentences, and a total that grew without saying why would read as a
+total that keeps being wrong. And the folders of a later page are **merged into the folders already
+on screen** rather than appended under the objects: a service answers a listing in one order, so
+folder-first is re-established each time a page lands, each half keeping the order the service
+answered in.
+
+Because that slides every object row down, **a page that arrives with folders in it lets go of what
+was ticked**. A tick is an index and an index is not an identity: left where it was, it would go on
+being a tick on a row that now names a different object, and the one action it is most often the
+aim of is the delete.
 
 **Flatten** asks the service for no delimiter: every key under the folder, however deep, and no
 folders at all. The keys are then grouped on the slash into an
 [outlined column](../grid.md) — which is `keyRows`, the same flattener a key space's colons go
-through, because a bucket and a key space are both one flat namespace whose names are paths.
+through, because a bucket and a key space are both one flat namespace whose names are paths — and
+that flattener puts its **branches before its leaves**, so the folders a page spells stand above the
+objects sitting loose beside them, exactly as they do in an unflattened one.
 
 ## The panel under the grid
 

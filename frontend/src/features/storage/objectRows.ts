@@ -1,6 +1,6 @@
 import type { ObjectRow } from '@/bridge/objects'
 import { keyRows, type KeyRow } from '@/features/table/keyTree'
-import type { Cell, GridData, ResultColumn } from '@/features/results/resultSet'
+import { sortedOrder, type Cell, type GridData, type ResultColumn, type SortKey } from '@/features/results/resultSet'
 
 /**
  * A bucket's page as the grid draws it. The columns are **not read from anywhere and not inferred
@@ -65,6 +65,33 @@ function cellsOf(row: ObjectRow): Cell[] {
     row.storageClass,
     row.etag,
   ]
+}
+
+/**
+ * The page in the order a header asked for, and **folders still first**: an order is what a reader
+ * wants of the objects, and a folder is not one of them — a listing that put a folder between two
+ * spreadsheets because its name sorts there would have stopped being a place to walk through.
+ *
+ * It sorts the `ObjectRow`s and not the grid's cells, because every index in this feature — the row
+ * a menu was raised on, the rows that are ticked, the object the panel is open on — counts against
+ * that list. The comparison itself is the grid's own `sortedOrder`, so `Size` sorts as a number here
+ * for the same reason it does everywhere else, and no second comparator can drift from it.
+ *
+ * What it orders is **what has been read**, which is the only thing it could: a listing is forward
+ * only, so a sort of the whole bucket would be a read of the whole bucket. Rows appended afterwards
+ * are sorted in as they land.
+ */
+export function sortRows(
+  rows: readonly ObjectRow[],
+  sort: readonly SortKey[],
+): readonly ObjectRow[] {
+  if (sort.length === 0) return rows
+
+  const ordered = sortedOrder(rows.map(cellsOf), COLUMNS, sort).flatMap((at) => {
+    const row = rows[at]
+    return row ? [row] : []
+  })
+  return [...ordered.filter((row) => row.folder), ...ordered.filter((row) => !row.folder)]
 }
 
 /**
