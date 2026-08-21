@@ -24,7 +24,7 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:            "vibe-db",
+		Title:            "Vibe DB",
 		Width:            1280,
 		Height:           820,
 		MinWidth:         900,

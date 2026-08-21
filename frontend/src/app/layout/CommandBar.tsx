@@ -92,7 +92,7 @@ export function CommandBar({
           <span className="grid h-5 w-5 shrink-0 place-items-center rounded-md bg-accent text-on-accent">
             <Database size={12} strokeWidth={2.5} />
           </span>
-          <span className="text-sm font-semibold tracking-tight text-fg">vibe-db</span>
+          <span className="text-sm font-semibold tracking-tight text-fg">Vibe DB</span>
         </span>
 
         <span className="mx-1 h-4 w-px bg-line" />

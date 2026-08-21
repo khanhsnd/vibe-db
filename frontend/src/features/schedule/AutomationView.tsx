@@ -164,7 +164,7 @@ export function AutomationView() {
 
         {/* The one thing about a schedule a reader has to know, said where they cannot miss it. */}
         <span className="ml-auto pr-1 text-2xs text-faint">
-          Jobs fire only while vibe-db is running
+          Jobs fire only while Vibe DB is running
         </span>
       </div>
 

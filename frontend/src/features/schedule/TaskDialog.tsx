@@ -231,7 +231,7 @@ function GeneralTab({
           onChange={(event) => onChange({ catchUp: event.target.checked })}
         />
         <p className="text-xs text-faint">
-          A job fires only while vibe-db is open — nothing is installed on this machine and no
+          A job fires only while Vibe DB is open — nothing is installed on this machine and no
           service is left behind. Ticked, a job whose moment went by while the app was shut runs the
           next time it opens; left clear, it waits for its next moment.
         </p>
