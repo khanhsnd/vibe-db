@@ -366,6 +366,24 @@ driver, read from a second scalar question beside the list (`CONNECTION_ID()`, `
 `@@SPID`, `CLIENT ID`, `whatsmyuri`), and it says *one of ours* rather than the only one: a session
 holds a pool. See [features/monitor.md](features/monitor.md).
 
+**A chart is that same server read a fifth way.** `ServerMetrics` is a read of its own rather than a
+filter over the status, because on three of these engines the numbers are not in one catalogue —
+PostgreSQL keeps its sessions in `pg_stat_activity` and its counters in `pg_stat_database`, SQL Server
+keeps its bytes in `dm_io_virtual_file_stats` — and it is **one** read because a session count from
+one moment drawn beside a rate from another would be two servers on one screen.
+
+What is fixed is the **four panels** (`domain.MetricPanel`: sessions, traffic, queries, throughput)
+and what is the engine's own is every series inside them, which is `ProcessList`'s arrangement and is
+here for a sharper reason: MySQL counts bytes on its own sockets and PostgreSQL counts pages off the
+disk, so a vocabulary insisting the six were one number would be this app inventing a fact. What a
+series is *called* is the adapter's, exactly as a column heading is, and it is what says which of the
+two a traffic chart is showing. Whether a number has been adding up is the driver's to say as well
+(`domain.MetricKind`) — a gauge and a counter sit side by side in one status list — and the frontend
+turns a counter into a rate by dividing by the interval between two readings, never by a clock of its
+own, which is why the moment of a read is stamped where the read happened. A counter this server's
+version has not got is **left out** rather than sent as a zero: a flat line and a line the server will
+not draw are opposite answers. See [features/metrics.md](features/metrics.md).
+
 ## What a server already ran slowly
 
 `driver.Profiler` is the fifth half of a session: the statements a server recorded as slow, how that

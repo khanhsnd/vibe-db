@@ -112,6 +112,11 @@ Four of those blanks are worth the sentence:
   *server* runs, writing where the server can see; Oracle's Data Pump runs inside the instance. And
   a backup here is a file of *statements*, which a document store's commands are not — but its
   vendor ships mongodump, which carries the BSON itself. See [tools.md](tools.md).
+- **A traffic chart is not bytes on the wire on two of them.** PostgreSQL counts nothing about its
+  own sockets and SQL Server counts packets rather than bytes, so what each honestly has is the
+  traffic it moved to *answer* — pages off the disk, bytes read from and written to its own files.
+  The panel title is the question and the series label is the answer, which is why neither of those
+  two draws a line called `Sent to clients`. See [metrics.md](metrics.md#what-each-engine-counts).
 - **Two of the monitoring rows are not the same blank.** SQL Server, Oracle and Redis can end a
   connection and cannot stop one statement inside it; MongoDB is the other way round, a client there
   disconnecting itself. Which of the two an engine has, and why, is

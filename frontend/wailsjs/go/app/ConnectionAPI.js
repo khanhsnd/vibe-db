@@ -254,6 +254,10 @@ export function LoadRoutineParams(arg1, arg2, arg3) {
   return window['go']['app']['ConnectionAPI']['LoadRoutineParams'](arg1, arg2, arg3);
 }
 
+export function LoadServerMetrics(arg1) {
+  return window['go']['app']['ConnectionAPI']['LoadServerMetrics'](arg1);
+}
+
 export function LoadServerStatus(arg1) {
   return window['go']['app']['ConnectionAPI']['LoadServerStatus'](arg1);
 }

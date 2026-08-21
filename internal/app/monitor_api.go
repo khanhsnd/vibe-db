@@ -1,10 +1,12 @@
 package app
 
 import (
+	"time"
+
 	"github.com/khanhsnd/vibe-db/internal/domain"
 )
 
-// What a server is doing and what it was started with, as five bound methods. Nothing here knows how
+// What a server is doing and what it was started with, as six bound methods. Nothing here knows how
 // an engine spells a kill or where it keeps its counters: the statements are the driver's, the hazard
 // is a `domain` rule, and this layer's whole job is to find the session, refuse an action that arrived
 // as something this app does not do, and wrap what comes back.
@@ -121,4 +123,26 @@ func (a *ConnectionAPI) LoadServerVariables(sessionID string) (ServerFacts, erro
 		return ServerFacts{}, wrapError(err)
 	}
 	return toServerFactsDTO(facts), nil
+}
+
+// LoadServerMetrics is the handful of numbers behind those lists that are worth watching move, in the
+// four panels a chart is drawn per — see docs/features/metrics.md.
+//
+// It is one bound method rather than four because it is one read: a session count from one moment
+// drawn beside a rate from another would be two servers on one screen. The moment it came back is
+// stamped on the answer, that being what a counter is divided by to become a rate.
+func (a *ConnectionAPI) LoadServerMetrics(sessionID string) (ServerMetrics, error) {
+	monitor, _, err := a.sessions.Monitor(sessionID)
+	if err != nil {
+		return ServerMetrics{}, wrapError(err)
+	}
+
+	ctx, cancel := a.withTimeout(queryTimeout)
+	defer cancel()
+
+	metrics, err := monitor.ServerMetrics(ctx)
+	if err != nil {
+		return ServerMetrics{}, wrapError(err)
+	}
+	return toServerMetricsDTO(metrics, time.Now()), nil
 }

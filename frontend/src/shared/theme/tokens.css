@@ -103,6 +103,23 @@
   --conn-purple: #a371f7;
   --conn-pink: #f778ba;
 
+  /** What a line on a chart is drawn in. It is a family of its own rather than the connection
+      colours reused, because these are read **against each other** on one pair of axes: six hues
+      spaced far enough apart that two lines crossing stay two lines, and every one of them legible
+      on the panel a chart sits on. The order is the order they are handed out in, so a panel's
+      first series is always the first colour and a chart redrawn after a server dropped a counter
+      does not recolour the lines above it. */
+  --chart-1: #4c8dff;
+  --chart-2: #3fb950;
+  --chart-3: #d29922;
+  --chart-4: #a371f7;
+  --chart-5: #2dc3d4;
+  --chart-6: #f778ba;
+  /** The grid behind the lines, and the crosshair a pointer draws. Both are washes rather than
+      solid lines: what is being read is the data on top of them. */
+  --chart-grid: #ffffff12;
+  --chart-crosshair: #ffffff33;
+
   /** How much of that colour the rows under a connection are washed with: light enough to read a
       name through, strong enough to tell two connections apart without reading either. */
   --conn-tint: 15%;
@@ -249,6 +266,15 @@
   --conn-purple: #8250df;
   --conn-pink: #bf3989;
 
+  --chart-1: #2563eb;
+  --chart-2: #1a7f37;
+  --chart-3: #9a6700;
+  --chart-4: #8250df;
+  --chart-5: #0f7c8a;
+  --chart-6: #bf3989;
+  --chart-grid: #0000000f;
+  --chart-crosshair: #00000033;
+
   /** Lighter than the dark theme's: the same wash over white reads as a stronger colour. */
   --conn-tint: 11%;
 
@@ -348,6 +374,15 @@
   --color-env-staging: var(--env-staging);
   --color-env-production: var(--env-production);
   --color-env-none: var(--env-none);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-crosshair: var(--chart-crosshair);
 
   --color-kind-database: var(--kind-database);
   --color-kind-schema: var(--kind-schema);

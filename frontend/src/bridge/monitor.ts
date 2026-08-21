@@ -104,3 +104,52 @@ export function loadServerVariables(sessionId: string): Promise<ServerFacts> {
  * satisfy it — the same boundary cast every other module here makes, and for the same reason.
  */
 const wire = (kills: ProcessKill[]) => kills as unknown as app.ProcessKillInput[]
+
+/**
+ * What a panel a metric belongs to is called. It is a closed list because the frontend draws one
+ * chart per entry: the panels are fixed and the **series inside them are the engine's own**, which is
+ * the arrangement a process list has — no two of these engines count the same things, and a
+ * vocabulary insisting they did would be this app inventing a fact.
+ */
+export type MetricPanel = 'sessions' | 'traffic' | 'queries' | 'throughput'
+
+/**
+ * How a number is read, and the one fact about a metric nothing here could derive. A `gauge` is true
+ * at the moment it was read; a `counter` has only been adding up since the server started, so what a
+ * chart draws for one is the difference between two samples over the time between them.
+ */
+export type MetricKind = 'gauge' | 'counter'
+
+/** What a number is counted in, which is the whole of how it is written out. */
+export type MetricUnit = 'count' | 'bytes'
+
+/**
+ * One number a live server keeps about itself. `key` is what the *server* calls it and is never
+ * drawn — it is what keeps one line the same line across two samples, so a metric that comes and goes
+ * does not become a second series — and `label` is what a reader sees, written by the adapter for the
+ * reason a column heading is.
+ */
+export interface ServerMetric {
+  panel: MetricPanel
+  key: string
+  label: string
+  kind: MetricKind
+  unit: MetricUnit
+  value: number
+}
+
+/**
+ * One read of every number the four charts are drawn from, taken at one moment.
+ *
+ * `readAt` is stamped on the Go side, at the moment the answer came back, and is what a counter is
+ * divided by to become a rate: a clock read here would fold the bridge's own latency into whatever
+ * the server was doing.
+ */
+export interface ServerMetrics {
+  metrics: ServerMetric[]
+  readAt: number
+}
+
+export function loadServerMetrics(sessionId: string): Promise<ServerMetrics> {
+  return call(() => api.LoadServerMetrics(sessionId)) as Promise<ServerMetrics>
+}

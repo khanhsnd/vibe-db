@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import {
   Activity,
+  ChartSpline,
   CirclePause,
   Database,
   FlaskConical,
@@ -56,7 +57,10 @@ import { useSchemaStore } from '@/stores/schema'
 import { useTabsStore, type MonitorPane, type MonitorTab } from '@/stores/tabs'
 
 import { arrange } from './arrange'
+import { HISTORY, WINDOW, type Reading } from './metrics'
+import { MetricsPane } from './MetricsPane'
 import { ProfileDialog } from './ProfileDialog'
+import { useMetricHistory } from './useMetricHistory'
 import { useServerReport } from './useServerReport'
 
 /** How often the pane may re-read itself, in seconds. `0` is off, and is what a pick holds it at. */
@@ -71,9 +75,15 @@ const SLOW_ROWS = 200
 
 /**
  * What each pane is called and what it wears, in the order the toolbar draws them: what the server is
- * *doing*, what it has already *done* slowly, what it has *counted*, and what it was *set to*.
+ * *doing now*, what it has been doing *over the last few minutes*, what it has already *done* slowly,
+ * what it has *counted*, and what it was *set to*.
+ *
+ * Charts come first because it is the one that answers "is this server all right" without the reader
+ * knowing what to look for. The four beside it are lists, and a list is read by somebody who already
+ * has a question.
  */
 const PANES: ReadonlyArray<{ id: MonitorPane; label: string; icon: LucideIcon }> = [
+  { id: 'charts', label: 'Charts', icon: ChartSpline },
   { id: 'processes', label: 'Processes', icon: Activity },
   { id: 'slow', label: 'Slow Queries', icon: TimerReset },
   { id: 'status', label: 'Status', icon: Gauge },
@@ -81,9 +91,10 @@ const PANES: ReadonlyArray<{ id: MonitorPane; label: string; icon: LucideIcon }>
 ]
 
 /**
- * What a server is doing and what it was started with — what the `Server Monitor` node opens. Three
- * panes over one `ResultGrid`, in whatever columns that engine's own catalogue keeps, like every other
- * list in this app.
+ * What a server is doing and what it was started with — what the `Server Monitor` node opens. Four
+ * panes over one `ResultGrid`, in whatever columns that engine's own catalogue keeps like every other
+ * list in this app, and one that is not a list at all: the [charts](./MetricsPane.tsx), which are the
+ * same servers read for what is *moving* rather than for what is there.
  *
  * There is **one of these per connection**, and asking for a second pane moves this tab rather than
  * opening another: a process belongs to the server, and the server is what the tab is.
@@ -125,12 +136,18 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
     [database],
   )
 
+  const charts = tab.pane === 'charts'
+
   const read = useCallback((): Promise<Report> => {
+    // The charts pane is not a list, so there is nothing here for it to ask. It reads its own numbers
+    // on its own clock — see `useMetricHistory` — and leaving this one to fall through to the process
+    // list would have a busy server answering a question nobody on screen was looking at.
+    if (charts) return Promise.resolve(NO_REPORT)
     if (tab.pane === 'status') return loadServerStatus(sessionId)
     if (tab.pane === 'variables') return loadServerVariables(sessionId)
     if (tab.pane === 'slow') return loadSlowQueries(sessionId, namespace, SLOW_ROWS)
     return listProcesses(sessionId)
-  }, [sessionId, tab.pane, namespace])
+  }, [sessionId, tab.pane, namespace, charts])
 
   // The clock is **held while anything is picked**. A list that moved under a pick would leave the
   // reader's rows pointing at somebody else's process, and the next press would end that one — which
@@ -138,12 +155,18 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
   const picking = selectedRows(selection).length > 0
   const { data, loading, error, refresh } = useServerReport(
     read,
-    picking ? 0 : tab.every,
+    picking || charts ? 0 : tab.every,
     // What is being asked, which is what the pane re-reads itself on. The database is part of it
     // because on two engines the recording belongs to one: switching either is a different question,
     // and a reader who asked it should see the answer rather than have to press Refresh.
     `${tab.pane}:${database}`,
   )
+
+  // The readings behind the charts. They are kept in a store keyed by this tab rather than in any
+  // component, because only the tab in front is mounted: minutes of collected history are the one
+  // thing on this tab that is worse for being thrown away and read again, and looking at a query tab
+  // would otherwise do it. The clock is still this view's — see `useMetricHistory`.
+  const metrics = useMetricHistory(tab.id, sessionId, tab.every, charts)
 
   const shown = useMemo(
     () =>
@@ -355,7 +378,11 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
           </MenuButton>
         ) : null}
 
-        <Button variant="subtle" icon={ICON.refresh} onClick={refresh}>
+        <Button
+          variant="subtle"
+          icon={ICON.refresh}
+          onClick={charts ? metrics.refresh : refresh}
+        >
           Refresh
         </Button>
 
@@ -363,17 +390,21 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
             itself, because this surface has a toolbar of its own and one table must never carry two
             strips — see docs/grid.md. The count on the first is what says the grid is still narrowed
             after the panel is closed. */}
-        <FilterSortButton
-          shown={filterShown}
-          onToggle={() => setFilterShown(!filterShown)}
-          count={countConditions(criteria) + sort.length}
-        />
+        {charts ? null : (
+          <>
+            <FilterSortButton
+              shown={filterShown}
+              onToggle={() => setFilterShown(!filterShown)}
+              count={countConditions(criteria) + sort.length}
+            />
 
-        <CellEditorButton
-          shown={valueShown}
-          onToggle={() => setValueShown(!valueShown)}
-          label="Value"
-        />
+            <CellEditorButton
+              shown={valueShown}
+              onToggle={() => setValueShown(!valueShown)}
+              label="Value"
+            />
+          </>
+        )}
 
         {/* How often the pane asks again. It is a menu rather than a row of buttons because it is set
             once and then read as a label — and the label is what says the pane is live. */}
@@ -394,128 +425,146 @@ export function MonitorView({ tab, sessionId }: { tab: MonitorTab; sessionId: st
           {/* Why the pane has stopped moving, said where the reader is looking. It is the one thing
               here that gives way on a narrow window: the box beside it is what the reader is
               reaching for, and this sentence is an explanation rather than a control. */}
-          {picking && tab.every > 0 ? (
+          {picking && !charts && tab.every > 0 ? (
             <span className="hidden text-2xs text-faint xl:inline">Held while a row is picked</span>
           ) : null}
 
-          <div className="flex h-6 shrink-0 items-center gap-1.5 rounded-md border border-line-strong bg-elevated px-2">
-            <Search size={12} className="shrink-0 text-faint" />
-            <input
-              value={find}
-              onChange={(event) => {
-                setFind(event.target.value)
-                setSelection(null)
-              }}
-              placeholder="Find"
-              aria-label="Narrow the list"
-              className="w-24 bg-transparent text-xs text-fg outline-none placeholder:text-faint lg:w-40"
-            />
-          </div>
+          {/* The box narrows a **list**, and the charts pane has none: what would it hide, a line?
+              The panels are already the four questions, so there is nothing here to narrow to. */}
+          {charts ? null : (
+            <div className="flex h-6 shrink-0 items-center gap-1.5 rounded-md border border-line-strong bg-elevated px-2">
+              <Search size={12} className="shrink-0 text-faint" />
+              <input
+                value={find}
+                onChange={(event) => {
+                  setFind(event.target.value)
+                  setSelection(null)
+                }}
+                placeholder="Find"
+                aria-label="Narrow the list"
+                className="w-24 bg-transparent text-xs text-fg outline-none placeholder:text-faint lg:w-40"
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* The rows, and under them the value of whichever cell is focused. The panel is the reason
-          this is a `Split` at all: every pane here holds cells far longer than a column is wide — a
-          statement, a `currentOp` document, a `CLIENT LIST` line — and reading one used to mean
-          copying it out of the app. It is `CellEditor` in its read-only shape, the same panel a
-          table view and a query result put under their own grids. */}
-      <Split
-        id="vibe-db.monitor.rows"
-        orientation="vertical"
-        panelIds={panels}
-        className="min-h-0 flex-1"
-      >
-        <SplitPanel id="rows" minSize="25%">
-          {grid === null ? (
-            error ? (
-              <Empty title={error.message} hint={error.detail} />
-            ) : (
-              <Loading label="Asking the server…" />
-            )
-          ) : grid.rows.length === 0 ? (
-            <Empty
-              title={emptyTitle(tab.pane, narrowed, info.processLabel)}
-              hint={narrowed ? 'Widen the box or the conditions to see the whole list.' : undefined}
-            />
-          ) : (
-            <ResultGrid
-              result={grid}
-              selection={selection}
-              onSelectionChange={setSelection}
-              onRefresh={refresh}
-              headStrip={false}
-              cellPanel={{ shown: valueShown, onToggle: () => setValueShown(!valueShown) }}
-              onEditInPanel={showInPanel}
-              // Both narrow **what is already in memory** — see `arrange`. There is no `suggest`,
-              // because offering the values a column holds would mean asking the server a second
-              // question about a list it has already answered with in full.
-              sort={sort}
-              onSortChange={(next) => {
-                setSort(next)
-                setSelection(null)
-              }}
-              filtering={{
-                criteria,
-                shown: filterShown,
-                onShownChange: setFilterShown,
-                onChange: (next) => {
-                  setCriteria(next)
-                  setSelection(null)
-                },
-              }}
-              // What a reader *does* with a recorded statement, pinned to the right edge where it
-              // stays reachable however wide the statement column runs. Only the slow list has one:
-              // the other three panes are watched rather than taken away from.
-              rowActions={
-                slow
-                  ? {
-                      label: 'Take',
-                      width: ROW_ACTIONS_WIDTH,
-                      render: (row) => <SlowRowActions statement={statementAt(shown.refs, row)} />,
-                    }
-                  : undefined
-              }
-            />
-          )}
-        </SplitPanel>
-
-        {valueOpen ? (
-          <>
-            <SplitHandle orientation="vertical" />
-
-            <SplitPanel
-              id="value"
-              defaultSize={EDITOR_HEIGHT}
-              minSize={EDITOR_MIN_HEIGHT}
-              maxSize="70%"
-            >
-              {focused === null ? (
-                <Empty title="No cell selected" hint="Click a cell in the grid to read its value." />
+      {charts ? (
+        <MetricsPane history={metrics.history} reading={metrics.reading} error={metrics.error} />
+      ) : (
+        <>
+          {/* The rows, and under them the value of whichever cell is focused. The panel is the reason
+              this is a `Split` at all: every pane here holds cells far longer than a column is wide — a
+              statement, a `currentOp` document, a `CLIENT LIST` line — and reading one used to mean
+              copying it out of the app. It is `CellEditor` in its read-only shape, the same panel a
+              table view and a query result put under their own grids. */}
+          <Split
+            id="vibe-db.monitor.rows"
+            orientation="vertical"
+            panelIds={panels}
+            className="min-h-0 flex-1"
+          >
+            <SplitPanel id="rows" minSize="25%">
+              {grid === null ? (
+                error ? (
+                  <Empty title={error.message} hint={error.detail} />
+                ) : (
+                  <Loading label="Asking the server…" />
+                )
+              ) : grid.rows.length === 0 ? (
+                <Empty
+                  title={emptyTitle(tab.pane, narrowed, info.processLabel)}
+                  hint={narrowed ? 'Widen the box or the conditions to see the whole list.' : undefined}
+                />
               ) : (
-                <CellEditor
-                  key={`${focused.ref.row}:${focused.ref.column}`}
-                  column={focused.column}
-                  value={focused.value}
-                  // Nothing on any of these four panes is written back: a process list, a slow log
-                  // and a server's own counters are all reads. The panel says so rather than taking
-                  // an edit it would then throw away.
-                  readOnly="This is what the server reported, and there is nothing here to write back to."
-                  busy={false}
-                  onApply={NO_APPLY}
+                <ResultGrid
+                  result={grid}
+                  selection={selection}
+                  onSelectionChange={setSelection}
+                  onRefresh={refresh}
+                  headStrip={false}
+                  cellPanel={{ shown: valueShown, onToggle: () => setValueShown(!valueShown) }}
+                  onEditInPanel={showInPanel}
+                  // Both narrow **what is already in memory** — see `arrange`. There is no `suggest`,
+                  // because offering the values a column holds would mean asking the server a second
+                  // question about a list it has already answered with in full.
+                  sort={sort}
+                  onSortChange={(next) => {
+                    setSort(next)
+                    setSelection(null)
+                  }}
+                  filtering={{
+                    criteria,
+                    shown: filterShown,
+                    onShownChange: setFilterShown,
+                    onChange: (next) => {
+                      setCriteria(next)
+                      setSelection(null)
+                    },
+                  }}
+                  // What a reader *does* with a recorded statement, pinned to the right edge where it
+                  // stays reachable however wide the statement column runs. Only the slow list has one:
+                  // the other three panes are watched rather than taken away from.
+                  rowActions={
+                    slow
+                      ? {
+                          label: 'Take',
+                          width: ROW_ACTIONS_WIDTH,
+                          render: (row) => <SlowRowActions statement={statementAt(shown.refs, row)} />,
+                        }
+                      : undefined
+                  }
                 />
               )}
             </SplitPanel>
-          </>
-        ) : null}
-      </Split>
 
-      {/* A failed re-read leaves the list already drawn where it is and says so under it, which is
-          what a table view does with the same failure — a monitor that blanked itself the moment a
-          server hiccoughed would be one nobody could watch. */}
-      {grid !== null && error !== null ? <ErrorStrip error={error} /> : null}
+            {valueOpen ? (
+              <>
+                <SplitHandle orientation="vertical" />
 
-      <GridFooter editable={false} busy={loading} onRefresh={refresh}>
-        <span>{footer(tab.pane, data, shown.rows.length, picked.length)}</span>
+                <SplitPanel
+                  id="value"
+                  defaultSize={EDITOR_HEIGHT}
+                  minSize={EDITOR_MIN_HEIGHT}
+                  maxSize="70%"
+                >
+                  {focused === null ? (
+                    <Empty title="No cell selected" hint="Click a cell in the grid to read its value." />
+                  ) : (
+                    <CellEditor
+                      key={`${focused.ref.row}:${focused.ref.column}`}
+                      column={focused.column}
+                      value={focused.value}
+                      // Nothing on any of these four panes is written back: a process list, a slow log
+                      // and a server's own counters are all reads. The panel says so rather than taking
+                      // an edit it would then throw away.
+                      readOnly="This is what the server reported, and there is nothing here to write back to."
+                      busy={false}
+                      onApply={NO_APPLY}
+                    />
+                  )}
+                </SplitPanel>
+              </>
+            ) : null}
+          </Split>
+
+          {/* A failed re-read leaves the list already drawn where it is and says so under it, which is
+              what a table view does with the same failure — a monitor that blanked itself the moment a
+              server hiccoughed would be one nobody could watch. */}
+          {grid !== null && error !== null ? <ErrorStrip error={error} /> : null}
+        </>
+      )}
+
+      <GridFooter
+        editable={false}
+        busy={charts ? metrics.reading : loading}
+        onRefresh={charts ? metrics.refresh : refresh}
+      >
+        <span>
+          {charts
+            ? watched(metrics.history, tab.every)
+            : footer(tab.pane, data, shown.rows.length, picked.length)}
+        </span>
       </GridFooter>
 
       {/* The switch, over the pane it is about. It reads the server itself when it opens and applies
@@ -622,6 +671,13 @@ function SlowRowActions({ statement }: { statement: SlowQueryRef | null }) {
 const EMPTY_DATABASES: readonly string[] = []
 
 /**
+ * What the list read answers with on the pane that has no list. It is a value rather than a `null`
+ * so the grid below is drawn as an *empty* answer and never as one still in flight — and it is held
+ * still because it is a dependency of the read.
+ */
+const NO_REPORT: Report = { columns: [], rows: [] }
+
+/**
  * The sentence a kill is answered for by. It carries the **statements**, because this app never asks a
  * reader to confirm something it has not shown them, and it says plainly when one of the picked rows
  * is this app's own connection — which is the reason that case is confirmed on a laptop at all.
@@ -656,11 +712,45 @@ function count(many: number, noun: string): string {
  */
 function emptyTitle(pane: MonitorPane, narrowed: boolean, label: string): string {
   if (narrowed) return 'Nothing matches'
+  // The charts pane draws no grid and so reaches none of this — it says its own kind of empty, one
+  // panel at a time, because a server that counts sessions and not bytes is empty in one place only.
+  if (pane === 'charts') return 'Nothing to show'
   if (pane === 'processes') return `No ${label.toLowerCase()}s to show`
   // "Nothing has run slowly" is a happy answer, and it is a different one from "this server is not
   // recording" — which the dialog says, having read the setting rather than the list.
   if (pane === 'slow') return 'Nothing slow has been recorded'
   return 'The server reported nothing'
+}
+
+/**
+ * What the charts pane says it is showing: how much of the window has been collected, and whether it
+ * is still collecting. It counts **readings** rather than minutes because that is the honest number —
+ * a pane opened five minutes ago with the clock off holds one — and it names the ceiling, so a reader
+ * watching a long stretch can see it is about to start losing the front of it.
+ *
+ * There are **two** ceilings and either will do, the readings having outlived the pane: a count, and
+ * the two hours past which the front is dropped however few of them there are. The second is read
+ * against the clock's own step, the front going when the *next* reading is more than that far past it.
+ */
+function watched(history: readonly Reading[], every: number): string {
+  if (history.length === 0) return ''
+
+  const from = history[0]?.readAt ?? 0
+  const to = history[history.length - 1]?.readAt ?? 0
+  const span = clock(from, to)
+
+  const full = history.length === HISTORY || to - from + every * 1000 >= WINDOW
+  const held = `${history.length} readings${full ? ' (the most it keeps)' : ''}`
+  return every === 0 ? `${held} · ${span} · not refreshing` : `${held} · ${span} · every ${every}s`
+}
+
+/** How long the readings kept so far cover, written the way a person says a stretch of time. */
+function clock(from: number, to: number): string {
+  const seconds = Math.max(0, Math.round((to - from) / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
 }
 
 function footer(

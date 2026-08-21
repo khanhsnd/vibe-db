@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
@@ -72,4 +73,56 @@ func (s *session) facts(ctx context.Context, query string) (driver.ServerFacts, 
 		return driver.ServerFacts{}, translateError(err)
 	}
 	return driver.ServerFacts{Columns: result.Columns, Rows: result.Rows}, nil
+}
+
+// mysqlMetrics is which of `SHOW GLOBAL STATUS`'s several hundred numbers the four charts are drawn
+// from, and what each is called on one. MySQL is the easiest of the six: every number here is in the
+// one list the Status pane already draws, so this read is that read with a table run over it.
+//
+// The throughput panel is `Innodb_rows_*` rather than `Com_select` and friends, and the difference is
+// the whole point of that panel: a `Com_select` is somebody *asking*, and a row read is what the
+// server actually moved to answer them. A server on another storage engine reports none of the four,
+// and the panel is empty rather than flat — see `driver.PickMetrics`.
+var mysqlMetrics = []driver.MetricSpec{
+	{Panel: domain.MetricSessions, Name: "Threads_connected", Label: "Connected",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "Threads_running", Label: "Running",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "Threads_cached", Label: "Cached",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricTraffic, Name: "Bytes_received", Label: "Received from clients",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+	{Panel: domain.MetricTraffic, Name: "Bytes_sent", Label: "Sent to clients",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+
+	{Panel: domain.MetricQueries, Name: "Questions", Label: "Statements",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "Slow_queries", Label: "Slow",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "Com_commit", Label: "Commits",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "Com_rollback", Label: "Rollbacks",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricThroughput, Name: "Innodb_rows_read", Label: "Rows read",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "Innodb_rows_inserted", Label: "Rows inserted",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "Innodb_rows_updated", Label: "Rows updated",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "Innodb_rows_deleted", Label: "Rows deleted",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+}
+
+// ServerMetrics is the four charts' numbers, all of them out of the one global status. It is asked
+// globally for the reason ServerStatus is: a session's own counters are one pooled connection's.
+func (s *session) ServerMetrics(ctx context.Context) (driver.ServerMetrics, error) {
+	facts, err := s.facts(ctx, "SHOW GLOBAL STATUS")
+	if err != nil {
+		return driver.ServerMetrics{}, err
+	}
+
+	pairs := driver.MetricPairs(facts.Columns, facts.Rows, "Variable_name", "Value")
+	return driver.ServerMetrics{Metrics: driver.PickMetrics(mysqlMetrics, pairs)}, nil
 }

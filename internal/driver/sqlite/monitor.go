@@ -43,3 +43,7 @@ func (*session) ServerStatus(context.Context) (driver.ServerFacts, error) {
 func (*session) ServerVariables(context.Context) (driver.ServerFacts, error) {
 	return driver.ServerFacts{}, domain.Unsupported(noServer)
 }
+
+func (*session) ServerMetrics(context.Context) (driver.ServerMetrics, error) {
+	return driver.ServerMetrics{}, domain.Unsupported(noServer)
+}

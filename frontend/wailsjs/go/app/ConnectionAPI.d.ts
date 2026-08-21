@@ -128,6 +128,8 @@ export function LoadProfileConfig(arg1:string,arg2:app.Namespace):Promise<app.Pr
 
 export function LoadRoutineParams(arg1:string,arg2:app.Namespace,arg3:app.SourceRef):Promise<Array<app.RoutineParam>>;
 
+export function LoadServerMetrics(arg1:string):Promise<app.ServerMetrics>;
+
 export function LoadServerStatus(arg1:string):Promise<app.ServerFacts>;
 
 export function LoadServerVariables(arg1:string):Promise<app.ServerFacts>;

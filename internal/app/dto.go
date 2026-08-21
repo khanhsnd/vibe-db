@@ -576,6 +576,32 @@ type ServerFacts struct {
 	Rows    [][]*string   `json:"rows"`
 }
 
+// ServerMetric is one number a live server keeps about itself, named the way that engine names it and
+// sorted into which of four questions a chart answers — see driver.Metric.
+//
+// `kind` is the one field the frontend cannot do without: a gauge is drawn as it stands and a counter
+// has only been adding up since the server started, so what is drawn for one is the difference
+// between two samples over the time between them.
+type ServerMetric struct {
+	Panel string  `json:"panel"`
+	Key   string  `json:"key"`
+	Label string  `json:"label"`
+	Kind  string  `json:"kind"`
+	Unit  string  `json:"unit"`
+	Value float64 `json:"value"`
+}
+
+// ServerMetrics is one read of every number the four charts are drawn from, taken at one moment.
+//
+// `readAt` is stamped **here** rather than on the frontend, and it is what a rate is divided by: the
+// interval between two samples is what turns a counter into a number per second, and a clock read
+// after the answer had crossed the bridge would fold this app's own latency into the server's rate.
+// It is milliseconds since the epoch, which is what a browser reads a time as.
+type ServerMetrics struct {
+	Metrics []ServerMetric `json:"metrics"`
+	ReadAt  int64          `json:"readAt"`
+}
+
 // SlowQueryRef is what one row of a slow list is taken away by. `runnable` is the recorded statement
 // written out as something that would run somewhere else — the engine's own doing, since entering a
 // database is spelled four ways across these engines — and `complete` says it would run as it stands,
@@ -1572,6 +1598,25 @@ func toServerFactsDTO(facts driver.ServerFacts) ServerFacts {
 		Columns: toColumnDTOs(facts.Columns),
 		Rows:    gridRows(facts.Rows),
 	}
+}
+
+// toServerMetricsDTO is the four charts' numbers on their way to the frontend, with the moment they
+// were read stamped on. The panels are put in their own order here rather than being trusted from an
+// adapter's table, so the charts are drawn in one pass down the list.
+func toServerMetricsDTO(metrics driver.ServerMetrics, readAt time.Time) ServerMetrics {
+	sorted := driver.SortMetrics(metrics.Metrics)
+	out := make([]ServerMetric, 0, len(sorted))
+	for _, metric := range sorted {
+		out = append(out, ServerMetric{
+			Panel: string(metric.Panel),
+			Key:   metric.Key,
+			Label: metric.Label,
+			Kind:  string(metric.Kind),
+			Unit:  string(metric.Unit),
+			Value: metric.Value,
+		})
+	}
+	return ServerMetrics{Metrics: out, ReadAt: readAt.UnixMilli()}
 }
 
 // processActions is every action a bound method will accept, and it is the same closed list an account

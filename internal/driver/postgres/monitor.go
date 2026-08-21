@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
@@ -104,4 +105,102 @@ func (s *session) facts(ctx context.Context, query string) (driver.ServerFacts, 
 		return driver.ServerFacts{}, translateError(err)
 	}
 	return driver.ServerFacts{Columns: result.Columns, Rows: result.Rows}, nil
+}
+
+// postgresMetrics is what the four charts are drawn from, named by the query below rather than by a
+// catalogue: this engine keeps its sessions in one view and its counters in another, and has no
+// `SHOW STATUS` to pick either out of.
+//
+// **The traffic panel is blocks and not bytes on the wire.** PostgreSQL counts nothing about its own
+// sockets, so what is honestly there is the traffic it moved to answer: pages off the disk, and pages
+// it already had. The labels say which, because a panel that called either of them "sent to clients"
+// would be this app inventing a number the server never kept.
+//
+// **There is no statement counter here either** without an extension, so the queries panel is what a
+// bare server does count — transactions, and the deadlocks it resolved. What ran *slowly* is the
+// [Slow Queries pane](../../../docs/features/profiler.md), which is where `pg_stat_statements` is read.
+var postgresMetrics = []driver.MetricSpec{
+	{Panel: domain.MetricSessions, Name: "active", Label: "Active",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "idle", Label: "Idle",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "idle_in_transaction", Label: "Idle in transaction",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "backends", Label: "Backends",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricTraffic, Name: "blks_read", Label: "Read from disk",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+	{Panel: domain.MetricTraffic, Name: "blks_hit", Label: "Read from cache",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+
+	{Panel: domain.MetricQueries, Name: "xact_commit", Label: "Commits",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "xact_rollback", Label: "Rollbacks",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "deadlocks", Label: "Deadlocks",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricThroughput, Name: "tup_returned", Label: "Rows returned",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "tup_fetched", Label: "Rows fetched",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "tup_inserted", Label: "Rows inserted",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "tup_updated", Label: "Rows updated",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "tup_deleted", Label: "Rows deleted",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+}
+
+// ServerMetrics is the four charts' numbers in **one** read. The sessions are counted in
+// `pg_stat_activity` and everything else is summed over `pg_stat_database`, and the two are one query
+// so that every point on every chart is the same instant — two reads would draw a session count from
+// one moment beside a rate from another.
+//
+// The sums go over the whole view rather than over this connection's database, because that is what
+// the panes beside this one already report: `pg_stat_activity` is the cluster's backends, and a chart
+// of one database's rows beside a count of every database's backends would be two servers on one
+// screen. A page is multiplied out by `block_size` rather than by 8192, this being a build-time
+// setting and the server the only one that knows it.
+func (s *session) ServerMetrics(ctx context.Context) (driver.ServerMetrics, error) {
+	const query = `
+		SELECT 'active' AS "Name", count(*)::float8 AS "Value"
+		  FROM pg_catalog.pg_stat_activity WHERE state = 'active'
+		UNION ALL SELECT 'idle', count(*)::float8
+		  FROM pg_catalog.pg_stat_activity WHERE state = 'idle'
+		UNION ALL SELECT 'idle_in_transaction', count(*)::float8
+		  FROM pg_catalog.pg_stat_activity WHERE state LIKE 'idle in transaction%'
+		UNION ALL SELECT 'backends', count(*)::float8
+		  FROM pg_catalog.pg_stat_activity
+		UNION ALL SELECT 'blks_read',
+		       coalesce(sum(blks_read), 0)::float8 * current_setting('block_size')::float8
+		  FROM pg_catalog.pg_stat_database
+		UNION ALL SELECT 'blks_hit',
+		       coalesce(sum(blks_hit), 0)::float8 * current_setting('block_size')::float8
+		  FROM pg_catalog.pg_stat_database
+		UNION ALL SELECT 'xact_commit', coalesce(sum(xact_commit), 0)::float8
+		  FROM pg_catalog.pg_stat_database
+		UNION ALL SELECT 'xact_rollback', coalesce(sum(xact_rollback), 0)::float8
+		  FROM pg_catalog.pg_stat_database
+		UNION ALL SELECT 'deadlocks', coalesce(sum(deadlocks), 0)::float8
+		  FROM pg_catalog.pg_stat_database
+		UNION ALL SELECT 'tup_returned', coalesce(sum(tup_returned), 0)::float8
+		  FROM pg_catalog.pg_stat_database
+		UNION ALL SELECT 'tup_fetched', coalesce(sum(tup_fetched), 0)::float8
+		  FROM pg_catalog.pg_stat_database
+		UNION ALL SELECT 'tup_inserted', coalesce(sum(tup_inserted), 0)::float8
+		  FROM pg_catalog.pg_stat_database
+		UNION ALL SELECT 'tup_updated', coalesce(sum(tup_updated), 0)::float8
+		  FROM pg_catalog.pg_stat_database
+		UNION ALL SELECT 'tup_deleted', coalesce(sum(tup_deleted), 0)::float8
+		  FROM pg_catalog.pg_stat_database`
+
+	facts, err := s.facts(ctx, query)
+	if err != nil {
+		return driver.ServerMetrics{}, err
+	}
+
+	pairs := driver.MetricPairs(facts.Columns, facts.Rows, "Name", "Value")
+	return driver.ServerMetrics{Metrics: driver.PickMetrics(postgresMetrics, pairs)}, nil
 }

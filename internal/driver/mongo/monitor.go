@@ -274,3 +274,67 @@ func textField(raw bson.Raw, name string) string {
 func cellOf(text string) *string {
 	return &text
 }
+
+// mongoMetrics is what the four charts are drawn from, named by the **dotted paths** `serverStatus`
+// flattens to — which is the same notation the Status pane draws and the one a reader would use to
+// ask for a field of it.
+//
+// This engine is the only one of the six that counts every panel exactly: bytes on its own sockets,
+// operations by kind, and documents by what happened to them. The queries panel is `opcounters`,
+// which is what was *asked for*, and the throughput panel is `metrics.document`, which is what the
+// server actually moved — a `find` matching a million documents is one query and a million rows.
+var mongoMetrics = []driver.MetricSpec{
+	{Panel: domain.MetricSessions, Name: "connections.current", Label: "Open",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "connections.active", Label: "Active",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "globalLock.activeClients.readers", Label: "Reading",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "globalLock.activeClients.writers", Label: "Writing",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricTraffic, Name: "network.bytesIn", Label: "Received from clients",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+	{Panel: domain.MetricTraffic, Name: "network.bytesOut", Label: "Sent to clients",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+
+	{Panel: domain.MetricQueries, Name: "opcounters.query", Label: "Queries",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "opcounters.insert", Label: "Inserts",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "opcounters.update", Label: "Updates",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "opcounters.delete", Label: "Deletes",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "opcounters.getmore", Label: "Get more",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "opcounters.command", Label: "Commands",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricThroughput, Name: "metrics.document.returned", Label: "Documents returned",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "metrics.document.inserted", Label: "Documents inserted",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "metrics.document.updated", Label: "Documents updated",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "metrics.document.deleted", Label: "Documents deleted",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "metrics.queryExecutor.scanned",
+		Label: "Index keys scanned", Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "metrics.queryExecutor.scannedObjects",
+		Label: "Documents scanned", Kind: domain.MetricCounter, Unit: domain.MetricCount},
+}
+
+// ServerMetrics is the four charts' numbers out of one `serverStatus`. It goes wherever the status
+// pane's read goes, for that read's reason: the server answers this one from any database, and a
+// reader scoped to theirs can still ask.
+func (s *session) ServerMetrics(ctx context.Context) (driver.ServerMetrics, error) {
+	raw, err := s.runCommand(ctx, driver.Namespace{}, bson.D{{Key: "serverStatus", Value: 1}})
+	if err != nil {
+		return driver.ServerMetrics{}, err
+	}
+
+	pairs := map[string]string{}
+	walk(raw, "", pairs)
+	return driver.ServerMetrics{Metrics: driver.PickMetrics(mongoMetrics, pairs)}, nil
+}

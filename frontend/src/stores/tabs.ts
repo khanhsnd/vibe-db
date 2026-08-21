@@ -10,6 +10,7 @@ import { useBucketViewsStore } from './bucketViews'
 import { useConsoleStore } from './console'
 import { useDiagramsStore } from './diagrams'
 import { useGridEditsStore } from './gridEdits'
+import { useMetricsStore } from './metrics'
 import { useQueriesStore } from './queries'
 import { loadQueryTabs, saveQueryTabs } from './savedQueries'
 import { useSearchesStore } from './searches'
@@ -197,7 +198,7 @@ export interface AccountsTab extends TabBase {
  * Which quarter of a server monitor is being read: what it is doing, what it has already run
  * **slowly**, what it has counted, or what it was started with.
  */
-export type MonitorPane = 'processes' | 'slow' | 'status' | 'variables'
+export type MonitorPane = 'charts' | 'processes' | 'slow' | 'status' | 'variables'
 
 /**
  * What a **connection's server** is doing, and what it was started with — what the `Server Monitor`
@@ -465,6 +466,7 @@ function closeTabs(set: StoreApi<TabsState>['setState'], ids: string[]): void {
     useConsoleStore.getState().discard(id)
     useSearchesStore.getState().discard(id)
     useDiagramsStore.getState().discard(id)
+    useMetricsStore.getState().discard(id)
     useBucketViewsStore.getState().drop(id)
   }
 
@@ -564,7 +566,10 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       ),
     })),
 
-  openMonitor: (profileId, pane = 'processes') => {
+  // The pane a plain open lands on is the **charts**, which is the one that answers "is this server
+  // all right" without the reader already knowing what to look for. The four lists beside it are
+  // reached by name, from the same menu and from the toolbar.
+  openMonitor: (profileId, pane = 'charts') => {
     const id = get().open({
       kind: 'monitor',
       title: 'Server Monitor',

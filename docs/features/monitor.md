@@ -4,13 +4,16 @@
 
 ## What it is
 
-The `Server Monitor` row under a connection opens one tab with four panes: what the server is doing
-**right now**, what it has already run [**slowly**](profiler.md), what it has been counting since it
-started, and what it was started **with**.
+The `Server Monitor` row under a connection opens one tab with five panes: what the server has been
+doing over the last few **minutes**, what it is doing **right now**, what it has already run
+[**slowly**](profiler.md), what it has been counting since it started, and what it was started
+**with**.
 
-This document is the three that are about the server as a whole. The Slow Queries pane is its own —
-it reads a different catalogue on every engine, it can be turned on and off, and it hands a statement
-to a query tab — and it is [features/profiler.md](profiler.md).
+This document is the three that are lists about the server as a whole. Two panes are their own
+documents: the [Charts](metrics.md), which are not a list at all — four pictures of what is *moving*,
+and the pane a plain open lands on — and the Slow Queries pane, which reads a different catalogue on
+every engine, can be turned on and off, and hands a statement to a query tab
+([features/profiler.md](profiler.md)).
 
 **It hangs off the connection and not off a database**, which is the only honest place for it: a
 process belongs to the server, and the tree's other levels are all namespaces. It is the second row
@@ -18,7 +21,8 @@ in the tree that does, the [`Users` folder](accounts.md) being the first — and
 holds **nothing**, because what a server is doing changes while nobody is touching it and a list of
 branches nobody could keep up with is worse than no list at all.
 
-Every pane is a [`ResultGrid`](../grid.md) in whatever columns that engine's own catalogue keeps,
+Every pane in this document is a [`ResultGrid`](../grid.md) in whatever columns that engine's own
+catalogue keeps,
 exactly as [the table list](schema-tree.md) and [the account list](accounts.md) are, and for the same
 reason: no two engines report the same facts about a connection, and a column neither could fill would
 say nothing.
@@ -60,8 +64,14 @@ rows where they are, which is what makes a hiccuping server watchable — see th
 over the session and the pane and would otherwise be a new function on every render.
 
 The pane also **re-reads itself on a clock** — off, or every 2, 5, 10 or 30 seconds, and five when it
-opens. That interval belongs to the tab rather than to the view, so switching away and back does not
-silently stop a monitor the reader left running.
+opens. That interval belongs to the tab rather than to the view, so a monitor left on `Auto: 2s` is
+still on it when the reader comes back.
+
+**Only the tab in front is mounted, though**, so a monitor behind another tab is asking nothing at
+all: the interval is the tab's but the clock is the view's, and it starts again on arrival. That costs
+a list nothing — a process list is a picture of now, and reading it again is one read — and it would
+cost the [charts](metrics.md) the very minutes they are made of, which is why those readings are kept
+where the tab can outlive the view.
 
 **An answer that arrives late is dropped.** A reader moving through three databases faster than a busy
 server answers has three reads in flight, and the slowest would otherwise land last and win — leaving
@@ -212,6 +222,10 @@ anyway, because the mistake it prevents is the one nothing else could catch.
 in flight, and a status holds a number counted since the server started; the statement that was slow
 ten minutes ago is in neither. That is [the Slow Queries pane](profiler.md), which is why it exists.
 
+**A number on a chart is not on any of these three either**, and the reverse: what a chart draws is a
+handful of counters read a fifth way, on their own bound method, because on three of these engines
+they are not all in one catalogue. See [features/metrics.md](metrics.md).
+
 **A variable cannot be changed from this pane.** Reading one is the same question on every engine and
 setting one is not: `SET GLOBAL` takes effect at once, `ALTER SYSTEM SET` needs a reload and rewrites
 a file the server owns, `sp_configure` is followed by `RECONFIGURE` and takes a subset of the list,
@@ -225,9 +239,11 @@ pressing Enter did. A variable is changed in a [query tab](query-tab.md) or a
 connection is not one — which is the honest reading of "what is this server doing" on that engine
 rather than a gap in this pane.
 
-**Nothing here is kept.** Nothing is cached in a store, and the pane holds one read at a time — a
-count in the sidebar or a row remembered from a minute ago would be a number about a server that has
-moved on. A kill is not in the [History Log](log.md) either, that log holding what **Execute** sent and
+**Nothing in these three is kept.** None of them is cached in a store, and the pane holds one read at
+a time — a count in the sidebar or a row remembered from a minute ago would be a number about a server
+that has moved on. The [charts](metrics.md#reading-it) are the one exception on this tab, and the
+reason is what they are: a list is a picture of now and can be read again, and a chart *is* the
+readings that came before. A kill is not in the [History Log](log.md) either, that log holding what **Execute** sent and
 nothing the app did of its own accord — the same reason a schema change from the tree is not in it. The
 statement is shown wherever the reader is asked to answer for it, which is what the table above says
 and why the confirmation carries it in full.

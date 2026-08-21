@@ -1250,6 +1250,20 @@ type Monitor interface {
 	// statement at all — a file rewritten, or a restart — so a variable is changed where the reader
 	// can see which server they are on: a query tab. See docs/features/monitor.md.
 	ServerVariables(ctx context.Context) (ServerFacts, error)
+	// ServerMetrics is the same servers read a fifth way: the handful of numbers behind those lists
+	// that are worth **watching move**, sorted into the four questions a chart answers — who is
+	// connected, how much data is moving, how much work is being asked for, and what that work moved.
+	//
+	// It is a read of its own rather than a filter over ServerStatus, because on three of these
+	// engines the numbers are not in one place: PostgreSQL keeps its sessions in `pg_stat_activity`
+	// and its counters in `pg_stat_database`, SQL Server keeps its bytes in `dm_io_virtual_file_stats`
+	// and everything else in `dm_os_performance_counters`, and neither status pane holds a session
+	// count at all. A reader watching a chart is watching one server, so this is **one** answer.
+	//
+	// The panels are fixed and the series are the engine's own — ProcessList's arrangement, and for
+	// its reason. A counter this server's version does not keep is **left out**, never sent as a zero:
+	// a flat line at nothing and a line the server will not draw are opposite answers.
+	ServerMetrics(ctx context.Context) (ServerMetrics, error)
 }
 
 // SlowQueryRef is what one row of a slow list is *taken away* by, kept beside the row rather than

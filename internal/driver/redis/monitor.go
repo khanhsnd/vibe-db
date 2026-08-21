@@ -253,3 +253,76 @@ func isNumber(value string) bool {
 	}
 	return true
 }
+
+// redisMetrics is what the four charts are drawn from, named by the fields `INFO` reports them under.
+// Every one of them is in the default sections, which is why this read asks for those rather than for
+// `INFO all`: the per-command statistics that make the Status pane worth reading are several hundred
+// lines a chart never looks at, and this read happens every two seconds.
+//
+// **A Redis server has no idle connection to distinguish**, so the sessions panel is what it does
+// keep: how many clients are attached, and how many of those are blocked waiting on a list or a
+// stream. The throughput panel is the key space, which is this engine's answer to "what did that work
+// move" — a hit and a miss are the two halves of whether the data asked for was there.
+var redisMetrics = []driver.MetricSpec{
+	{Panel: domain.MetricSessions, Name: "connected_clients", Label: "Clients",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "blocked_clients", Label: "Blocked",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "watching_clients", Label: "Watching",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricTraffic, Name: "total_net_input_bytes", Label: "Received from clients",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+	{Panel: domain.MetricTraffic, Name: "total_net_output_bytes", Label: "Sent to clients",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+
+	{Panel: domain.MetricQueries, Name: "total_commands_processed", Label: "Commands",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "total_error_replies", Label: "Errors",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "total_connections_received", Label: "Connections",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "rejected_connections", Label: "Rejected",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricThroughput, Name: "keyspace_hits", Label: "Key space hits",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "keyspace_misses", Label: "Key space misses",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "expired_keys", Label: "Keys expired",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "evicted_keys", Label: "Keys evicted",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+}
+
+// ServerMetrics is the four charts' numbers out of the default `INFO` sections.
+func (s *session) ServerMetrics(ctx context.Context) (driver.ServerMetrics, error) {
+	client, err := s.client(driver.Namespace{})
+	if err != nil {
+		return driver.ServerMetrics{}, err
+	}
+
+	info, err := client.Info(ctx).Result()
+	if err != nil {
+		return driver.ServerMetrics{}, translateError(err)
+	}
+	return driver.ServerMetrics{Metrics: driver.PickMetrics(redisMetrics, infoPairs(info))}, nil
+}
+
+// infoPairs reads an `INFO` answer into the pairs it holds, dropping the section headings it groups
+// them under. A key-space line — `db0:keys=1,expires=0` — is a pair whose value is not a number, and
+// is left where it is rather than special-cased: nothing is looking for it, and `driver.PickMetrics`
+// is what decides that a value it cannot read is a metric this server has not got.
+func infoPairs(info string) map[string]string {
+	pairs := map[string]string{}
+	for _, line := range strings.Split(info, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if name, value, found := strings.Cut(line, ":"); found {
+			pairs[name] = value
+		}
+	}
+	return pairs
+}

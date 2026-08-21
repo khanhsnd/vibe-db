@@ -3,6 +3,7 @@ package sqlserver
 import (
 	"context"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
@@ -103,4 +104,109 @@ func (s *session) facts(ctx context.Context, query string) (driver.ServerFacts, 
 		return driver.ServerFacts{}, translateError(err)
 	}
 	return driver.ServerFacts{Columns: result.Columns, Rows: result.Rows}, nil
+}
+
+// sqlserverMetrics is what the four charts are drawn from. This engine keeps the four answers in
+// three different places — sessions in `dm_exec_sessions`, bytes in `dm_io_virtual_file_stats`, and
+// everything else in `dm_os_performance_counters` — so the query below names each one itself and this
+// table is what says which panel it belongs to and how it is read.
+//
+// **The traffic panel is file I/O and not bytes on the wire**, as it is on PostgreSQL and for the
+// same reason: this engine counts packets between itself and a client, not bytes, and a packet count
+// drawn under a byte label would be a number off by whatever the packet size is. What it does count
+// exactly is what it read from and wrote to its own files.
+//
+// Every counter in `dm_os_performance_counters` whose name ends in `/sec` is a **running total**
+// despite the name — the server leaves the dividing to whoever reads it, which is what this app's
+// counter kind already means.
+var sqlserverMetrics = []driver.MetricSpec{
+	{Panel: domain.MetricSessions, Name: "running", Label: "Running",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "sleeping", Label: "Sleeping",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "sessions", Label: "User sessions",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricTraffic, Name: "bytes_read", Label: "Read from files",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+	{Panel: domain.MetricTraffic, Name: "bytes_written", Label: "Written to files",
+		Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+
+	{Panel: domain.MetricQueries, Name: "batch_requests", Label: "Batch requests",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "compilations", Label: "Compilations",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "recompilations", Label: "Recompilations",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "transactions", Label: "Transactions",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricThroughput, Name: "index_searches", Label: "Index searches",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "full_scans", Label: "Full scans",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "page_splits", Label: "Page splits",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "page_lookups", Label: "Page lookups",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+}
+
+// ServerMetrics is the four charts' numbers in one read. A performance counter is matched on the
+// **tail** of its object name — `%:SQL Statistics` — because the head of it is the instance's, and an
+// app that matched `SQLServer:` would find nothing on every named instance there is.
+func (s *session) ServerMetrics(ctx context.Context) (driver.ServerMetrics, error) {
+	const query = `
+		SELECT [Name], [Value] FROM (
+		SELECT 'running' AS [Name], CAST(COUNT(*) AS float) AS [Value]
+		  FROM sys.dm_exec_sessions WHERE is_user_process = 1 AND status = 'running'
+		UNION ALL SELECT 'sleeping', CAST(COUNT(*) AS float)
+		  FROM sys.dm_exec_sessions WHERE is_user_process = 1 AND status = 'sleeping'
+		UNION ALL SELECT 'sessions', CAST(COUNT(*) AS float)
+		  FROM sys.dm_exec_sessions WHERE is_user_process = 1
+		UNION ALL SELECT 'bytes_read', CAST(COALESCE(SUM(num_of_bytes_read), 0) AS float)
+		  FROM sys.dm_io_virtual_file_stats(NULL, NULL)
+		UNION ALL SELECT 'bytes_written', CAST(COALESCE(SUM(num_of_bytes_written), 0) AS float)
+		  FROM sys.dm_io_virtual_file_stats(NULL, NULL)
+		UNION ALL SELECT 'batch_requests', CAST(COALESCE(SUM(cntr_value), 0) AS float)
+		  FROM sys.dm_os_performance_counters
+		 WHERE RTRIM(object_name) LIKE '%:SQL Statistics'
+		   AND RTRIM(counter_name) = 'Batch Requests/sec'
+		UNION ALL SELECT 'compilations', CAST(COALESCE(SUM(cntr_value), 0) AS float)
+		  FROM sys.dm_os_performance_counters
+		 WHERE RTRIM(object_name) LIKE '%:SQL Statistics'
+		   AND RTRIM(counter_name) = 'SQL Compilations/sec'
+		UNION ALL SELECT 'recompilations', CAST(COALESCE(SUM(cntr_value), 0) AS float)
+		  FROM sys.dm_os_performance_counters
+		 WHERE RTRIM(object_name) LIKE '%:SQL Statistics'
+		   AND RTRIM(counter_name) = 'SQL Re-Compilations/sec'
+		UNION ALL SELECT 'transactions', CAST(COALESCE(SUM(cntr_value), 0) AS float)
+		  FROM sys.dm_os_performance_counters
+		 WHERE RTRIM(object_name) LIKE '%:Databases'
+		   AND RTRIM(counter_name) = 'Transactions/sec'
+		   AND RTRIM(instance_name) = '_Total'
+		UNION ALL SELECT 'index_searches', CAST(COALESCE(SUM(cntr_value), 0) AS float)
+		  FROM sys.dm_os_performance_counters
+		 WHERE RTRIM(object_name) LIKE '%:Access Methods'
+		   AND RTRIM(counter_name) = 'Index Searches/sec'
+		UNION ALL SELECT 'full_scans', CAST(COALESCE(SUM(cntr_value), 0) AS float)
+		  FROM sys.dm_os_performance_counters
+		 WHERE RTRIM(object_name) LIKE '%:Access Methods'
+		   AND RTRIM(counter_name) = 'Full Scans/sec'
+		UNION ALL SELECT 'page_splits', CAST(COALESCE(SUM(cntr_value), 0) AS float)
+		  FROM sys.dm_os_performance_counters
+		 WHERE RTRIM(object_name) LIKE '%:Access Methods'
+		   AND RTRIM(counter_name) = 'Page Splits/sec'
+		UNION ALL SELECT 'page_lookups', CAST(COALESCE(SUM(cntr_value), 0) AS float)
+		  FROM sys.dm_os_performance_counters
+		 WHERE RTRIM(object_name) LIKE '%:Buffer Manager'
+		   AND RTRIM(counter_name) = 'Page lookups/sec'
+		) m`
+
+	facts, err := s.facts(ctx, query)
+	if err != nil {
+		return driver.ServerMetrics{}, err
+	}
+
+	pairs := driver.MetricPairs(facts.Columns, facts.Rows, "Name", "Value")
+	return driver.ServerMetrics{Metrics: driver.PickMetrics(sqlserverMetrics, pairs)}, nil
 }

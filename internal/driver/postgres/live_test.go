@@ -224,6 +224,61 @@ func TestLiveMonitor(t *testing.T) {
 			t.Errorf("KillProcesses on a pid that is not a backend: %v", err)
 		}
 	})
+
+	t.Run("metrics", func(t *testing.T) {
+		first, err := live.ServerMetrics(ctx)
+		if err != nil {
+			t.Fatalf("ServerMetrics() error = %v", err)
+		}
+
+		// Every one of the four panels is answered for. A panel this engine filled with nothing draws
+		// an empty chart saying the server counts nothing there, which is true of no engine here.
+		panels := map[domain.MetricPanel]int{}
+		for at, metric := range first.Metrics {
+			if metric.Key == "" || metric.Label == "" {
+				t.Fatalf("metric %d has no name: %+v", at, metric)
+			}
+			if metric.Kind != domain.MetricGauge && metric.Kind != domain.MetricCounter {
+				t.Fatalf("%s is a %q, which is neither kind", metric.Key, metric.Kind)
+			}
+			if metric.Unit != domain.MetricCount && metric.Unit != domain.MetricBytes {
+				t.Fatalf("%s is counted in %q, which is neither unit", metric.Key, metric.Unit)
+			}
+			panels[metric.Panel]++
+		}
+
+		for _, panel := range []domain.MetricPanel{
+			domain.MetricSessions,
+			domain.MetricTraffic,
+			domain.MetricQueries,
+			domain.MetricThroughput,
+		} {
+			if panels[panel] == 0 {
+				t.Errorf("nothing was reported for the %s panel", panel)
+			}
+		}
+
+		// A counter has only ever gone up. It is the one property a chart depends on — a rate is the
+		// difference between two readings divided by the time between them — and only a real server
+		// can be asked whether it holds.
+		second, err := live.ServerMetrics(ctx)
+		if err != nil {
+			t.Fatalf("second ServerMetrics() error = %v", err)
+		}
+
+		before := map[string]float64{}
+		for _, metric := range first.Metrics {
+			if metric.Kind == domain.MetricCounter {
+				before[metric.Key] = metric.Value
+			}
+		}
+		for _, metric := range second.Metrics {
+			was, held := before[metric.Key]
+			if held && metric.Value < was {
+				t.Errorf("counter %s fell from %v to %v", metric.Key, was, metric.Value)
+			}
+		}
+	})
 }
 
 // A routine round trip: declare one, read what it takes, and run it. PostgreSQL is the engine where

@@ -2,8 +2,9 @@ import type { MenuItem } from '@/shared/ui/ContextMenu'
 import { ICON } from '@/shared/ui/menuIcons'
 import type { MonitorPane } from '@/stores/tabs'
 
-/** The four panes as a menu offers them, which is the same order the tab's own toolbar draws. */
+/** The five panes as a menu offers them, which is the same order the tab's own toolbar draws. */
 const PANES: ReadonlyArray<{ pane: MonitorPane; label: string }> = [
+  { pane: 'charts', label: 'Charts' },
   { pane: 'processes', label: 'Process List' },
   { pane: 'slow', label: 'Slow Queries' },
   { pane: 'status', label: 'Server Status' },

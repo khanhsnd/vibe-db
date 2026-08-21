@@ -3,6 +3,7 @@ package oracle
 import (
 	"context"
 
+	"github.com/khanhsnd/vibe-db/internal/domain"
 	"github.com/khanhsnd/vibe-db/internal/driver"
 	"github.com/khanhsnd/vibe-db/internal/driver/sqlkit"
 )
@@ -106,4 +107,80 @@ func (s *session) facts(ctx context.Context, query string) (driver.ServerFacts, 
 		return driver.ServerFacts{}, translateError(err)
 	}
 	return driver.ServerFacts{Columns: result.Columns, Rows: result.Rows}, nil
+}
+
+// oracleMetrics is what the four charts are drawn from. All but the sessions come out of `v$sysstat`,
+// which is this engine's `SHOW STATUS` under another name; the sessions are counted in `v$session`,
+// there being no counter for "how many are connected right now".
+//
+// **The traffic panel is SQL*Net and so is genuinely bytes on the wire**, which two of the six engines
+// here cannot say. The throughput panel is blocks rather than rows, because that is what an Oracle
+// instance counts: a logical read is a block found in the cache and a physical read is one that was
+// not, and the pair of them together is the honest reading of how hard the instance is working.
+var oracleMetrics = []driver.MetricSpec{
+	{Panel: domain.MetricSessions, Name: "active", Label: "Active",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "inactive", Label: "Inactive",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+	{Panel: domain.MetricSessions, Name: "sessions", Label: "User sessions",
+		Kind: domain.MetricGauge, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricTraffic, Name: "bytes received via SQL*Net from client",
+		Label: "Received from clients", Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+	{Panel: domain.MetricTraffic, Name: "bytes sent via SQL*Net to client",
+		Label: "Sent to clients", Kind: domain.MetricCounter, Unit: domain.MetricBytes},
+
+	{Panel: domain.MetricQueries, Name: "execute count", Label: "Executions",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "parse count (total)", Label: "Parses",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "user commits", Label: "Commits",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricQueries, Name: "user rollbacks", Label: "Rollbacks",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+
+	{Panel: domain.MetricThroughput, Name: "session logical reads", Label: "Logical reads",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "physical reads", Label: "Physical reads",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "db block changes", Label: "Block changes",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+	{Panel: domain.MetricThroughput, Name: "table scan rows gotten", Label: "Rows scanned",
+		Kind: domain.MetricCounter, Unit: domain.MetricCount},
+}
+
+// ServerMetrics is the four charts' numbers in one read. `v$session` is counted in the same statement
+// as `v$sysstat` is read, so a session count and a rate on the two charts beside each other are the
+// same instant rather than two.
+//
+// The statistic names travel as the strings this engine keeps them under — spaces, a `*` and all —
+// because they are what the table above matches on, and renaming them here would put a name on the
+// chart that is not the one a reader would find in `v$sysstat`.
+func (s *session) ServerMetrics(ctx context.Context) (driver.ServerMetrics, error) {
+	const query = `
+		SELECT 'active' AS "Name", COUNT(*) AS "Value"
+		  FROM v$session WHERE type = 'USER' AND status = 'ACTIVE'
+		UNION ALL SELECT 'inactive', COUNT(*)
+		  FROM v$session WHERE type = 'USER' AND status = 'INACTIVE'
+		UNION ALL SELECT 'sessions', COUNT(*)
+		  FROM v$session WHERE type = 'USER'
+		UNION ALL SELECT name, value FROM v$sysstat
+		 WHERE name IN ('bytes received via SQL*Net from client',
+		                'bytes sent via SQL*Net to client',
+		                'execute count',
+		                'parse count (total)',
+		                'user commits',
+		                'user rollbacks',
+		                'session logical reads',
+		                'physical reads',
+		                'db block changes',
+		                'table scan rows gotten')`
+
+	facts, err := s.facts(ctx, query)
+	if err != nil {
+		return driver.ServerMetrics{}, err
+	}
+
+	pairs := driver.MetricPairs(facts.Columns, facts.Rows, "Name", "Value")
+	return driver.ServerMetrics{Metrics: driver.PickMetrics(oracleMetrics, pairs)}, nil
 }

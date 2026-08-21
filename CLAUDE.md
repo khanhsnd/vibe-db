@@ -181,8 +181,9 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 
 22. **What a server is doing is read, and one speller ends it.** `driver.Monitor` is the fourth half of
     a session: the processes a server is running, what it has counted since it started, what it was
-    started with, and the two statements that end one. Each read is the **engine's own** — a process
-    list is a catalogue read like a table list, in that engine's own columns, and two of them are not
+    started with, the handful of those numbers worth **watching move**, and the two statements that
+    end one. Each read is the **engine's own** — a process list is a catalogue read like a table list,
+    in that engine's own columns, and two of them are not
     name-and-value pairs at all (PostgreSQL has no `SHOW STATUS`; a document store's is one nested
     document) — while `sqlkit.Watch` spells and runs **every** kill there is: what differs between five
     SQL engines is a flag on `Dialect` (`CancelStatementSQL`, `CloseConnectionSQL`, and Oracle's session
@@ -198,6 +199,25 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     to watch answers `domain.Unsupported` naming it and `EngineInfo.hasMonitor` says so to the frontend;
     which kill it has is `cancelsStatement` and `closesConnection`, and what one is *called* is
     `processLabel`, never a comparison against an engine's name.
+    **A chart is that same server read a fifth way, and it is one read.** `ServerMetrics` is a method
+    of its own rather than a filter over the status, because on three of these engines the numbers are
+    not in one catalogue — PostgreSQL keeps its sessions in `pg_stat_activity`, SQL Server its bytes in
+    `dm_io_virtual_file_stats` — and a session count from one moment beside a rate from another would
+    be two servers on one screen. **The four panels are `domain`'s and the series inside them are the
+    engine's own** (`domain.MetricPanel`, `driver.Metric`), which is `ProcessList`'s arrangement and is
+    here for a sharper reason: MySQL counts bytes on the wire and PostgreSQL counts pages off the disk,
+    so a vocabulary insisting the six were one number would be this app inventing a fact — what a
+    series is *called* is the adapter's, exactly as a column heading is. Whether a number has been
+    adding up is the driver's to say as well (`domain.MetricKind`), a gauge and a counter sitting side
+    by side in one status list; the frontend divides a counter by the seconds between two readings and
+    never by a clock of its own, which is why the moment of a read is stamped where the read happened —
+    and why a point is drawn **at its own instant** rather than at its place in the run, a reader who
+    changes the clock or looks away otherwise having ten minutes and forty seconds drawn the same
+    width. A counter this server's version has not got is **left out**, never sent as a zero: a flat
+    line and a line the server will not draw are opposite answers. A **panel** is one kind, one unit
+    and at most six series — it takes its axis from the first series it holds, so each of the three
+    fails silently into a chart that looks perfectly ordinary, which is why `driver.PanelFault` states
+    them and every adapter's own test holds its table to them.
 
 
 23. **A column's description and a table's partitions are the two facts about a table's shape that no
@@ -354,6 +374,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Turn autocommit off, or touch Begin / Commit / Rollback | [docs/features/transaction.md](docs/features/transaction.md) |
 | Touch a user, a role or a privilege | [docs/architecture.md](docs/architecture.md#who-may-do-what), [docs/features/accounts.md](docs/features/accounts.md) |
 | Touch a process list, a kill, a server status or a variable | [docs/architecture.md](docs/architecture.md#what-a-server-is-doing), [docs/features/monitor.md](docs/features/monitor.md) |
+| Touch a live chart, or what a server is asked to count for one | [docs/features/metrics.md](docs/features/metrics.md) |
 | Touch a slow query list, or what a server records about one | [docs/architecture.md](docs/architecture.md#what-a-server-already-ran-slowly), [docs/features/profiler.md](docs/features/profiler.md) |
 | Change what is kept about a statement that has run | [docs/features/log.md](docs/features/log.md), [docs/features/results.md](docs/features/results.md#the-history-pane) |
 | Touch a named snippet, the library file, or what completion offers by name | [docs/features/snippets.md](docs/features/snippets.md), [docs/editor.md](docs/editor.md#what-completion-offers) |
