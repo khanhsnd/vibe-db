@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react'
-import { Bookmark, ListTree, Loader2, Play, Square, WrapText } from 'lucide-react'
+import { Bookmark, ListTree, Play, Square, WrapText } from 'lucide-react'
 
 import type { Namespace } from '@/bridge/connections'
 import { DEFAULT_QUERY_ROWS, QUERY_ROW_LIMITS } from '@/bridge/rows'
@@ -73,15 +72,18 @@ export function QueryToolbar({
 
       <span className="mx-1 h-4 w-px bg-line" />
 
+      {/* The key that does what the button does is in the button's **tooltip** rather than on a
+          keycap beside it: two keycaps in a row this full were two more things to read past, and
+          a reader hunting for a shortcut hovers the button they already found. */}
       <Button
         variant="primary"
+        title="Execute (F5)"
         icon={<Play size={12} fill="currentColor" />}
         disabled={!canRun || running}
         onClick={onExecute}
       >
         Execute
       </Button>
-      <Shortcut>F5</Shortcut>
 
       <Button
         variant="default"
@@ -109,13 +111,13 @@ export function QueryToolbar({
           lexical — so it needs the connection exactly as Execute does. */}
       <Button
         variant="default"
+        title="Format (Ctrl+Shift+F)"
         icon={<WrapText size={12} />}
         disabled={!canRun || running}
         onClick={onFormat}
       >
         Format
       </Button>
-      <Shortcut>Ctrl+Shift+F</Shortcut>
 
       {/* Naming a statement needs no server: a snippet is text this machine keeps, and one is worth
           saving whether or not the connection it was written against is still open. So this is alive
@@ -133,13 +135,6 @@ export function QueryToolbar({
         <TransactionMenu sessionId={sessionId} namespace={namespace} engine={engine} />
       ) : null}
 
-      {running ? (
-        <span className="ml-1 flex items-center gap-1.5 text-xs text-muted">
-          <Loader2 size={13} className="animate-spin text-accent" />
-          Running…
-        </span>
-      ) : null}
-
       <div className="min-w-2 flex-1" />
 
       <div className="flex shrink-0 items-center text-xs text-muted">
@@ -154,16 +149,3 @@ export function QueryToolbar({
     </div>
   )
 }
-
-/**
- * The key that does what the button beside it does, drawn as the key: a reader who is looking for
- * the shortcut finds a keycap where plain grey text reads as part of the label before it.
- */
-function Shortcut({ children }: { children: ReactNode }) {
-  return (
-    <kbd className="mr-1 shrink-0 rounded border border-line bg-elevated px-1 py-px font-mono text-2xs text-faint">
-      {children}
-    </kbd>
-  )
-}
-
