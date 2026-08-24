@@ -33,9 +33,13 @@
     outline-offset: -1px;
   }
 
+  /** What a drag paints on the text that *is* text — a transcript, an error, a preview, a value
+      read whole. It is the editor's own selection colour rather than the accent, and it leaves the
+      text its own colour: a solid accent block with the words knocked out of it reads as a web page
+      being copied rather than as a selection, and a NULL drawn in red stops being red inside one.
+      Anything with rows and columns is not this — it is the grid, and the grid selects cells. */
   ::selection {
-    background-color: var(--accent);
-    color: var(--fg-on-accent);
+    background-color: var(--selection);
   }
 }
 

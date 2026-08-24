@@ -18,6 +18,13 @@ each is a different question. Folding them into one column would be a wall nobod
 | **Versions** | the last twenty, newest first, delete markers included | one request |
 | **Log** | what **this app** did about this object | nothing at all |
 
+**Every pane that shows rows and columns is [the grid](../grid.md)** — Properties, Header,
+Permissions, Tags, Versions and Log are all `ResultGrid`, stacked at their own rows' height where a
+pane holds more than one table (`GridBlock`). So a drag over an ETag, a version id and a request's
+detail picks *cells* and copies them as tab-separated rows, exactly as it does in a table's own rows.
+They were once hand-drawn lists of names and values, and a drag there smeared the browser's own text
+selection across the whole pane — which is the reason the rule about one grid exists.
+
 **A pane is read when it is opened and never before.** Picking a row costs *one* request — the head,
 which Properties and Header are both drawn from — and the rest cost one each, the first time a reader
 asks. A panel that read all seven on selection would make walking a folder of fifty objects three
@@ -68,16 +75,21 @@ else the reader types becomes an `x-amz-meta-` pair, which is the other half of 
 take. The list travels **from the Go side** with the object rather than being spelled in the pane, so
 the two cannot come to disagree about what a service accepts.
 
-**Everything else is drawn with a lock.** The tag, the length, the last-modified, the request id, the
+**Everything else is read-only.** The tag, the length, the last-modified, the request id, the
 server's own name — those belong to the service and no request writes them. Offering to edit them
-would be offering something that does not exist, so the pane says so with a padlock and a second
-heading rather than by silently ignoring an edit.
+would be offering something that does not exist, so they are under a **second heading**, in a grid
+that was passed no `onEditCell` at all, rather than in one that silently ignores an edit.
 
 **A change is staged and applied in one press.** That is not a preference: the request *replaces the
 set entire*, so a header left out of it is a header the object stops having. A per-row write would
 mean one rewrite of the object per keystroke, and a row deleted between two of them would come back.
-The bar under the rows is `Add`, `Edit`, `Delete`, `Discard` and `Apply`; a click on a value opens its
-editor, a click on a name picks the row, and what is staged is washed in the accent until it goes.
+The bar under the rows is `Add`, `Discard` and `Apply`; a **click on a value opens the grid's own
+editor**, what is staged carries the grid's own pending ring, and a row is dropped by the button on
+its own row — the grid's [pinned action column](../grid.md#the-pinned-action-column). A dropped row
+is banded and **struck through with the value it is about to lose**, which is the same thing the grid
+draws for a table's row waiting to be deleted and is waiting for the same reason: nothing has been
+sent yet. The same button puts it back. `Add` names the row and leaves it empty at the end of the
+changeable table, to be clicked and typed into like any other cell.
 
 **Apply rewrites the object**, and the confirmation says so plainly: a new ETag, a new modified time,
 and a new version on a bucket that keeps them. The storage class is **carried through** — a copy that

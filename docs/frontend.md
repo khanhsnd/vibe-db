@@ -184,7 +184,11 @@
   hand-roll), `ResultPane`'s error panel, `Empty` (whose hint is often a server's own wording),
   `Banner`, `Field`'s error note, the console transcript and the status bar's facts. The panel adds
   `shared/ui/CopyButton` — the same tick-on-copy control the grid's status line uses — because the
-  code, the message and the engine's detail are one answer and are wanted as one paste.
+  code, the message and the engine's detail are one answer and are wanted as one paste. What a drag
+  paints on the text that *is* text is the **editor's own selection colour**, and it leaves the words
+  their own colour: a solid accent block with the text knocked out of it reads as a web page being
+  copied rather than as a selection, and a NULL drawn in red stops being red inside one. Anything
+  with rows and columns is not this at all — it is [the grid](grid.md), and the grid selects cells.
 - **A read the reader waits on is `shared/ui/Loading`**, which fills its pane the way `Empty` does:
   the two make the same claim about the same area — nothing to show, or nothing *yet*. A surface
   draws it only while it has no rows at all; once rows are on screen a re-read leaves them there.

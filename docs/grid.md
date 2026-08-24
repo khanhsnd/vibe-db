@@ -49,7 +49,20 @@ the thing the reader opened the surface to read is the thing they cannot see. Th
   `setPointerCapture` on press means the drag survives leaving the grid, and a pointer held *past*
   an edge keeps scrolling (`EDGE_STEP` per frame) so a range can run beyond one screenful. Past the
   edge, not near it — otherwise a click landing by the bottom row moves the grid under the pointer.
-  `user-select: none` is already global in `index.css`; nothing in the grid may opt back in.
+- **"Never text" is enforced three ways, and it takes all three.** `user-select: none` is global in
+  `index.css` and the scroller carries `select-none` of its own, so no call site can hand a grid a
+  text selection by wrapping it in `.selectable`; every press the grid reads — the body's, a
+  header's, a resize handle's — goes through `takePress`, which **prevents the press's default** and
+  drops any selection the document already held; and the scroller **refuses `selectstart`**. The CSS
+  alone was not enough: it is what an engine consults before starting a selection *of its own
+  accord*, and the app's own WebView went on extending one through the rows once a drag was under
+  way — painting its highlight across the words inside the cells, and across cells outside the
+  rectangle at that, since text runs on past where a rectangle stops. Chromium refuses the selection
+  from the CSS alone, which is exactly why the grid cannot rely on it: preventing the press and
+  refusing `selectstart` are what no engine argues with. **A cell editor is the exception
+  in all three**, because a box open over a cell *is* text: the press handler returns on an input,
+  and so does the `selectstart` one, so dragging across a value in the box and double-clicking a
+  word in it both still work.
 - **A selection is a list of rectangles, not one.** `Selection.ranges` holds them and the **last is
   live**: **Shift**-click reopens it from its own anchor, **`Ctrl`/`Cmd`**-click leaves every
   rectangle standing and starts a new one beside them, and a plain press starts over. Together with
@@ -224,6 +237,15 @@ the thing the reader opened the surface to read is the thing they cannot see. Th
   comparison's two panes**, which is a grid of its own precisely so that scrolling either side
   sideways cannot slide it away. Its width is the frame's and not the reader's: a column dragged
   wider than the strip around it could never be scrolled back, there being no bar to scroll it with.
+- **A grid may be drawn at its own rows' height** (`GridBlock`), for a panel that stacks several
+  under headings: five rows of facts under one, four under the next, and the whole column scrolling
+  as one. Every other grid fills the panel a splitter gave it and scrolls inside it; one given no
+  height of its own would collapse, and one given a guessed height would clip its last row or leave
+  a gap under it — so the height is the sum it needs and the scrolling stays the panel's. It is
+  `dense`, because a panel of facts is read by scanning it. The [object
+  panel](features/object-panel.md) is what asks: seven panes, six of them tables, and the reason
+  they are grids at all is this file's first rule — a drag there picks cells and copies as
+  tab-separated rows, rather than smearing the browser's own text selection across the pane.
 - **A column may refuse an edit** (`ResultColumn.readOnly`), which is the one arrangement a single
   `onEditCell` cannot express: a grid whose rows are *read* and which carries one column that is
   acted on. A comparison is that grid — a **Take** tick beside the columns of facts — and without

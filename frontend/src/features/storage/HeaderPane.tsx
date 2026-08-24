@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Lock, Plus } from 'lucide-react'
+import { Plus, Undo2 } from 'lucide-react'
 
 import { objects, type ObjectFacts, type ObjectRule } from '@/bridge/objects'
 import { toAppError, type AppError } from '@/bridge/errors'
-import { cn } from '@/lib/cn'
+import { GridBlock } from '@/features/results/GridBlock'
+import type { Cell, ResultColumn } from '@/features/results/resultSet'
 import { Button } from '@/shared/ui/Button'
 import { ErrorStrip } from '@/shared/ui/ErrorStrip'
-import { TextInput } from '@/shared/ui/Field'
 import { IconButton } from '@/shared/ui/IconButton'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
@@ -18,9 +18,10 @@ import { useSchemaStore } from '@/stores/schema'
  * The whole shape of this pane comes from one fact about the protocol: **there is no request that
  * sets a header.** What there is, is a copy of the object onto itself with the new set — so
  *
- *  - only the six the service takes are editable, and everything else is drawn with a lock: the tag,
- *    the length, the last-modified, the request id are the *service's* and there is no request that
- *    writes them. Offering to edit those would be offering something that does not exist;
+ *  - only the six the service takes are editable, and everything else is under a second heading and
+ *    read-only: the tag, the length, the last-modified, the request id are the *service's* and there
+ *    is no request that writes them. Offering to edit those would be offering something that does
+ *    not exist;
  *  - a change is **staged and applied in one press**, because the request replaces the set entire. A
  *    row deleted here is a header the object stops having, and a per-row write would mean one rewrite
  *    of the object per keystroke;
@@ -42,17 +43,8 @@ export function HeaderPane({
   const [facts, setFacts] = useState<ObjectFacts | null>(null)
   const [failure, setFailure] = useState<AppError | null>(null)
   const [busy, setBusy] = useState(false)
-  /** What the reader has typed, staged. `null` is a row they deleted. */
+  /** What the reader has typed, staged. `null` is a row they dropped. */
   const [draft, setDraft] = useState<Record<string, string | null>>({})
-  /**
-   * Two different things, and they are two pieces of state because they are two questions: which row
-   * the reader has **picked** — what Edit and Delete act on — and which row's editor is **open**. A
-   * click on a value opens its editor directly, because making a reader press twice to change a value
-   * they are already pointing at buys nothing; a click on a name picks without opening, which is how
-   * Delete is aimed.
-   */
-  const [picked, setPicked] = useState('')
-  const [editing, setEditing] = useState('')
   const ask = useSchemaStore((s) => s.ask)
 
   const load = useCallback(() => objects.head(sessionId, bucket, objectKey), [sessionId, bucket, objectKey])
@@ -79,9 +71,12 @@ export function HeaderPane({
   const stage = (name: string, value: string | null) =>
     setDraft((held) => ({ ...held, [name]: value }))
 
+  /** Takes one row's change back off the pile, which is how a row dropped by mistake is kept. */
+  const unstage = (name: string) =>
+    setDraft((held) => Object.fromEntries(Object.entries(held).filter(([key]) => key !== name)))
+
   const discard = () => {
     setDraft({})
-    setEditing('')
     setFailure(null)
   }
 
@@ -90,7 +85,7 @@ export function HeaderPane({
 
     const input = { system: {} as Record<string, string>, meta: {} as Record<string, string> }
     for (const row of rows) {
-      if (!row.editable || row.value === null) continue
+      if (!row.editable || row.dropped) continue
       if (row.meta) input.meta[row.name] = row.value
       else input.system[row.name] = row.value
     }
@@ -103,7 +98,6 @@ export function HeaderPane({
         // the modified time have both changed, and showing what was typed would hide that.
         setFacts(await objects.setHeaders(sessionId, bucket, objectKey, input))
         setDraft({})
-        setEditing('')
       } catch (thrown) {
         setFailure(toAppError(thrown))
       } finally {
@@ -139,8 +133,9 @@ export function HeaderPane({
       onSubmit: async (name) => {
         const clean = name.trim()
         if (clean === '') return
+        // The row appears empty at the end of the changeable table; a click on its value opens the
+        // box, which is what a click on any other cell of any other grid does.
         stage(clean, '')
-        setEditing(clean)
       },
     })
   }
@@ -151,11 +146,10 @@ export function HeaderPane({
 
   const editable = rows.filter((row) => row.editable)
   const owned = rows.filter((row) => !row.editable)
-  const focused = rows.find((row) => row.name === picked && row.editable)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-auto">
         <Heading>
           Changeable
           <span className="pl-1.5 font-normal text-faint">
@@ -168,18 +162,48 @@ export function HeaderPane({
             becomes an <code>x-amz-meta-</code> pair.
           </p>
         ) : (
-          <Table
-            rows={editable}
-            editing={editing}
-            picked={picked}
-            onPick={setPicked}
-            onEdit={(name) => {
-              setPicked(name)
-              setEditing(name)
-            }}
-            onChange={stage}
-            onDelete={(name) => stage(name, null)}
-            readOnly={rule.refused}
+          <GridBlock
+            result={{ columns: HEADER_COLUMNS, rows: gridRows(editable) }}
+            // A cell of the Value column, and nothing else: the name is the catalogue's here, a row
+            // being named when it is added rather than typed over afterwards.
+            onEditCell={
+              rule.refused
+                ? undefined
+                : ({ row, column }, value) => {
+                    const one = editable[row]
+                    if (one && column === VALUE) stage(one.name, value ?? '')
+                  }
+            }
+            isDirty={(row) => editable[row]?.dirty ?? false}
+            // A dropped row is struck through and banded by the grid itself, which is the same thing
+            // it draws for a row of a table waiting to be deleted — and it is waiting for the same
+            // reason: nothing has been sent yet.
+            isDeleted={(row) => editable[row]?.dropped ?? false}
+            rowActions={
+              rule.refused
+                ? undefined
+                : {
+                    label: '',
+                    width: 34,
+                    render: (row) => {
+                      const one = editable[row]
+                      if (!one) return null
+                      return one.dropped ? (
+                        <IconButton
+                          label={`Keep ${one.name}`}
+                          icon={<Undo2 size={12} />}
+                          onClick={() => unstage(one.name)}
+                        />
+                      ) : (
+                        <IconButton
+                          label={`Drop ${one.name}`}
+                          icon={ICON.delete}
+                          onClick={() => stage(one.name, null)}
+                        />
+                      )
+                    },
+                  }
+            }
           />
         )}
 
@@ -189,15 +213,9 @@ export function HeaderPane({
             no request writes these
           </span>
         </Heading>
-        <Table
-          rows={owned}
-          editing=""
-          picked={picked}
-          onPick={setPicked}
-          onEdit={() => {}}
-          onChange={() => {}}
-          readOnly
-        />
+        {/* No `onEditCell`, which is the whole of what makes a grid read-only: there is no request
+            that writes any of these, so there is nothing to open a box over. */}
+        <GridBlock result={{ columns: HEADER_COLUMNS, rows: gridRows(owned) }} />
       </div>
 
       {failure !== null ? <ErrorStrip error={failure} /> : null}
@@ -213,25 +231,6 @@ export function HeaderPane({
         >
           <Button variant="subtle" icon={<Plus size={13} />} onClick={add}>
             Add
-          </Button>
-          <Button
-            variant="subtle"
-            icon={ICON.rename}
-            disabled={focused === undefined}
-            onClick={() => setEditing(picked)}
-          >
-            Edit
-          </Button>
-          <Button
-            variant="subtle"
-            icon={ICON.delete}
-            disabled={focused === undefined}
-            className="text-danger hover:bg-danger-subtle hover:text-danger"
-            onClick={() => {
-              if (focused) stage(focused.name, null)
-            }}
-          >
-            Delete
           </Button>
 
           <span className="flex-1" />
@@ -256,14 +255,32 @@ export function HeaderPane({
 /** One row of the pane: what it is called, what it says, and whether anything can write it. */
 interface HeaderRow {
   name: string
-  /** `null` is a row the reader has deleted, drawn struck through until Apply. */
-  value: string | null
+  /**
+   * What the row says, and it is the value the object **has** even on a row the reader has dropped:
+   * a row on its way out is drawn struck through with what it is about to lose, which is the one
+   * thing a reader has to see before pressing Apply.
+   */
+  value: string
+  /** Whether the reader has dropped it — a header the object stops having when Apply is pressed. */
+  dropped: boolean
   editable: boolean
   /** Whether it is an `x-amz-meta-` pair rather than one of the six. */
   meta: boolean
   /** Whether the reader has changed it. */
   dirty: boolean
 }
+
+/** The one editable column. The name is what the row *is*; a value is what it says. */
+const VALUE = 1
+
+const HEADER_COLUMNS: ResultColumn[] = [
+  { name: 'Name', type: 'text', fullType: 'text', width: 190, readOnly: true },
+  { name: 'Value', type: 'text', fullType: 'text', width: 420 },
+]
+
+/** An `x-amz-meta-` pair is named as one, so two rows cannot read as the same header. */
+const gridRows = (rows: readonly HeaderRow[]): Cell[][] =>
+  rows.map((row) => [row.meta ? `meta: ${row.name}` : row.name, row.value])
 
 /**
  * The rows the pane draws, which is the service's answer with what the reader typed over the top.
@@ -276,18 +293,28 @@ function headerRows(facts: ObjectFacts, draft: Record<string, string | null>): H
   const rows: HeaderRow[] = []
   const seen = new Set<string>()
 
-  const push = (name: string, value: string | null, editable: boolean, meta: boolean) => {
+  const push = (name: string, value: string, editable: boolean, meta: boolean) => {
     if (seen.has(name.toLowerCase())) return
     seen.add(name.toLowerCase())
 
-    const held = Object.hasOwn(draft, name) ? draft[name]! : value
-    rows.push({ name, value: held, editable, meta, dirty: Object.hasOwn(draft, name) })
+    const typed = Object.hasOwn(draft, name) ? draft[name]! : undefined
+    rows.push({
+      name,
+      // A dropped row keeps the value it had — `dropped` is what says it is going, and the grid
+      // strikes it through.
+      value: typed ?? value,
+      dropped: Object.hasOwn(draft, name) && draft[name] === null,
+      editable,
+      meta,
+      dirty: Object.hasOwn(draft, name),
+    })
   }
 
   for (const name of facts.settable) {
     const held = facts.headers.find((one) => one.name.toLowerCase() === name.toLowerCase())
     push(name, held?.value ?? '', true, false)
   }
+
   for (const pair of facts.metadata) {
     push(pair.name, pair.value, true, true)
   }
@@ -303,91 +330,6 @@ function headerRows(facts: ObjectFacts, draft: Record<string, string | null>): H
   }
 
   return rows
-}
-
-function Table({
-  rows,
-  editing,
-  picked,
-  onPick,
-  onEdit,
-  onChange,
-  onDelete,
-  readOnly,
-}: {
-  rows: readonly HeaderRow[]
-  editing: string
-  picked: string
-  onPick: (name: string) => void
-  onEdit: (name: string) => void
-  onChange: (name: string, value: string | null) => void
-  onDelete?: (name: string) => void
-  readOnly: boolean
-}) {
-  if (rows.length === 0) return null
-
-  return (
-    <dl className="grid grid-cols-[minmax(9rem,auto)_1fr_auto] gap-x-2">
-      {rows.map((row) => (
-        <div
-          key={row.name}
-          onClick={() => onPick(row.name)}
-          className={cn(
-            'col-span-3 grid grid-cols-subgrid items-center border-b border-line/60',
-            // A staged row wins over a picked one: what the reader has *changed* is the more
-            // consequential fact, and the two shades are never both wanted at once.
-            row.dirty ? 'bg-accent-subtle' : picked === row.name && 'bg-selected',
-          )}
-        >
-          <dt className="flex items-center gap-1 px-2 py-1 text-xs text-muted">
-            {!row.editable ? <Lock size={10} className="shrink-0 text-faint" /> : null}
-            <span className="truncate" title={row.name}>
-              {row.meta ? `meta: ${row.name}` : row.name}
-            </span>
-          </dt>
-
-          <dd className="min-w-0 px-1 py-0.5">
-            {row.editable && !readOnly && editing === row.name ? (
-              <TextInput
-                autoFocus
-                value={row.value ?? ''}
-                className="h-6 text-xs"
-                onChange={(e) => onChange(row.name, e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === 'Escape') onEdit('')
-                }}
-                onBlur={() => onEdit('')}
-              />
-            ) : (
-              <button
-                type="button"
-                disabled={!row.editable || readOnly}
-                onClick={() => onEdit(row.name)}
-                className={cn(
-                  'selectable block w-full truncate px-1 py-0.5 text-left font-mono text-2xs',
-                  row.value === null ? 'text-danger line-through' : 'text-fg',
-                  row.editable && !readOnly ? 'rounded hover:bg-hover' : 'cursor-default',
-                )}
-                title={row.value ?? 'This row will be dropped when Apply is pressed'}
-              >
-                {row.value === null ? '(dropped)' : row.value || '—'}
-              </button>
-            )}
-          </dd>
-
-          <dd className="px-1">
-            {row.editable && !readOnly && onDelete ? (
-              <IconButton
-                label={`Drop ${row.name}`}
-                icon={ICON.delete}
-                onClick={() => onDelete(row.name)}
-              />
-            ) : null}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  )
 }
 
 function Heading({ children }: { children: ReactNode }) {

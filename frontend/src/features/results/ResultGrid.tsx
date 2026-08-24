@@ -81,6 +81,32 @@ const GUTTER_WIDTH = 52
 const HEADER_HEIGHT = 40
 
 /**
+ * **A press this grid handles is a press on cells, on a column or on an edge — never on text**, and
+ * this is what makes that true of the browser as well as of the grid.
+ *
+ * `user-select: none` was not enough on its own. Chromium refuses a selection over the rows from the
+ * CSS alone, and the **app's own WebView was reported painting one anyway** — the browser's highlight
+ * over the words inside the cells, and over cells outside the rectangle at that, text running on past
+ * where a rectangle stops. Which engine reads that property how is not something the grid can depend
+ * on, and preventing the press's default is refused by none of them, so every press the grid reads
+ * goes through here: the body's, a header's, a resize handle's.
+ *
+ * The document's own selection is dropped in the same breath, because the press would have collapsed
+ * it and `preventDefault` takes that away too — a highlight made in a transcript would otherwise
+ * stand for as long as the app was open.
+ *
+ * Nothing the grid prevents here wanted a default: the press's focus is handed to the scroller by
+ * the handler itself, and everything that does want one — a cell editor's box, a caret, a row
+ * action, a header's own button — is either an input the handler returns on or stops the press
+ * before it reaches the grid.
+ */
+function takePress(event: ReactPointerEvent<HTMLElement>) {
+  event.preventDefault()
+  const held = window.getSelection()
+  if (held !== null && !held.isCollapsed) held.removeAllRanges()
+}
+
+/**
  * How tall a row, its header and its gutter are. There are two sets of them and no more: the one
  * every grid has, and the one a grid drawn to be *scanned* takes — see `density.ts`. The numbers
  * travel as an object rather than as three arguments because they are read in seven places and
@@ -199,7 +225,7 @@ interface Hit {
   moved: boolean
 }
 
-interface ResultGridProps {
+export interface ResultGridProps {
   result: GridData
   selection?: Selection | null
   onSelectionChange?: (selection: Selection) => void
@@ -452,15 +478,34 @@ export function ResultGrid({
    */
   const [viewing, setViewing] = useState<CellRef | null>(null)
 
+  /**
+   * `selectstart` is the event a webview raises when it is *about* to begin selecting text, and
+   * refusing it there is the second half of `takePress`'s answer: one says the press starts nothing,
+   * this says the element takes no selection however one was asked for. Both are here because the
+   * CSS alone left the app's own WebView highlighting the words inside the cells.
+   *
+   * A **cell editor is the exception**, exactly as it is for a press: a box open over a cell is text,
+   * and dragging across it or double-clicking a word in it has to keep working.
+   */
+  const refuseSelection = useCallback((event: Event) => {
+    if (event.target instanceof HTMLInputElement) return
+    if (event.target instanceof HTMLTextAreaElement) return
+    event.preventDefault()
+  }, [])
+
   // The scroller is the grid's own and a call site's at once, where one was asked for. A callback
   // rather than two `ref` attributes, because an element takes one — and a memoized one, because
   // an inline callback ref detaches and reattaches the scroller on every render.
   const attachViewport = useCallback(
     (node: HTMLDivElement | null) => {
+      scrollRef.current?.removeEventListener('selectstart', refuseSelection)
       scrollRef.current = node
+      // React has no prop for `selectstart`, so it is attached with the element rather than in an
+      // effect: the listener and the node it belongs to then cannot come apart.
+      node?.addEventListener('selectstart', refuseSelection)
       if (viewportRef) viewportRef.current = node
     },
-    [viewportRef],
+    [viewportRef, refuseSelection],
   )
 
   const current = selection === undefined ? ownSelection : selection
@@ -811,6 +856,8 @@ export function ResultGrid({
     if (event.button !== 0 || event.target instanceof HTMLInputElement) return
     if (result.rows.length === 0) return
 
+    takePress(event)
+
     const wholeRow = inGutter(event.target)
     const hit = cellAt(event.clientX, event.clientY, wholeRow)
     const live = current?.ranges.at(-1)
@@ -930,7 +977,10 @@ export function ResultGrid({
       onKeyDown={onKeyDown}
       onScroll={askForMore}
       className={cn(
-        'overflow-auto bg-canvas',
+        // `select-none` is on the body already, and it is here as well because *this* is the element
+        // it must be true of: a call site that wrapped a grid in `.selectable` would otherwise hand
+        // its cells a text selection by inheritance.
+        'overflow-auto bg-canvas select-none',
         strip ? 'scroll-none' : 'scroll-thin',
         // It fills the panel the splitter gave it where there is one, and takes what the column
         // leaves where there is not.
@@ -1375,8 +1425,13 @@ function HeaderRow({
 
   const startDrag = (event: ReactPointerEvent<HTMLDivElement>, index: number) => {
     // The resize handle stops its own press; a button in the header is pressed, never gripped.
-    if (!onMoveColumn || event.button !== 0) return
+    if (event.button !== 0) return
     if (event.target instanceof Element && event.target.closest('button')) return
+
+    // Before the reordering is asked about: a header that cannot be dragged into place is still a
+    // header rather than a paragraph, and a press on one starts no selection either.
+    takePress(event)
+    if (!onMoveColumn) return
 
     event.currentTarget.setPointerCapture(event.pointerId)
     onDragChange({ from: index, to: index })
@@ -1544,6 +1599,7 @@ interface ResizeHandleProps {
 function ResizeHandle({ width, onResize, onFit }: ResizeHandleProps) {
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.stopPropagation()
+    takePress(event)
 
     const startX = event.clientX
     const startWidth = width
