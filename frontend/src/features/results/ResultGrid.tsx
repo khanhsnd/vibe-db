@@ -48,7 +48,7 @@ import { ValueDialog } from './ValueDialog'
 import { ColumnTypeIcon, isNumeric, temporalPicker, type TemporalPicker } from './columnType'
 import { countConditions, type GridFiltering } from './filter'
 import { useFilterDraft } from './useFilterDraft'
-import { gridFont, headerFont, widestText } from './measureText'
+import { gridFont, headerNameWidth, textWidth, widestText } from './measureText'
 import {
   boundsOf,
   cellPreview,
@@ -107,12 +107,25 @@ const REACH_END = 8
 const DEFAULT_COLUMN_WIDTH = 160
 const MIN_COLUMN_WIDTH = 60
 const MAX_FIT_WIDTH = 520
+/**
+ * How wide a column may open on its header alone. A fit is the reader asking for one column, so it
+ * may take 520 px; an opening width is every column at once, and a name nobody shortened would
+ * otherwise push the columns beside it off the pane before they were read.
+ */
+const MAX_HEADER_WIDTH = 320
 const CELL_PADDING = 17
 const TYPE_ICON_WIDTH = 17
 /** The room the lock on a key column takes, ahead of that column's name. */
 const KEY_ICON_WIDTH = 15
 /** The room the header's options button takes on the right, beyond a cell's own padding. */
 const MENU_WIDTH = 20
+/**
+ * The room the sort mark takes after a name — the arrow, its gap and the digit a second key
+ * carries. It is reserved on every column rather than added when one is sorted: a width that grew
+ * as the reader sorted would move every column beside it, and a name clipped by an arrow is the
+ * same name they could not read before.
+ */
+const SORT_MARK_WIDTH = 22
 /** How far one level of an outlined column indents its name — the tree's own step. */
 const OUTLINE_INDENT = 12
 /** Pixels scrolled per frame while a drag is held past an edge of the viewport. */
@@ -458,10 +471,17 @@ export function ResultGrid({
   }
 
   // The reader's own width first, then the column's own, then the grid's — so a drag outlives the
-  // width a call site asked to open at, and neither of them outlives the other's turn.
-  const widths = result.columns.map(
-    (column) => resized[column.name] ?? column.width ?? DEFAULT_COLUMN_WIDTH,
-  )
+  // width a call site asked to open at, and neither of them outlives the other's turn. What the
+  // grid's own is, is the header's: a name a reader has to widen a column to read is a name the
+  // column does not carry, and 160 px clips a third of the names a real schema holds. A strip is
+  // the exception, its width being the frame's — see `strip`.
+  const widths = result.columns.map((column) => {
+    const own = column.width ?? DEFAULT_COLUMN_WIDTH
+    // The cap is on the *header's* need alone: a call site that asked for 460 px for a column of
+    // sentences meant it, and capping the answer rather than the need would take it back.
+    const need = strip ? 0 : Math.min(headerWidth(column), MAX_HEADER_WIDTH)
+    return resized[column.name] ?? Math.max(own, need)
+  })
   const lastColumn = result.columns.length - 1
 
   const virtualizer = useVirtualizer({
@@ -545,16 +565,10 @@ export function ResultGrid({
     const column = result.columns[index]
     if (!column) return
 
-    const font = gridFont()
     const cells = result.rows.slice(0, FIT_SAMPLE).map((row) => cellPreview(row[index] ?? null))
-    const key = column.primaryKey === true ? KEY_ICON_WIDTH : 0
-    const content = Math.max(
-      widestText(cells, font),
-      widestText([column.name], headerFont()) + key + MENU_WIDTH,
-      widestText([typeLabel(column)], font) + TYPE_ICON_WIDTH + MENU_WIDTH,
-    )
+    const content = Math.max(widestText(cells, gridFont()) + CELL_PADDING, headerWidth(column))
 
-    setWidth(column.name, Math.min(content + CELL_PADDING, MAX_FIT_WIDTH))
+    setWidth(column.name, Math.min(content, MAX_FIT_WIDTH))
   }
 
   /** A header carries the whole column, so right-clicking one selects it before it acts. */
@@ -1204,6 +1218,25 @@ function HeadStrip({
 }
 
 const typeLabel = (column: ResultColumn) => column.fullType || column.type
+
+/**
+ * What a header needs to be read whole: the wider of its two lines — the lock and the name above,
+ * the type-kind glyph and the type below — plus the options button and the cell's own padding.
+ *
+ * It is one function because a column *opens* at it and a fit is measured against it: two
+ * measurements would let a fit disagree with the width the column was already showing. A dense
+ * header draws one line rather than two and a slightly smaller name, so this over-measures it —
+ * which errs wide, and a name is never clipped by an over-measurement.
+ */
+function headerWidth(column: ResultColumn): number {
+  const key = column.primaryKey === true ? KEY_ICON_WIDTH : 0
+  const lines = Math.max(
+    headerNameWidth(column.name) + key + SORT_MARK_WIDTH,
+    textWidth(typeLabel(column), gridFont()) + TYPE_ICON_WIDTH,
+  )
+
+  return lines + MENU_WIDTH + CELL_PADDING
+}
 
 const inGutter = (target: EventTarget) =>
   target instanceof Element && target.closest('[data-gutter]') !== null

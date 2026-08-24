@@ -191,17 +191,33 @@ the thing the reader opened the surface to read is the thing they cannot see. Th
   drag does not scroll the grid, so a column is carried among the headers on screen — twice for
   further.
 - **Columns resize** by dragging the right edge of the header, and **double-clicking that edge fits
-  the column** to the widest of its name — plus the lock, on a key column — its type line and its
-  cells, capped at 520 px and measured on a canvas against the tokens each is drawn with — `--font-ui` / `--text-base` for the name, and
-  `--font-data` / `--font-data-size` / `--font-data-weight` for the rest, so a fit measures the font
-  the reader chose rather than the one shipped. Widths are keyed by column *name*, so hiding a column
-  does not reset them. It measures the **first `FIT_SAMPLE` (2 000) rows and no more**: a grid may
-  hold every row of a table, and measuring a million cells is seconds of frozen window for a width
-  nobody can see anyway.
+  the column** to the wider of its cells and its header — the header being `headerWidth`, the one
+  measurement a column also opens at — capped at 520 px and measured on a canvas against the tokens
+  each is drawn with — `--font-ui` / `--text-base` for the name, and `--font-data` /
+  `--font-data-size` / `--font-data-weight` for the rest, so a fit measures the font the reader
+  chose rather than the one shipped. Widths are keyed by column *name*, so hiding a column does not
+  reset them. It measures the **first `FIT_SAMPLE` (2 000) rows and no more**: a grid may hold every
+  row of a table, and measuring a million cells is seconds of frozen window for a width nobody can
+  see anyway.
+- **No column opens narrower than its own header.** A width that clipped a name would be asking the
+  reader to widen a column before they could tell what is in it, and 160 px clips a third of the
+  names a real schema holds — so the width a column opens at is the wider of what it was given and
+  what its header needs: the lock, the name and the room the sort mark takes, against the type-kind
+  glyph and the type line, plus the options button and the cell's padding. That is `headerWidth`,
+  and a fit is measured against **that same function** — a second measurement would let a fit
+  disagree with the width the column was already showing. The sort mark's room is reserved whether
+  or not the column is sorted: a width that grew as the reader sorted would move every column beside
+  it. The **need** is capped at `MAX_HEADER_WIDTH` (320 px), below the fit's own 520: a fit is the
+  reader asking for one column, while this is every column at once, and one unshortened name would
+  otherwise push the columns beside it off the pane before they were read. The cap is on the need
+  and never on the answer — a call site that asked for 460 px for a column of sentences meant it.
+  Past the cap the header's tooltip is what carries the whole name. A **strip** is the exception —
+  its width is the frame's, as below.
 - **A column may say what width it opens at** (`ResultColumn.width`), for the one where the grid's
   own 160 px is plainly wrong: a column of **ticks** is not as wide as a column of values. It is
   only the width it *opens* at — a drag or a fit replaces it, and the reader's width always wins,
-  which is the order the three are read in.
+  which is the order the three are read in; on a grid that is not a strip it is a floor rather than
+  the last word, the header's own need winning where a call site asked for less than a name.
 - **A grid may be drawn as a strip that follows another** (`strip`): no row gutter, no scrollbars,
   no header menu and no resize handle — the grids either side carry all of them, and a second set
   would only repeat what is already there. It exists for the column of **ticks between a

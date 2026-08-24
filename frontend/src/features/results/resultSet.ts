@@ -80,6 +80,9 @@ export interface ResultColumn {
    * The width this column opens at, where the grid's own is wrong for it — a column of **ticks** is
    * not as wide as a column of values, and a tree's name column is wider than one. It is only the
    * width it *opens* at: a drag or a fit replaces it, and the reader's width always wins.
+   *
+   * On a grid that is not a `strip` it is a **floor and not the last word**: a column never opens
+   * narrower than its own header needs, so asking for less than a name gets the name's width.
    */
   width?: number | undefined
   /** Draws this column's cells as the rows of a tree — see `GridOutline`. */
