@@ -5,6 +5,7 @@ import type { HistoryEntry } from '@/bridge/history'
 import { needsConfirming, queries, type ScriptReview } from '@/bridge/query'
 import { emptySnippet, type Snippet, type SnippetInput } from '@/bridge/snippets'
 import { SnippetDialog } from '@/features/snippets/SnippetDialog'
+import { BusyBar } from '@/shared/ui/BusyBar'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import { IDLE_RUN, useQueriesStore } from '@/stores/queries'
 import { snippetsFor, useSnippetsStore } from '@/stores/snippets'
@@ -229,6 +230,11 @@ export function QueryWorkspace({
         onSaveSnippet={nameThis}
         onStop={() => cancel(tab.id)}
       />
+
+      {/* Under the toolbar and over both halves of the tab, because a run belongs to the tab and
+          not to the pane its rows will land in: a reader watching the editor sees it as readily as
+          one watching the grid. */}
+      {run.running ? <BusyBar label="Running…" /> : null}
 
       <ScriptProblems review={review} onReveal={(offset) => editor.current?.reveal(offset)} />
 

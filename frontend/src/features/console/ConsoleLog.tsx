@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { ChevronRight, Loader2 } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 
 import type { StatementOutcome } from '@/bridge/query'
 import { cn } from '@/lib/cn'
@@ -49,12 +49,9 @@ export function ConsoleLog({ entries, running }: { entries: ConsoleEntry[]; runn
         </div>
       ))}
 
-      {running ? (
-        <div className="flex items-center gap-1.5 py-0.5 pl-[18px] text-muted">
-          <Loader2 size={12} className="animate-spin text-accent" />
-          Running…
-        </div>
-      ) : null}
+      {/* Where the transcript has got to, and no cat: the strip above the transcript is already
+          running one, and two in one tab would be two things saying one thing. */}
+      {running ? <div className="py-0.5 pl-[18px] text-muted">Running…</div> : null}
 
       <div ref={end} />
     </div>

@@ -4,6 +4,7 @@ import { Eraser, Square } from 'lucide-react'
 import { engineInfo } from '@/bridge/connections'
 import { NamespacePicker } from '@/features/connections/NamespacePicker'
 import { ResultPane } from '@/features/results/ResultPane'
+import { BusyBar } from '@/shared/ui/BusyBar'
 import { Button } from '@/shared/ui/Button'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import { entriesOf, useConsoleStore } from '@/stores/console'
@@ -88,6 +89,8 @@ export function ConsoleView({ tab, sessionId, databases, schemas, engine }: Cons
           Clear
         </Button>
       </div>
+
+      {run.running ? <BusyBar label="Running…" /> : null}
 
       <Split
         id="vibe-db.console"

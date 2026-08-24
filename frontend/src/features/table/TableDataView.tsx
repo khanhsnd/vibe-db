@@ -35,6 +35,7 @@ import {
   type SortKey,
 } from '@/features/results/resultSet'
 import { useGridEdits, type EditSource } from '@/features/results/useGridEdits'
+import { BusyBar } from '@/shared/ui/BusyBar'
 import { Empty } from '@/shared/ui/Empty'
 import { ErrorStrip } from '@/shared/ui/ErrorStrip'
 import { FetchProgress } from '@/shared/ui/FetchProgress'
@@ -515,6 +516,13 @@ export function TableDataView({
             : undefined
         }
       />
+
+      {/* A re-read leaves the rows on screen, so this is the whole of what says one is happening —
+          the pager's spinner and the footer's `↻` are thirteen pixels each and are at the other end
+          of the pane from the toolbar the reader just pressed. The first read draws `Loading` over
+          the empty pane as well; the two are not the same claim, one saying there is nothing yet
+          and this one that there is more coming. */}
+      {loading ? <BusyBar label={`Loading ${table}…`} /> : null}
 
       {/* Both side panels are dragged rather than fixed, and the handle between them is the only
           divider — a border of their own beside it would read as two lines. */}

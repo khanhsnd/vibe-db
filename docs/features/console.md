@@ -24,7 +24,10 @@ any, in the same `ResultPane` a query tab shows.
 - **It runs through the same store a query tab does**, so a console's rows are paged, sorted,
   exported, edited and stopped exactly as any other result is, and `Stop` is the same button. A line
   reads as many rows as a fresh query tab would — the Options row limit — because a prompt has no
-  toolbar to put a Limit control on.
+  toolbar to put a Limit control on. A statement in flight draws the same strip
+  ([`BusyBar`](../frontend.md)) a query tab draws, and for the same reason: the transcript's own
+  `Running…` is one line among many in a pane that scrolls. That line is words alone — the cat is
+  the strip's, and one tab draws one cat.
 - The **database picker on its strip** is the query tab's, so a console can be pointed elsewhere
   without being reopened; picking a database drops the schema with it, as everywhere else.
 - It has **no editor**: no completion, no formatting, no review of a whole script before it runs. A

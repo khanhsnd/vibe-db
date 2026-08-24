@@ -79,6 +79,133 @@
     font-size: var(--text-sm);
   }
 
+  /** That a tab is waiting on a server — see `shared/ui/BusyBar`. A track the width of the surface
+      with one segment sweeping over it: a reader looking at the grid, the editor or the toolbar
+      cannot have it out of the corner of their eye, which a spinning icon on one button always is.
+
+      **Two colours because a sweep must not read as a state.** The accent leads it and the danger
+      tone follows, the pair the app already uses for *go* and *stop*, so the line says motion at a
+      glance rather than sitting there like a red strip announcing something is wrong. */
+  .busy-bar {
+    position: relative;
+    flex-shrink: 0;
+    height: 4px;
+    overflow: hidden;
+    background-color: var(--surface-bar);
+  }
+
+  .busy-bar::after {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inline-size: 40%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--accent) 30%,
+      var(--danger) 80%,
+      transparent
+    );
+    animation: busy-sweep 1.2s ease-in-out infinite;
+  }
+
+  /** The segment is 40% of the track, so 250% of *itself* is the far edge of it. */
+  @keyframes busy-sweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(250%);
+    }
+  }
+
+  /** The cat that runs beside the words while a statement is out — see `shared/ui/RunningCat`.
+      **Two frames and no tween**: legs gathered, legs splayed, swapped with `steps(1)`, because at
+      sixteen pixels an interpolated leg is a grey smear and not a stride. The body lifts a pixel on
+      the second frame, which is the whole of what makes it a run rather than a shuffle; the tail is
+      the one part swept, being long enough for the movement to read. It runs **in place** — what
+      travels is `.busy-bar` beside it. */
+  .cat-run .cat-frame-a {
+    animation: cat-frame-a 0.22s steps(1) infinite;
+  }
+
+  .cat-run .cat-frame-b {
+    opacity: 0;
+    animation: cat-frame-b 0.22s steps(1) infinite;
+  }
+
+  .cat-run .cat-bob {
+    animation: cat-bob 0.22s steps(1) infinite;
+  }
+
+  .cat-run .cat-tail {
+    transform-box: fill-box;
+    transform-origin: 90% 95%;
+    animation: cat-tail 0.44s ease-in-out infinite alternate;
+  }
+
+  @keyframes cat-frame-a {
+    0%,
+    49.99% {
+      opacity: 1;
+    }
+    50%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes cat-frame-b {
+    0%,
+    49.99% {
+      opacity: 0;
+    }
+    50%,
+    100% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes cat-bob {
+    0%,
+    49.99% {
+      transform: none;
+    }
+    50%,
+    100% {
+      transform: translateY(-0.7px);
+    }
+  }
+
+  @keyframes cat-tail {
+    from {
+      transform: rotate(-10deg);
+    }
+    to {
+      transform: rotate(12deg);
+    }
+  }
+
+  /** A reader who asked for less motion still has to be told the query is running, so the sweep
+      stops and the segment stands across the whole track instead of being taken away. */
+  @media (prefers-reduced-motion: reduce) {
+    .busy-bar::after {
+      inline-size: 100%;
+      animation: none;
+      background: var(--accent);
+      opacity: 0.7;
+    }
+
+    /* The cat stands rather than being taken away: it is still what says a statement is out. Frame
+       B keeps the `opacity: 0` it is declared with, so what stands is one whole cat. */
+    .cat-run .cat-frame-a,
+    .cat-run .cat-frame-b,
+    .cat-run .cat-bob,
+    .cat-run .cat-tail {
+      animation: none;
+    }
+  }
+
   .scroll-thin {
     scrollbar-width: thin;
     scrollbar-color: var(--line-strong) transparent;

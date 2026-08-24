@@ -188,6 +188,38 @@
 - **A read the reader waits on is `shared/ui/Loading`**, which fills its pane the way `Empty` does:
   the two make the same claim about the same area — nothing to show, or nothing *yet*. A surface
   draws it only while it has no rows at all; once rows are on screen a re-read leaves them there.
+- **A read the reader waits on *over rows already there* is `shared/ui/BusyBar`** — the strip under
+  a tab's toolbar, holding a cat running on the spot, the word for what is happening, and a
+  four-pixel line sweeping under both while the answer is out. It is the other half of `Loading`'s
+  sentence: that one fills a pane with nothing in it, and this says a pane that is *full* is waiting
+  for more. It exists because **a spinning icon is where a reader is not looking** — the one on a
+  footer's Refresh is thirteen pixels in a bar of thirteen-pixel icons, so a statement taking forty
+  seconds read, from a foot away, exactly like one that had already come back.
+- **It is a strip and not a chip in the toolbar**, which is the second thing tried and the reason
+  for the first: a toolbar is a row of controls of one height, and a cat with a word beside it
+  wedged between two of them is neither — it pushed its neighbours about and read as the alignment
+  having gone wrong. Under the toolbar there is nothing to be out of line with, and the full width
+  belongs to the one thing whose job is to be noticed. It is drawn where the *tab's* toolbar is
+  rather than over the grid, because a run belongs to the tab: the three that draw it are [the query
+  tab](features/query-tab.md), the console and [the table tab](features/table-tab.md), each passing
+  the words it wants — `Running…`, or `Loading <table>…`. Nothing re-renders while it runs
+  (`.busy-bar` and `.cat-run` in `index.css`), and its two colours are the accent and the danger
+  tone the app already uses for *go* and *stop*, so a line in motion cannot be read as a red strip
+  saying something is wrong. A reader who asked for less motion (`prefers-reduced-motion`) gets the
+  segment standing still across the whole track and the cat standing on the spot, the query being no
+  less out either way.
+- **The cat is `shared/ui/RunningCat`**, and it is only ever the strip's: a sixteen-pixel silhouette
+  running on the spot where a `Loader2` used to spin. A spinner is the same shape on every surface
+  of every app and so reads as furniture; a cat mid-stride is a thing a reader *notices*, which is
+  the whole job. It is a **silhouette** because that is what survives sixteen pixels — a body, two
+  ears, a tail, four legs and one `evenodd` hole for an eye, the trick `engineGlyphs.ts` already
+  uses for the elephant's — and it takes `currentColor` rather than a colour of its own: **a black
+  cat on a dark bar is an invisible cat**, so it wears the theme's own foreground and is black only
+  where black is what reads. The run is **two frames swapped with `steps(1)`** and no tween, a leg
+  interpolated across two pixels being a smear rather than a stride; only the tail is swept, being
+  long enough for the movement to show. It runs **in place**, the thing that travels being the line
+  beneath it. **One tab draws one cat**: the console's transcript says `Running…` in words alone,
+  because the strip above it is already running one.
 - **"Which of these am I on" is `shared/ui/Segmented`, and "is this on" is a pressed `Button`.** The
   two are different sentences and are drawn differently on purpose: a `Button` held down with
   `aria-pressed` wears the hover shade, which reads beside its neighbours as *one button shaded* — fine

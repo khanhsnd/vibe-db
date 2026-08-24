@@ -6,8 +6,10 @@
 the server. **Until the first page lands the pane says so** — `Loading <table>…` under a spinner,
 from `shared/ui/Loading` — because a grid with no columns yet is a blank pane and a table of any
 size can take seconds to answer. Only the *first* read gets it: once rows are on screen a re-read
-leaves them there and the pager alone says it is working, which is what keeps a page turn from
-blinking.
+leaves them there rather than blinking — and what says it is working is the **strip under the
+toolbar** ([`BusyBar`](../frontend.md)) — the cat, `Loading <table>…` and a sweeping line — beside
+the spinner on the pager, because the pager is at the far end of the pane from the button the reader
+just pressed.
 
 **A page in hand is read once.** Looking at another tab and coming back reads nothing: the rows are
 the rows the reader left, and so is the row they had added and not yet applied — see

@@ -204,8 +204,11 @@ the server rejects.
 - **Errors surface in the output panel below the editor**, with the code, the server's own wording
   and the engine's error code, never as a dialog. A cancel is reported as `QUERY_CANCELLED`, not as
   a failure.
-- Progress shows in two places: `Running…` beside the toolbar buttons, and a spinner on the pager
-  under the grid. Previous rows stay on screen until the new ones land.
+- Progress shows in two places: the **strip under the toolbar** ([`BusyBar`](../frontend.md)) — the
+  cat, the word `Running…` and a line sweeping the width of the tab, which is the one a reader
+  cannot miss — and a spinner on the pager under the grid. Previous rows stay on screen until the
+  new ones land, which is exactly why the strip is needed: a pane full of the last answer looks like
+  a pane full of this one.
 - **How many rows came back, and how long it took, are on the grid's own status line** — not on a
   strip of their own under the panel. There was one, and it said `325 rows · 5,077 ms` directly
   beneath a line already reading `Record 1 of 325`: two accounts of one read, a row apart. The
