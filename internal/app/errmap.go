@@ -42,10 +42,13 @@ const (
 	// CodeUnsupported is a thing this engine has no concept of rather than a thing that went
 	// wrong — a foreign key on MongoDB, a primary key other than `_id`. It is its own code so the
 	// UI can say so plainly instead of drawing it as a failure the reader could retry.
-	CodeUnsupported      ErrorCode = "UNSUPPORTED"
-	CodeQueryCancelled   ErrorCode = "QUERY_CANCELLED"
-	CodeHostUnreachable  ErrorCode = "HOST_UNREACHABLE"
-	CodeTimeout          ErrorCode = "TIMEOUT"
+	CodeUnsupported     ErrorCode = "UNSUPPORTED"
+	CodeQueryCancelled  ErrorCode = "QUERY_CANCELLED"
+	CodeHostUnreachable ErrorCode = "HOST_UNREACHABLE"
+	CodeTimeout         ErrorCode = "TIMEOUT"
+	// CodeRunDeadline is this app's clock rather than the server's silence, which is why it is not
+	// CodeTimeout: the run may still be going on the far side. See domain.ErrRunDeadline.
+	CodeRunDeadline      ErrorCode = "RUN_DEADLINE"
 	CodeTLSUnsupported   ErrorCode = "TLS_UNSUPPORTED"
 	CodeTLSNotVerified   ErrorCode = "TLS_NOT_VERIFIED"
 	CodePasswordNotFound ErrorCode = "PASSWORD_NOT_FOUND"
@@ -129,6 +132,7 @@ var sentinelToWire = []struct {
 	{domain.ErrFileUnreadable, CodeFileUnreadable, "That file could not be read. Check it is still there and that this account can open it."},
 	{domain.ErrHostUnreachable, CodeHostUnreachable, "Could not reach the server. Check the host and port."},
 	{domain.ErrConnectionTimeout, CodeTimeout, "The server did not respond in time."},
+	{domain.ErrRunDeadline, CodeRunDeadline, "Vibe DB stopped waiting for this. The server may still be running it."},
 	{domain.ErrTLSUnsupported, CodeTLSUnsupported, "The server does not support TLS. Try a lower TLS mode."},
 	{domain.ErrTLSNotVerified, CodeTLSNotVerified, "The server's TLS certificate is not trusted. Use TLS mode Required to encrypt without verifying it."},
 	{domain.ErrPasswordNotFound, CodePasswordNotFound, "No saved password. Enter the password to connect."},

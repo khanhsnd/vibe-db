@@ -20,6 +20,12 @@ export type ErrorCode =
   | 'QUERY_CANCELLED'
   | 'HOST_UNREACHABLE'
   | 'TIMEOUT'
+  /**
+   * This app's own clock ran out, which is **not** `TIMEOUT`: the server may still be running the
+   * statement. Nothing here knows whether it finished, so it is never something to retry blindly —
+   * see `features/query-tab.md`.
+   */
+  | 'RUN_DEADLINE'
   | 'TLS_UNSUPPORTED'
   | 'TLS_NOT_VERIFIED'
   | 'PASSWORD_NOT_FOUND'

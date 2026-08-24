@@ -35,6 +35,16 @@ var (
 	ErrEmptyStatement  = errors.New("no statement to run")
 	ErrStatementFailed = errors.New("statement rejected by the server")
 	ErrQueryCancelled  = errors.New("query cancelled")
+	// ErrRunDeadline is **this app's own clock** running out on something the reader asked for, and
+	// it is its own sentinel because it is not what ErrConnectionTimeout says. A timeout is a server
+	// that did not answer; this is a server that is still working and a client that stopped waiting —
+	// the statement may well be running on the far side, and nothing here can say whether it
+	// finished. Reporting it as the server's silence sends a reader to check a server that is fine.
+	//
+	// It is also what a *cancellation* means when nobody pressed Stop: PostgreSQL answers a cut-off
+	// statement with `57014`, which is the same code its own `statement_timeout` uses, so a clock
+	// this app set would otherwise be reported as the reader's own doing.
+	ErrRunDeadline = errors.New("this app stopped waiting for the run")
 
 	// ErrFileUnreadable is a file on this machine the app was pointed at and could not read: a
 	// path that is no longer there, or one this account may not open. Nothing was sent to a

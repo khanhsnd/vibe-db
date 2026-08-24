@@ -214,3 +214,31 @@ the server rejects.
   strip of their own under the panel. There was one, and it said `325 rows · 5,077 ms` directly
   beneath a line already reading `Record 1 of 325`: two accounts of one read, a row apart. The
   elapsed time went with it, `ElapsedMs` still crossing the wire for whatever wants it next.
+
+## How long a run is given
+
+**A run the reader can Stop is given no deadline at all.** How long a statement takes is not knowable
+from this side — a report over a year of rows, a migration, a `COUNT(*)` on a big table are all
+minutes of perfectly ordinary work — so the bound is the reader's own press, which is
+`rowsTimeout`'s rule for [a streamed read of every row](row-limit.md) applied to a statement. Execute,
+Explain and a console line all go through the one bound method and all carry a **run id**, which is
+what Stop cancels; a run without one keeps a clock, nothing on this side being able to end it.
+
+**Whose timeout a long statement has is therefore the server's**, which is where such a limit belongs:
+`max_execution_time`, `statement_timeout`, a query governor — administered per database and per
+account by whoever owns the database. A clock in a client second-guessing them is how a statement the
+server was happy to run comes back as a failure.
+
+- **Where a clock this app set does still run out, it says so**: `RUN_DEADLINE`, never `TIMEOUT`. The
+  two are different failures — one is a server that did not answer, the other a server that is *still
+  working* while this side stopped waiting — and the statement may well still be running on the far
+  side, so it is never something to retry blindly. Which operations keep a clock, and how long, is
+  [the error's own row](../errors.md).
+- **It is one seam** (`stopped`), because a deadline reaches the driver as an ordinary cancelled
+  context and comes back in that engine's words: four engines call a cut-off statement a timeout and
+  PostgreSQL calls it `57014` — the same code its *own* `statement_timeout` uses. So both are
+  reclassified, and **only while this app's context is what expired**: a server's own limit, a reader's
+  Stop (`QUERY_CANCELLED`) and a syntax error that landed at the same moment all keep their own answer.
+- **The History Log gets the same wording**, the note being taken after the reclassification rather
+  than before — a log that said the server timed out would be the same wrong answer, kept.
+

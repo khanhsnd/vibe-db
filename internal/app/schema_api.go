@@ -453,7 +453,7 @@ func (a *ConnectionAPI) CallRoutine(
 	started := time.Now()
 	result, err := schema.CallRoutine(ctx, ns.toDriver(), planned)
 	if err != nil {
-		return QueryResult{}, wrapError(err)
+		return QueryResult{}, wrapError(stopped(ctx, err))
 	}
 	return toQueryResultDTO(result, time.Since(started)), nil
 }
@@ -616,7 +616,7 @@ func (a *ConnectionAPI) changeSchema(
 	ctx, cancel := a.withTimeout(schemaTimeout)
 	defer cancel()
 
-	return wrapError(change(ctx, schema))
+	return wrapError(stopped(ctx, change(ctx, schema)))
 }
 
 // requireColumn refuses a column that named neither itself nor a type. A default is allowed to

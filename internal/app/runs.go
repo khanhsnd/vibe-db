@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
+
+	"github.com/khanhsnd/vibe-db/internal/domain"
 )
 
 // runRegistry keeps the cancel func of every in-flight query so a second bound
@@ -44,6 +47,27 @@ func (r *runRegistry) begin(
 		r.mu.Unlock()
 		cancel()
 	}
+}
+
+// stopped names a failure that is **this app's clock** rather than the server's silence, and it is
+// the one seam that does so: a deadline set here reaches the driver as an ordinary cancelled
+// context, so what comes back is whatever that engine calls a cut-off statement — a timeout on
+// four of them, and a *cancellation* on PostgreSQL, which uses one code for both. Left alone, the
+// first blames a server that is answering perfectly well and the second blames a reader who never
+// pressed Stop.
+//
+// It reclassifies only where **our** context is what expired and the error is one of those two, so
+// a server's own `statement_timeout`, a reader's Stop, and a syntax error that happened to land at
+// the same moment all keep their own answer. Order matters: a Stop cancels the context without a
+// deadline, so `ctx.Err()` says which of the two happened.
+func stopped(ctx context.Context, err error) error {
+	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return err
+	}
+	if errors.Is(err, domain.ErrConnectionTimeout) || errors.Is(err, domain.ErrQueryCancelled) {
+		return domain.ErrRunDeadline
+	}
+	return err
 }
 
 // bound is context.WithTimeout, except that a non-positive timeout means no deadline.

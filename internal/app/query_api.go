@@ -12,7 +12,30 @@ import (
 	"github.com/khanhsnd/vibe-db/internal/snippet"
 )
 
+// statementTimeout is what a run with **nothing to stop it** is given. A run the reader can stop is
+// given no deadline at all — see runDeadline.
 const statementTimeout = 60 * time.Second
+
+// runDeadline is how long a run is allowed, and a run carrying a **run id** is allowed as long as it
+// takes. How long a statement runs is not knowable from here: a report over a year of rows, a
+// migration, a `COUNT(*)` on a big table are all minutes of perfectly ordinary work, and a clock that
+// cut them off would be doing the very thing Stop exists to let the reader decide. So the bound is
+// the reader's own press (`Cancel`), which is `rowsTimeout`'s rule applied to a statement — a
+// streamed read of every row is given no clock for the same reason.
+//
+// **Whose timeout it then is, is the server's**, which is where a limit on a long statement belongs:
+// `max_execution_time`, `statement_timeout`, a query governor. Those are administered per database
+// and per account, and this app second-guessing them from a laptop is how a statement that the
+// server was happy to run came back as a failure.
+//
+// A run with no id has no Stop behind it — nothing on this side could end it — so it keeps a clock,
+// exactly as an unbounded read that did not ask to be streamed does.
+func runDeadline(runID string) time.Duration {
+	if runID == "" {
+		return statementTimeout
+	}
+	return noDeadline
+}
 
 type QueryAPI struct {
 	apiContext
@@ -62,7 +85,7 @@ func (a *QueryAPI) Run(sessionID string, input QueryInput) (ScriptResult, error)
 		return ScriptResult{}, wrapError(domain.ErrEmptyStatement)
 	}
 
-	ctx, release := a.runs.begin(a.ctx, input.RunID, statementTimeout)
+	ctx, release := a.runs.begin(a.ctx, input.RunID, runDeadline(input.RunID))
 	defer release()
 
 	started := time.Now()
@@ -88,6 +111,9 @@ func (a *QueryAPI) runScript(
 		started := time.Now()
 		result, err := a.sessions.Query(ctx, sessionID, query)
 		elapsed := time.Since(started)
+		// Before anything is said about it: a clock this app set is this app's failure, and the
+		// history log gets the same wording the reader does — see stopped.
+		err = stopped(ctx, err)
 		noting.note(statement, elapsed, err)
 
 		if err != nil {

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/khanhsnd/vibe-db/internal/domain"
 )
 
 func TestRunRegistryCancelStopsTheRun(t *testing.T) {
@@ -71,5 +73,52 @@ func TestRowsTimeout(t *testing.T) {
 	}
 	if got := rowsTimeout(false); got != queryTimeout {
 		t.Errorf("rowsTimeout(bounded) = %v, want %v", got, queryTimeout)
+	}
+}
+
+func TestRunDeadlineIsTheReadersPress(t *testing.T) {
+	if got := runDeadline("run-1"); got != noDeadline {
+		t.Errorf("runDeadline(%q) = %v, want no deadline: a run with Stop behind it needs no clock",
+			"run-1", got)
+	}
+	if got := runDeadline(""); got != statementTimeout {
+		t.Errorf("runDeadline(\"\") = %v, want %v: nothing on this side could stop it",
+			got, statementTimeout)
+	}
+}
+
+func TestStoppedNamesThisAppsClock(t *testing.T) {
+	expired, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	live, release := context.WithCancel(context.Background())
+	defer release()
+
+	pressed, stop := context.WithCancel(context.Background())
+	stop()
+
+	sqlError := errors.New("syntax error at or near \"slect\"")
+
+	tests := []struct {
+		name string
+		ctx  context.Context
+		in   error
+		want error
+	}{
+		// Our clock ran out, and the engine reported it as either of the two things engines report.
+		{"deadline reported as a timeout", expired, domain.ErrConnectionTimeout, domain.ErrRunDeadline},
+		{"deadline reported as a cancel", expired, domain.ErrQueryCancelled, domain.ErrRunDeadline},
+		// The server's own limit, or the reader's own press: both keep their own answer.
+		{"server timeout with time to spare", live, domain.ErrConnectionTimeout, domain.ErrConnectionTimeout},
+		{"reader pressed Stop", pressed, domain.ErrQueryCancelled, domain.ErrQueryCancelled},
+		// A failure that has nothing to do with a clock is left alone even past the deadline.
+		{"statement refused", expired, sqlError, sqlError},
+		{"nothing went wrong", expired, nil, nil},
+	}
+
+	for _, test := range tests {
+		if got := stopped(test.ctx, test.in); !errors.Is(got, test.want) && got != test.want {
+			t.Errorf("%s: stopped(...) = %v, want %v", test.name, got, test.want)
+		}
 	}
 }

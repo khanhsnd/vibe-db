@@ -284,7 +284,7 @@ func (a *ConnectionAPI) LoadTableRows(sessionID string, page TablePageInput) (Ta
 
 	rows, err := a.sessions.TableRows(ctx, sessionID, target)
 	if err != nil {
-		return TableRows{}, wrapError(err)
+		return TableRows{}, wrapError(stopped(ctx, err))
 	}
 	return toTableRowsDTO(rows, target), nil
 }
