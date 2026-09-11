@@ -122,3 +122,8 @@ what the viewer decodes to show the bytes, the image or the dump.
 and a reader who stored text wants to read it rather than decode it. Nothing consults the column's
 type to decide this: the bytes themselves are the evidence, which is also why it cannot be wrong
 about a `TEXT` column an engine happens to report as a `BLOB`.
+
+Writable NULL cells open with an empty text editor. Typing clears the NULL checkbox;
+opening the editor alone leaves the value unchanged. Unchecking NULL allows an
+empty string, and Discard restores the original NULL. Read-only NULL cells retain
+the “This cell holds NULL” message.

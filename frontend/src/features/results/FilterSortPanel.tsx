@@ -12,6 +12,7 @@ import { ValuePick } from './FilterValuePanel'
 import {
   appendTo,
   arityOf,
+  defaultOperator,
   fitValues,
   FILTER_OPS,
   insertAfter,
@@ -61,6 +62,7 @@ export function FilterSortPanel({ columns, filtering, draft }: FilterSortPanelPr
   const firstColumn = names[0] ?? ''
 
   const edit: Edit = {
+    columns,
     names,
     suggest: filtering.suggest,
     set: (path, node) => {
@@ -84,7 +86,7 @@ export function FilterSortPanel({ columns, filtering, draft }: FilterSortPanelPr
         <Label>Filter</Label>
         <Adders
           disabled={firstColumn === ''}
-          onCondition={() => edit.addInside([], newCondition(firstColumn))}
+          onCondition={() => edit.addInside([], newCondition(firstColumn, edit.columns))}
           onGroup={() => edit.addInside([], newGroup())}
         />
         <div className="min-w-2 flex-1" />
@@ -143,6 +145,7 @@ export function FilterSortPanel({ columns, filtering, draft }: FilterSortPanelPr
 
 /** Everything a row of the builder acts through, so the tree renders itself down one prop. */
 interface Edit {
+  columns: readonly ResultColumn[]
   names: readonly string[]
   suggest?: ((column: string) => Promise<string[]>) | undefined
   set: (path: Path, node: Criterion | null) => void
@@ -215,8 +218,8 @@ function Rows({ group, path, depth, edit }: RowsProps) {
               <Adders
                 onCondition={() =>
                   grouped
-                    ? edit.addInside(here, newCondition(firstColumn))
-                    : edit.addBeside(here, newCondition(firstColumn))
+                    ? edit.addInside(here, newCondition(firstColumn, edit.columns))
+                    : edit.addBeside(here, newCondition(firstColumn, edit.columns))
                 }
                 onGroup={() =>
                   grouped ? edit.addInside(here, newGroup()) : edit.addBeside(here, newGroup())
@@ -265,7 +268,14 @@ function ConditionParts({
       <FieldPick
         names={edit.names}
         value={condition.column}
-        onChange={(column) => edit.set(path, { ...condition, column })}
+        onChange={(column) => {
+          const previous = edit.columns.find((one) => one.name === condition.column)
+          const next = edit.columns.find((one) => one.name === column)
+          const operator = condition.operator === defaultOperator(previous)
+            ? defaultOperator(next)
+            : condition.operator
+          edit.set(path, { ...condition, column, operator })
+        }}
       />
 
       <MenuButton

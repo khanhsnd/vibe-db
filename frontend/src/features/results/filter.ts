@@ -1,6 +1,7 @@
 import type { Cell } from '@/bridge/tables'
 
-import { cellPreview } from './resultSet'
+import { typeKind } from './columnType'
+import { cellPreview, type ResultColumn } from './resultSet'
 
 /**
  * How much of a value a *label* carries — a menu item, a picker's trigger. A label is not the
@@ -184,12 +185,20 @@ export function operatorLabel(operator: FilterOp, value: Cell): string {
   return `${symbolOf(operator)} ${cellPreview(value, LABEL_LIMIT)}`
 }
 
-/**
- * A fresh condition on the first column, which is what `+` adds. `contains` rather than `=`
- * because a reader adding a row is looking for something rather than naming it exactly.
- */
-export function newCondition(column: string): Condition {
-  return { kind: 'condition', column, operator: 'contains', values: [], enabled: true }
+/** Text searches start with contains; typed scalar values start with equality. */
+export function defaultOperator(column: ResultColumn | undefined): FilterOp {
+  const kind = typeKind(column?.fullType || column?.type || '')
+  return kind === 'numeric' || kind === 'bool' || kind === 'temporal' ? 'eq' : 'contains'
+}
+
+export function newCondition(column: string, columns: readonly ResultColumn[]): Condition {
+  return {
+    kind: 'condition',
+    column,
+    operator: defaultOperator(columns.find((one) => one.name === column)),
+    values: [],
+    enabled: true,
+  }
 }
 
 /** A fresh empty group, which is what `()+` adds: the parentheses first, their contents after. */

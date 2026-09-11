@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { appendTo, newCondition, NO_FILTER, type GridFiltering, type Group } from './filter'
-import type { SortKey } from './resultSet'
+import type { ResultColumn, SortKey } from './resultSet'
 
 /**
  * The conditions and the sort keys as the reader is building them, before `Apply Filter & Sort`
@@ -27,6 +27,7 @@ export interface FilterDraft {
 }
 
 export function useFilterDraft(
+  columns: readonly ResultColumn[],
   filtering: GridFiltering | undefined,
   sort: readonly SortKey[],
   onSortChange: ((sort: SortKey[]) => void) | undefined,
@@ -54,6 +55,6 @@ export function useFilterDraft(
       if (keys !== sort) onSortChange?.([...keys])
     },
     addCondition: (column) =>
-      setCriteria((current) => appendTo(current, [], newCondition(column))),
+      setCriteria((current) => appendTo(current, [], newCondition(column, columns))),
   }
 }

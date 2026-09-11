@@ -104,9 +104,14 @@ export function CellEditor({
           that is text is typed into — see ValueViewer. */}
       <ValueViewer
         className="min-h-0 flex-1"
-        value={isNull ? null : draft}
+        value={isNull ? (editable ? '' : null) : draft}
         columnType={column.fullType || column.type}
-        onChange={editable && !isNull ? setDraft : undefined}
+        onChange={
+          editable ? (next) => {
+            setDraft(next)
+            setIsNull(false)
+          } : undefined
+        }
         formatValue={formatValue}
       />
 

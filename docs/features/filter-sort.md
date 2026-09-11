@@ -95,3 +95,8 @@ pattern writes one in the query tab. And `is NULL` is `{ field: null }`, which f
 *missing* the field as well as one holding null, because in a document store those are one question.
 The statement shown under the grid is the command that ran, spelled from the same documents that were
 sent: `db.users.find({ age: { $gt: 30 } }).sort({ _id: 1 }).skip(0).limit(100)`.
+
+New conditions default to `=` for numeric, boolean and temporal columns, and
+`contains` for other types. This applies to header Add Filter and every builder
+add button. Changing the column updates the operator when it still matches the
+previous column’s default; explicitly chosen comparisons are preserved.

@@ -463,7 +463,7 @@ export function ResultGrid({
    * panel is only mounted while it is showing: a reader who removed a condition and then hid the
    * panel would otherwise find it back on opening the panel again.
    */
-  const draft = useFilterDraft(filtering, sort, onSortChange)
+  const draft = useFilterDraft(result.columns, filtering, sort, onSortChange)
   /**
    * The header being carried, if one is. It is the grid's rather than the header row's because the
    * column it marks runs the whole height of the grid: what the reader has hold of is a column, and
