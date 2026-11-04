@@ -5,12 +5,16 @@ on:
     tags:
       - 'v*.*.*'
 
+# Releases and the Homebrew Cask both live in this repository, so the built-in GITHUB_TOKEN is all
+# the workflow needs. `contents: write` lets it create the release and commit Casks/vibe-db.rb.
 permissions:
-  contents: read
+  contents: write
 
 env:
-  RELEASE_REPOSITORY: khanhsnd/vibe-db-releases
-  TAP_REPOSITORY: khanhsnd/homebrew-tap
+  # Kept only while copies installed before the move still check these repositories for updates —
+  # see docs/features/updates.md. Delete the RELEASES_TOKEN secret and the `legacy` job skips itself.
+  LEGACY_RELEASE_REPOSITORY: khanhsnd/vibe-db-releases
+  LEGACY_TAP_REPOSITORY: khanhsnd/homebrew-tap
 
 jobs:
   windows:
@@ -147,58 +151,92 @@ jobs:
       - name: Create checksums
         working-directory: dist
         run: sha256sum vibe-db-* > checksums.txt
-      - name: Publish public release
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          repository: ${{ env.RELEASE_REPOSITORY }}
-          token: ${{ secrets.RELEASES_TOKEN }}
           tag_name: ${{ github.ref_name }}
-          target_commitish: master
           name: Vibe DB ${{ github.ref_name }}
-          body: Release ${{ github.ref_name }}.
+          generate_release_notes: true
           files: dist/*
 
-  update-homebrew-tap:
+  update-cask:
     needs: publish
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
       - uses: actions/download-artifact@v4
         with:
           name: macos-release
           path: dist
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ env.TAP_REPOSITORY }}
-          token: ${{ secrets.RELEASES_TOKEN }}
-          path: tap
-      - name: Update Cask
+      - name: Write Cask
         env:
           VERSION: ${{ github.ref_name }}
         run: |
           version="${VERSION#v}"
           sha256=$(sha256sum "dist/vibe-db-$version-macos-universal.zip" | cut -d ' ' -f 1)
-          mkdir -p tap/Casks
-          VERSION="$version" SHA256="$sha256" node <<'NODE'
-          const fs = require('fs')
-          const version = process.env.VERSION
-          const sha256 = process.env.SHA256
-          const cask = `cask 'vibe-db' do
-            version '${version}'
-            sha256 '${sha256}'
-
-            url "https://github.com/khanhsnd/vibe-db-releases/releases/download/v#{version}/vibe-db-#{version}-macos-universal.zip"
-            name 'Vibe DB'
-            desc 'Database desktop client'
-            homepage 'https://github.com/khanhsnd/vibe-db-releases'
-
-            app 'vibe-db.app'
-          end
-          `
-          fs.writeFileSync('tap/Casks/vibe-db.rb', cask)
-          NODE
+          .github/scripts/write-cask.sh "$version" "$sha256" Casks/vibe-db.rb
       - name: Commit Cask
-        working-directory: tap
         run: |
+          git config user.name 'vibe-db release bot'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Casks/vibe-db.rb
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(cask): update vibe-db to ${{ github.ref_name }}"
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin master && git push origin HEAD:master && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
+
+  # Copies installed before releases moved here still ask khanhsnd/vibe-db-releases for an update,
+  # and Homebrew users still read khanhsnd/homebrew-tap. Mirroring each release there lets them
+  # reach a version that looks here instead. Remove the RELEASES_TOKEN secret once that is done
+  # and every step below is skipped; the two repositories can then be deleted.
+  legacy:
+    needs: publish
+    runs-on: ubuntu-latest
+    env:
+      HAS_TOKEN: ${{ secrets.RELEASES_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.HAS_TOKEN == 'true'
+      - uses: actions/download-artifact@v4
+        if: env.HAS_TOKEN == 'true'
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create checksums
+        if: env.HAS_TOKEN == 'true'
+        working-directory: dist
+        run: sha256sum vibe-db-* > checksums.txt
+      - name: Mirror release
+        if: env.HAS_TOKEN == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ env.LEGACY_RELEASE_REPOSITORY }}
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          target_commitish: master
+          name: Vibe DB ${{ github.ref_name }}
+          body: Release ${{ github.ref_name }}. Releases now live at https://github.com/khanhsnd/vibe-db/releases.
+          files: dist/*
+      - uses: actions/checkout@v4
+        if: env.HAS_TOKEN == 'true'
+        with:
+          repository: ${{ env.LEGACY_TAP_REPOSITORY }}
+          token: ${{ secrets.RELEASES_TOKEN }}
+          path: tap
+      - name: Update legacy Cask
+        if: env.HAS_TOKEN == 'true'
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          version="${VERSION#v}"
+          sha256=$(sha256sum "dist/vibe-db-$version-macos-universal.zip" | cut -d ' ' -f 1)
+          .github/scripts/write-cask.sh "$version" "$sha256" tap/Casks/vibe-db.rb
+          cd tap
           git config user.name 'vibe-db release bot'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add Casks/vibe-db.rb

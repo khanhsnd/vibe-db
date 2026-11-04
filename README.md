@@ -5,8 +5,8 @@ same port.
 
 ## Install
 
-Builds are published to
-[khanhsnd/vibe-db-releases](https://github.com/khanhsnd/vibe-db-releases/releases/latest). **Nothing
+Builds are published to this repository's
+[Releases](https://github.com/khanhsnd/vibe-db/releases/latest). **Nothing
 there is code-signed or notarized**, so each platform asks once before it runs an unknown publisher.
 How a version is built and how the app updates itself are in
 [docs/features/updates.md](docs/features/updates.md).
@@ -20,8 +20,8 @@ elevation prompt. Later versions install themselves from Settings → Updates.
 ### macOS 12+, Intel or Apple Silicon
 
 ```sh
-brew tap khanhsnd/tap
-brew install --cask vibe-db
+brew tap khanhsnd/vibe-db https://github.com/khanhsnd/vibe-db
+brew install --cask khanhsnd/vibe-db/vibe-db
 ```
 
 Or download `vibe-db-<version>-macos-universal.zip`, unzip it and move `vibe-db.app` into

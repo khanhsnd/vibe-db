@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const ReleasesURL = "https://api.github.com/repos/khanhsnd/vibe-db-releases/releases/latest"
+const ReleasesURL = "https://api.github.com/repos/khanhsnd/vibe-db/releases/latest"
 
 var ErrDevelopmentBuild = errors.New("development builds do not update")
 
