@@ -3,6 +3,8 @@ import { Check, Minus, Plus, RotateCw, Square, X } from 'lucide-react'
 
 import { IconButton } from '@/shared/ui/IconButton'
 
+import { useRefreshKeys } from './refreshKeys'
+
 interface GridFooterProps {
   /**
    * The four editing icons are hidden outright for rows that cannot be written back — which is
@@ -48,6 +50,9 @@ export function GridFooter({
   running = false,
   children,
 }: GridFooterProps) {
+  // The footer's Refresh is also what F5 and Ctrl+R press — see `refreshKeys.ts`.
+  useRefreshKeys(onRefresh, busy)
+
   return (
     <div
       role="toolbar"
@@ -92,7 +97,7 @@ export function GridFooter({
         ) : null}
 
         <IconButton
-          label="Refresh"
+          label="Refresh (F5, Ctrl+R)"
           icon={<RotateCw size={13} className={busy ? 'animate-spin' : ''} />}
           disabled={busy}
           onClick={onRefresh}

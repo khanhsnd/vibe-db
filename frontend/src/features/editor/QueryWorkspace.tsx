@@ -4,6 +4,7 @@ import { engineInfo, namespaceOf } from '@/bridge/connections'
 import type { HistoryEntry } from '@/bridge/history'
 import { needsConfirming, queries, type ScriptReview } from '@/bridge/query'
 import { emptySnippet, type Snippet, type SnippetInput } from '@/bridge/snippets'
+import { useClaimF5 } from '@/features/results/refreshKeys'
 import { SnippetDialog } from '@/features/snippets/SnippetDialog'
 import { BusyBar } from '@/shared/ui/BusyBar'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
@@ -187,6 +188,9 @@ export function QueryWorkspace({
 
   // Both shortcuts are bound on the window, because F5 reloads the WebView whenever focus sits
   // outside this panel. The ref keeps the listeners off the keystroke path.
+  // F5 is Execute here rather than the result's Refresh, which keeps Ctrl+R.
+  useClaimF5()
+
   const latest = useRef({ start, format })
   latest.current = { start, format }
 

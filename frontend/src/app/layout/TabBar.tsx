@@ -19,6 +19,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 
 import { environmentInfo, namespaceLabel, type Profile } from '@/bridge/connections'
 import { EnvironmentStripe } from '@/features/connections/EnvironmentDot'
@@ -200,6 +201,14 @@ function TabItem({
 }: TabItemProps) {
   const { icon: Icon, tint } = KINDS[tab.kind]
   const where = namespaceLabel(tab.namespace)
+  const self = useRef<HTMLDivElement>(null)
+
+  // A tab brought to the front from anywhere else — the tree, a menu, a new query, a close beside
+  // it — is scrolled into the strip, or the reader is looking at a tab they cannot see the name of.
+  // `nearest` moves the strip only as far as it must, and not at all when the tab already shows.
+  useEffect(() => {
+    if (active) self.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [active])
   const menu: MenuItem[] = [
     { label: 'Close', icon: <X size={13} />, onSelect: onClose },
     { label: 'Close All Tabs', icon: <X size={13} />, onSelect: onCloseAll, separatorBefore: true },
@@ -229,6 +238,7 @@ function TabItem({
   return (
     <ContextMenu items={menu}>
       <div
+        ref={self}
         role="tab"
         aria-selected={active}
         title={tooltip}

@@ -5,6 +5,7 @@ import { copyText } from '@/bridge/clipboard'
 import { engineInfo, engineWords } from '@/bridge/connections'
 import { files } from '@/bridge/files'
 import { schema } from '@/bridge/schema'
+import { useRefreshKeys } from '@/features/results/refreshKeys'
 import { Empty } from '@/shared/ui/Empty'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
 import { useConnectionsStore } from '@/stores/connections'
@@ -201,6 +202,7 @@ export function DiagramView({ tab }: { tab: DiagramTab }) {
       void refreshStructure(tab.profileId, tab.namespace, node.table)
     }
   }, [refreshObjects, refreshStructure, tab.profileId, tab.namespace, diagram.nodes])
+  useRefreshKeys(refresh, false)
 
   /** The whole diagram as a standalone file — everything drawn, not just what is on screen. */
   const picture = useCallback(() => {

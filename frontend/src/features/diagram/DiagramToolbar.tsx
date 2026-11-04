@@ -173,7 +173,7 @@ export function DiagramToolbar({
 
       <IconButton label="Arrange the boxes" icon={<LayoutGrid size={14} />} onClick={onArrange} />
       <IconButton label="Add every table" icon={<Plus size={14} />} onClick={onAddAll} />
-      <IconButton label="Re-read the tables" icon={<RotateCw size={14} />} onClick={onRefresh} />
+      <IconButton label="Re-read the tables (F5, Ctrl+R)" icon={<RotateCw size={14} />} onClick={onRefresh} />
 
       <MenuButton
         items={[

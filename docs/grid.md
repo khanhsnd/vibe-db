@@ -414,7 +414,8 @@ Every grid sits above one `GridFooter`, which is where a row is *acted on* rathe
 - **Add** appends an empty row at the end of the grid **and selects it**, so a paste that follows the
   add means the new row and not the one that was copied; **Delete** marks the selected rows, so both
   are pending like an edited cell. **Apply** writes every pending change — edits, then inserts, then
-  deletions — and reloads; **Discard** drops them all. **Refresh** reloads alone, and is the *only*
+  deletions — and reloads; **Discard** drops them all. **Refresh** reloads alone — `F5` and `Ctrl`+`R`
+  press it, see [features/shell.md](features/shell.md#tabs) — and is the *only*
   thing that re-reads a table tab — see [features/table-tab.md](features/table-tab.md). **Stop**
   appears only where there is something to cancel, which today is a running statement.
 - **What is pending outlives the tab being looked away from.** It is staged in `stores/gridEdits.ts`

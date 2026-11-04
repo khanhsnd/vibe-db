@@ -8,7 +8,8 @@ whichever connection is open.
 
 A query tab carries its own toolbar, editor buffer, database and row limit, so several tabs can sit
 on the same connection without treading on each other. The toolbar picks the database, then
-**Execute** (`F5` or `Ctrl`+`Enter`) or **Explain** runs the statement; **Format**
+**Execute** (`F5` or `Ctrl`+`Enter`) or **Explain** runs the statement — `Ctrl`+`R` is the result's
+Refresh, [as everywhere](shell.md#tabs); **Format**
 (`Ctrl`+`Shift`+`F`) lays it out — **each key is in its button's tooltip** rather than on a keycap
 beside it, a toolbar this full having no room for two more things to read past; **Save Snippet**
 names it and keeps it, which is [snippets.md](snippets.md); **Stop** cancels it; **Transaction**

@@ -160,6 +160,17 @@ are otherwise the same tab. Asking for a pair that is already open **reveals tha
 is state inside it, not part of what names it, so `Compare ▸ Data Only` on a comparison showing
 structure switches that one rather than opening a second on the same pair.
 
+**The tab in front is always in view.** However it got there — picked in the tree, opened by a
+menu, a new query, or the neighbour of one just closed — the strip scrolls just far enough to show
+it whole, and not at all when it already shows; otherwise the reader is looking at a tab whose name
+is off the end of the strip.
+
+**`F5` and `Ctrl`+`R` (`⌘`+`R`) press the Refresh in front** — a grid footer's `↻`, or a diagram's
+re-read — and are refused as keys of the WebView everywhere, since there both would reload the app
+and lose every tab's rows and every edit not yet applied. A query tab keeps `F5` for **Execute** and
+leaves `Ctrl`+`R` as its result's Refresh; a key pressed in an open dialog refreshes nothing behind
+it. One listener does it (`features/results/refreshKeys.ts`), so no view binds either key itself.
+
 **The wheel closes a tab**, as it does in every strip of tabs there is, and the `✕` that appears
 under the pointer is the other way. The press itself is refused: Chromium's middle-click autoscroll
 starts there and swallows the click that would follow, and the strip scrolls the moment it holds
