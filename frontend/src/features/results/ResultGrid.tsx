@@ -145,7 +145,7 @@ const CELL_PADDING = 17
 const TYPE_ICON_WIDTH = 17
 /** The room the lock on a key column takes, ahead of that column's name. */
 const KEY_ICON_WIDTH = 15
-/** The room the button on a referencing column takes after its name, its gap included. */
+/** The room the arrow on a referencing column takes, its gap and padding included. */
 const REFERENCE_WIDTH = 20
 /** The room the header's options button takes on the right, beyond a cell's own padding. */
 const MENU_WIDTH = 20
@@ -1287,7 +1287,9 @@ function headerWidth(column: ResultColumn): number {
   const reference = column.reference ? REFERENCE_WIDTH : 0
   const lines = Math.max(
     headerNameWidth(column.name) + key + reference + SORT_MARK_WIDTH,
-    textWidth(typeLabel(column), gridFont()) + TYPE_ICON_WIDTH,
+    textWidth(typeLabel(column), gridFont()) +
+      TYPE_ICON_WIDTH +
+      (column.reference ? reference + textWidth(column.reference.table, gridFont()) : 0),
   )
 
   return lines + MENU_WIDTH + CELL_PADDING
@@ -1515,11 +1517,10 @@ function HeaderRow({
                     place={sort.length > 1 ? place + 1 : 0}
                   />
                 ) : null}
-                {/* Where this column's values point. It is a button and so is never gripped — a
-                    press on it starts no drag — and it refuses focus for the reason the options
-                    button does: the keyboard stays on the grid. */}
-                {column.reference ? (
-                  <ReferenceButton reference={column.reference} />
+                {/* A dense header has no second line to name the referenced table on, so the
+                    arrow stands alone here and the tooltip says where it goes. */}
+                {dense && column.reference ? (
+                  <ReferenceButton reference={column.reference} bare />
                 ) : null}
               </span>
 
@@ -1530,6 +1531,11 @@ function HeaderRow({
                 <span className="flex items-center gap-1 text-2xs text-muted">
                   <ColumnTypeIcon type={column.type} />
                   <span className="truncate font-mono">{typeLabel(column)}</span>
+                  {/* Where this column's values point, **named**: an arrow alone would have to be
+                      hovered to be checked. It is a button and so is never gripped — a press on
+                      it starts no drag — and it refuses focus for the reason the options button
+                      does: the keyboard stays on the grid. */}
+                  {column.reference ? <ReferenceButton reference={column.reference} /> : null}
                 </span>
               )}
 
@@ -1807,10 +1813,10 @@ function CheckMark({ on, focused }: { on: boolean; focused: boolean }) {
 }
 
 /**
- * The arrow on a column a foreign key is declared on, which opens the table that key names. It is
- * drawn in `--accent` because it is the one mark in a header that is a link rather than a fact.
+ * The arrow on a column a foreign key is declared on, and beside it the table that key names, which
+ * it opens. It is drawn in `--accent` because it is the one mark in a header that is a link rather than a fact.
  */
-function ReferenceButton({ reference }: { reference: ColumnReference }) {
+function ReferenceButton({ reference, bare = false }: { reference: ColumnReference; bare?: boolean }) {
   const label = `Open ${reference.table} (${reference.column})`
 
   return (
@@ -1820,9 +1826,10 @@ function ReferenceButton({ reference }: { reference: ColumnReference }) {
       title={label}
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => reference.onOpen()}
-      className="inline-grid h-4 w-4 shrink-0 place-items-center rounded-sm text-accent transition-colors hover:bg-hover hover:text-accent-hover"
+      className="inline-flex h-4 min-w-0 shrink-0 items-center gap-0.5 rounded-sm px-0.5 text-accent transition-colors hover:bg-hover hover:text-accent-hover"
     >
-      <ArrowUpRight size={12} />
+      <ArrowUpRight size={12} className="shrink-0" />
+      {bare ? null : <span className="truncate font-mono">{reference.table}</span>}
     </button>
   )
 }
