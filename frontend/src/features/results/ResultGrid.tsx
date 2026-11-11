@@ -1273,6 +1273,12 @@ function HeadStrip({
 
 const typeLabel = (column: ResultColumn) => column.fullType || column.type
 
+/** A header's tooltip: everything the header draws, whole, for when the column is too narrow to. */
+const headerTitle = (column: ResultColumn) =>
+  column.reference
+    ? `${column.name} — ${typeLabel(column)} → ${column.reference.table}.${column.reference.column}`
+    : `${column.name} — ${typeLabel(column)}`
+
 /**
  * What a header needs to be read whole: the wider of its two lines — the lock and the name above,
  * the type-kind glyph and the type below — plus the options button and the cell's own padding.
@@ -1477,7 +1483,7 @@ function HeaderRow({
         return (
           <ContextMenu key={i} items={menuFor(i)}>
             <div
-              title={`${column.name} — ${typeLabel(column)}`}
+              title={headerTitle(column)}
               onContextMenu={() => onSelectColumn(i)}
               onPointerDown={(event) => startDrag(event, i)}
               onPointerMove={carry}
@@ -1520,7 +1526,7 @@ function HeaderRow({
                 {/* A dense header has no second line to name the referenced table on, so the
                     arrow stands alone here and the tooltip says where it goes. */}
                 {dense && column.reference ? (
-                  <ReferenceButton reference={column.reference} bare />
+                  <ReferenceButton name={column.name} reference={column.reference} bare />
                 ) : null}
               </span>
 
@@ -1530,12 +1536,21 @@ function HeaderRow({
               {dense ? null : (
                 <span className="flex items-center gap-1 text-2xs text-muted">
                   <ColumnTypeIcon type={column.type} />
-                  <span className="truncate font-mono">{typeLabel(column)}</span>
+                  {/* Beside a reference the type keeps its room up to half the line and the
+                      table's name is what gives way: a type is short and is what the cells
+                      underneath are read by, and the name is whole in the tooltip. */}
+                  <span
+                    className={cn('truncate font-mono', column.reference && 'max-w-1/2 shrink-0')}
+                  >
+                    {typeLabel(column)}
+                  </span>
                   {/* Where this column's values point, **named**: an arrow alone would have to be
                       hovered to be checked. It is a button and so is never gripped — a press on
                       it starts no drag — and it refuses focus for the reason the options button
                       does: the keyboard stays on the grid. */}
-                  {column.reference ? <ReferenceButton reference={column.reference} /> : null}
+                  {column.reference ? (
+                    <ReferenceButton name={column.name} reference={column.reference} />
+                  ) : null}
                 </span>
               )}
 
@@ -1816,8 +1831,19 @@ function CheckMark({ on, focused }: { on: boolean; focused: boolean }) {
  * The arrow on a column a foreign key is declared on, and beside it the table that key names, which
  * it opens. It is drawn in `--accent` because it is the one mark in a header that is a link rather than a fact.
  */
-function ReferenceButton({ reference, bare = false }: { reference: ColumnReference; bare?: boolean }) {
-  const label = `Open ${reference.table} (${reference.column})`
+function ReferenceButton({
+  name,
+  reference,
+  bare = false,
+}: {
+  /** The column the button is drawn on, which is the near end of what its tooltip spells. */
+  name: string
+  reference: ColumnReference
+  bare?: boolean
+}) {
+  // The whole of it, because the label is the first thing a narrow column clips: both ends of the
+  // key, and what a press does.
+  const label = `${name} → ${reference.table}.${reference.column} — click to open ${reference.table}`
 
   return (
     <button
@@ -1826,7 +1852,7 @@ function ReferenceButton({ reference, bare = false }: { reference: ColumnReferen
       title={label}
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => reference.onOpen()}
-      className="inline-flex h-4 min-w-0 shrink-0 items-center gap-0.5 rounded-sm px-0.5 text-accent transition-colors hover:bg-hover hover:text-accent-hover"
+      className="inline-flex h-4 min-w-0 items-center gap-0.5 rounded-sm px-0.5 text-accent transition-colors hover:bg-hover hover:text-accent-hover"
     >
       <ArrowUpRight size={12} className="shrink-0" />
       {bare ? null : <span className="truncate font-mono">{reference.table}</span>}

@@ -7,8 +7,9 @@ point, and takes the reader there two ways.
 
 - **The header names the referenced table, and that name opens it.** It sits on the header's type
   line after the type, in `--accent` — `↗ customers` — so which table a column points at is read
-  rather than hovered for; the tooltip adds the column it is matched against,
-  `Open customers (id)`. It opens a table tab like any other: the one a double-click in the tree
+  rather than hovered for. A name too long for the column is clipped with an ellipsis, and the
+  **tooltip** spells both ends of the key whole —
+  `customer_id → customers.id — click to open customers`. It opens a table tab like any other: the one a double-click in the tree
   would have opened, and **reused** if it is already in the strip, with whatever page and filter the
   reader left on it untouched.
 - **`Go to <table> · <column> = <value>` on the cell menu opens it narrowed to that row.** The
