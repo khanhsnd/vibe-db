@@ -4,6 +4,7 @@ import {
   ArchiveRestore,
   ArrowDownNarrowWide,
   ArrowUpDown,
+  ArrowUpRight,
   ArrowUpNarrowWide,
   Ban,
   ClipboardPaste,
@@ -121,6 +122,8 @@ export const ICON = {
   // The same glyph the tree's `Open View` wears, and for the same reason: both only look.
   viewValue: <Eye size={SIZE} />,
   saveAs: <Save size={SIZE} />,
+  // Following a foreign key to the table it names — the same arrow a header's own button wears.
+  reference: <ArrowUpRight size={SIZE} />,
   filter: <Filter size={SIZE} />,
   filterNone: <FilterX size={SIZE} />,
   filterPanel: <SlidersHorizontal size={SIZE} />,

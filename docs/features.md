@@ -89,6 +89,7 @@ to reach the one they came for. How the docs are laid out is written down in
 | Running a backup, an export, a dump or a comparison on a clock | [features/automation.md](features/automation.md) |
 | Running the engine's own mongodump, mysqldump or pg_dump — and putting one back | [features/tools.md](features/tools.md) |
 | The table tab: opening it, paging it, and its two panels | [features/table-tab.md](features/table-tab.md) |
+| Following a foreign key from a table tab: the header's arrow and the cell menu's Go to | [features/references.md](features/references.md) |
 | Query tabs, Explain, a MongoDB tab, a Redis tab, running a whole script | [features/query-tab.md](features/query-tab.md) |
 | `Format`, what the editor says before anything runs, and the log every statement is kept in | [features/script.md](features/script.md) |
 | The console, and Execute SQL File | [features/console.md](features/console.md) |

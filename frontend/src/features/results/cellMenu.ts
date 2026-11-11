@@ -14,12 +14,14 @@ import {
   type GridFiltering,
 } from './filter'
 import {
+  cellPreview,
   cellText,
   selectedCells,
   selectedRows,
   toTSV,
   type Cell,
   type CellRef,
+  type ColumnReference,
   type GridData,
   type Selection,
   type SortKey,
@@ -31,6 +33,9 @@ const UUIDS: ReadonlyArray<{ label: string; make: () => string }> = [
   { label: 'Uppercase', make: () => crypto.randomUUID().toUpperCase() },
   { label: 'Without Hyphens', make: () => crypto.randomUUID().replaceAll('-', '') },
 ]
+
+/** How much of a value the Go to item spells out. The condition it writes carries the whole of it. */
+const REFERENCE_LABEL_LIMIT = 32
 
 /**
  * Everything the cell menu acts through. What the grid was given decides what the menu offers:
@@ -91,6 +96,7 @@ export function cellMenuItems(context: CellMenuContext): MenuItem[] {
 
   return [
     ...writeItems(context),
+    ...referenceItems(context, column.reference, target),
     ...deleteItems(context),
     ...clipboardItems(context, target),
     ...narrowItems(context, target),
@@ -129,6 +135,31 @@ function writeItems(context: CellMenuContext): MenuItem[] {
     ...(onEditInPanel
       ? [{ label: 'Edit in Cell Editor', icon: ICON.cellEditor, onSelect: () => onEditInPanel(at) }]
       : []),
+  ]
+}
+
+/**
+ * Follows a foreign key from the cell it was raised on: the referenced table, narrowed to the row
+ * this value names. A NULL points at nothing, so the item is left off rather than drawn dead — the
+ * header's own button is still there for a reader who only wants the table.
+ */
+function referenceItems(
+  context: CellMenuContext,
+  reference: ColumnReference | undefined,
+  target: Target,
+): MenuItem[] {
+  if (!reference || target.value === null) return []
+
+  const row = context.data.rows[context.at.row]
+  if (!row) return []
+
+  return [
+    {
+      label: `Go to ${reference.table} · ${reference.column} = ${cellPreview(target.value, REFERENCE_LABEL_LIMIT)}`,
+      icon: ICON.reference,
+      separatorBefore: true,
+      onSelect: () => reference.onOpen(row),
+    },
   ]
 }
 

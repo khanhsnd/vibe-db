@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { engineInfo, type Namespace } from '@/bridge/connections'
 import { rowExport, type ExportFormat } from '@/bridge/export'
@@ -42,8 +42,9 @@ import { FetchProgress } from '@/shared/ui/FetchProgress'
 import { Loading } from '@/shared/ui/Loading'
 import { ICON } from '@/shared/ui/menuIcons'
 import { Split, SplitHandle, SplitPanel } from '@/shared/ui/Split'
-import { useConnectionsStore, useReadOnlySession } from '@/stores/connections'
+import { tableKey, useConnectionsStore, useReadOnlySession } from '@/stores/connections'
 import { IDLE_VIEW, useTableViewsStore } from '@/stores/tableViews'
+import { useTabsStore } from '@/stores/tabs'
 import { useTransactionsStore } from '@/stores/transactions'
 
 import { ColumnPicker } from './ColumnPicker'
@@ -62,6 +63,7 @@ import {
   type KeySearch,
 } from './keySpace'
 import { sampledTotal } from './keyValue'
+import { columnReference, referenceFilter, referencesOf } from './references'
 import { useWholeValue } from './useWholeValue'
 import { TableToolbar, type PanelKind } from './TableToolbar'
 import { useTableData } from './useTableData'
@@ -161,6 +163,57 @@ export function TableDataView({
     [arranged, hidden],
   )
 
+  /**
+   * The table's foreign keys, by the column each is declared on. They come from the **catalogue
+   * cache** the tree and the designer read — one read per table, and none at all where the tree has
+   * already opened it — and only on an engine that has such a constraint to declare.
+   */
+  const hasForeignKeys = engineInfo(engine).hasForeignKeys
+  const loadStructure = useConnectionsStore((s) => s.loadStructure)
+  const structure = useConnectionsStore((s) => s.structures[tableKey(profileId, namespace, table)])
+
+  useEffect(() => {
+    if (hasForeignKeys) void loadStructure(profileId, namespace, table)
+  }, [hasForeignKeys, loadStructure, profileId, namespace, table])
+
+  const references = useMemo(
+    () => referencesOf(namespace, structure?.foreignKeys ?? []),
+    [namespace, structure],
+  )
+
+  /**
+   * The columns the grid draws, each carrying where its values point. Opening one is a table tab like
+   * any other — the tab a double-click in the tree would have opened, and reused if it is already in
+   * the strip — and following a **value** gives that tab the conditions naming the row it points at,
+   * with the panel that spells them open so the reader can see why the table is one row long.
+   */
+  const drawn = useMemo(
+    () =>
+      visible.map(({ column }): ResultColumn => {
+        const reference = references.get(column.name)
+        if (reference === undefined) return column
+
+        return {
+          ...column,
+          reference: columnReference(namespace, reference, (row) => {
+            const tab = useTabsStore
+              .getState()
+              .openTable({ profileId, namespace: reference.namespace, table: reference.table })
+            if (row === undefined) return
+
+            const criteria = referenceFilter(reference, (name) => {
+              const at = visible.findIndex((entry) => entry.column.name === name)
+              return at < 0 ? null : (row[at] ?? null)
+            })
+            if (criteria.children.length === 0) return
+
+            useTableViewsStore.getState().change(tab, { criteria, page: 0, filterShown: true })
+          }),
+        }
+      }),
+    [visible, references, namespace, profileId],
+  )
+
   /** Which column identifies a row, and so which one a key space groups its tree by. */
   const keyColumn = keySpace ? columnAt(columns, KEY_COLUMN) : -1
 
@@ -206,7 +259,6 @@ export function TableDataView({
   )
 
   const grid = useMemo(() => {
-    const drawn = visible.map((entry) => entry.column)
     if (tree === null) return { columns: drawn, rows: flatRows }
 
     return {
@@ -228,7 +280,7 @@ export function TableDataView({
         })
       }),
     }
-  }, [tree, flatRows, visible, keyColumn, outline, edits.rows])
+  }, [tree, flatRows, drawn, visible, keyColumn, outline, edits.rows])
 
   /**
    * Which row of the page the grid's row *n* is. A tree reorders and adds rows, so the two differ

@@ -14,6 +14,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
+  ArrowUpRight,
   ChevronDown,
   ChevronRight,
   EllipsisVertical,
@@ -72,6 +73,7 @@ import {
   type DiffMark,
   type GridData,
   type GridOutline,
+  type ColumnReference,
   type ResultColumn,
   type Selection,
   type SortKey,
@@ -143,6 +145,8 @@ const CELL_PADDING = 17
 const TYPE_ICON_WIDTH = 17
 /** The room the lock on a key column takes, ahead of that column's name. */
 const KEY_ICON_WIDTH = 15
+/** The room the button on a referencing column takes after its name, its gap included. */
+const REFERENCE_WIDTH = 20
 /** The room the header's options button takes on the right, beyond a cell's own padding. */
 const MENU_WIDTH = 20
 /**
@@ -1280,8 +1284,9 @@ const typeLabel = (column: ResultColumn) => column.fullType || column.type
  */
 function headerWidth(column: ResultColumn): number {
   const key = column.primaryKey === true ? KEY_ICON_WIDTH : 0
+  const reference = column.reference ? REFERENCE_WIDTH : 0
   const lines = Math.max(
-    headerNameWidth(column.name) + key + SORT_MARK_WIDTH,
+    headerNameWidth(column.name) + key + reference + SORT_MARK_WIDTH,
     textWidth(typeLabel(column), gridFont()) + TYPE_ICON_WIDTH,
   )
 
@@ -1509,6 +1514,12 @@ function HeaderRow({
                     descending={sorted.descending}
                     place={sort.length > 1 ? place + 1 : 0}
                   />
+                ) : null}
+                {/* Where this column's values point. It is a button and so is never gripped — a
+                    press on it starts no drag — and it refuses focus for the reason the options
+                    button does: the keyboard stays on the grid. */}
+                {column.reference ? (
+                  <ReferenceButton reference={column.reference} />
                 ) : null}
               </span>
 
@@ -1792,6 +1803,27 @@ function CheckMark({ on, focused }: { on: boolean; focused: boolean }) {
       size={14}
       className={cn('shrink-0', focused ? 'text-on-accent' : on ? 'text-accent' : 'text-faint')}
     />
+  )
+}
+
+/**
+ * The arrow on a column a foreign key is declared on, which opens the table that key names. It is
+ * drawn in `--accent` because it is the one mark in a header that is a link rather than a fact.
+ */
+function ReferenceButton({ reference }: { reference: ColumnReference }) {
+  const label = `Open ${reference.table} (${reference.column})`
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => reference.onOpen()}
+      className="inline-grid h-4 w-4 shrink-0 place-items-center rounded-sm text-accent transition-colors hover:bg-hover hover:text-accent-hover"
+    >
+      <ArrowUpRight size={12} />
+    </button>
   )
 }
 

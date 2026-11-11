@@ -87,6 +87,29 @@ export interface ResultColumn {
   width?: number | undefined
   /** Draws this column's cells as the rows of a tree — see `GridOutline`. */
   outline?: GridOutline | undefined
+  /** The table this column's values name rows of — see `ColumnReference`. */
+  reference?: ColumnReference | undefined
+}
+
+/**
+ * Where a column's values **point**: the table a foreign key on it names. It is a fact of the
+ * catalogue and never a guess from a name ending in `_id` — the surface reads the constraint and
+ * hands it over, so a result nobody traced back to a stored table simply carries none.
+ *
+ * The grid draws it twice and knows nothing else about it: a small button beside the header's name
+ * that opens the table, and one item on the cell menu that opens it **narrowed to the row this
+ * one points at**. What "open" means is the surface's — the grid has never heard of a tab.
+ */
+export interface ColumnReference {
+  /** The referenced table as a reader would say it, qualified only where it is somewhere else. */
+  table: string
+  /** The column of that table this one is matched against. */
+  column: string
+  /**
+   * Opens the referenced table. Handed a **row of the grid** — its cells in the order the grid drew
+   * them — it opens narrowed to what that row points at; handed none, it opens the table as it is.
+   */
+  onOpen: (row?: readonly Cell[]) => void
 }
 
 /**
