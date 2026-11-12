@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  # Run from the Actions tab (or the API) where pushing a tag is not possible: the publish step
+  # creates the tag on the commit that was built.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Tag to release, e.g. v1.4.1
+        required: true
 
 # Releases and the Homebrew Cask both live in this repository, so the built-in GITHUB_TOKEN is all
 # the workflow needs. `contents: write` lets it create the release and commit Casks/vibe-db.rb.
@@ -47,7 +54,7 @@ jobs:
       - name: Set release version
         shell: pwsh
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           $version = $env:VERSION.TrimStart('v')
           $config = Get-Content wails.json -Raw | ConvertFrom-Json
@@ -56,7 +63,7 @@ jobs:
       - name: Build Windows installer
         shell: pwsh
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           $version = $env:VERSION.TrimStart('v')
           wails build -platform windows/amd64 -nsis -ldflags "-X main.version=$version"
@@ -68,7 +75,7 @@ jobs:
       - name: Package portable Windows build
         shell: pwsh
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           $version = $env:VERSION.TrimStart('v')
           $exe = 'build/bin/vibe-db.exe'
@@ -100,13 +107,13 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
       - name: Set release version
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           version="${VERSION#v}"
           node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('wails.json')); p.info.productVersion=process.env.VERSION.replace(/^v/,''); fs.writeFileSync('wails.json', JSON.stringify(p,null,2)+'\n')"
       - name: Build universal macOS app
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           version="${VERSION#v}"
           wails build -platform darwin/universal -ldflags "-X main.version=$version"
@@ -136,12 +143,12 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
       - name: Set release version
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync('wails.json')); p.info.productVersion=process.env.VERSION.replace(/^v/,''); fs.writeFileSync('wails.json', JSON.stringify(p,null,2)+'\n')"
       - name: Build Linux archive
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           version="${VERSION#v}"
           wails build -platform linux/amd64 -ldflags "-X main.version=$version"
@@ -170,8 +177,9 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Vibe DB ${{ github.ref_name }}
+          tag_name: ${{ inputs.version || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          name: Vibe DB ${{ inputs.version || github.ref_name }}
           generate_release_notes: true
           files: dist/*
 
@@ -188,7 +196,7 @@ jobs:
           path: dist
       - name: Write Cask
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           version="${VERSION#v}"
           sha256=$(sha256sum "dist/vibe-db-$version-macos-universal.zip" | cut -d ' ' -f 1)
@@ -199,7 +207,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add Casks/vibe-db.rb
           git diff --cached --quiet && exit 0
-          git commit -m "chore(cask): update vibe-db to ${{ github.ref_name }}"
+          git commit -m "chore(cask): update vibe-db to ${{ inputs.version || github.ref_name }}"
           for attempt in 1 2 3 4; do
             git pull --rebase origin master && git push origin HEAD:master && exit 0
             sleep $((attempt * 5))
@@ -233,10 +241,10 @@ jobs:
         with:
           repository: ${{ env.LEGACY_RELEASE_REPOSITORY }}
           token: ${{ secrets.RELEASES_TOKEN }}
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ inputs.version || github.ref_name }}
           target_commitish: master
-          name: Vibe DB ${{ github.ref_name }}
-          body: Release ${{ github.ref_name }}. Releases now live at https://github.com/khanhsnd/vibe-db/releases.
+          name: Vibe DB ${{ inputs.version || github.ref_name }}
+          body: Release ${{ inputs.version || github.ref_name }}. Releases now live at https://github.com/khanhsnd/vibe-db/releases.
           files: dist/*
       - uses: actions/checkout@v4
         if: env.HAS_TOKEN == 'true'
@@ -247,7 +255,7 @@ jobs:
       - name: Update legacy Cask
         if: env.HAS_TOKEN == 'true'
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
           version="${VERSION#v}"
           sha256=$(sha256sum "dist/vibe-db-$version-macos-universal.zip" | cut -d ' ' -f 1)
@@ -256,5 +264,5 @@ jobs:
           git config user.name 'vibe-db release bot'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add Casks/vibe-db.rb
-          git diff --cached --quiet || git commit -m "Update vibe-db to ${{ github.ref_name }}"
+          git diff --cached --quiet || git commit -m "Update vibe-db to ${{ inputs.version || github.ref_name }}"
           git push
