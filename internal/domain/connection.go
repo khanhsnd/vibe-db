@@ -500,7 +500,11 @@ type ConnectionProfile struct {
 	// Access is what this app will let the connection do at all — see Access, and note that it is
 	// the second fact about a profile that changes how the app *behaves* rather than how it
 	// connects. Environment decides what is answered for; this decides what is not sent.
-	Access   Access
+	Access Access
+	// MCP says an AI agent may reach this connection through `vibe-db mcp`. It is off until the
+	// reader turns it on, because a connection an agent can see is one a prompt can name — see
+	// ForAgent, which is what an agent is handed instead of this profile.
+	MCP      bool
 	Host     string
 	Port     int
 	User     string
@@ -514,6 +518,15 @@ type ConnectionProfile struct {
 	// Proxy is the outer hop, and carries the bastion as well as the database — see ProxyOptions.
 	Proxy        ProxyOptions
 	SavePassword bool
+}
+
+// ForAgent is this profile as an AI agent is given it: **always read-only**, whatever the reader
+// chose for themselves. An agent has nobody in front of a dialog to answer "are you sure", so the
+// question Environment.NeedsConfirmation asks would have nobody to ask — and a refusal is the only
+// answer left that does not default to allowing.
+func (p ConnectionProfile) ForAgent() ConnectionProfile {
+	p.Access = AccessReadOnly
+	return p
 }
 
 func (p ConnectionProfile) Validate() error {

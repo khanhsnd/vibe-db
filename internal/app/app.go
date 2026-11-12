@@ -38,6 +38,7 @@ type App struct {
 	Updates *UpdateAPI
 
 	sessions *session.Manager
+	version  string
 }
 
 func New(version ...string) (*App, error) {
@@ -102,6 +103,7 @@ func New(version ...string) (*App, error) {
 		System:   NewSystemAPI(),
 		Updates:  NewUpdateAPI(currentVersion),
 		sessions: sessions,
+		version:  currentVersion,
 	}, nil
 }
 

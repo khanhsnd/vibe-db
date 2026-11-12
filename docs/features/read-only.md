@@ -22,6 +22,8 @@ and exactly what does not protect the database from anybody who points another c
 read-only account on the server is the protection**; this is the guard. The hint under the picker
 says as much rather than leaving a reader to assume otherwise.
 
+An AI agent is always held to this, whatever the picker says — see [mcp.md](mcp.md#always-read-only).
+
 It is saved on the profile like any other field — `access` in `connections.json` — so a connection
 opened before this existed reads back as read *and* write, which is what it always was.
 

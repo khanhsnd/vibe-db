@@ -49,6 +49,8 @@ export interface Profile {
   colour: string
   /** What this connection will be let do at all — see `ACCESS_MODES`. */
   access: string
+  /** Whether an AI agent may read this connection through `vibe-db mcp` — never write to it. */
+  mcp: boolean
   host: string
   port: number
   user: string
@@ -72,6 +74,7 @@ export interface ProfileInput {
   environment: string
   colour: string
   access: string
+  mcp: boolean
   host: string
   port: number
   user: string
@@ -934,6 +937,7 @@ export function emptyProfileInput(): ProfileInput {
     environment: '',
     colour: '',
     access: '',
+    mcp: false,
     host: '127.0.0.1',
     port,
     user,
@@ -977,6 +981,7 @@ export function toProfileInput(profile: Profile): ProfileInput {
     environment: profile.environment,
     colour: profile.colour,
     access: profile.access,
+    mcp: profile.mcp,
     host: profile.host,
     port: profile.port,
     user: profile.user,

@@ -32,6 +32,7 @@ at a time and keeps the transcript**, **running a file of statements against a c
 time in a grid, an object's headers, permissions, tags, versions and preview in seven panes under it,
 searched by name across a bucket, and objects brought down in parallel ranges that survive being
 interrupted**,
+**an AI agent such as Claude reading a connection — always read-only — through `vibe-db mcp`**,
 **marking a connection with a colour that washes down the sidebar**, **a history of every statement
 run, kept on disk and put back in the editor by a double-click**, **a library of the statements the
 reader named, kept in a file and offered by that name in every editor**, **a log of everything the window
@@ -66,6 +67,7 @@ to reach the one they came for. How the docs are laid out is written down in
 |---|---|
 | Picking an engine, filling a profile in, TLS, a proxy, SSH, the environment guard, a connection's colour | [features/connections.md](features/connections.md) |
 | A connection that refuses to send anything that writes | [features/read-only.md](features/read-only.md) |
+| An AI agent reading a connection through `vibe-db mcp` | [features/mcp.md](features/mcp.md) |
 | What each of the seven engines has, and what it has not | [features/engines.md](features/engines.md) |
 | The tree, what a level loads, filtering it, and the table list | [features/schema-tree.md](features/schema-tree.md) |
 | A Redis key space: the grid of keys, the prefix tree, the search bar, the key panel | [features/key-space.md](features/key-space.md) |

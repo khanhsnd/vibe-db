@@ -25,6 +25,7 @@ type record struct {
 	Environment string `json:"environment,omitempty"`
 	Colour      string `json:"colour,omitempty"`
 	Access      string `json:"access,omitempty"`
+	MCP         bool   `json:"mcp,omitempty"`
 	Host        string `json:"host"`
 	Port        int    `json:"port"`
 	User        string `json:"user"`
@@ -151,6 +152,7 @@ func toDomain(rec record) domain.ConnectionProfile {
 		Environment: domain.Environment(rec.Environment),
 		Colour:      domain.Colour(rec.Colour),
 		Access:      domain.Access(rec.Access),
+		MCP:         rec.MCP,
 		Host:        rec.Host,
 		Port:        rec.Port,
 		User:        rec.User,
@@ -193,6 +195,7 @@ func fromDomain(profile domain.ConnectionProfile) record {
 		Environment: string(profile.Environment),
 		Colour:      string(profile.Colour),
 		Access:      string(profile.Access),
+		MCP:         profile.MCP,
 		Host:        profile.Host,
 		Port:        profile.Port,
 		User:        profile.User,

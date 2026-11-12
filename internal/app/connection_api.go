@@ -172,7 +172,12 @@ func (a *ConnectionAPI) Connect(profileID, password string) (Session, error) {
 	if err != nil {
 		return Session{}, wrapError(err)
 	}
+	return a.open(stored, password)
+}
 
+// open is Connect after the profile has been read, so an agent's session — which is opened from
+// the profile ForAgent answers with rather than the stored one — is dialled the one way there is.
+func (a *ConnectionAPI) open(stored domain.ConnectionProfile, password string) (Session, error) {
 	secrets, err := a.resolveSecrets(stored, password, "", "")
 	if err != nil {
 		return Session{}, wrapError(err)

@@ -18,6 +18,10 @@ export function ListFonts() {
   return window['go']['app']['SystemAPI']['ListFonts']();
 }
 
+export function MCPCommand() {
+  return window['go']['app']['SystemAPI']['MCPCommand']();
+}
+
 export function SaveTextFile(arg1, arg2, arg3, arg4) {
   return window['go']['app']['SystemAPI']['SaveTextFile'](arg1, arg2, arg3, arg4);
 }

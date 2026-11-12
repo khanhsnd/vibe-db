@@ -2036,6 +2036,7 @@ export namespace app {
 	    environment: string;
 	    colour: string;
 	    access: string;
+	    mcp: boolean;
 	    host: string;
 	    port: number;
 	    user: string;
@@ -2062,6 +2063,7 @@ export namespace app {
 	        this.environment = source["environment"];
 	        this.colour = source["colour"];
 	        this.access = source["access"];
+	        this.mcp = source["mcp"];
 	        this.host = source["host"];
 	        this.port = source["port"];
 	        this.user = source["user"];
@@ -2171,6 +2173,7 @@ export namespace app {
 	    environment: string;
 	    colour: string;
 	    access: string;
+	    mcp: boolean;
 	    host: string;
 	    port: number;
 	    user: string;
@@ -2197,6 +2200,7 @@ export namespace app {
 	        this.environment = source["environment"];
 	        this.colour = source["colour"];
 	        this.access = source["access"];
+	        this.mcp = source["mcp"];
 	        this.host = source["host"];
 	        this.port = source["port"];
 	        this.user = source["user"];

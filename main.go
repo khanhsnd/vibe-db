@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log"
+	"os"
 
 	"github.com/khanhsnd/vibe-db/internal/app"
 	"github.com/wailsapp/wails/v2"
@@ -21,6 +23,16 @@ func main() {
 	application, err := app.New(version)
 	if err != nil {
 		log.Fatalf("vibe-db: %v", err)
+	}
+
+	// `vibe-db mcp` is the same app with no window: an AI agent's client starts it and speaks to it
+	// over stdin and stdout, so the log goes to stderr and nothing else may print — see
+	// docs/features/mcp.md.
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		if err := application.ServeMCP(context.Background(), os.Stdin, os.Stdout); err != nil {
+			log.Fatalf("vibe-db mcp: %v", err)
+		}
+		return
 	}
 
 	err = wails.Run(&options.App{

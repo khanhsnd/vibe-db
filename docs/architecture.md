@@ -23,6 +23,10 @@ objects](#buckets-full-of-objects).
 - **`internal/app`** — the Wails boundary and the only package bound to JavaScript. Speaks `dto.go`
   wire types, never domain types, and maps every error to a stable code (see
   [errors.md](errors.md)).
+- **`internal/mcp`** — the Model Context Protocol over stdio, and nothing about a database: JSON-RPC
+  in, JSON-RPC out, and a list of tools it is handed. `internal/app/mcp.go` hands it tools whose
+  bodies are bound methods, so an agent is a second caller of the API the window calls rather than a
+  second way into a session. See [features/mcp.md](features/mcp.md).
 - **`internal/history`** — the statements the reader has run, so one can be found and run again.
   A port with `List` / `Append` / `Clear` and a `jsonfile` adapter, exactly as `profile` is. `Append`
   is its only write besides `Clear`, because what a log holds after one more statement — newest

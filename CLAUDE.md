@@ -348,6 +348,15 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
     own record**, not the service's access log: that is a bucket setting writing objects elsewhere, and
     a client showing one would be showing somebody else's gigabytes.
 
+30. **An AI agent is a second caller of the bound methods, and it only ever reads.** `vibe-db mcp`
+    is this app with no window — `internal/mcp` speaks the protocol and knows no database, and every
+    tool `internal/app/mcp.go` hands it is a bound method the window calls, so an agent reads through
+    the same guard, history and error map a query tab does and there is no second way into a session.
+    A connection is visible to an agent only when the reader ticked it (`mcp` on the profile), and it
+    is opened as `domain.ConnectionProfile.ForAgent` answers — **read-only whatever `Access` says**,
+    because a confirmation needs somebody in front of it and an agent's call has nobody. A password
+    is never an answer; the session is dialled from the credential store the way a scheduled job's is.
+
 ## Where to read before changing something
 
 | Task | Read |
@@ -366,6 +375,7 @@ either. What each engine has and has not got is [docs/features/engines.md](docs/
 | Find out what exists at all | [docs/features.md](docs/features.md) — the index, one file per feature under [docs/features/](docs/features/) |
 | Change how a connection is made or guarded — a proxy, a bastion, TLS | [docs/features/connections.md](docs/features/connections.md) |
 | Turn a connection read-only, or change what a read-only one refuses | [docs/features/read-only.md](docs/features/read-only.md) |
+| Change what an AI agent may see or do through `vibe-db mcp` | [docs/features/mcp.md](docs/features/mcp.md) |
 | Change the tree, the table list or a schema change | [docs/features/schema-tree.md](docs/features/schema-tree.md), [docs/features/schema-changes.md](docs/features/schema-changes.md) |
 | Change a view's, a routine's or a trigger's definition — or a materialized view, a sequence, an event | [docs/features/definitions.md](docs/features/definitions.md) |
 | Touch a partition of a table | [docs/features/partitions.md](docs/features/partitions.md) |

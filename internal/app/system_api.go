@@ -111,3 +111,14 @@ func (s *SystemAPI) SaveTextFile(title, pattern, name, content string) (string, 
 	}
 	return path, nil
 }
+
+// MCPCommand is the line that registers this app with Claude Code as an MCP server, naming the
+// program that is running now — so what is copied is right for wherever this copy was installed.
+// See docs/features/mcp.md.
+func (s *SystemAPI) MCPCommand() (string, error) {
+	path, err := os.Executable()
+	if err != nil {
+		return "", wrapError(err)
+	}
+	return `claude mcp add vibe-db -- "` + path + `" mcp`, nil
+}

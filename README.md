@@ -70,6 +70,35 @@ Ubuntu 24.04 among them — will not run it. Build from source there instead:
 wails build -platform linux/amd64 -tags webkit2_41
 ```
 
+## Use it from Claude (MCP)
+
+An AI agent such as Claude can read your saved connections through `vibe-db mcp` — the same app with
+no window, speaking the Model Context Protocol over stdio. You can then ask *"use vibe-db to query
+the `orders` table on Shop"* in a chat and get the rows back. The app does not have to be open.
+
+1. In Vibe DB, edit each connection an agent may use and tick **Let AI agents read this connection**
+   on its **MCP** tab. Every connection starts with this off, and an agent sees none that are off.
+2. Register the program once. The MCP tab's **Copy** button gives the line for the copy you
+   installed; on macOS and Linux it is:
+
+   ```sh
+   # macOS
+   claude mcp add vibe-db -- "/Applications/vibe-db.app/Contents/MacOS/vibe-db" mcp
+   # Linux
+   claude mcp add vibe-db -- "$HOME/.local/bin/vibe-db" mcp
+   ```
+
+   Another MCP client (Claude Desktop, Cursor) takes the same program with the argument `mcp`:
+
+   ```json
+   { "mcpServers": { "vibe-db": { "command": "/Applications/vibe-db.app/Contents/MacOS/vibe-db", "args": ["mcp"] } } }
+   ```
+
+**An agent only ever reads.** Anything that writes is refused before it reaches the server, even on a
+connection you saved as read & write, and a query answers with 100 rows unless the agent asks for
+more (at most 1,000). Passwords stay in the credential store and are never shown to the agent.
+Details are in [docs/features/mcp.md](docs/features/mcp.md).
+
 ## Stack
 
 | Layer | Choice |

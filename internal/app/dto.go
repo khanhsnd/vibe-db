@@ -69,7 +69,10 @@ type Profile struct {
 	Colour string `json:"colour"`
 	// Access is what this connection will be let do at all — `''` for read and write, `read-only`
 	// for a connection that refuses to send anything that writes. See domain.Access.
-	Access   string `json:"access"`
+	Access string `json:"access"`
+	// MCP says an AI agent may read this connection through `vibe-db mcp` — see
+	// domain.ConnectionProfile.ForAgent, which is why it is never more than a read.
+	MCP      bool   `json:"mcp"`
 	Host     string `json:"host"`
 	Port     int    `json:"port"`
 	User     string `json:"user"`
@@ -97,6 +100,7 @@ type ProfileInput struct {
 	Environment string `json:"environment"`
 	Colour      string `json:"colour"`
 	Access      string `json:"access"`
+	MCP         bool   `json:"mcp"`
 	Host        string `json:"host"`
 	Port        int    `json:"port"`
 	User        string `json:"user"`
@@ -976,6 +980,7 @@ func toProfileDTO(
 		Environment: string(profile.Environment),
 		Colour:      string(profile.Colour),
 		Access:      string(profile.Access),
+		MCP:         profile.MCP,
 		Host:        profile.Host,
 		Port:        profile.Port,
 		User:        profile.User,
@@ -2156,6 +2161,7 @@ func (in ProfileInput) toDomain() domain.ConnectionProfile {
 		Environment: domain.Environment(in.Environment),
 		Colour:      domain.Colour(in.Colour),
 		Access:      domain.Access(in.Access),
+		MCP:         in.MCP,
 		Host:        in.Host,
 		Port:        port,
 		User:        in.User,

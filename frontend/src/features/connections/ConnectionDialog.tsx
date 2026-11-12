@@ -40,6 +40,7 @@ import { useConnectionsStore } from '@/stores/connections'
 import { EngineIcon } from './EngineIcon'
 import { EnginePicker } from './EnginePicker'
 import { EnvironmentDot } from './EnvironmentDot'
+import { McpPane } from './McpPane'
 
 /** Tall enough that every tab is the same height, so switching one never moves the footer. */
 const PANE_HEIGHT = 316
@@ -701,6 +702,15 @@ export function ConnectionDialog({ open, initial, onOpenChange }: ConnectionDial
                     value={form.ssh.knownHosts}
                     onChange={(value) => updateSSH('knownHosts', value)}
                   />
+                </Pane>
+              ),
+            },
+            {
+              id: 'mcp',
+              label: 'MCP',
+              content: (
+                <Pane>
+                  <McpPane enabled={form.mcp} onChange={(on) => update('mcp', on)} />
                 </Pane>
               ),
             },
