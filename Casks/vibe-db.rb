@@ -1,6 +1,6 @@
 cask 'vibe-db' do
-  version '1.4.1'
-  sha256 '3dd9f34ba37b94f6a189ddb286ee549c40f7071d93f9ead03304e6efb9f7687b'
+  version '1.5.0'
+  sha256 'bc4e33cc4149bf22a60e1c12f52d0f93b3480215fa8f8988e0af8abacc5b516c'
 
   url "https://github.com/khanhsnd/vibe-db/releases/download/v#{version}/vibe-db-#{version}-macos-universal.zip"
   name 'Vibe DB'
