@@ -17,6 +17,12 @@ Download `vibe-db-<version>-windows-x64-setup.exe` and run it. Defender SmartScr
 protected your PC"* — choose **More info → Run anyway**. The installer then raises the ordinary
 elevation prompt. Later versions install themselves from Settings → Updates.
 
+**Portable, no installer:** download `vibe-db-<version>-windows-x64-portable.zip`, unzip it anywhere
+(a USB stick works) and run `vibe-db.exe`. It needs no administrator rights; SmartScreen asks once in
+the same way. It uses the WebView2 runtime Windows 10/11 already ships, and connections, history and
+settings are kept in your user profile rather than beside the exe — see
+[docs/features/updates.md](docs/features/updates.md#the-portable-windows-build).
+
 ### macOS 12+, Intel or Apple Silicon
 
 ```sh
