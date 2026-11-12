@@ -79,16 +79,23 @@ the `orders` table on Shop"* in a chat and get the rows back. The app does not h
 1. In Vibe DB, edit each connection an agent may use and tick **Let AI agents read this connection**
    on its **MCP** tab. Every connection starts with this off, and an agent sees none that are off.
 2. Register the program once. The MCP tab's **Copy** button gives the line for the copy you
-   installed; on macOS and Linux it is:
+   installed. With the default install locations it is:
 
    ```sh
+   # Windows (installer) — the portable build is wherever you unzipped vibe-db.exe
+   claude mcp add vibe-db -- "C:\Program Files\khanh\Vibe DB\vibe-db.exe" mcp
    # macOS
    claude mcp add vibe-db -- "/Applications/vibe-db.app/Contents/MacOS/vibe-db" mcp
    # Linux
    claude mcp add vibe-db -- "$HOME/.local/bin/vibe-db" mcp
    ```
 
-   Another MCP client (Claude Desktop, Cursor) takes the same program with the argument `mcp`:
+   Another MCP client (Claude Desktop, Cursor) takes the same program with the argument `mcp`. On
+   Windows a backslash is doubled inside JSON:
+
+   ```json
+   { "mcpServers": { "vibe-db": { "command": "C:\\Program Files\\khanh\\Vibe DB\\vibe-db.exe", "args": ["mcp"] } } }
+   ```
 
    ```json
    { "mcpServers": { "vibe-db": { "command": "/Applications/vibe-db.app/Contents/MacOS/vibe-db", "args": ["mcp"] } } }

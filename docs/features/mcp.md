@@ -16,6 +16,9 @@ of the app that is running, so the path is right wherever it was installed:
 claude mcp add vibe-db -- "/Applications/vibe-db.app/Contents/MacOS/vibe-db" mcp
 ```
 
+On Windows the installer puts the program at `C:\Program Files\khanh\Vibe DB\vibe-db.exe`, and the
+portable build is wherever `vibe-db.exe` was unzipped — the README lists every platform's line.
+
 Any client that starts an MCP server as a program over stdio takes the same program and the same
 argument. **The app does not have to be open**: the client starts its own copy, and that copy ends
 when the client hangs up.
