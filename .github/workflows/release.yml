@@ -69,7 +69,7 @@ jobs:
           path: build/bin/vibe-db-*-windows-x64-setup.exe
 
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
